@@ -7,10 +7,13 @@ from frappe.utils import add_to_date, cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.ingest.gateway import enqueue_identity
+from omni_crm.pipeline.outbound import enqueue_outbound
 from omni_crm.pipeline.retry import TransientError, mark_retry
 
 INBOUND = "Omni Inbound Message"
+OUTBOUND = "Omni Outbound Message"
 NEW_ORPHAN_MINUTES = 2
+OUTBOUND_ORPHAN_MINUTES = 5
 COUNTS_CACHE_KEY = "omni:sweeper:counts"
 COUNTS_TTL = 3600
 
@@ -66,5 +69,34 @@ def _enqueue_all(identity_keys: list[str]) -> int:
 
 
 def requeue_stuck_outbound() -> int:
-	"""Mục 4 docs/03 (tin ra Queued đến hạn thử lại hoặc cũ hơn 5 phút): D1-09 bổ sung; hiện trả 0."""
-	return 0
+	"""Mục 4 docs/03: tin ra Queued đến hạn thử lại (hoặc hết hạn thuê), hoặc cũ hơn 5 phút mà chưa ai nhận -> enqueue.
+
+	send_outbound tự quyết (an toàn gửi trùng): tin có dấu "đang gửi" quá hạn bị chuyển Failed chứ không gửi lại.
+	Kênh đã tắt chiều ra: send_outbound chuyển tin sang Blocked (kèm lý do) thay vì để Queued mãi.
+	"""
+	now = now_datetime()
+	due = frappe.get_all(
+		OUTBOUND,
+		# frappe coi NULL là 0001-01-01 khi so sánh ngày giờ: phải thêm "is set" để loại tin chưa có hạn
+		filters=[
+			[OUTBOUND, "status", "=", "Queued"],
+			[OUTBOUND, "next_attempt_at", "is", "set"],
+			[OUTBOUND, "next_attempt_at", "<=", now],
+		],
+		pluck="name",
+		limit_page_length=500,
+	)
+	orphans = frappe.get_all(
+		OUTBOUND,
+		filters={
+			"status": "Queued",
+			"next_attempt_at": ["is", "not set"],
+			"creation": ["<", add_to_date(now, minutes=-OUTBOUND_ORPHAN_MINUTES)],
+		},
+		pluck="name",
+		limit_page_length=500,
+	)
+	names = list(dict.fromkeys(due + orphans))
+	for name in names:
+		enqueue_outbound(name, after_commit=False)
+	return len(names)

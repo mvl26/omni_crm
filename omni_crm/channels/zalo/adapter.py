@@ -239,6 +239,16 @@ class ZaloAdapter:
 		ids = ZaloClient(channel_doc.name).send_text(user_id, req.text)
 		return ids[0]
 
+	def request_user_info(self, identity_doc, channel_doc) -> tuple[str, str]:
+		"""Gửi tin yêu cầu thông tin người dùng (xin SĐT); trả (mã tin, nội dung hiển thị). Sandbox: không gọi HTTP."""
+		title = _("Miyano Việt Nam")
+		subtitle = _("Vui lòng chia sẻ số điện thoại để nhân viên tư vấn hỗ trợ bạn nhanh hơn.")
+		user_id = identity_doc.get("external_id")
+		if not user_id:
+			raise ValueError(_("Định danh chưa có mã người dùng Zalo"))
+		message_id = ZaloClient(channel_doc.name).send_request_user_info(user_id, title, subtitle)
+		return message_id, f"{title}: {subtitle}"
+
 	# Điểm nối với worker (không thuộc Protocol bắt buộc)
 	def prepare_batch(self, msgs: list[Any], channel_doc) -> list[Any]:
 		"""Xem worker_hooks.prepare_batch."""

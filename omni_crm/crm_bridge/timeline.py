@@ -12,7 +12,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import escape_html, now_datetime
+from frappe.utils import escape_html, get_datetime, now_datetime, strip_html_tags
 
 from omni_crm.crm_bridge import lead as lead_bridge
 
@@ -208,7 +208,7 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 	row = frappe.db.get_value(
 		OUTBOUND,
 		name,
-		["name", "channel", "text", "source", "sent_by", "sent_at", "creation"],
+		["name", "channel", "text", "source", "sent_by", "sent_at", "creation", "is_sandbox"],
 		as_dict=True,
 	)
 	if not row:
@@ -223,11 +223,15 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 		full_name = frappe.db.get_value("User", row.sent_by, "full_name") or row.sent_by
 	else:
 		full_name = _("Bot") if row.source == "Bot" else _("Hệ thống")
+	subject, content = _subject(channel_type, row.text), render_text(row.text)
+	if row.is_sandbox:  # tin thử nghiệm không được trông như đã gửi thật
+		subject = f"[{_('Thử nghiệm')}] {subject}"
+		content += f"<p><i>{_('Tin thử nghiệm (sandbox), chưa gửi tới khách')}</i></p>"
 	return _insert_communication(
 		{
 			"sent_or_received": "Sent",
-			"subject": _subject(channel_type, row.text),
-			"content": render_text(row.text),
+			"subject": subject,
+			"content": content,
 			"sender": row.sent_by,
 			"sender_full_name": full_name,
 			"communication_date": row.sent_at or row.creation or now_datetime(),
@@ -256,3 +260,84 @@ def notify(lead: str | None, channel_types: list[str] | None = None) -> None:
 		pass
 	for user in filter(None, users):
 		frappe.publish_realtime(REALTIME_EVENT, payload, user=user, after_commit=True)
+
+
+def conversation_turns(lead: str, until: Any = None) -> list[dict]:
+	"""Mọi lượt hội thoại của Lead (và Deal của nó) trên mọi kênh, cũ nhất trước (đầu vào cho bot ở Đợt 2).
+
+	Mỗi phần tử: {at, direction "in"|"out", channel_type, actor "customer"|"sale"|"bot"|"system"|"external",
+	text, kind "message"|"oa_echo"|"outbound"|"email_out", ref}. Gồm tin vào của khách, tin Sale trả lời ngoài
+	hệ thống (oa_echo), tin ra đã gửi (Sent, kể cả sandbox) và thư gửi đi từ CRM (Communication Sent). Tin ra
+	trùng mã tin với oa_echo chỉ tính một lần. `until`: chỉ lấy lượt có thời điểm <= until.
+	"""
+	refs = [lead]
+	deal = lead_bridge.get_deal_for_lead(lead)
+	if deal:
+		refs.append(deal)
+	turns: list[dict] = []
+	inbound = frappe.get_all(
+		INBOUND,
+		filters={"lead": lead, "event_type": ["in", sorted(TIMELINE_EVENTS)], "status": ["!=", "Ignored"]},
+		fields=["name", "channel_type", "event_type", "text", "received_at", "external_message_id"],
+	)
+	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
+	for m in inbound:
+		echo = m.event_type == "oa_echo"
+		turns.append(
+			{
+				"at": m.received_at,
+				"direction": "out" if echo else "in",
+				"channel_type": m.channel_type,
+				"actor": "external" if echo else "customer",
+				"text": m.text or "",
+				"kind": m.event_type,
+				"ref": m.name,
+			}
+		)
+	outbound = frappe.get_all(
+		OUTBOUND,
+		filters={"lead": lead, "status": "Sent"},
+		fields=["name", "channel", "text", "source", "sent_at", "creation", "external_message_id"],
+	)
+	types = {r.name: r.channel_type for r in frappe.get_all("Omni Channel", fields=["name", "channel_type"])}
+	for o in outbound:
+		if o.external_message_id and o.external_message_id in echo_ids:
+			continue
+		turns.append(
+			{
+				"at": o.sent_at or o.creation,
+				"direction": "out",
+				"channel_type": types.get(o.channel),
+				"actor": o.source.lower() if o.source in ("Sale", "Bot", "System") else "system",
+				"text": o.text or "",
+				"kind": "outbound",
+				"ref": o.name,
+			}
+		)
+	mails = frappe.get_all(
+		COMMUNICATION,
+		filters={
+			"reference_doctype": ["in", [LEAD, DEAL]],
+			"reference_name": ["in", refs],
+			"communication_medium": "Email",
+			"sent_or_received": "Sent",
+		},
+		fields=["name", "content", "communication_date", "creation"],
+	)
+	for c in mails:
+		turns.append(
+			{
+				"at": c.communication_date or c.creation,
+				"direction": "out",
+				"channel_type": EMAIL,
+				"actor": "sale",
+				"text": strip_html_tags(c.content or "").strip(),
+				"kind": "email_out",
+				"ref": c.name,
+			}
+		)
+	if until is not None:
+		limit = get_datetime(until)
+		turns = [t for t in turns if get_datetime(t["at"]) <= limit]
+	turns.sort(key=lambda t: (get_datetime(t["at"]), t["ref"]))
+	return turns
