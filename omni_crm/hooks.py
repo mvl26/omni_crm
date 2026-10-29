@@ -171,6 +171,9 @@ scheduler_events = {
 # Fixtures
 # --------
 doc_events = {
+	"Communication": {
+		"after_insert": "omni_crm.channels.email.adapter.on_communication_insert",  # D1-07
+	},
 	"CRM Lead": {
 		"validate": "omni_crm.crm_bridge.lead.compute_normalized_fields",  # D1-05
 		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06

@@ -31,6 +31,7 @@ FIELDS = [
 	"event_type",
 	"external_sender_id",
 	"identity_key",
+	"communication",
 	"received_at",
 	"text",
 	"sender_profile",

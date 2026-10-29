@@ -21,6 +21,9 @@ class InboundEvent:
 	attachments: list[dict] = field(default_factory=list)  # [{"url"|"file", "name", "mime"}]
 	sender_profile: dict = field(default_factory=dict)  # tên hiển thị, SĐT/email nếu có
 	raw: dict = field(default_factory=dict)  # payload gốc, lưu nguyên văn
+	communication: str | None = (
+		None  # tên Communication (kênh Email); lưu riêng vì raw_payload bị xóa theo hạn
+	)
 
 
 @dataclass(frozen=True)
