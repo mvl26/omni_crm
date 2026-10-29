@@ -1,0 +1,11 @@
+.omni-monitor .om-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.omni-monitor .om-card { border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); padding: 12px 14px; }
+.omni-monitor .om-card h6 { margin: 0 0 8px; font-weight: 600; }
+.omni-monitor .om-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; font-size: 12px; }
+.omni-monitor .om-row .om-k { color: var(--text-muted); }
+.omni-monitor .om-bad { color: var(--red-500, #e24c4c); font-weight: 600; }
+.omni-monitor .om-ok { color: var(--green-600, #2d9c5a); }
+.omni-monitor .om-sub { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border-color); }
+.omni-monitor .om-meta { color: var(--text-muted); font-size: 11px; margin-bottom: 8px; }
+.omni-monitor .om-manual td { font-size: 12px; vertical-align: top; }
+.omni-monitor .om-erase input, .omni-monitor .om-erase textarea { margin-bottom: 6px; }

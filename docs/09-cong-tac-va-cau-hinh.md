@@ -15,6 +15,8 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
 | `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI) | 2 |
 | `bot_paused_until` | Omni Identity | Bot im với một khách | 3 |
+| `alert_recipients` (trống) | Omni Settings | Không gửi thư cảnh báo (Notification Log cho Omni Admin vẫn tạo; không có công tắc riêng, xem docs/12 mục D) | 1 |
+| `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload` | 1 |
 
 ## 2. Đọc công tắc — `flags.py`
 

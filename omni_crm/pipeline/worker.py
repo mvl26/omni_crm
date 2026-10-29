@@ -163,7 +163,8 @@ def _process_batch(identity_key: str, msgs: list[Any], batch_id: str) -> str | N
 			"next_attempt_at": None,
 			"processing_started_at": None,
 		},
-		update_modified=False,
+		# Cố ý đổi `modified`: đây là thời điểm Done, màn hình giám sát lấy p50/p95 = modified - creation (D1-10).
+		update_modified=True,
 	)
 	if identity and last_inbound:
 		frappe.db.set_value("Omni Identity", identity, "last_inbound_at", last_inbound, update_modified=False)
