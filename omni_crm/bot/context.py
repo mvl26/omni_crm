@@ -68,7 +68,17 @@ def build_conversation(
 	`until`: chỉ lấy lượt có thời điểm <= until. `mask`: che email/SĐT (mặc định bật cho đến khi chủ dự án chốt Q11
 	trong docs/12; phân tích cần SĐT/email khách thì phải được chốt trước khi tắt).
 	"""
-	turns = [t for t in timeline.conversation_turns(lead, until=until) if (t.get("text") or "").strip()]
+	return render_turns(timeline.conversation_turns(lead, until=until), max_turns, max_chars, mask)
+
+
+def render_turns(
+	turns: list[dict[str, Any]], max_turns: int = 20, max_chars: int = 6000, mask: bool = True
+) -> str:
+	"""`<hoi_thoai>…</hoi_thoai>` từ danh sách lượt {at, actor, channel_type, text} (cũ trước), cắt như `build_conversation`.
+
+	Dùng chung cho hội thoại thật (`build_conversation`) và ca của bộ đề (`bot/eval`, không có Lead).
+	"""
+	turns = [t for t in turns if (t.get("text") or "").strip()]
 	lines: list[str] = []
 	for turn in turns[-max(max_turns, 0) :]:
 		text = escape_tags(

@@ -96,9 +96,13 @@ def hours_context(at: datetime | None = None) -> dict[str, str]:
 	}
 
 
-def groups_block() -> str:
-	"""Danh sách nhóm câu hỏi (kèm cờ luôn chuyển người) đưa cho bot phân loại; nội dung đã thoát thẻ."""
-	rows = frappe.get_all(GROUP, fields=["name", "always_handoff", "description"], order_by="name asc")
+def groups_block(rows: list[Any] | None = None) -> str:
+	"""Danh sách nhóm câu hỏi (kèm cờ luôn chuyển người) đưa cho bot phân loại; nội dung đã thoát thẻ.
+
+	`rows`: dòng có name/always_handoff/description; mặc định đọc từ DB (bộ đề có thể đưa dòng đọc từ tệp).
+	"""
+	if rows is None:
+		rows = frappe.get_all(GROUP, fields=["name", "always_handoff", "description"], order_by="name asc")
 	lines = [
 		f'<nhom ten="{escape_tags(r.name)}" luon_chuyen_nguoi="{1 if r.always_handoff else 0}">'
 		f"{escape_tags(r.description or '')}</nhom>"
@@ -112,20 +116,32 @@ def channel_max_chars(channel_type: str | None) -> int:
 	return min(CHANNEL_MAX_CHARS.get(channel_type or "", guards.DEFAULT_MAX_CHARS), TEXT_MAX * 2)
 
 
-def build_user_message(
-	lead: str, channel_type: str | None, until: Any = None, include_summary: bool = True, mask: bool = True
+def compose_user_message(
+	conversation: str,
+	channel_type: str | None,
+	summary: str | None = None,
+	mask: bool = True,
+	groups: str | None = None,
 ) -> str:
-	"""Nội dung gửi bot: nhóm câu hỏi, tóm tắt Lead (nếu có), giới hạn kênh và hội thoại (tối đa 20 lượt, dữ liệu)."""
-	parts = [groups_block()]
-	summary = frappe.db.get_value("CRM Lead", lead, "omni_bot_summary") if include_summary else None
+	"""Ghép nội dung gửi bot từ hội thoại đã dựng: nhóm câu hỏi, tóm tắt Lead (nếu có), giới hạn kênh, hội thoại."""
+	parts = [groups if groups is not None else groups_block()]
 	if summary:
 		text = escape_tags(normalize_text(summary))
 		parts.append(f"<tom_tat_lead>{mask_pii(text) if mask else text}</tom_tat_lead>")
 	parts.append(
 		f"<gioi_han_kenh>kenh={channel_type or '?'}; toi_da_ky_tu={channel_max_chars(channel_type)}</gioi_han_kenh>"
 	)
-	parts.append(build_conversation(lead, until=until, max_turns=MAX_TURNS, mask=mask))
+	parts.append(conversation)
 	return "\n".join(parts)
+
+
+def build_user_message(
+	lead: str, channel_type: str | None, until: Any = None, include_summary: bool = True, mask: bool = True
+) -> str:
+	"""Nội dung gửi bot: nhóm câu hỏi, tóm tắt Lead (nếu có), giới hạn kênh và hội thoại (tối đa 20 lượt, dữ liệu)."""
+	summary = frappe.db.get_value("CRM Lead", lead, "omni_bot_summary") if include_summary else None
+	conversation = build_conversation(lead, until=until, max_turns=MAX_TURNS, mask=mask)
+	return compose_user_message(conversation, channel_type, summary, mask)
 
 
 # --- Dữ liệu của lượt ---------------------------------------------------------------------------------------
