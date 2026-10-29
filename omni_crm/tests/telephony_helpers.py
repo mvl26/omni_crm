@@ -149,5 +149,9 @@ class TelephonyTestCase(FrappeTestCase):
 		started = time.monotonic()
 		webhooks.telephony_lookup()
 		elapsed = time.monotonic() - started
-		body = {k: v for k, v in frappe.local.response.items() if k != "http_status_code"}
+		resp = frappe.local.response
+		if resp.get("filename") == "lookup.json":
+			body = json.loads(resp["filecontent"])
+		else:
+			body = {k: v for k, v in resp.items() if k != "http_status_code"}
 		return frappe.local.response.get("http_status_code", 200), body, elapsed

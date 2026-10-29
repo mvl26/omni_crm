@@ -1,0 +1,28 @@
+{
+  "call_status": "ended",
+  "project_id": 9999,
+  "request_from_user_id": "",
+  "account_sid": "AC-fake",
+  "timestamp_ms": 1790000090000,
+  "from": {
+    "number": "agent101",
+    "alias": "agent101",
+    "is_online": true,
+    "type": "internal"
+  },
+  "to": {
+    "number": "0903201002",
+    "alias": "0903201002",
+    "is_online": false,
+    "type": "external"
+  },
+  "type": "stringee_call",
+  "call_id": "call-vn-1-FAKE0004",
+  "clientCustomData": "",
+  "callCreatedReason": "CLIENT_MAKE_CALL",
+  "endCallCause": "USER_END_CALL",
+  "endedBy": "INTERNAL",
+  "callType": "CALL",
+  "duration": 90,
+  "answerDuration": 80
+}

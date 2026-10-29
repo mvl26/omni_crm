@@ -426,12 +426,12 @@ class TestLookup(TelephonyTestCase):
 
 	def test_wrong_token_does_not_leak_customer(self):
 		self.make_lead()
-		for args in ({"t": "sai"}, {"t": ""}, {"ch": "khong co"}):
+		new_body = self.lookup({"from": "0903201003"})[1]  # khách mới thật
+		for args in ({"t": "sai"}, {"t": ""}):
 			status, body, _t = self.lookup(args)
-			self.assertEqual(status, 200)
-			self.assertNotIn("lead", body)
-			self.assertNotIn("owner", body)
-			self.assertNotIn("customer_name", body if not body.get("found") else {"x": 1})
+			self.assertEqual((status, body), (200, new_body))  # D2-02: giống hệt phản hồi khách mới
+		status, body, _t = self.lookup({"ch": "khong co"})  # kênh không tồn tại: không có nhà cung cấp
+		self.assertEqual((status, body), (200, {}))
 
 	def test_disabled_channel_returns_empty_valid(self):
 		self.make_lead()

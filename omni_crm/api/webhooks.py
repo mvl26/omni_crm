@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 import uuid
 
@@ -186,30 +187,40 @@ def telephony_event() -> dict:
 	return _handle_webhook("Telephony")
 
 
-def _lookup_channel(query: dict):
-	"""Kênh Telephony hợp lệ cho tra cứu, hoặc None (không tồn tại, sai loại, tắt, sai token, thiếu nhà cung cấp)."""
+def _lookup_channel(query: dict) -> tuple[object | None, bool]:
+	"""(kênh Telephony có thật hoặc None, token hợp lệ và kênh đang bật?)."""
 	from omni_crm.channels.telephony.adapter import verify_token
 
 	name = query.get("ch")
 	if not name or not frappe.db.exists("Omni Channel", name):
-		return None
+		return None, False
 	channel_doc = frappe.get_cached_doc("Omni Channel", name)
-	if channel_doc.channel_type != "Telephony" or not channel_doc.enabled:
-		return None
-	return channel_doc if verify_token(channel_doc, query.get("t")) else None
+	if channel_doc.channel_type != "Telephony":
+		return None, False
+	return channel_doc, bool(channel_doc.enabled) and verify_token(channel_doc, query.get("t"))
 
 
 def _send_raw(payload: dict | str) -> None:
-	"""Trả nguyên văn phản hồi của nhà cung cấp (không bọc trong {"message": ...} của Frappe)."""
+	"""Trả nguyên văn phản hồi của nhà cung cấp (không bọc trong {"message": ...} của Frappe).
+
+	Luôn đi qua kiểu `download` (nội dung là bytes) để khóa do nhà cung cấp đặt (type, message, location...)
+	không bao giờ ghi đè khóa điều khiển của Frappe; dict được tuần tự hóa thành JSON.
+	"""
 	if isinstance(payload, dict):
-		frappe.local.response.update(payload)
-		return
+		body, filename, content_type = (
+			json.dumps(payload, ensure_ascii=False).encode(),
+			"lookup.json",
+			"application/json",
+		)
+	else:
+		body, filename, content_type = str(payload).encode(), "lookup.txt", "text/plain"
 	frappe.local.response.update(
 		{
 			"type": "download",
-			"filename": "lookup.txt",
-			"filecontent": str(payload).encode(),
+			"filename": filename,
+			"filecontent": body,
 			"display_content_as": "inline",
+			"content_type": content_type,
 		}
 	)
 
@@ -231,10 +242,13 @@ def telephony_lookup() -> None:
 	channel_doc = provider = None
 	try:
 		query = request_query()
-		channel_doc = _lookup_channel(query)
+		channel_doc, authed = _lookup_channel(query)
 		if channel_doc is None:
 			return _send_raw({})
 		provider = provider_for_channel(channel_doc)
+		if not authed:
+			# Sai token / kênh tắt: cùng phản hồi "khách mới" của nhà cung cấp, không phân biệt được với khách mới
+			return _send_raw(provider.lookup_response(LookupResult(), channel_doc))
 		result = LookupResult()
 		try:
 			body = _read_body(frappe.local.request)[: 64 * 1024]

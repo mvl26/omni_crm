@@ -31,7 +31,7 @@ Nút thao tác: "Xử lý lại" tin Manual (đưa về New), "Quét ngay", "Là
 | Không nhận được tin Zalo | Cấu hình webhook phía Zalo, xác thực tên miền, chứng chỉ HTTPS, log 401 | Sửa cấu hình; nếu lỗi chữ ký hàng loạt → kiểm tra secret |
 | Bot trả lời sai với khách | Tìm Bot Draft, Bot Run, nhóm câu hỏi | **Tắt `auto_send_enabled` của nhóm** ngay; sale gửi đính chính; sửa kho tri thức; chạy lại bộ đề |
 | Chi phí AI tăng vọt | Bot Run theo giờ, kind | Giảm hạn mức; kiểm tra vòng lặp gọi lại |
-| Lộ `webhook_token` tổng đài | — | Đổi token trên Omni Channel và phía nhà cung cấp |
+| Lộ `webhook_token` tổng đài | — | Đổi token trên Omni Channel và phía nhà cung cấp (Stringee: `docs/huong-dan/cau-hinh-stringee.md` mục 6) |
 
 ## 4. Quay lui
 

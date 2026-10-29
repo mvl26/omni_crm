@@ -1,0 +1,42 @@
+{
+  "r": 0,
+  "message": "Load call(s) success",
+  "data": {
+    "calls": [
+      {
+        "id": "call-vn-1-LOG0003",
+        "uuid": "uuid-fake-3",
+        "project_id": 9999,
+        "project_name": "fake",
+        "account_id": 1,
+        "from_number": "84903201001",
+        "to_number": "842873001234",
+        "from_user_id": null,
+        "from_alias": "",
+        "to_alias": "",
+        "from_internal": 0,
+        "to_internal": 0,
+        "participants": "",
+        "video_call": 0,
+        "recorded": 1,
+        "record_path": "rec-fake-0003",
+        "start_time": 1790000003000,
+        "answer_time": 1790000008000,
+        "stop_time": 1790000068000,
+        "created": 1790000003,
+        "last_modified": 1790000003,
+        "amount": 0,
+        "answer_duration": 60,
+        "answer_duration_minutes": 1,
+        "fields": []
+      }
+    ],
+    "search_after": [
+      1790000003000,
+      "cursor-fake-2"
+    ],
+    "limit": 2,
+    "totalCalls": 3,
+    "totalAnswerDurationMinutes": null
+  }
+}
