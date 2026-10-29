@@ -85,8 +85,10 @@ class TestOmniModels(FrappeTestCase):
 		):
 			self.assertFalse(frappe.db.exists("DocType", dt), dt)
 		settings_fields = {f.fieldname for f in frappe.get_meta("Omni Settings").fields}
-		for fn in ("score_rules", "hot_lead_threshold", "bot_active_hours"):
-			self.assertNotIn(fn, settings_fields)
+		self.assertNotIn("bot_active_hours", settings_fields)
+		# D2-06 đã thêm bảng điểm, ngưỡng Lead nóng và công tắc chấm điểm
+		for fn in ("score_rules", "hot_lead_threshold", "lead_scoring_enabled"):
+			self.assertIn(fn, settings_fields)
 		# D2-04 đã tạo Omni Bot Run và khối Bot của Omni Settings
 		self.assertTrue(frappe.db.exists("DocType", "Omni Bot Run"))
 		for fn in ("bot_analyze_enabled", "bot_reply_mode", "ai_api_key", "daily_token_budget", "kb_version"):
