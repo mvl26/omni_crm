@@ -143,6 +143,16 @@ class OmniMonitor {
 				tel.channels.map((c) => this.row(c.name, `${this.yes_no(c.enabled)} · ${__("cuộc gọi gần nhất")}: ${c.last_call_at || "-"}`)).join("")));
 		}
 
+		const bot = s.bot || {};
+		if (bot.daily_token_budget !== undefined) {
+			const pct = bot.usage_pct === null || bot.usage_pct === undefined ? "-" : bot.usage_pct + "%";
+			cards.push(this.card(__("Bot AI"),
+				this.row(__("Token hôm nay / hạn mức"), `${bot.tokens_today} / ${bot.daily_token_budget} (${pct})`, bot.usage_pct > 80) +
+				this.row(__("Số lần gọi AI (24 giờ)"), bot.runs_24h) +
+				this.row(__("Lần lỗi (24 giờ)"), bot.errors_24h, bot.runs_24h >= 20 && bot.errors_24h * 100 > 5 * bot.runs_24h) +
+				this.row(__("Bị bỏ qua do hạn mức (24 giờ)"), bot.skipped_budget_24h, bot.skipped_budget_24h > 0)));
+		}
+
 		const d = s.duplicates || {};
 		cards.push(this.card(__("Nghi trùng"), this.row(__("Cặp đang Open"), d.open, d.open > 20)));
 
