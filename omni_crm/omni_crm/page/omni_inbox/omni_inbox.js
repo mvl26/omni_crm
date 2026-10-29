@@ -28,6 +28,7 @@ class OmniInbox {
 		this.refresh_timer = null;
 		const e = frappe.utils.escape_html;
 		$(page.body).html(`
+			<div class="oi-system-status" style="display:none"></div>
 			<div class="omni-inbox">
 				<div class="oi-left">
 					<div class="oi-filters">
@@ -53,8 +54,23 @@ class OmniInbox {
 		$(page.body).find(".oi-channel, .oi-unanswered, .oi-mine").on("change", () => this.load_list());
 		this.on_update_handler = (data) => this.on_update(data);
 		this.active = false;
+		this.$status = $(page.body).find(".oi-system-status");
 		this.resume();
 		this.load_list();
+		this.load_status();
+	}
+
+	// Khối "Tình trạng hệ thống": chỉ hiện khi có sự cố kênh; thông điệp cố định từ máy chủ.
+	load_status() {
+		frappe
+			.call({ method: "omni_crm.api.inbox.system_status", freeze: false, silent: true })
+			.then((r) => {
+				const msgs = (r.message || {}).messages || [];
+				const e = frappe.utils.escape_html;
+				this.$status
+					.html(msgs.map((m) => `<div>${e(m)}</div>`).join(""))
+					.toggle(msgs.length > 0);
+			});
 	}
 
 	resume() {
@@ -63,7 +79,10 @@ class OmniInbox {
 		// Realtime: payload không chứa nội dung tin; nhận tin hiệu rồi gọi lại API có kiểm quyền.
 		frappe.realtime.on("omni_inbox_update", this.on_update_handler);
 		// Dự phòng khi mất kết nối realtime.
-		this.poll = setInterval(() => this.load_list(true), 60000);
+		this.poll = setInterval(() => {
+			this.load_list(true);
+			this.load_status();
+		}, 60000);
 		if (this.current) this.show(this.current);
 	}
 

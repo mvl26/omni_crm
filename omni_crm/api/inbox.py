@@ -527,3 +527,39 @@ def _reserve_phone_request(identity: str) -> Any:
 		IDENTITY, identity, "phone_requested_at", frappe.utils.now_datetime(), update_modified=False
 	)
 	return last
+
+
+STATUS_CACHE_KEY = "omni:system_status"
+STATUS_CACHE_SECONDS = 30
+STATUS_SLOW_SECONDS = 300
+
+
+def _status_messages() -> list[str]:
+	from omni_crm.monitoring.snapshot import build_snapshot
+
+	snap = build_snapshot()
+	out: list[str] = []
+	for ch in snap["channels"]:
+		if not ch["enabled"]:
+			continue
+		if ch["channel_type"] == "Zalo OA" and not snap["switches"]["sandbox_mode"]:
+			left = ch["token_seconds_left"]
+			if ch["last_error"] or (left is not None and left <= 0):
+				out.append(_("Zalo đang mất kết nối, tin đến vẫn được lưu"))
+		if not ch["outbound_enabled"]:
+			out.append(_("Gửi tin qua {0} đang tạm tắt").format(ch["channel_type"]))
+	age = snap["queue"]["oldest_new_age_seconds"]
+	if age is not None and age > STATUS_SLOW_SECONDS:
+		out.append(_("Hệ thống xử lý tin đang chậm, tin vẫn được lưu"))
+	return list(dict.fromkeys(out))
+
+
+@frappe.whitelist()
+def system_status() -> dict[str, list[str]]:
+	"""Khối "Tình trạng hệ thống" của Hộp thư: chỉ thông điệp cố định khi có sự cố kênh (không lộ lỗi thô)."""
+	cache = frappe.cache()
+	messages = cache.get_value(STATUS_CACHE_KEY)
+	if messages is None:
+		messages = _status_messages()
+		cache.set_value(STATUS_CACHE_KEY, messages, expires_in_sec=STATUS_CACHE_SECONDS)
+	return {"messages": messages}
