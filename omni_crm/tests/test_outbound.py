@@ -368,6 +368,17 @@ class TestSendOutbound(OutboundTestCase):
 		self.assertFalse(frappe.db.exists(OUT, dup.name))
 		self.assertEqual(self.row(name).status, "Sent")
 
+	def test_echo_cleanup_error_does_not_lose_sent(self):
+		self.sandbox(False)
+		name = self.queue()
+		with (
+			mock.patch.object(ZaloAdapter, "send", return_value="zl-mid-x"),
+			mock.patch.object(outbound, "drop_echo_duplicate", side_effect=RuntimeError("0912345678")),
+		):
+			self.assertEqual(outbound.send_outbound(name), "Sent")
+		r = self.row(name)
+		self.assertEqual((r.status, r.external_message_id), ("Sent", "zl-mid-x"))
+
 	def test_error_message_is_redacted(self):
 		self.sandbox(False)
 		name = self.queue()

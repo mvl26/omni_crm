@@ -222,8 +222,15 @@ def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
 		is_sandbox=1 if sandbox else 0,
 		last_error=None,
 	)
+	frappe.db.commit()  # trạng thái Sent + mã tin phải bền trước các bước phụ bên dưới
 	if external_id and not sandbox:
-		drop_echo_duplicate(row, external_id)
+		try:
+			drop_echo_duplicate(row, external_id)
+		except Exception:
+			frappe.db.rollback()
+			frappe.logger("omni").warning(
+				"omni: dọn echo trùng của %s lỗi: %s", row.name, redact(frappe.get_traceback())[:300]
+			)
 	try:
 		timeline.append_outbound(lead_bridge.get_deal_for_lead(row.lead) or row.lead, row.name)
 	except Exception:
