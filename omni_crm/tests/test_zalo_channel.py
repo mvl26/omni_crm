@@ -217,8 +217,9 @@ class TestRegistry(ZaloTestCase):
 		unregister_adapter("Email")
 		self.assertIsInstance(get_adapter("Zalo OA"), ZaloAdapter)
 		self.assertEqual(get_adapter("Email").channel_type, "Email")
+		self.assertEqual(get_adapter("Telephony").channel_type, "Telephony")  # D2-01
 		with self.assertRaises(AdapterNotFoundError):
-			get_adapter("Telephony")
+			get_adapter("Loai kenh khong co")
 
 	def test_fake_overrides_and_lazy_comes_back(self):
 		class Fake:
