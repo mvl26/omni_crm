@@ -18,6 +18,8 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
 | `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI); lần gọi ghi `Skipped Budget`. Site đã migrate bắt đầu ở 0 cho đến khi đặt hạn mức | 2 |
+| `daily_token_budget` — tính chất | Omni Settings | **Hạn mức mềm**: `call_tool` giữ chỗ token ước lượng (~ký tự/3 + max_tokens) trước khi gọi rồi hiệu chỉnh theo số thật, nhưng các worker chạy song song vẫn có thể vượt khoảng (số worker × max_tokens) | 2 |
+| `sandbox_mode` — với AI | Omni Settings | `call_tool` KHÔNG đọc sandbox_mode: sandbox chỉ áp chiều gửi ra khách. Lời gọi AI thật bị chặn bằng cổng Q11 (`synthetic` / `omni_ai_allow_customer_data`) | 2 |
 | Ngắt mạch AI (tự động) | cache `omni:ai:breaker_open` | 5 lần lỗi liên tiếp → 5 phút mọi lần gọi ghi `Skipped Switch`; xóa khóa để mở lại ngay | 2 |
 | site_config `omni_ai_allow_customer_data` | site_config | Không bật (mặc định) thì lời gọi API thật chỉ chạy với hội thoại tổng hợp (`synthetic=True`); chỉ bật sau khi Q11 được chốt | 2 |
 | site_config `omni_ai_timeout_seconds` | site_config | Timeout mỗi lần gọi AI, mặc định 60 | 2 |

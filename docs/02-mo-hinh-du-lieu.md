@@ -53,7 +53,7 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | `ai_api_key` | Password | | Khóa Claude API |
 | `analyze_model` | Data | `claude-haiku-5-5` | Mô hình cho phân tích |
 | `reply_model` | Data | `claude-sonnet-5-5` | Mô hình cho soạn trả lời |
-| `daily_token_budget` | Int | 2000000 | Vượt thì bot tạm dừng đến hôm sau, gửi cảnh báo |
+| `daily_token_budget` | Int | 2000000 | Vượt thì bot tạm dừng đến hôm sau, gửi cảnh báo. Lưu ý: site đã có Omni Settings trước khi thêm trường migrate ra 0 (bot dừng) — Omni Admin phải đặt giá trị; không có patch tự đặt |
 | `analyze_prompt_version`, `reply_prompt_version`, `summarize_prompt_version` | Data | (chỉ đọc) | Phiên bản câu lệnh đang dùng; `bot/prompts/loader.py` ghi khi nạp tệp mới nhất. `Omni Bot Run.prompt_version` lưu bản thực sự đã dùng |
 | `kb_version` | Int | (chỉ đọc) | Tăng mỗi khi kho tri thức thay đổi |
 | `score_rules` | Table | Omni Score Rule | Bảng điểm |
