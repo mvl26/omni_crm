@@ -96,6 +96,19 @@ class TestResolverBasics(IdentityTestCase):
 		self.assertEqual(r.lead, nam)
 		self.assertEqual(r.matched_by, "medium")
 
+	def test_medium_signal_with_placeholder_sender_name_attaches_per_spec(self):
+		# ĐANG MỞ (docs/12 mục D, mức Cao): theo docs/04 mục 3 bước 5 + 3.1, tên không có thông tin thì
+		# "không mâu thuẫn" nên khách ẩn danh nhắc số của người khác bị gắn vào Lead của người đó.
+		# Test này ghim hành vi hiện tại; nếu người duyệt đổi quyết định, đổi test này cùng lúc.
+		nam = self.make_lead("Phạm Quốc Nam", mobile=phone(17))
+		for uid, profile in (
+			("U1", None),
+			("U2", {"display_name": "Khách"}),
+			("U3", {"display_name": "Zalo user"}),
+		):
+			r = self.resolve(zalo(uid, f"liên hệ anh Nam {phone(17)}", profile))
+			self.assertEqual((r.lead, r.matched_by), (nam, "medium"))
+
 	def test_medium_signal_ambiguous_between_two_leads_never_attaches(self):
 		a = self.make_lead("Phạm Quốc Nam", mobile=phone(6))
 		b = self.make_lead("Lê Văn Hải", mobile=phone(6))
@@ -232,6 +245,47 @@ class TestDealAndCreate(IdentityTestCase):
 		self.assertEqual(doc.status, "New")
 		frappe.db.commit()
 
+	def test_default_names_are_placeholders_for_all_channels(self):
+		from omni_crm.identity.normalize import is_informative_name, is_placeholder_name
+
+		for ct, ext in (
+			("Zalo OA", "2973123456789"),
+			("Email", "an@gmail.com"),
+			("Telephony", "+84903105001"),
+		):
+			name = lead_bridge.default_lead_name(ct, ext)
+			self.assertTrue(is_placeholder_name(name), name)
+			self.assertFalse(is_informative_name(name), name)
+
+	def test_nameless_email_leads_do_not_flag_each_other(self):
+		a = self.resolve(make_msg("Email", "an@td105.example", "xin chào"))
+		b = self.resolve(make_msg("Email", "binh@td105.example", "xin chào"))
+		self.assertNotEqual(a.lead, b.lead)
+		self.assertEqual(self.candidates(a.lead), [])
+		self.assertEqual(self.candidates(b.lead), [])
+
+	def test_new_lead_with_email_does_not_call_gravatar_and_sets_email(self):
+		ident = frappe.get_doc(
+			{
+				"doctype": "Omni Identity",
+				"identity_key": "Email:x@td105.example",
+				"channel_type": "Email",
+				"external_id": "x@td105.example",
+			}
+		).insert(ignore_permissions=True)
+		with mock.patch("crm.fcrm.doctype.crm_lead.crm_lead.has_gravatar") as gr:
+			name = lead_bridge.create_lead_for_identity(ident.name, {"email": "x@td105.example"})
+		gr.assert_not_called()
+		self.assertEqual(
+			frappe.db.get_value("CRM Lead", name, ["email", "omni_email_norm"], as_dict=True),
+			{"email": "x@td105.example", "omni_email_norm": "x@td105.example"},
+		)
+		frappe.db.commit()
+
+	def test_lead_phone_field_accepts_dotted_number(self):
+		lead = self.make_lead("TD105 Cham", mobile="0912.345.678")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead, "omni_phone_e164"), "+84912345678")
+
 	def test_compute_normalized_fields_prefers_mobile(self):
 		lead = self.make_lead("TD105 Mobile", mobile="024 3123 4567")
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead, "omni_phone_e164"), "+842431234567")
@@ -259,17 +313,18 @@ class TestResolverConcurrency(IdentityTestCase):
 		def run(msg):
 			def go():
 				barrier.wait(10)
-				with mock.patch.object(lead_bridge, "create_lead_for_identity", slow_create):
-					return resolver.resolve_full([msg])
+				return resolver.resolve_full([msg])
 
 			return go
 
 		m1 = make_msg("Telephony", phone(20), "alo")
 		m2 = make_msg("Zalo OA", "TD105U1", None, {"phone": "+84 " + phone(20)[1:]}, event_type="user_info")
-		t1, r1 = _in_thread(run(m1))
-		t2, r2 = _in_thread(run(m2))
-		t1.join(30)
-		t2.join(30)
+		# Vá một lần ở thread chính (vá/hoàn tác từ hai thread sẽ giẫm lên nhau)
+		with mock.patch.object(lead_bridge, "create_lead_for_identity", slow_create):
+			t1, r1 = _in_thread(run(m1))
+			t2, r2 = _in_thread(run(m2))
+			t1.join(30)
+			t2.join(30)
 		self.assertNotIn("error", r1, r1.get("error"))
 		self.assertNotIn("error", r2, r2.get("error"))
 		self.assertEqual(r1["value"].lead, r2["value"].lead)

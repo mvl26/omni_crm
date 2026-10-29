@@ -12,6 +12,7 @@ from omni_crm.crm_bridge.lead import normalized_fields
 
 LEAD = "CRM Lead"
 SAVEPOINT = "omni_merge_leads"
+LOST_REASON = "Other"  # CRM Lost Reason có sẵn (apps/crm/crm/install.py::add_default_lost_reasons)
 JUNK_STATUS = "Junk"  # CRM Lead Status loại Lost có sẵn (docs/12 mục C, G1)
 
 # DocType của app này có trường Link tới CRM Lead: (DocType, tên trường). DocType chưa tồn tại thì bỏ qua
@@ -176,10 +177,15 @@ def merge_leads(primary: str, secondary: str, user: str, candidate: str | None =
 		if last_s and (not last or last_s > last):
 			frappe.db.set_value(LEAD, primary, "omni_last_inbound_at", last_s, update_modified=False)
 
-		status = JUNK_STATUS if frappe.db.exists("CRM Lead Status", JUNK_STATUS) else None
 		values: dict[str, Any] = {"omni_merged_into": primary}
-		if status:
-			values["status"] = status
+		# Junk thuộc nhóm Lost: CRM đòi lost_reason (và lost_notes nếu "Other") mỗi lần lưu Lead, nên phải
+		# điền để Lead phụ vẫn lưu được; thiếu trạng thái/lý do "Other" thì giữ nguyên trạng thái.
+		if frappe.db.exists("CRM Lead Status", JUNK_STATUS) and frappe.db.exists(
+			"CRM Lost Reason", LOST_REASON
+		):
+			values.update(
+				status=JUNK_STATUS, lost_reason=LOST_REASON, lost_notes=_("Đã gộp vào {0}").format(primary)
+			)
 		frappe.db.set_value(LEAD, secondary, values)
 
 		lines = [_("Đã gộp Lead {0} vào Lead này.").format(escape_html(secondary))]

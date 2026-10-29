@@ -172,8 +172,14 @@ def _name_tokens(name: str | None) -> list[str]:
 	return re.findall(r"[a-z0-9]+", strip_accents(name))
 
 
+# Tên mặc định do hệ thống đặt ("Khách Zalo OA 4821", "Khách Email .com"): luôn là tên giữ chỗ.
+_DEFAULT_NAME_RE = re.compile(r"^khach (zalo oa|zalo|email|telephony)\b")
+
+
 def informative_tokens(name: str | None) -> list[str]:
 	"""Các từ mang thông tin của tên: bỏ từ chung chung (anh, chị, khách...) và số."""
+	if _DEFAULT_NAME_RE.match(strip_accents(name).strip()):
+		return []
 	return [t for t in _name_tokens(name) if t not in GENERIC_NAME_WORDS and not t.isdigit()]
 
 

@@ -133,6 +133,13 @@ class TestMergeLeads(IdentityTestCase):
 		s = frappe.get_doc("CRM Lead", self.s)
 		self.assertEqual(s.omni_merged_into, self.p)
 		self.assertEqual(s.status, "Junk")
+		# Lead phụ vẫn lưu lại được (Junk thuộc nhóm Lost: CRM đòi lost_reason khi validate)
+		try:
+			s.save(ignore_permissions=True)
+			saved = True
+		except frappe.ValidationError:
+			saved = False
+		self.assertTrue(saved, "Lead phụ không lưu được sau khi gộp (thiếu lost_reason?)")
 		self.assertTrue(
 			frappe.db.exists(
 				"Comment",

@@ -78,15 +78,20 @@ def create_lead_for_identity(identity: str, signals: dict) -> str:
 			"doctype": LEAD,
 			"first_name": name[:140],
 			"mobile_no": signals.get("phone") or None,
-			"email": signals.get("email") or None,
 			"omni_first_channel": ident.channel_type,
 			"omni_last_inbound_at": signals.get("last_inbound_at"),
 		}
 	)
 	doc.flags.ignore_permissions = True
-	doc.flags.ignore_email_validation = True  # email đã qua normalize_email
-	# CRM Lead.validate gọi has_gravatar (mạng, timeout 5 giây) khi có email; frappe bỏ qua trong test.
+	# Không truyền email vào insert: CRM Lead.validate gọi has_gravatar (mạng, timeout 5 giây) cho Lead mới
+	# có email, mà lúc đó `set_new_name` đã giữ khóa dòng của bộ đếm tên (tabSeries), làm nghẽn mọi Lead
+	# đang được tạo. Email (đã qua normalize_email) được ghi sau bằng db.set_value, không qua validate.
 	doc.insert()
+	email = signals.get("email")
+	if email:
+		frappe.db.set_value(
+			LEAD, doc.name, {"email": email, "omni_email_norm": normalized_fields(None, None, email)[1]}
+		)
 	return doc.name
 
 
