@@ -122,7 +122,7 @@ class EmailAdapter:
 		"""Email không nhận qua webhook: không có sự kiện nào."""
 		return []
 
-	def can_send_now(self, identity_doc, channel_doc) -> tuple[bool, str]:
+	def can_send_now(self, identity_doc, channel_doc, source: str = "Sale") -> tuple[bool, str]:
 		"""Gửi được trừ khi kênh tắt chiều ra."""
 		if channel_doc is not None and not channel_doc.get("outbound_enabled"):
 			return False, _("Kênh email đã tắt chiều ra")

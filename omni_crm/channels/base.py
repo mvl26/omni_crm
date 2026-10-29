@@ -24,6 +24,6 @@ class ChannelAdapter(Protocol):
 		"""Gửi tin ra; trả external_message_id."""
 		...
 
-	def can_send_now(self, identity_doc, channel_doc) -> tuple[bool, str]:
+	def can_send_now(self, identity_doc, channel_doc, source: str = "Sale") -> tuple[bool, str]:
 		"""Có được gửi cho định danh này lúc này không, kèm lý do."""
 		...

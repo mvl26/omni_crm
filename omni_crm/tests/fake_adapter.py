@@ -34,7 +34,7 @@ class FakeAdapter:
 	def send(self, req, channel_doc):
 		raise NotImplementedError
 
-	def can_send_now(self, identity_doc, channel_doc):
+	def can_send_now(self, identity_doc, channel_doc, source="Sale"):
 		return True, ""
 
 
