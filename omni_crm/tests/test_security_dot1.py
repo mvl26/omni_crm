@@ -118,7 +118,15 @@ class TestWebhookExposure(PipelineTestCase):
 				fn = getattr(mod, attr)
 				if callable(fn) and fn in frappe.guest_methods:
 					allow.append(f"{mod.__name__}.{attr}")
-		self.assertEqual(allow, ["omni_crm.api.webhooks.zalo"])
+		# D2-01: thêm đúng hai endpoint tổng đài theo docs/03 mục 1 (không dùng ký tự đại diện)
+		self.assertEqual(
+			sorted(allow),
+			[
+				"omni_crm.api.webhooks.telephony_event",
+				"omni_crm.api.webhooks.telephony_lookup",
+				"omni_crm.api.webhooks.zalo",
+			],
+		)
 
 	def test_unsigned_body_creates_nothing(self):
 		raw = b'{"event_name":"user_send_text","timestamp":"1"}'
