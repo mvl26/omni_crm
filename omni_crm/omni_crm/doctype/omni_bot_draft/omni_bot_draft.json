@@ -1,0 +1,226 @@
+{
+ "autoname": "BDR-.YYYY.-.#######",
+ "naming_rule": "Expression (old style)",
+ "field_order": [
+  "lead",
+  "identity",
+  "channel",
+  "batch_id",
+  "bot_run",
+  "col_a",
+  "mode",
+  "action",
+  "decision",
+  "question_group",
+  "confidence",
+  "sec_text",
+  "draft_text",
+  "kb_items",
+  "guard_flags",
+  "handoff_reason",
+  "sec_final",
+  "final_text",
+  "edit_distance_ratio",
+  "sale_reply_text",
+  "sale_handoff",
+  "col_b",
+  "decided_by",
+  "decided_at",
+  "rating",
+  "rating_note",
+  "critical"
+ ],
+ "fields": [
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Định danh",
+   "options": "Omni Identity"
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Link",
+   "label": "Kênh",
+   "options": "Omni Channel"
+  },
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "Mã lượt xử lý",
+   "search_index": 1
+  },
+  {
+   "fieldname": "bot_run",
+   "fieldtype": "Link",
+   "label": "Lần gọi AI",
+   "options": "Omni Bot Run"
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Chế độ lúc soạn",
+   "options": "Shadow\nDraft\nAuto",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "label": "Bot đề xuất",
+   "options": "Reply\nHandoff",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "decision",
+   "fieldtype": "Select",
+   "label": "Quyết định",
+   "options": "Pending\nSent As Is\nSent Edited\nDiscarded\nExpired\nShadow Compared",
+   "default": "Pending",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "question_group",
+   "fieldtype": "Link",
+   "label": "Nhóm câu hỏi",
+   "options": "Omni Question Group",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "confidence",
+   "fieldtype": "Float",
+   "label": "Độ tự tin",
+   "description": "0-1, bot tự đánh giá (chỉ tham khảo)"
+  },
+  {
+   "fieldname": "sec_text",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "draft_text",
+   "fieldtype": "Long Text",
+   "label": "Nháp"
+  },
+  {
+   "fieldname": "kb_items",
+   "fieldtype": "Small Text",
+   "label": "Mục kho tri thức đã dùng"
+  },
+  {
+   "fieldname": "guard_flags",
+   "fieldtype": "Small Text",
+   "label": "Chốt chặn",
+   "description": "Lý do bị chặn bởi guards.py nếu có; dòng bắt đầu bằng info: chỉ là ghi chú"
+  },
+  {
+   "fieldname": "handoff_reason",
+   "fieldtype": "Small Text",
+   "label": "Lý do chuyển người"
+  },
+  {
+   "fieldname": "sec_final",
+   "fieldtype": "Section Break",
+   "label": "Kết quả"
+  },
+  {
+   "fieldname": "final_text",
+   "fieldtype": "Long Text",
+   "label": "Câu thực sự gửi"
+  },
+  {
+   "fieldname": "edit_distance_ratio",
+   "fieldtype": "Float",
+   "label": "Độ khác biệt",
+   "precision": "3",
+   "description": "0 = giữ nguyên; ngầm: so nháp với câu sale"
+  },
+  {
+   "fieldname": "sale_reply_text",
+   "fieldtype": "Long Text",
+   "label": "Câu sale trả lời (ngầm)"
+  },
+  {
+   "fieldname": "sale_handoff",
+   "fieldtype": "Check",
+   "label": "Sale trả lời ngoài kho tri thức"
+  },
+  {
+   "fieldname": "col_b",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "decided_by",
+   "fieldtype": "Link",
+   "label": "Người quyết định",
+   "options": "User"
+  },
+  {
+   "fieldname": "decided_at",
+   "fieldtype": "Datetime",
+   "label": "Thời điểm quyết định"
+  },
+  {
+   "fieldname": "rating",
+   "fieldtype": "Select",
+   "label": "Đánh giá",
+   "options": "\nĐúng\nSai\nThiếu"
+  },
+  {
+   "fieldname": "rating_note",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú chấm"
+  },
+  {
+   "fieldname": "critical",
+   "fieldtype": "Check",
+   "label": "Lỗi nghiêm trọng",
+   "description": "Sai về giá, cam kết, y khoa"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Omni Knowledge Editor",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "actions": [],
+ "creation": "2026-10-30 12:00:00.000000",
+ "modified": "2026-10-30 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Bot Draft",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "links": [],
+ "states": []
+}

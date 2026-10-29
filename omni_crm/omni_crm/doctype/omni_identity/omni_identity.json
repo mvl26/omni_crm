@@ -19,7 +19,8 @@
   "sec_activity",
   "last_inbound_at",
   "is_follower",
-  "phone_requested_at"
+  "phone_requested_at",
+  "bot_paused_until"
  ],
  "fields": [
   {
@@ -93,6 +94,12 @@
    "fieldname": "phone_requested_at",
    "fieldtype": "Datetime",
    "label": "Lần gần nhất yêu cầu SĐT"
+  },
+  {
+   "fieldname": "bot_paused_until",
+   "fieldtype": "Datetime",
+   "label": "Bot tạm dừng đến",
+   "description": "Bot im với khách này đến thời điểm này (D2-07 chỉ kiểm tra; D3-02 dùng đầy đủ)"
   }
  ],
  "permissions": [
