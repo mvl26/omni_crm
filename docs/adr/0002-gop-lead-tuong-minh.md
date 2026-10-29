@@ -18,5 +18,6 @@ Chọn 2. Không đánh giá thêm bằng test cho lựa chọn 1 vì nó vi ph�
 
 ## Hệ quả
 - Thêm DocType mới có Link tới CRM Lead (Đợt 2: Omni Call, Omni Bot Draft đã có trong danh sách, bỏ qua khi chưa tồn tại) thì phải bổ sung vào hằng số trong `merge.py`; test `test_merge.py` quét `Link` tới CRM Lead của mọi DocType omni_crm để nhắc việc này.
-- Chưa chuyển: `ToDo` (phân việc/assign), `CRM Deal.lead` (Deal của Lead phụ vẫn trỏ Lead phụ, đã ghi ở docs/12).
+- Đã chuyển cả `ToDo` (`reference_type`/`reference_name`, phân công sale). `CRM Deal.lead` KHÔNG bị sửa (an toàn nhất, Deal giữ nguồn gốc): `get_deal_for_lead(primary)` tra thêm Deal của các Lead đã gộp vào primary (`omni_merged_into`, `converted=1`), nên tin mới của khách vẫn đi về Deal cũ.
+- Hai lượt gộp ngược chiều đồng thời: khóa hàng cả hai Lead (`for_update`, theo thứ tự tên) trong savepoint, kiểm tra `omni_merged_into` sau khi giữ khóa; lượt sau bị từ chối, không có vòng.
 - Gộp chạy trong savepoint, không tự commit (request/job gọi sẽ commit); lỗi giữa chừng rollback về savepoint.
