@@ -50,6 +50,17 @@ def _touch_last_success(channel_name: str) -> None:
 	)
 
 
+def _read_body(request) -> bytes:
+	"""Đọc body có giới hạn MAX_BODY_BYTES + 1 byte để request chunked không bị đọc hết vào RAM."""
+	cached = getattr(request, "_cached_data", None)  # werkzeug đã đọc (ví dụ make_form_dict của Frappe)
+	if cached is not None:
+		return cached
+	stream = getattr(request, "stream", None)
+	if stream is not None:
+		return stream.read(MAX_BODY_BYTES + 1) or b""
+	return request.get_data() or b""
+
+
 def _unparsed_event(channel_doc, raw: bytes) -> InboundEvent:
 	digest = hashlib.sha256(raw).hexdigest()
 	return InboundEvent(
@@ -74,7 +85,7 @@ def _handle_webhook(channel_type: str) -> dict:
 		return _respond(413, _("Nội dung quá lớn"))
 
 	# 2. đọc raw body trước khi parse
-	raw = request.get_data() or b""
+	raw = _read_body(request)
 	if len(raw) > MAX_BODY_BYTES:
 		return _respond(413, _("Nội dung quá lớn"))
 
@@ -110,12 +121,16 @@ def _handle_webhook(channel_type: str) -> dict:
 
 	# 6. lưu từng sự kiện
 	saved = 0
+	saved_real = 0  # sự kiện thật được lưu (không tính trùng, không tính unparsed)
 	for event in events:
 		if gateway.save_inbound(event):
 			saved += 1
+			if event.event_type != "unparsed":
+				saved_real += 1
 
-	# 7. ghi dấu thành công, commit, trả 200
-	_touch_last_success(channel_doc.name)
+	# 7. ghi dấu thành công (chỉ khi có sự kiện thật được lưu), commit, trả 200
+	if saved_real:
+		_touch_last_success(channel_doc.name)
 	frappe.db.commit()
 	return _respond(200, "ok", received=len(events), saved=saved)
 
