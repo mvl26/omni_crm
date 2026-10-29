@@ -23,6 +23,7 @@ class OmniSettings(Document):
 		self.validate_backoff()
 		self.validate_json_fields()
 		self.validate_positive_numbers()
+		self.validate_score_rules()
 
 	def validate_backoff(self) -> None:
 		try:
@@ -46,3 +47,13 @@ class OmniSettings(Document):
 				frappe.throw(_("{0} phải lớn hơn 0").format(_(self.meta.get_label(fieldname))))
 		if (self.debounce_seconds or 0) < 0 or (self.recording_retention_days or 0) < 0:
 			frappe.throw(_("Giá trị không được âm"))
+
+	def validate_score_rules(self) -> None:
+		"""Ngưỡng Lead nóng > 0; mỗi tín hiệu chỉ một dòng trong bảng điểm."""
+		if self.get("hot_lead_threshold") is not None and (self.hot_lead_threshold or 0) < 1:
+			frappe.throw(_("Ngưỡng Lead nóng phải lớn hơn 0"))
+		seen: set[str] = set()
+		for row in self.get("score_rules") or []:
+			if row.signal in seen:
+				frappe.throw(_("Dòng {0}: tín hiệu {1} bị trùng trong bảng điểm").format(row.idx, row.signal))
+			seen.add(row.signal)

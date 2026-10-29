@@ -73,6 +73,8 @@ Xử lý sau khi nhận kết quả (code, không phải AI):
 
 Hoàn toàn bằng code, từ bảng `Omni Settings.score_rules` (mẫu ở `mau/bang-diem-lead-mau.csv`). Mỗi tín hiệu chỉ cộng một lần. Kết quả ghi `omni_score`. Lần đầu vượt `hot_lead_threshold` → thông báo cho người phụ trách Lead ("Lead nóng: …, điểm …, lý do: …"). Điểm và các tín hiệu đã cộng hiển thị được (ghi vào Comment ẩn hoặc trường JSON) để sale hiểu vì sao.
 
+Cách làm (D2-06): nguồn tín hiệu là trường Lead (`mobile_no`/`phone`, `email`, `organization`, `omni_quantity`, `omni_urgency` = Cao, `omni_intent` = Hỏi giá / Đặt hàng / Khiếu nại), khóa `timeframe_within_30d` của lượt phân tích thành công GẦN NHẤT CÓ khóa đó (quét tối đa 20 lượt; khóa vắng = không có căn cứ), và `repeat_contact` = từ 2 lượt khách liên hệ trong 30 ngày (mỗi batch tin `message` một lần, cộng mỗi cuộc gọi vào `Omni Call`). Chấm điểm chạy ở `analyze.after_analyze`; lượt không qua bot (cuộc gọi, bot tắt) chấm ở `worker.post_batch_hooks`. `omni_score_breakdown` = `{total, signals:[{signal, points, note}], scored_at, hot_notified_at}`; `hot_notified_at` không bao giờ bị xóa nên điểm dao động quanh ngưỡng không báo lại. Lead đã chuyển Deal không báo. Thông báo chỉ có tên Lead, điểm và ghi chú tín hiệu (không SĐT/email/nội dung tin). Bật bằng `lead_scoring_enabled`; nhập bảng điểm: `bench --site <site> execute omni_crm.bot.scoring.import_rules --kwargs "{'path': '<csv>'}"`.
+
 ## 5. Soạn trả lời — `bot/reply.py`
 
 ### 5.1 Khi nào chạy

@@ -41,7 +41,11 @@
   "analyze_prompt_version",
   "reply_prompt_version",
   "summarize_prompt_version",
-  "kb_version"
+  "kb_version",
+  "sec_score",
+  "lead_scoring_enabled",
+  "hot_lead_threshold",
+  "score_rules"
  ],
  "fields": [
   {
@@ -247,6 +251,31 @@
    "fieldtype": "Int",
    "label": "Phiên bản kho tri thức",
    "read_only": 1
+  },
+  {
+   "fieldname": "sec_score",
+   "fieldtype": "Section Break",
+   "label": "Chấm điểm Lead (Đợt 2)"
+  },
+  {
+   "fieldname": "lead_scoring_enabled",
+   "fieldtype": "Check",
+   "label": "Bật chấm điểm Lead",
+   "default": "0",
+   "description": "Tắt: không tính điểm mới, điểm cũ giữ nguyên. Cần nhập bảng điểm trước (bench execute omni_crm.bot.scoring.import_rules)."
+  },
+  {
+   "fieldname": "hot_lead_threshold",
+   "fieldtype": "Int",
+   "label": "Ngưỡng Lead nóng",
+   "default": "60",
+   "description": "Từ ngưỡng này là Lead nóng, báo người phụ trách một lần"
+  },
+  {
+   "fieldname": "score_rules",
+   "fieldtype": "Table",
+   "label": "Bảng điểm",
+   "options": "Omni Score Rule"
   }
  ],
  "permissions": [

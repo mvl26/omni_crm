@@ -202,7 +202,8 @@ class OmniInbox {
 			<div class="oi-head">
 				<div><b>${e(lead.lead_name || lead.name)}</b>
 					<div class="oi-meta">${e(lead.mobile_no || "")} ${e(lead.email || "")} · ${e(lead.status || "")}
-					${(data.identities || []).map((i) => `<span class="oi-chan">${e(i.channel_type)}</span>`).join("")}</div></div>
+					${(data.identities || []).map((i) => `<span class="oi-chan">${e(i.channel_type)}</span>`).join("")}
+					${this.score_html(data.score)}</div></div>
 				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a>
 			</div>
 			${this.bot_html(lead)}
@@ -217,6 +218,14 @@ class OmniInbox {
 			const t = this.$right.find(".oi-thread");
 			t.scrollTop(t[0].scrollHeight);
 		}
+	}
+
+	score_html(score) {
+		// Điểm Lead do quy tắc cố định (không phải AI); rê chuột thấy lý do. Luôn thoát HTML.
+		if (!score) return "";
+		const e = frappe.utils.escape_html;
+		const why = (score.reasons || []).join("\n") || __("Chưa có tín hiệu nào được cộng điểm");
+		return `<span class="oi-chan oi-score ${score.hot ? "oi-hot" : ""}" title="${e(__("Điểm Lead") + ": " + score.score + "\n" + why)}">${e(__("Điểm"))} ${e(score.score)}</span>`;
 	}
 
 	bot_html(lead) {

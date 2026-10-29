@@ -71,6 +71,11 @@ def recording_enabled() -> bool:
 	return _settings_flag("recording_enabled")
 
 
+def lead_scoring_enabled() -> bool:
+	"""Công tắc chấm điểm Lead (Đợt 2); lỗi hoặc chưa cấu hình thì coi là tắt (an toàn)."""
+	return _settings_flag("lead_scoring_enabled")
+
+
 def _settings_flag(fieldname: str) -> bool:
 	try:
 		return bool(frappe.get_cached_doc("Omni Settings").get(fieldname))

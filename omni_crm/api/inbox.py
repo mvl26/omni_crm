@@ -11,6 +11,7 @@ from frappe import _
 from frappe.utils import cint, get_datetime
 
 from omni_crm import flags
+from omni_crm.bot import scoring
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
@@ -336,12 +337,18 @@ def get_thread(lead: str) -> dict:
 			"converted",
 			"omni_intent",
 			"omni_bot_summary",
+			"omni_score",
+			"omni_score_breakdown",
 		],
 		as_dict=True,
 	)
+	score = scoring.score_view(info)
+	info.pop("omni_score_breakdown", None)  # JSON thô không đưa ra giao diện
+	info["omni_score"] = score["score"] if score else None
 	deal = frappe.db.get_value("CRM Deal", {"lead": lead}, "name") if info.converted else None
 	return {
 		"lead": info,
+		"score": score,  # {score, reasons, hot} hoặc None khi chưa chấm (D2-06)
 		"deal": deal,
 		"crm_url": f"/crm/deals/{deal}" if deal else f"/crm/leads/{lead}",
 		"identities": frappe.get_all(
