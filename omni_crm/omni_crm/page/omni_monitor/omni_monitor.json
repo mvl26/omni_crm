@@ -1,0 +1,16 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Omni CRM",
+ "name": "omni-monitor",
+ "page_name": "omni-monitor",
+ "roles": [
+  {
+   "role": "Omni Admin"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "title": "Giám sát Omni"
+}
