@@ -171,6 +171,9 @@ Ghi chú về "tin bị mất" ở sự cố DB: 2 tin trả HTTP 500 không thu
 | # | Mức | Lỗi | Trạng thái |
 | --- | --- | --- | --- |
 | E1 | **Chặn** | Webhook trả 404 với mọi request thật: Frappe bỏ tham số query khi thân là JSON, nên `?ch=` mất, trong khi Zalo gửi JSON. Test cũ gán `form_dict` bằng tay nên không bắt được. | **Đã sửa** ở D1-11 (`fix(webhooks)`, đọc `ch` từ `request.args`), có test dựng Request werkzeug thật (`TestRealRequestParsing`, đỏ trước khi sửa) |
+| E2 | Trung bình | Webhook không giới hạn thời gian chờ khóa DB: khóa bảng 25 giây -> mọi request chờ ~20 giây rồi trả 200; khóa 62 giây -> 2/3 request trả 500 sau ~50 giây. Không đạt "không quá 5 giây" (docs/10 mục 5). Không mất tin nếu Zalo gửi lại (Z8 chưa xác nhận). | **Mở**, chưa sửa (đổi hành vi với kênh, cần quyết định). Đề xuất: giới hạn lock wait ngắn rồi trả 503 |
+| E3 | Trung bình | Sau `kill -9` worker, tin của các khách đang xử lý đứng yên ~15 phút: job zombie trong StartedJobRegistry của RQ chặn enqueue `deduplicate` của tác vụ quét tới khi RQ dọn. Không mất tin. | **Mở**, chưa sửa (đổi thiết kế, cần ADR). Giảm thiểu: supervisor khởi động lại worker nhanh, theo dõi cảnh báo "tin chờ lâu" |
+| E4 | Trung bình | Số worker `omni` ở docs/09 ("≥ 2") không đủ: 4 worker xử lý ~0,75 tin/giây khác khách, tin đến 1,67/giây thì backlog tăng mãi. | **Mở** (cấu hình/vận hành): chốt số worker (docs/11 D1-11 có công thức); docs/09 đã chỉnh chú thích |
 
 Các phát hiện khác (không phải lỗi mã, hoặc cần quyết định) nằm ở mục 9 và `docs/12` mục D.
 
@@ -222,6 +225,7 @@ Chỉ `api.webhooks.zalo` có `allow_guest=True` (test `test_only_webhook_allows
 | 4 | **Xóa dữ liệu khách chưa đủ phạm vi** (Communication, `identity_key`, Identity, Comment, `last_error` còn dữ liệu cá nhân) | Cao nếu dùng cho yêu cầu pháp lý | Chọn phạm vi xóa mở rộng; hoặc chưa dùng nút xóa cho yêu cầu thật |
 | 5 | **Redis queue của bench dev cổng 11000 hỏng** | Môi trường | Chủ bench đưa RDB hỏng đi. Production/staging cần Redis queue khỏe |
 | 6 | **Số worker `omni`**: docs/09 nói "≥ 2"; đo thật cho thấy cần `tin_mỗi_giây_cao_điểm x 6 x 1,5` (mục 3) | Trung bình | Chốt số worker và supervisor; thêm tiến trình `bench worker --queue omni` |
+| 6b | **E2/E3** (webhook chờ khóa DB không giới hạn; phục hồi ~15 phút sau kill worker): chấp nhận hoặc ra quyết định/ADR sửa | Trung bình | Mục 6 |
 | 7 | **Công tắc:** `sandbox_mode` tắt có chủ đích khi mở; `developer_mode` TẮT; `zalo_skip_signature` TẮT | Chặn | Mục 7 |
 | 8 | **Q4 (quy tắc gán Lead cho sale)** chưa chốt: Lead mới chưa có người phụ trách nếu không có Assignment Rule | Trung bình | Với 1-2 sale thử có thể gán tay |
 | 9 | **Q7 (thời hạn lưu dữ liệu)**: mặc định 180 ngày `raw_payload` | Trung bình | Q7 chưa chốt |

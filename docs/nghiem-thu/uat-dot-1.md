@@ -4,7 +4,7 @@ Mục đích: sale thật dùng Hộp thư Omni và Lead trong Frappe CRM trong 
 
 ## 0. Điều kiện trước ngày đầu (người phụ trách hệ thống làm, KHÔNG phải sale)
 
-Chưa đạt mục nào thì chưa bắt đầu tuần chạy thử. Danh sách đầy đủ ở `docs/nghiem-thu/dot-1.md` mục 8.
+Chưa đạt mục nào thì chưa bắt đầu tuần chạy thử. Danh sách đầy đủ ở `docs/nghiem-thu/dot-1.md` mục 9.1 và 9.2.
 
 - [ ] Z1/G7 (công thức chữ ký Zalo), G8, G9 đã đối chiếu với tài liệu Zalo chính thức hoặc OA thật, có link (docs/12 mục B2).
 - [ ] Đã chốt R1 (docs/12 mục D, "Review D1-05, R1") hoặc ghi rõ chấp nhận rủi ro gộp sai.
