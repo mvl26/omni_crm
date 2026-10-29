@@ -147,20 +147,20 @@ after_install = "omni_crm.install.after_install"
 
 # Scheduled Tasks
 # ---------------
-# Khung theo docs/01 mục 5-6. Chưa bật.
+# Khung theo docs/01 mục 5-6. Mới bật tác vụ quét (D1-04); các mục còn lại bật ở prompt sau.
 
-# scheduler_events = {
-# 	"cron": {
-# 		"*/5 * * * *": [
-# 			"omni_crm.pipeline.sweeper.requeue_stuck",
-# 			"omni_crm.monitoring.alerts.run_checks",
-# 		],
-# 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],
-# 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],
-# 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],
-# 	},
-# 	"hourly": ["omni_crm.bot.ai_client.report_budget"],
-# }
+scheduler_events = {
+	"cron": {
+		"*/5 * * * *": [
+			"omni_crm.pipeline.sweeper.requeue_stuck",
+			# "omni_crm.monitoring.alerts.run_checks",  # D1-10
+		],
+		# "*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],
+		# "30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],
+		# "0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],
+	},
+	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
+}
 
 # Fixtures
 # --------
