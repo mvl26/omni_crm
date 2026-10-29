@@ -1,4 +1,4 @@
-// Hộp thư Omni: sale đọc hội thoại đa kênh của Lead (chưa có khung trả lời — D1-09 thêm).
+// Hộp thư Omni: sale đọc hội thoại đa kênh của Lead và trả lời khách Zalo (D1-09).
 frappe.pages["omni-inbox"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -11,7 +11,15 @@ frappe.pages["omni-inbox"].on_page_load = function (wrapper) {
 frappe.pages["omni-inbox"].on_page_show = function (wrapper) {
 	const lead = (frappe.route_options && frappe.route_options.lead) || frappe.utils.get_query_params().lead;
 	if (frappe.route_options) frappe.route_options = null;
-	if (wrapper.omni_inbox) wrapper.omni_inbox.show(lead);
+	if (wrapper.omni_inbox) {
+		wrapper.omni_inbox.resume();
+		wrapper.omni_inbox.show(lead);
+	}
+};
+
+// Rời trang: hủy lắng nghe realtime, bộ đếm làm mới và đăng ký phòng Lead để không rò rỉ.
+frappe.pages["omni-inbox"].on_page_hide = function (wrapper) {
+	if (wrapper.omni_inbox) wrapper.omni_inbox.pause();
 };
 
 class OmniInbox {
@@ -45,13 +53,32 @@ class OmniInbox {
 		this.$right = $(page.body).find(".oi-right");
 		$(page.body).find(".oi-search").on("input", frappe.utils.debounce(() => this.load_list(), 300));
 		$(page.body).find(".oi-channel, .oi-unanswered, .oi-mine").on("change", () => this.load_list());
-		// Realtime: payload không chứa nội dung tin; nhận tin hiệu rồi gọi lại API có kiểm quyền.
-		frappe.realtime.on("omni_inbox_update", (data) => this.on_update(data));
-		// Dự phòng khi mất kết nối realtime.
-		this.poll = setInterval(() => {
-			if (frappe.get_route()[0] === "omni-inbox") this.load_list(true);
-		}, 60000);
+		this.on_update_handler = (data) => this.on_update(data);
+		this.active = false;
+		this.resume();
 		this.load_list();
+	}
+
+	resume() {
+		if (this.active) return;
+		this.active = true;
+		// Realtime: payload không chứa nội dung tin; nhận tin hiệu rồi gọi lại API có kiểm quyền.
+		frappe.realtime.on("omni_inbox_update", this.on_update_handler);
+		// Dự phòng khi mất kết nối realtime.
+		this.poll = setInterval(() => this.load_list(true), 60000);
+		if (this.current) this.show(this.current);
+	}
+
+	pause() {
+		this.active = false;
+		frappe.realtime.off("omni_inbox_update", this.on_update_handler);
+		clearInterval(this.poll);
+		clearTimeout(this.refresh_timer);
+		this.poll = null;
+		if (this.subscribed) {
+			frappe.realtime.doc_unsubscribe("CRM Lead", this.subscribed);
+			this.subscribed = null;
+		}
 	}
 
 	filters() {
@@ -132,6 +159,7 @@ class OmniInbox {
 	render_thread(data, keep_scroll) {
 		const e = frappe.utils.escape_html;
 		const old = this.$right.find(".oi-thread");
+		const draft = keep_scroll ? this.$right.find(".oi-text").val() : ""; // giữ bản nháp khi làm mới cùng hội thoại
 		const stick = !old.length || !keep_scroll || old[0].scrollHeight - old.scrollTop() - old.innerHeight() < 40;
 		const lead = data.lead;
 		const msgs = data.messages
@@ -139,10 +167,17 @@ class OmniInbox {
 				const atts = (m.attachments || [])
 					.map((a) => `<div><a href="${e(a.url)}" target="_blank" rel="noopener">${e(a.name)}</a></div>`)
 					.join("");
-				const flag = m.status && m.status !== "Sent" ? ` · ${e(m.status)}` : "";
+				const labels = {
+					Queued: __("Đang gửi"),
+					Sent: __("Đã gửi"),
+					Failed: __("Lỗi"),
+					Blocked: __("Bị chặn"),
+				};
+				const flag = m.status ? ` · <span class="oi-status ${e(m.status)}">${e(labels[m.status] || m.status)}</span>` : "";
+				const why = m.error ? `<div class="oi-error">${e(m.error)}</div>` : "";
 				const sandbox = m.is_sandbox ? ` · ${e(__("thử nghiệm"))}` : "";
 				return `<div class="oi-msg ${m.direction}">
-					<div class="oi-meta"><b>${e(m.channel_type || "")}</b> · ${e(m.sender || "")} · ${e(frappe.datetime.str_to_user(m.at))}${flag}${sandbox}</div>
+					<div class="oi-meta"><b>${e(m.channel_type || "")}</b> · ${e(m.sender || "")} · ${e(frappe.datetime.str_to_user(m.at))}${flag}${sandbox}</div>${why}
 					<div>${e(m.text).replace(/\n/g, "<br>")}</div>${atts}</div>`;
 			})
 			.join("");
@@ -153,7 +188,10 @@ class OmniInbox {
 					${(data.identities || []).map((i) => `<span class="oi-chan">${e(i.channel_type)}</span>`).join("")}</div></div>
 				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a>
 			</div>
-			<div class="oi-thread">${msgs || `<div class="oi-empty">${e(__("Chưa có tin nhắn."))}</div>`}</div>`);
+			<div class="oi-thread">${msgs || `<div class="oi-empty">${e(__("Chưa có tin nhắn."))}</div>`}</div>
+			${this.compose_html(data)}`);
+		this.bind_compose(data);
+		if (draft) this.$right.find(".oi-text").val(draft);
 		if (data.truncated) {
 			this.$right.find(".oi-thread").prepend(`<div class="oi-empty">${e(__("Chỉ hiện các tin gần nhất."))}</div>`);
 		}
@@ -161,5 +199,75 @@ class OmniInbox {
 			const t = this.$right.find(".oi-thread");
 			t.scrollTop(t[0].scrollHeight);
 		}
+	}
+
+	compose_html(data) {
+		const e = frappe.utils.escape_html;
+		const c = data.compose || {};
+		const z = c.zalo;
+		let html = '<div class="oi-compose">';
+		if (z && c.can_write) {
+			html += `<textarea class="form-control oi-text" rows="3" maxlength="6000" placeholder="${e(__("Nhập tin trả lời Zalo"))}" ${z.can_send ? "" : "disabled"}></textarea>
+				<div class="oi-actions">
+					<button class="btn btn-primary btn-sm oi-send">${e(__("Gửi qua Zalo"))}</button>
+					${z.can_request_phone ? `<button class="btn btn-default btn-sm oi-phone">${e(__("Xin SĐT qua Zalo"))}</button>` : ""}
+					${z.sandbox ? `<span class="oi-meta">${e(__("Chế độ thử: không gửi thật"))}</span>` : ""}
+				</div>`;
+			if (!z.can_send) html += `<div class="oi-error">${e(z.message || "")}</div>`;
+			else if (z.paid) html += `<div class="oi-warn">${e(z.message)}</div>`;
+		}
+		if (c.email) {
+			html += `<div class="oi-actions"><a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(__("Trả lời email trong CRM"))}</a></div>`;
+		}
+		return html + "</div>";
+	}
+
+	bind_compose(data) {
+		const $r = this.$right;
+		$r.find(".oi-send").on("click", () => this.send($r.find(".oi-text").val(), 0));
+		$r.find(".oi-phone").on("click", () => this.ask_phone());
+	}
+
+	send(text, confirm_paid) {
+		const lead = this.current;
+		if (!(text || "").trim()) {
+			frappe.show_alert({ message: __("Nội dung tin nhắn đang trống"), indicator: "orange" });
+			return;
+		}
+		this.$right.find(".oi-send").prop("disabled", true); // chống bấm hai lần
+		frappe
+			.call({
+				method: "omni_crm.api.inbox.send_reply",
+				args: { lead, channel: "Zalo OA", text, confirm_paid },
+				freeze: false,
+			})
+			.then((r) => {
+				const res = r.message || {};
+				if (res.status === "confirm_required") {
+					frappe.confirm(
+						frappe.utils.escape_html(res.warning) + "<br>" + __("Bạn vẫn muốn gửi?"),
+						() => this.send(text, 1),
+						() => this.load_thread(lead, true)
+					);
+					return;
+				}
+				if (res.status === "Blocked") {
+					frappe.show_alert({ message: res.reason, indicator: "red" }, 8);
+				}
+				this.load_thread(lead);
+			})
+			.catch(() => this.load_thread(lead, true));
+	}
+
+	ask_phone() {
+		const lead = this.current;
+		this.$right.find(".oi-phone").prop("disabled", true);
+		frappe
+			.call({ method: "omni_crm.api.inbox.request_phone", args: { lead }, freeze: false })
+			.then(() => {
+				frappe.show_alert({ message: __("Đã gửi yêu cầu chia sẻ số điện thoại"), indicator: "green" });
+				this.load_thread(lead);
+			})
+			.catch(() => this.load_thread(lead, true));
 	}
 }
