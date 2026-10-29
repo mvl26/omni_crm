@@ -82,7 +82,15 @@ Worker với `event_type = call_ended`:
 
 `fetch_recording(call)`: tải ngay sau cuộc gọi (nhà cung cấp có thể chỉ giữ file có hạn — Stringee giữ 30 ngày), lưu `File` **private** gắn `Omni Call`, rồi enqueue chuyển giọng nói (xem `docs/08` mục 9). Xóa file sau `recording_retention_days`.
 
-D2-01 đã làm bước 1-4; bước 5 (việc gọi lại) ở D2-03, bước 6 (ghi âm) ở Đợt 3, đối soát đêm (2.3) ở D2-03. Hiện cron `reconcile_yesterday` vẫn tắt trong `hooks.py`.
+D2-01 đã làm bước 1-4; D2-03 làm bước 5 và đối soát đêm (2.3); bước 6 (ghi âm) ở Đợt 3.
+
+**Đã làm ở D2-03:**
+
+- Việc gọi lại KHÔNG tạo trong worker (khi còn giữ transaction/khóa). Sau khi lô tin commit, `pipeline.worker.post_batch_hooks` gọi `channels.telephony.callbacks.after_batch`, đẩy job `process_missed_call` (hàng đợi `omni`) cho từng cuộc gọi nhỡ đến có Lead. Job: `rollback` -> `verify_missed_call` (HTTP, đặt `Omni Call.unverified` + bộ đếm cache `omni:telephony:unverified:<kênh>`) -> `crm_bridge.task.create_callback_task` trong transaction riêng -> commit. Đẩy job lỗi/mất: tác vụ `callbacks.sweep_pending` (mỗi 5 phút) xử lý cuộc gọi nhỡ có Lead mà chưa có `callback_task` (tạo trong 2 ngày qua, cũ hơn 5 phút).
+- Sandbox bật: `verify_missed_call` không gọi nhà cung cấp và không đánh dấu `unverified`.
+- Gộp: việc còn mở của cùng Lead (nhận biết qua `Omni Call.callback_task`) được cập nhật mô tả "Khách đã gọi nhỡ N lần, lần cuối …"; không có việc mở thì tạo mới. Tự đóng (`status = Done`) khi có cuộc gọi Answered (đến hoặc đi) với khách sau lần gọi nhỡ cuối của việc. Người nhận: chủ Deal/Lead đang hoạt động, không có thì `callback_fallback_user`, không có nữa thì để trống (xem docs/12). Hạn = thời điểm cuộc gọi + `missed_call_callback_minutes` tính theo `business_hours` và `holidays`.
+- **Khách ẩn số/số không chuẩn hóa được** (`prepare_batch` của adapter): chỉ ghi `Omni Call` + `CRM Call Log` (không tham chiếu), KHÔNG tạo `Omni Identity`, KHÔNG tạo/gắn Lead, không có việc gọi lại (không biết gọi ai).
+- Đối soát đêm (`registry.reconcile_yesterday`, cron 01:30): với mỗi kênh Telephony `enabled`, `list_calls` hôm qua; cuộc gọi chưa có `Omni Call` cuối thì `gateway.save_inbound` (dedupe `kênh:call_id` nên chạy lại không bù thêm). Kết quả {ngày, tổng, đã có, bù thêm, lỗi} lưu cache 3 ngày cho màn hình giám sát. Bù > 1% hoặc lỗi (kể cả `list_calls` chạm giới hạn trang, ném `StringeeError`) -> cảnh báo. Công tắc: `Omni Channel.enabled` (kênh tắt bị bỏ qua) và `sandbox_mode` (bật thì bỏ qua, không gọi API nhà cung cấp).
 
 ## 3. Adapter Stringee
 
