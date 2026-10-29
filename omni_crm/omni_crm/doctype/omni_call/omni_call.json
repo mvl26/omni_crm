@@ -1,0 +1,192 @@
+{
+ "actions": [],
+ "autoname": "OCALL-.YYYY.-.######",
+ "naming_rule": "Expression (old style)",
+ "creation": "2026-10-30 09:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "provider",
+  "call_id",
+  "direction",
+  "status",
+  "col_call",
+  "from_number",
+  "to_number",
+  "started_at",
+  "answered_at",
+  "ended_at",
+  "duration_seconds",
+  "sec_link",
+  "agent",
+  "lead",
+  "crm_call_log",
+  "col_link",
+  "callback_task",
+  "recording_ref",
+  "unverified",
+  "sec_raw",
+  "raw_events"
+ ],
+ "fields": [
+  {
+   "fieldname": "provider",
+   "fieldtype": "Data",
+   "label": "Nhà cung cấp",
+   "read_only": 1
+  },
+  {
+   "fieldname": "call_id",
+   "fieldtype": "Data",
+   "label": "Mã cuộc gọi",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Mã cuộc gọi của nhà cung cấp"
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Chiều gọi",
+   "options": "Inbound\nOutbound",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "\nAnswered\nMissed\nBusy\nFailed\nVoicemail",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Trống = cuộc gọi tạm, chưa nhận sự kiện kết thúc"
+  },
+  {
+   "fieldname": "col_call",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "from_number",
+   "fieldtype": "Data",
+   "label": "Số gọi",
+   "description": "E.164"
+  },
+  {
+   "fieldname": "to_number",
+   "fieldtype": "Data",
+   "label": "Số nhận",
+   "description": "E.164"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Bắt đầu"
+  },
+  {
+   "fieldname": "answered_at",
+   "fieldtype": "Datetime",
+   "label": "Nhấc máy"
+  },
+  {
+   "fieldname": "ended_at",
+   "fieldtype": "Datetime",
+   "label": "Kết thúc"
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Int",
+   "label": "Thời lượng (giây)"
+  },
+  {
+   "fieldname": "sec_link",
+   "fieldtype": "Section Break",
+   "label": "Liên kết"
+  },
+  {
+   "fieldname": "agent",
+   "fieldtype": "Link",
+   "label": "Sale nghe máy",
+   "options": "User",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "crm_call_log",
+   "fieldtype": "Link",
+   "label": "CRM Call Log",
+   "options": "CRM Call Log"
+  },
+  {
+   "fieldname": "col_link",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "callback_task",
+   "fieldtype": "Link",
+   "label": "Việc gọi lại",
+   "options": "CRM Task"
+  },
+  {
+   "fieldname": "recording_ref",
+   "fieldtype": "Data",
+   "label": "Mã ghi âm phía nhà cung cấp"
+  },
+  {
+   "fieldname": "unverified",
+   "fieldtype": "Check",
+   "label": "Chưa xác minh với nhà cung cấp"
+  },
+  {
+   "fieldname": "sec_raw",
+   "fieldtype": "Section Break",
+   "label": "Sự kiện gốc"
+  },
+  {
+   "fieldname": "raw_events",
+   "fieldtype": "JSON",
+   "label": "Sự kiện gốc",
+   "read_only": 1,
+   "permlevel": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-30 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Call",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1
+  },
+  {
+   "role": "Omni Admin",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "call_id"
+}

@@ -24,7 +24,11 @@
   "business_hours",
   "sec_alert",
   "alert_recipients",
-  "assignment_fallback_users"
+  "assignment_fallback_users",
+  "sec_tel",
+  "missed_call_callback_minutes",
+  "col_tel",
+  "callback_fallback_user"
  ],
  "fields": [
   {
@@ -125,6 +129,30 @@
    "fieldtype": "Small Text",
    "label": "Người nhận Lead dự phòng",
    "description": "Chỉ dùng nếu Assignment Rule của CRM không áp dụng được. Mỗi dòng một user, chia vòng tròn."
+  },
+  {
+   "fieldname": "sec_tel",
+   "fieldtype": "Section Break",
+   "label": "Tổng đài"
+  },
+  {
+   "fieldname": "missed_call_callback_minutes",
+   "fieldtype": "Int",
+   "label": "Hạn gọi lại khách gọi nhỡ (phút)",
+   "default": "30",
+   "description": "Tính trong giờ làm việc"
+  },
+  {
+   "fieldname": "col_tel",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "callback_fallback_user",
+   "fieldtype": "Link",
+   "label": "Người nhận việc gọi lại dự phòng",
+   "options": "User",
+   "description": "Dùng khi Lead chưa có người phụ trách"
   }
  ],
  "permissions": [
