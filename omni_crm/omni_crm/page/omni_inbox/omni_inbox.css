@@ -31,3 +31,5 @@
 .omni-inbox .oi-bot { padding: 8px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; background: var(--control-bg); }
 .omni-inbox .oi-bot .oi-meta { display: block; }
 .omni-inbox .oi-intent { background: var(--blue-100, #dbeafe); }
+.omni-inbox .oi-score { background: var(--gray-100, #f3f4f6); cursor: help; }
+.omni-inbox .oi-score.oi-hot { background: var(--orange-100, #ffedd5); font-weight: 600; }
