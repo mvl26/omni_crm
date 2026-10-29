@@ -29,7 +29,19 @@
   "sec_tel",
   "missed_call_callback_minutes",
   "col_tel",
-  "callback_fallback_user"
+  "callback_fallback_user",
+  "sec_bot",
+  "bot_analyze_enabled",
+  "bot_reply_mode",
+  "ai_api_key",
+  "daily_token_budget",
+  "col_bot",
+  "analyze_model",
+  "reply_model",
+  "analyze_prompt_version",
+  "reply_prompt_version",
+  "summarize_prompt_version",
+  "kb_version"
  ],
  "fields": [
   {
@@ -161,6 +173,80 @@
    "label": "Người nhận việc gọi lại dự phòng",
    "options": "User",
    "description": "Dùng khi Lead chưa có người phụ trách"
+  },
+  {
+   "fieldname": "sec_bot",
+   "fieldtype": "Section Break",
+   "label": "Bot AI (Đợt 2)"
+  },
+  {
+   "fieldname": "bot_analyze_enabled",
+   "fieldtype": "Check",
+   "label": "Bật bot phân tích",
+   "default": "0",
+   "description": "Tắt: không gọi AI phân tích"
+  },
+  {
+   "fieldname": "bot_reply_mode",
+   "fieldtype": "Select",
+   "label": "Chế độ bot trả lời",
+   "options": "Off\nShadow\nDraft",
+   "default": "Off",
+   "description": "Off: không soạn trả lời. Tự động bật theo nhóm ở Omni Question Group"
+  },
+  {
+   "fieldname": "ai_api_key",
+   "fieldtype": "Password",
+   "label": "Khóa Claude API",
+   "description": "Chỉ nhập trên máy chủ; không ghi vào log"
+  },
+  {
+   "fieldname": "daily_token_budget",
+   "fieldtype": "Int",
+   "label": "Hạn mức token mỗi ngày",
+   "default": "2000000",
+   "description": "Vượt thì bot tạm dừng đến hôm sau và gửi cảnh báo. Đặt 0 để dừng hẳn mọi AI"
+  },
+  {
+   "fieldname": "col_bot",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "analyze_model",
+   "fieldtype": "Data",
+   "label": "Mô hình phân tích",
+   "default": "claude-haiku-5-5"
+  },
+  {
+   "fieldname": "reply_model",
+   "fieldtype": "Data",
+   "label": "Mô hình soạn trả lời",
+   "default": "claude-sonnet-5-5"
+  },
+  {
+   "fieldname": "analyze_prompt_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản câu lệnh phân tích",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reply_prompt_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản câu lệnh trả lời",
+   "read_only": 1
+  },
+  {
+   "fieldname": "summarize_prompt_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản câu lệnh tóm tắt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "kb_version",
+   "fieldtype": "Int",
+   "label": "Phiên bản kho tri thức",
+   "read_only": 1
   }
  ],
  "permissions": [

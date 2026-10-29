@@ -79,15 +79,18 @@ class TestOmniModels(FrappeTestCase):
 
 	def test_doctypes_of_later_phases_absent(self):
 		for dt in (
-			"Omni Bot Run",
 			"Omni Bot Draft",
 			"Omni Knowledge Item",
 			"Omni Question Group",
 		):
 			self.assertFalse(frappe.db.exists("DocType", dt), dt)
 		settings_fields = {f.fieldname for f in frappe.get_meta("Omni Settings").fields}
-		for fn in ("score_rules", "hot_lead_threshold", "kb_version", "bot_active_hours"):
+		for fn in ("score_rules", "hot_lead_threshold", "bot_active_hours"):
 			self.assertNotIn(fn, settings_fields)
+		# D2-04 đã tạo Omni Bot Run và khối Bot của Omni Settings
+		self.assertTrue(frappe.db.exists("DocType", "Omni Bot Run"))
+		for fn in ("bot_analyze_enabled", "bot_reply_mode", "ai_api_key", "daily_token_budget", "kb_version"):
+			self.assertIn(fn, settings_fields)
 		self.assertIn("holidays", settings_fields)  # D2-03
 		for fn in ("assignment_fallback_users", "raw_payload_retention_days", "recording_retention_days"):
 			self.assertIn(fn, settings_fields)
