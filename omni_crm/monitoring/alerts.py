@@ -121,6 +121,17 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				),
 			)
 		)
+	if bot.get("breaker_open"):  # lượt bị ngắt mạch không tính là lỗi nên tỉ lệ `ai_loi_nhieu` bị pha loãng
+		out.append(
+			Alert(
+				"ai_ngat_mach",
+				"",
+				_("Bot AI tạm ngừng vì lỗi liên tiếp"),
+				_(
+					"Ngắt mạch đang mở: AI lỗi nhiều lần liên tiếp nên bot tạm không gọi AI vài phút. Kênh vẫn chạy."
+				),
+			)
+		)
 	runs = cint(bot.get("runs_24h"))
 	if runs >= BOT_MIN_RUNS and cint(bot.get("errors_24h")) * 100 > BOT_ERROR_MAX_PCT * runs:
 		out.append(

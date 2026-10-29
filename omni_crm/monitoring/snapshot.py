@@ -156,7 +156,7 @@ def _telephony(now) -> dict[str, Any]:
 
 def _bot(now) -> dict[str, Any]:
 	"""Khối Bot (docs/11): token hôm nay / hạn mức, số lần gọi AI và số lần lỗi trong 24 giờ. Không có nội dung tin."""
-	from omni_crm.bot.ai_client import tokens_today
+	from omni_crm.bot.ai_client import breaker_open, tokens_today
 
 	since = add_to_date(now, hours=-24)
 	counts = dict(
@@ -173,6 +173,7 @@ def _bot(now) -> dict[str, Any]:
 		"runs_24h": sum(cint(v) for v in counts.values()),
 		"errors_24h": cint(counts.get("Error")) + cint(counts.get("Invalid Output")),
 		"skipped_budget_24h": cint(counts.get("Skipped Budget")),
+		"breaker_open": bool(breaker_open()),
 	}
 
 
