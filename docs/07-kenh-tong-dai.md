@@ -97,6 +97,8 @@ D2-01 đã làm bước 1-4; bước 5 (việc gọi lại) ở D2-03, bước 6
 | Thời hạn ghi âm | Lưu trên Stringee 30 ngày |
 | Nhật ký cuộc gọi | Call log REST API, lọc theo mã cuộc gọi hoặc số, tối đa 100 bản ghi mỗi trang |
 
+**Đã đối chiếu ở D2-02 (2026-10-30, xem docs/12 mục C và B3):** Stringee CÓ ký webhook (`X-Stringee-Signature`, HMAC-SHA1 base64); định dạng phản hồi tra cứu không được tài liệu quy định; Call log dùng `version=2` + `search_after`. Mục dưới giữ lại làm lịch sử.
+
 Việc agent phải tự xác nhận: định dạng chính xác phản hồi cho `get_customer_info_url`; tên trường và các trạng thái trong payload sự kiện; Stringee có ký webhook hay không. Nếu **không có chữ ký**: bảo vệ bằng `webhook_token` trong URL (mục 4) và trong worker gọi Call log API xác minh `call_id` có thật trước khi tạo việc gọi lại (đặt `Omni Call.unverified = 1` nếu API lỗi, vẫn xử lý nhưng cảnh báo).
 
 ## 4. Bảo mật webhook tổng đài

@@ -1,0 +1,9 @@
+{
+  "call_id": "call-vn-1-FAKE0001",
+  "recording_url": "https://api.stringee.com/v1/call/recording/rec-fake-0001",
+  "start_time": 1790000000000,
+  "end_time": 1790000130000,
+  "project_id": 9999,
+  "type": "recording",
+  "recordMessage": false
+}

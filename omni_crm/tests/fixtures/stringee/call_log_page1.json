@@ -1,0 +1,69 @@
+{
+  "r": 0,
+  "message": "Load call(s) success",
+  "data": {
+    "calls": [
+      {
+        "id": "call-vn-1-LOG0001",
+        "uuid": "uuid-fake-1",
+        "project_id": 9999,
+        "project_name": "fake",
+        "account_id": 1,
+        "from_number": "84903201001",
+        "to_number": "842873001234",
+        "from_user_id": null,
+        "from_alias": "",
+        "to_alias": "",
+        "from_internal": 0,
+        "to_internal": 0,
+        "participants": "",
+        "video_call": 0,
+        "recorded": 0,
+        "record_path": null,
+        "start_time": 1790000001000,
+        "answer_time": 1790000006000,
+        "stop_time": 1790000066000,
+        "created": 1790000001,
+        "last_modified": 1790000001,
+        "amount": 0,
+        "answer_duration": 60,
+        "answer_duration_minutes": 1,
+        "fields": []
+      },
+      {
+        "id": "call-vn-1-LOG0002",
+        "uuid": "uuid-fake-2",
+        "project_id": 9999,
+        "project_name": "fake",
+        "account_id": 1,
+        "from_number": "84903201001",
+        "to_number": "842873001234",
+        "from_user_id": null,
+        "from_alias": "",
+        "to_alias": "",
+        "from_internal": 0,
+        "to_internal": 0,
+        "participants": "",
+        "video_call": 0,
+        "recorded": 0,
+        "record_path": null,
+        "start_time": 1790000002000,
+        "answer_time": 0,
+        "stop_time": 1790000067000,
+        "created": 1790000002,
+        "last_modified": 1790000002,
+        "amount": 0,
+        "answer_duration": 0,
+        "answer_duration_minutes": 1,
+        "fields": []
+      }
+    ],
+    "search_after": [
+      1790000002000,
+      "cursor-fake-1"
+    ],
+    "limit": 2,
+    "totalCalls": 3,
+    "totalAnswerDurationMinutes": null
+  }
+}
