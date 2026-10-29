@@ -25,6 +25,7 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | Ngắt mạch AI (tự động) | cache `omni:ai:breaker_open` | 5 lần lỗi liên tiếp → 5 phút mọi lần gọi ghi `Skipped Switch`; xóa khóa để mở lại ngay | 2 |
 | site_config `omni_ai_allow_customer_data` | site_config | Không bật (mặc định) thì lời gọi API thật chỉ chạy với hội thoại tổng hợp (`synthetic=True`); chỉ bật sau khi Q11 được chốt | 2 |
 | site_config `omni_ai_timeout_seconds` | site_config | Timeout mỗi lần gọi AI, mặc định 60 | 2 |
+| site_config `omni_eval_judge_model` | site_config | Mô hình giám khảo của bộ đề (mặc định `claude-sonnet-5-5`); chạy bộ đề tay, không cần công tắc bot (`call_tool(eval_mode=True)`), vẫn chịu hạn mức token, ngắt mạch và Q11 | 2 |
 | `bot_paused_until` | Omni Identity | Bot im với một khách | 3 |
 | `alert_recipients` (trống) | Omni Settings | Không gửi thư cảnh báo (Notification Log cho Omni Admin vẫn tạo; không có công tắc riêng, xem docs/12 mục D) | 1 |
 | `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload` | 1 |
