@@ -6,6 +6,8 @@ frappe.pages["omni-inbox"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 	wrapper.omni_inbox = new OmniInbox(page, wrapper);
+	// Frappe chỉ phát sự kiện jQuery "hide" cho trang (không gọi on_page_hide): bind ở đây.
+	$(wrapper).on("hide", () => wrapper.omni_inbox && wrapper.omni_inbox.pause());
 };
 
 frappe.pages["omni-inbox"].on_page_show = function (wrapper) {
@@ -17,10 +19,6 @@ frappe.pages["omni-inbox"].on_page_show = function (wrapper) {
 	}
 };
 
-// Rời trang: hủy lắng nghe realtime, bộ đếm làm mới và đăng ký phòng Lead để không rò rỉ.
-frappe.pages["omni-inbox"].on_page_hide = function (wrapper) {
-	if (wrapper.omni_inbox) wrapper.omni_inbox.pause();
-};
 
 class OmniInbox {
 	constructor(page, wrapper) {
@@ -225,7 +223,7 @@ class OmniInbox {
 	bind_compose(data) {
 		const $r = this.$right;
 		$r.find(".oi-send").on("click", () => this.send($r.find(".oi-text").val(), 0));
-		$r.find(".oi-phone").on("click", () => this.ask_phone());
+		$r.find(".oi-phone").on("click", () => this.ask_phone(0));
 	}
 
 	send(text, confirm_paid) {
@@ -259,12 +257,21 @@ class OmniInbox {
 			.catch(() => this.load_thread(lead, true));
 	}
 
-	ask_phone() {
+	ask_phone(confirm_paid) {
 		const lead = this.current;
 		this.$right.find(".oi-phone").prop("disabled", true);
 		frappe
-			.call({ method: "omni_crm.api.inbox.request_phone", args: { lead }, freeze: false })
-			.then(() => {
+			.call({ method: "omni_crm.api.inbox.request_phone", args: { lead, confirm_paid }, freeze: false })
+			.then((r) => {
+				const res = r.message || {};
+				if (res.status === "confirm_required") {
+					frappe.confirm(
+						frappe.utils.escape_html(res.warning) + "<br>" + __("Bạn vẫn muốn gửi?"),
+						() => this.ask_phone(1),
+						() => this.load_thread(lead, true)
+					);
+					return;
+				}
 				frappe.show_alert({ message: __("Đã gửi yêu cầu chia sẻ số điện thoại"), indicator: "green" });
 				this.load_thread(lead);
 			})

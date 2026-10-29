@@ -461,8 +461,8 @@ def _record_blocked(channel_doc: Any, identity_doc: Any, lead: str, text: str, r
 
 
 @frappe.whitelist(methods=["POST"])
-def request_phone(lead: str) -> dict:
-	"""Gửi tin yêu cầu thông tin (xin SĐT) qua Zalo; chỉ khi Lead chưa có SĐT và 7 ngày chưa xin."""
+def request_phone(lead: str, confirm_paid: int | str = 0) -> dict:
+	"""Gửi tin yêu cầu thông tin (xin SĐT) qua Zalo; chỉ khi Lead chưa có SĐT và 7 ngày chưa xin (khung có phí cần confirm_paid)."""
 	lead = check_lead_write(lead)
 	if _has_phone(lead):
 		frappe.throw(_("Lead đã có số điện thoại"))
@@ -473,6 +473,8 @@ def request_phone(lead: str) -> dict:
 	ok, reason = get_adapter("Zalo OA").can_send_now(identity_doc, channel_doc, source="Sale")
 	if not ok:
 		frappe.throw(reason)
+	if reason and not cint(confirm_paid):  # khung có phí: giống send_reply, cần sale xác nhận
+		return {"status": "confirm_required", "warning": reason}
 	previous = _reserve_phone_request(
 		identity_doc.name
 	)  # giữ chỗ trước khi gọi API: bấm hai lần không gửi hai tin
@@ -505,6 +507,8 @@ def request_phone(lead: str) -> dict:
 		}
 	)
 	doc.insert(ignore_permissions=True)
+	if not flags.sandbox() and message_id:  # echo có thể tới trước khi ta ghi mã tin (Z9)
+		outbound_pipeline.drop_echo_duplicate(doc, message_id)
 	timeline.append_outbound(lead_bridge.get_deal_for_lead(lead) or lead, doc.name)
 	timeline.notify(lead, ["Zalo OA"])
 	return {"status": "Sent", "outbound": doc.name, "sandbox": bool(flags.sandbox())}

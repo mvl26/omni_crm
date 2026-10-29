@@ -7,7 +7,8 @@ Nguyên tắc chống gửi trùng (tin gửi ra khách là việc không hoàn 
 - Kết quả được ghi và commit ngay sau lời gọi (kể cả `external_message_id`, để echo của Zalo nhận ra tin của ta).
 - Nếu tiến trình chết giữa lời gọi (hạn thuê quá hạn mà dấu còn): KHÔNG gửi lại, chuyển `Failed` và nhờ người
   kiểm tra (không biết khách đã nhận chưa). Tin tách nhiều đoạn đã gửi được một phần cũng chuyển `Failed`.
-- Chỉ lỗi tạm thời rõ ràng (mạng, quá hạn mức, máy chủ lỗi) mới thử lại, theo `mark_retry`.
+- Chỉ thử lại khi chắc tin CHƯA tới khách (kênh trả lỗi quá hạn mức/5xx, hoặc chưa kết nối được); lỗi mạng mơ hồ
+  (đọc phản hồi quá hạn...) chuyển `Failed`, không gửi lại.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import json
 from typing import Any
 
 import frappe
+import requests
 from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
@@ -35,6 +37,9 @@ SENDING_MARK = "[đang gửi]"  # last_error khi đã nhận việc nhưng chưa
 LEASE_MINUTES = 5
 MAX_TEXT_CHARS = 6000  # tối đa cho một lần trả lời (client tách tin theo giới hạn từng đoạn của kênh)
 LAST_ERROR_MAX = 500
+_AMBIGUOUS_MSG = (
+	"Không rõ tin đã tới khách chưa (lỗi mạng khi gửi). Hãy kiểm tra trên Zalo rồi gửi lại nếu cần."
+)
 KIND_TRANSIENT, KIND_WINDOW = (
 	"transient",
 	"window",
@@ -158,8 +163,8 @@ def _fail(row: Any, reason: str, **extra: Any) -> str:
 	return "Failed"
 
 
-def _drop_echo_duplicate(row: Any, external_id: str) -> None:
-	"""Echo (oa_echo) tới trước khi ta ghi mã tin có thể đã tạo một Outbound `Sale` trùng mã: bỏ bản trùng."""
+def drop_echo_duplicate(row: Any, external_id: str) -> None:
+	"""(row cần `channel`, `name`.) Echo (oa_echo) tới trước khi ta ghi mã tin có thể đã tạo một Outbound `Sale` trùng mã: bỏ bản trùng."""
 	dups = frappe.get_all(
 		OUTBOUND,
 		filters={
@@ -187,7 +192,7 @@ def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
 		last_error=None,
 	)
 	if external_id and not sandbox:
-		_drop_echo_duplicate(row, external_id)
+		drop_echo_duplicate(row, external_id)
 	try:
 		timeline.append_outbound(lead_bridge.get_deal_for_lead(row.lead) or row.lead, row.name)
 	except Exception:
@@ -335,6 +340,16 @@ def _after_error(row: Any, exc: Exception) -> str:
 		)
 	if kind == KIND_WINDOW:
 		return _block(row, message)
-	if kind == KIND_TRANSIENT or (kind is None and is_transient(exc)):
+	if kind == KIND_TRANSIENT and _safe_to_retry(exc):
 		return _retry_or_fail(row, exc, message)
+	if kind == KIND_TRANSIENT or (kind is None and is_transient(exc)):
+		# Lỗi mạng mơ hồ (vd đọc phản hồi quá hạn): tin có thể ĐÃ tới khách -> không gửi lại, nhờ người kiểm tra.
+		return _fail(row, _(_AMBIGUOUS_MSG))
 	return _fail(row, message)
+
+
+def _safe_to_retry(exc: BaseException) -> bool:
+	"""Chắc chắn tin CHƯA tới khách: kênh đã trả lời lỗi (mã lỗi/HTTP) hoặc chưa kết nối được (ConnectTimeout)."""
+	if getattr(exc, "code", None) is not None or getattr(exc, "http_status", None) is not None:
+		return True
+	return isinstance(exc.__cause__, requests.ConnectTimeout)

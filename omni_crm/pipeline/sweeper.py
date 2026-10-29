@@ -72,7 +72,7 @@ def requeue_stuck_outbound() -> int:
 	"""Mục 4 docs/03: tin ra Queued đến hạn thử lại (hoặc hết hạn thuê), hoặc cũ hơn 5 phút mà chưa ai nhận -> enqueue.
 
 	send_outbound tự quyết (an toàn gửi trùng): tin có dấu "đang gửi" quá hạn bị chuyển Failed chứ không gửi lại.
-	Chỉ xét kênh đang bật chiều ra; tin của kênh tắt để nguyên (người gửi tự thấy lý do khi tắt/bật lại).
+	Kênh đã tắt chiều ra: send_outbound chuyển tin sang Blocked (kèm lý do) thay vì để Queued mãi.
 	"""
 	now = now_datetime()
 	due = frappe.get_all(

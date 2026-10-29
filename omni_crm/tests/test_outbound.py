@@ -198,7 +198,7 @@ class TestSendOutbound(OutboundTestCase):
 		self.sandbox(False)
 		self.set_token()
 		name = self.queue()
-		with mock.patch(REQ, side_effect=requests.ConnectionError("x")):
+		with mock.patch(REQ, return_value=response({"error": -223, "message": "rate"})):
 			self.assertEqual(outbound.send_outbound(name), "Queued")
 			r = self.row(name)
 			self.assertEqual((r.status, r.attempts), ("Queued", 1))
@@ -218,13 +218,34 @@ class TestSendOutbound(OutboundTestCase):
 		self.sandbox(False)
 		self.set_token()
 		name = self.queue()
-		with mock.patch(REQ, side_effect=requests.Timeout("x")):
-			outbound.send_outbound(name)
+		with mock.patch(REQ, side_effect=requests.ConnectTimeout("x")):
+			self.assertEqual(outbound.send_outbound(name), "Queued")
 		frappe.db.set_value(OUT, name, "next_attempt_at", add_to_date(now_datetime(), minutes=-1))
 		frappe.db.commit()
 		with mock.patch(REQ, return_value=response(OK_SEND)):
 			self.assertEqual(outbound.send_outbound(name), "Sent")
 		self.assertEqual(self.row(name).external_message_id, "zl-sent-1")
+
+	def test_ambiguous_network_error_fails_without_retry(self):
+		"""Đọc phản hồi quá hạn/đứt kết nối giữa chừng: tin có thể đã tới khách -> Failed, không gửi lại."""
+		self.sandbox(False)
+		self.set_token()
+		for exc in (requests.ReadTimeout("x"), requests.ConnectionError("reset")):
+			name = self.queue()
+			with mock.patch(REQ, side_effect=exc) as http:
+				self.assertEqual(outbound.send_outbound(name), "Failed")
+			self.assertEqual(http.call_count, 1)
+			r = self.row(name)
+			self.assertEqual((r.status, r.attempts), ("Failed", 0))
+			self.assertIn("Không rõ", r.last_error)
+			self.assertIsNone(r.next_attempt_at)
+
+	def test_5xx_is_retried(self):
+		self.sandbox(False)
+		self.set_token()
+		name = self.queue()
+		with mock.patch(REQ, return_value=response({}, 502)):
+			self.assertEqual(outbound.send_outbound(name), "Queued")
 
 	def test_partial_send_fails_without_retry(self):
 		self.sandbox(False)
@@ -438,6 +459,47 @@ class TestRequestPhone(OutboundTestCase):
 		)
 		frappe.db.commit()
 		self.assertEqual(self.call()["status"], "Sent")
+
+	def test_paid_window_needs_confirmation(self):
+		self.set_last_inbound(hours_ago=72)
+		self.as_user(SALE1)
+		res = self.call()
+		self.assertEqual(res["status"], "confirm_required")
+		self.assertIn("tính phí", res["warning"])
+		self.assertIsNone(frappe.db.get_value("Omni Identity", self.ident1, "phone_requested_at"))
+		self.assertEqual(frappe.db.count(OUT, {"lead": self.lead1}), 0)
+		with mock.patch("frappe.enqueue"):
+			res = inbox.request_phone(self.lead1, confirm_paid=1)
+			frappe.db.commit()
+		self.assertEqual(res["status"], "Sent")
+
+	def test_window_closed_rejected(self):
+		self.set_last_inbound(hours_ago=24 * 9)
+		self.as_user(SALE1)
+		with self.assertRaises(frappe.ValidationError):
+			self.call()
+		self.assertIsNone(frappe.db.get_value("Omni Identity", self.ident1, "phone_requested_at"))
+
+	def test_real_send_drops_echo_duplicate(self):
+		self.sandbox(False)
+		self.as_user(SALE1)
+		echo = frappe.get_doc(
+			{
+				"doctype": OUT,
+				"channel": self.channel.name,
+				"identity": self.ident1,
+				"lead": self.lead1,
+				"text": "echo",
+				"source": "Sale",
+				"status": "Sent",
+				"external_message_id": "zl-info-1",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+		with mock.patch.object(ZaloAdapter, "request_user_info", return_value=("zl-info-1", "yêu cầu")):
+			res = self.call()
+		self.assertFalse(frappe.db.exists(OUT, echo.name))
+		self.assertEqual(self.row(res["outbound"]).external_message_id, "zl-info-1")
 
 	def test_lead_with_phone_rejected(self):
 		frappe.db.set_value("CRM Lead", self.lead1, "mobile_no", "0912345678")
