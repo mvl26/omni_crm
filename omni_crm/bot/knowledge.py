@@ -84,9 +84,9 @@ def import_items(path: str = "mau/kho-tri-thuc-mau.csv") -> dict[str, Any]:
 		if not ITEM_ID.match(item_id):
 			warnings.append(f"Bỏ dòng có item_id không hợp lệ: {item_id!r}")
 			continue
-		if has_placeholder(row.get("question", ""), row.get("answer", "")):
+		if has_placeholder(*row.values()):
 			skipped.append(item_id)
-			warnings.append(f"{item_id}: còn ô trong ngoặc vuông [...], chưa nhập (không bịa nội dung)")
+			warnings.append(f"{item_id}: có ô còn trong ngoặc vuông [...], chưa nhập (không bịa nội dung)")
 			continue
 		group = row.get("question_group", "")
 		if not group or not frappe.db.exists(GROUP, group):

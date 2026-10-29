@@ -78,6 +78,10 @@ class TestGuards(FrappeTestCase):  # các chốt chặn là hàm thuần
 			"Anh chị cần 100 hộp găng tay loại nào ạ?",
 			"Miyano có 5 khách sạn đối tác",
 			"Anh chị cho em xin tên đơn vị ạ.",
+			"Dạ nếu anh/chị đồng ý em lên đơn",
+			"Hợp đồng mua bán gửi qua email",
+			"Phụ kiện máy đo huyết áp còn dùng tốt",
+			"Hàng triệu khách hàng tin dùng",
 		):
 			self.assertFalse(guards.guard_unsupported_claims(text, list(self.KB))[0], text)
 
@@ -113,6 +117,15 @@ class TestGuards(FrappeTestCase):  # các chốt chặn là hàm thuần
 		self.assertTrue(guards.guard_handoff_topic(False, customer_text="Liều dùng thế nào?")[0])
 		self.assertFalse(guards.guard_handoff_topic(False, "Tư vấn", False, "Mấy giờ Miyano làm việc?")[0])
 		self.assertFalse(guards.guard_handoff_topic(False, customer_text="Gia đình em cần găng tay")[0])
+		for text in (
+			"Cần phụ kiện cho máy",
+			"Điều kiện bảo quản thế nào",
+			"Ý kiến của em là vậy",
+			"Giá treo dịch truyền loại nào",
+			"Giá trị đơn tối thiểu",
+		):
+			self.assertFalse(guards.guard_handoff_topic(False, customer_text=text)[0], text)
+		self.assertTrue(guards.guard_handoff_topic(False, customer_text="Tôi sẽ khởi kiện")[0])
 
 	def test_medical_unsafe_injection(self):
 		self.assertTrue(guards.guard_medical("Liều dùng 2 viên mỗi ngày", list(self.KB))[0])

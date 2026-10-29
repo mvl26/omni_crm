@@ -23,8 +23,8 @@ MONEY_PATTERNS = (
 	r"(?<![\w.,])\d[\d.,]*\s*(?:đồng|vnđ|vnd|nghìn|ngàn|triệu|tỷ|tỉ|usd|đô|tr|k|đ|%)(?!\w)",
 	r"[$]\s*\d[\d.,]*",
 	r"(?<!\w)(?:usd|vnd|vnđ)\s*\d[\d.,]*",
-	r"(?:\S+\s+)?(?:triệu|nghìn|ngàn|tỷ)(?!\w)",
-	r"(?:\S+\s+)?(?:đồng|vnđ|vnd|usd)(?!\w)",
+	r"\b(?:một|hai|ba|bốn|sáu|bảy|tám|chín|mười|trăm|vài|mấy)\s+(?:triệu|nghìn|ngàn|tỷ)(?!\w)",
+	r"\b(?:trăm|nghìn|ngàn|triệu|tỷ)\s+(?:đồng|vnđ|vnd)(?!\w)",
 )
 # Ngày/thời hạn giao: số kèm đơn vị thời gian, giờ giấc, ngày tháng, mốc tương đối.
 DEADLINE_PATTERNS = (
@@ -67,7 +67,15 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bhoan tien\b",
 		r"\bto cao\b",
 	),
-	"phap_ly": (r"\bkien\b", r"\bluat su\b", r"\bphap ly\b", r"\bvi pham\b", r"\bthanh tra\b"),
+	"phap_ly": (
+		r"\bkhoi kien\b",
+		r"\bkien tung\b",
+		r"\bdi kien\b",
+		r"\bluat su\b",
+		r"\bphap ly\b",
+		r"\bvi pham\b",
+		r"\bthanh tra\b",
+	),
 	"y_khoa": (
 		r"\blieu dung\b",
 		r"\blieu luong\b",
@@ -78,7 +86,7 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 	),
 	"gap_nguoi": (r"\bgap nhan vien\b", r"\bnoi chuyen voi (?:nguoi|nhan vien)\b", r"\bgoi lai cho toi\b"),
 }
-PRICE_WORD_ACCENTED = r"(?<!\w)giá(?!\w)"
+PRICE_WORD_ACCENTED = r"(?<!\w)giá(?!\w)(?!\s+(?:treo|đỡ|trị|kệ|thể|như))"
 INTENTS_HANDOFF = ("Hỏi giá", "Khiếu nại")
 # Chèn lệnh từ khách (so khớp trên văn bản đã bỏ dấu).
 INJECTION_PATTERNS = (

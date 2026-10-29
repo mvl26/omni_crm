@@ -91,6 +91,7 @@ def candidates_for_lead(lead: str, since: Any, until: Any) -> list[dict]:
 				"sale_at": at,
 				"sale_text": turn["text"],
 				"customer_ref": streak[-1]["ref"],
+				"customer_at": get_datetime(streak[-1]["at"]),
 				"customer_text": "\n".join(t["text"] for t in streak),
 				"until": at - timedelta(microseconds=1),
 			}
@@ -131,7 +132,7 @@ def _run_one(item: dict) -> tuple[str, str | None]:
 		batch_id=batch_id,
 		customer_text=item["customer_text"],
 		until=item["until"],
-		at=item["sale_at"],
+		at=item["customer_at"],  # giờ làm việc tính theo lúc khách nhắn, không phải lúc sale trả lời
 		include_summary=False,  # tóm tắt Lead tính tới nay có thể chứa điều khách nói SAU câu trả lời của sale
 		check_channel=False,
 	)

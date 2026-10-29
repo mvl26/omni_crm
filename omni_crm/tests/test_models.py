@@ -78,12 +78,11 @@ class TestOmniModels(FrappeTestCase):
 			settings.validate()
 
 	def test_doctypes_of_later_phases_absent(self):
-		for dt in (
-			"Omni Bot Draft",
-			"Omni Knowledge Item",
-			"Omni Question Group",
-		):
-			self.assertFalse(frappe.db.exists("DocType", dt), dt)
+		# D2-07 đã tạo ba DocType này; Đợt 3 chưa có cờ tự gửi theo nhóm
+		for dt in ("Omni Bot Draft", "Omni Knowledge Item", "Omni Question Group"):
+			self.assertTrue(frappe.db.exists("DocType", dt), dt)
+		group_fields = {f.fieldname for f in frappe.get_meta("Omni Question Group").fields}
+		self.assertFalse({f for f in group_fields if f.startswith("auto_send")})
 		settings_fields = {f.fieldname for f in frappe.get_meta("Omni Settings").fields}
 		self.assertNotIn("bot_active_hours", settings_fields)
 		# D2-06 đã thêm bảng điểm, ngưỡng Lead nóng và công tắc chấm điểm
@@ -99,8 +98,9 @@ class TestOmniModels(FrappeTestCase):
 		# D2-01 đã tạo Omni Call, Omni Agent Map và trường agent_map
 		self.assertTrue(frappe.db.exists("DocType", "Omni Call"))
 		self.assertIn("agent_map", {f.fieldname for f in frappe.get_meta("Omni Channel").fields})
-		self.assertNotIn("bot_paused_until", {f.fieldname for f in frappe.get_meta("Omni Identity").fields})
-		self.assertNotIn("bot_draft", {f.fieldname for f in frappe.get_meta("Omni Outbound Message").fields})
+		# D2-07 đã thêm bot_paused_until và bot_draft
+		self.assertIn("bot_paused_until", {f.fieldname for f in frappe.get_meta("Omni Identity").fields})
+		self.assertIn("bot_draft", {f.fieldname for f in frappe.get_meta("Omni Outbound Message").fields})
 
 	def test_track_changes(self):
 		for dt in ("Omni Settings", "Omni Channel"):
