@@ -70,3 +70,15 @@ Khóa Redis `omni:lock:sig:{SĐT/email}` (ADR 0003) có timeout 60 giây và KH�
 ## Lưu ý D1-09: tắt chiều ra của kênh
 
 Tắt `outbound_enabled` của một kênh thì mọi tin ra đang `Queued` của kênh đó chuyển `Blocked` với lý do "Kênh đã tắt chiều ra" khi worker/tác vụ quét chạm tới. Bật lại KHÔNG tự gửi lại những tin đã `Blocked`: sale phải gửi lại thủ công từ Hộp thư.
+
+## Lưu ý D1-10: giám sát, cảnh báo, xóa dữ liệu khách
+
+- **Màn hình** `/app/omni-monitor` (chỉ Omni Admin): công tắc, kênh (nhận/gửi gần nhất, lỗi, hạn token Zalo), hàng đợi, p50/p95 24 giờ, chiều ra hôm nay, nghi trùng, danh sách tin Manual để "Xử lý lại", "Quét ngay", "Làm mới token Zalo". Tự làm mới 30 giây. Số liệu p50/p95 = `modified - creation` của tin Done (worker đặt `modified` lúc Done); "Failed trong 1 giờ" tính theo `creation` của tin ra. Khối Bot/Tổng đài thuộc Đợt 2.
+- **Cảnh báo** `monitoring.alerts.run_checks` chạy mỗi 5 phút cùng tác vụ quét. Luật: tin New cũ nhất > 5 phút; Manual > 0; p95 > 2 phút; tin ra Failed > 5 trong 1 giờ; Candidate Open > 20; kênh bật không nhận tin > 4 giờ làm việc (chỉ trong giờ làm việc); token Zalo còn < 1 giờ hoặc lần làm mới gần nhất lỗi (không áp khi sandbox bật). Chống lặp 30 phút mỗi loại (mỗi kênh với luật theo kênh) bằng khóa Redis `omni:alert:<loại>:<kênh>`; xóa khóa này (`bench --site <site> clear-cache` hoặc xóa key) để buộc gửi lại. Nếu Redis cache lỗi, cảnh báo vẫn gửi (có thể lặp). Muốn tắt thư: để trống `alert_recipients`.
+- **Tắt worker 10 phút** để thử: sau ~5-10 phút nhận đúng một thư "Tin chờ xử lý quá lâu" (và thêm một thư sau mỗi 30 phút nếu vẫn kẹt).
+- **Dọn raw_payload** 02:00 hằng đêm, theo lô 500, tối đa ~240 giây mỗi lần, chỉ tin đã xử lý xong; đặt `raw_payload_retention_days = 0` để tắt.
+- **Xóa dữ liệu khách**: trang `omni-monitor` > "Xóa dữ liệu khách" (Lead + lý do + xác nhận) hoặc API `omni_crm.api.admin.erase_customer_data`. Xóa nội dung tin vào/ra theo Lead và các Identity của Lead, ghi Comment (lý do, người làm); không xóa Lead. LƯU Ý: chưa xóa Communication do timeline tạo, tên/SĐT/email trong Identity, `identity_key`, Comment liên kết (xem docs/12 mục D) nên chưa đủ cho yêu cầu pháp lý đầy đủ.
+- **Email Account của Frappe** (kênh email, docs/05): trên Email Account dùng cho kênh phải để cờ tạo Lead của CRM = 0 và `append_to` trống, nếu không CRM tự tạo Lead song song với Omni (trùng Lead).
+- **Supervisor/worker**: production phải có tiến trình `bench worker --queue omni`, tối thiểu 2 worker (debounce 5 giây giữ 1 worker mỗi khách; 1 worker xử lý ~20 khách khác nhau mất ~100 giây). Thiếu worker thì tin New tăng và cảnh báo "tin chờ lâu" nổ.
+- **Redis queue** phải chạy: không có thì không enqueue được job nền, không tạo được Comment trên Lead (hook CRM enqueue).
+- Giữ nguyên các lưu ý D1-05 (`sig:`), D1-08 (cấm `developer_mode` ở production) và D1-09 (tắt `outbound_enabled` => tin Blocked, không tự gửi lại) ở trên. Bảo vệ 1 MB cho webhook cần đặt thêm `client_max_body_size 1m;` ở nginx cho `/api/method/omni_crm.api.webhooks.*` (code đã chặn ở tầng ứng dụng nhưng nginx chặn sớm hơn).
