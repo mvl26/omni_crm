@@ -326,7 +326,17 @@ def get_thread(lead: str) -> dict:
 	info = frappe.db.get_value(
 		LEAD,
 		lead,
-		["name", "lead_name", "lead_owner", "status", "mobile_no", "email", "converted"],
+		[
+			"name",
+			"lead_name",
+			"lead_owner",
+			"status",
+			"mobile_no",
+			"email",
+			"converted",
+			"omni_intent",
+			"omni_bot_summary",
+		],
 		as_dict=True,
 	)
 	deal = frappe.db.get_value("CRM Deal", {"lead": lead}, "name") if info.converted else None

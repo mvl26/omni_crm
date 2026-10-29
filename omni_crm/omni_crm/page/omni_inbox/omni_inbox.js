@@ -205,6 +205,7 @@ class OmniInbox {
 					${(data.identities || []).map((i) => `<span class="oi-chan">${e(i.channel_type)}</span>`).join("")}</div></div>
 				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a>
 			</div>
+			${this.bot_html(lead)}
 			<div class="oi-thread">${msgs || `<div class="oi-empty">${e(__("Chưa có tin nhắn."))}</div>`}</div>
 			${this.compose_html(data)}`);
 		this.bind_compose(data);
@@ -216,6 +217,15 @@ class OmniInbox {
 			const t = this.$right.find(".oi-thread");
 			t.scrollTop(t[0].scrollHeight);
 		}
+	}
+
+	bot_html(lead) {
+		// Tóm tắt và nhãn ý định do bot ghi: luôn thoát HTML (nội dung có nguồn từ lời khách).
+		const e = frappe.utils.escape_html;
+		if (!lead.omni_bot_summary && !lead.omni_intent) return "";
+		const intent = lead.omni_intent ? `<span class="oi-chan oi-intent">${e(lead.omni_intent)}</span> ` : "";
+		return `<div class="oi-bot">${intent}${e(lead.omni_bot_summary || "")}
+			<span class="oi-meta">${e(__("Tóm tắt do bot, có thể chưa chính xác"))}</span></div>`;
 	}
 
 	compose_html(data) {
