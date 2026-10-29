@@ -1,0 +1,129 @@
+{
+ "autoname": "EVR-.YYYY.-.#####",
+ "naming_rule": "Expression (old style)",
+ "field_order": [
+  "started_at",
+  "prompt_version",
+  "kb_version",
+  "model",
+  "col_a",
+  "total_cases",
+  "critical_failures",
+  "passed_gate",
+  "sec_metrics",
+  "field_accuracy",
+  "action_accuracy",
+  "answer_pass_rate",
+  "sec_detail",
+  "result_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Bắt đầu lúc",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "prompt_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản câu lệnh",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "kb_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản kho tri thức"
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Mô hình"
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "total_cases",
+   "fieldtype": "Int",
+   "label": "Số ca",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "critical_failures",
+   "fieldtype": "Int",
+   "label": "Lỗi nghiêm trọng",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "passed_gate",
+   "fieldtype": "Check",
+   "label": "Qua cổng",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sec_metrics",
+   "fieldtype": "Section Break",
+   "label": "Chỉ số"
+  },
+  {
+   "fieldname": "field_accuracy",
+   "fieldtype": "Float",
+   "label": "Trường đúng",
+   "precision": "4"
+  },
+  {
+   "fieldname": "action_accuracy",
+   "fieldtype": "Float",
+   "label": "Hành động đúng",
+   "precision": "4"
+  },
+  {
+   "fieldname": "answer_pass_rate",
+   "fieldtype": "Float",
+   "label": "Trả lời đạt",
+   "precision": "4"
+  },
+  {
+   "fieldname": "sec_detail",
+   "fieldtype": "Section Break",
+   "label": "Chi tiết"
+  },
+  {
+   "fieldname": "result_json",
+   "fieldtype": "JSON",
+   "label": "Chi tiết từng ca"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Omni Knowledge Editor",
+   "read": 1
+  }
+ ],
+ "name": "Omni Eval Run",
+ "description": "Một lần chạy bộ đề",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "actions": [],
+ "creation": "2026-10-30 12:00:00.000000",
+ "modified": "2026-10-30 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "module": "Omni CRM",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "links": [],
+ "states": []
+}
