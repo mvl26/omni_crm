@@ -15,7 +15,8 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `missed_call_callback_minutes`, `callback_fallback_user`, `business_hours`, `holidays` | Omni Settings | Hạn gọi lại (phút làm việc), người nhận dự phòng, giờ làm việc, ngày nghỉ lễ (JSON `["2027-01-01", …]`, mặc định rỗng — việc cần người phụ trách điền) | 2 |
 | `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
 | `lead_scoring_enabled` | Omni Settings | Không tính điểm mới, không báo Lead nóng; `omni_score` và breakdown cũ giữ nguyên. Bảng điểm `score_rules` rỗng cũng coi như không chấm (không có điểm mặc định bịa). `hot_lead_threshold` (mặc định 60; <= 0 dùng 60) | 2 |
-| `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời | 2 |
+| `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời (không enqueue `reply_batch`, `call_tool` ghi `Skipped Switch`). Shadow (và Draft, tạm xử lý như Shadow ở Đợt 2) chỉ ghi `Omni Bot Draft`, không bao giờ tạo tin gửi; mặc định Off | 2 |
+| `bot_paused_until` (kiểm tra) | Omni Identity | Bot ngầm không soạn nháp cho khách này đến thời điểm đó | 2 |
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
 | `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI); lần gọi ghi `Skipped Budget`. Site đã migrate bắt đầu ở 0 cho đến khi đặt hạn mức | 2 |
