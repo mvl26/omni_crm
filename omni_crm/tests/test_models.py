@@ -188,8 +188,21 @@ class TestOmniModels(FrappeTestCase):
 			self.assertEqual(meta.get_field(fn).hidden, 1, fn)
 		self.assertEqual(meta.get_field("omni_manual_fields").hidden, 1)
 		self.assertEqual(meta.get_field("omni_merged_into").options, "CRM Lead")
-		for fn in ("omni_need", "omni_score"):
-			self.assertFalse(meta.has_field(fn), fn)
+		# Đợt 2 (D2-05): trường do bot ghi
+		for fn in (
+			"omni_need",
+			"omni_products",
+			"omni_quantity",
+			"omni_timeframe",
+			"omni_urgency",
+			"omni_intent",
+			"omni_score",
+			"omni_score_breakdown",
+			"omni_bot_summary",
+		):
+			self.assertTrue(meta.has_field(fn), fn)
+		self.assertEqual(meta.get_field("omni_score_breakdown").hidden, 1)
+		self.assertEqual(meta.get_field("omni_bot_summary").read_only, 1)
 
 	# ---- Bí mật và quyền
 	def test_password_fields_never_in_list_view(self):
