@@ -43,6 +43,8 @@ class TelephonyProvider(Protocol):
 
 `TelephonyAdapter` (thuộc `channels/`) bọc một `TelephonyProvider` để khớp `ChannelAdapter`: `parse()` đổi mỗi `CallEvent` kết thúc cuộc gọi thành `InboundEvent(event_type="call_ended", external_message_id=call_id, external_sender_id=<số khách>)`.
 
+Sự kiện kết thúc là sự kiện có `ended_at` hoặc trạng thái Missed/Busy/Failed/Voicemail/Ended; Ringing và Answered đơn lẻ là trung gian (xác nhận ở docs/12 mục C, D2-01).
+
 Số khách: cuộc gọi đến → `from_number`; gọi ra → `to_number`.
 
 ## 2. Luồng
@@ -79,6 +81,8 @@ Worker với `event_type = call_ended`:
 ### 2.4 Ghi âm (Đợt 3)
 
 `fetch_recording(call)`: tải ngay sau cuộc gọi (nhà cung cấp có thể chỉ giữ file có hạn — Stringee giữ 30 ngày), lưu `File` **private** gắn `Omni Call`, rồi enqueue chuyển giọng nói (xem `docs/08` mục 9). Xóa file sau `recording_retention_days`.
+
+D2-01 đã làm bước 1-4; bước 5 (việc gọi lại) ở D2-03, bước 6 (ghi âm) ở Đợt 3, đối soát đêm (2.3) ở D2-03. Hiện cron `reconcile_yesterday` vẫn tắt trong `hooks.py`.
 
 ## 3. Adapter Stringee
 
