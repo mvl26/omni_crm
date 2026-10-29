@@ -208,7 +208,7 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 	row = frappe.db.get_value(
 		OUTBOUND,
 		name,
-		["name", "channel", "text", "source", "sent_by", "sent_at", "creation"],
+		["name", "channel", "text", "source", "sent_by", "sent_at", "creation", "is_sandbox"],
 		as_dict=True,
 	)
 	if not row:
@@ -223,11 +223,15 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 		full_name = frappe.db.get_value("User", row.sent_by, "full_name") or row.sent_by
 	else:
 		full_name = _("Bot") if row.source == "Bot" else _("Hệ thống")
+	subject, content = _subject(channel_type, row.text), render_text(row.text)
+	if row.is_sandbox:  # tin thử nghiệm không được trông như đã gửi thật
+		subject = f"[{_('Thử nghiệm')}] {subject}"
+		content += f"<p><i>{_('Tin thử nghiệm (sandbox), chưa gửi tới khách')}</i></p>"
 	return _insert_communication(
 		{
 			"sent_or_received": "Sent",
-			"subject": _subject(channel_type, row.text),
-			"content": render_text(row.text),
+			"subject": subject,
+			"content": content,
 			"sender": row.sent_by,
 			"sender_full_name": full_name,
 			"communication_date": row.sent_at or row.creation or now_datetime(),

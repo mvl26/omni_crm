@@ -110,6 +110,27 @@ class TestSendOutbound(OutboundTestCase):
 		http.assert_not_called()
 		self.assertIn(name, self.comms())
 
+	def test_sandbox_communication_is_labelled(self):
+		self.sandbox(True)
+		name = self.queue()
+		outbound.send_outbound(name)
+		comm = frappe.db.get_value(
+			"Communication", {"omni_outbound_message": name}, ["subject", "content"], as_dict=True
+		)
+		self.assertTrue(comm.subject.startswith("[Thử nghiệm]"))
+		self.assertIn("Tin thử nghiệm (sandbox), chưa gửi tới khách", comm.content)
+
+	def test_real_communication_not_labelled(self):
+		self.sandbox(False)
+		name = self.queue()
+		with mock.patch.object(ZaloAdapter, "send", return_value="zl-mid-9"):
+			outbound.send_outbound(name)
+		comm = frappe.db.get_value(
+			"Communication", {"omni_outbound_message": name}, ["subject", "content"], as_dict=True
+		)
+		self.assertNotIn("Thử nghiệm", comm.subject)
+		self.assertNotIn("sandbox", comm.content)
+
 	def test_real_send_stores_message_id_and_timeline(self):
 		self.sandbox(False)
 		name = self.queue()
