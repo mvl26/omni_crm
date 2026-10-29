@@ -163,31 +163,38 @@ class TestWorker(PipelineTestCase):
 		self.assertEqual(frappe.db.count("Omni Identity", {"identity_key": KEY}), 1)
 
 	def test_lock_is_extended_each_round(self):
-		"""Khóa 4 giây, mỗi lô tốn 1,5 giây: không gia hạn thì khóa hết hạn giữa các vòng."""
-		import time
-
-		from omni_crm.pipeline.locks import lock_key
+		"""Mỗi vòng xử lý phải gia hạn khóa (replace_ttl) trước khi chạy lô; không phụ thuộc đồng hồ."""
+		from redis.lock import Lock
 
 		self.add_msg("e0")
 		real = worker._process_batch
-		ttls: list[int] = []
 		extra = [1, 2]
+		batches: list[int] = []
+		extend_calls_at_batch: list[int] = []
+		extend_calls: list[tuple] = []
+		real_extend = Lock.extend
+
+		def spy_extend(lock, additional_time, replace_ttl=False):
+			extend_calls.append((additional_time, replace_ttl))
+			return real_extend(lock, additional_time, replace_ttl=replace_ttl)
 
 		def wrapper(identity_key, msgs, batch_id):
-			ttls.append(frappe.cache().pttl(lock_key(identity_key)))
+			batches.append(1)
+			extend_calls_at_batch.append(len(extend_calls))
 			if extra:
 				extra.pop()
 				self.add_msg(f"e-{len(extra)}")
-			time.sleep(1.5)
 			return real(identity_key, msgs, batch_id)
 
 		with (
-			mock.patch.object(worker, "LOCK_TIMEOUT", 4),
+			mock.patch.object(Lock, "extend", spy_extend),
 			mock.patch.object(worker, "_process_batch", side_effect=wrapper),
 		):
 			process_identity(KEY, 0)
-		self.assertEqual(len(ttls), 3)
-		self.assertTrue(all(t > 3000 for t in ttls), ttls)
+		self.assertEqual(len(batches), 3)
+		# Trước mỗi lô thứ k đã có ít nhất k lần gia hạn.
+		self.assertEqual(extend_calls_at_batch, [1, 2, 3])
+		self.assertTrue(all(call == (worker.LOCK_TIMEOUT, True) for call in extend_calls), extend_calls)
 
 	def test_lock_lost_between_rounds_stops_and_enqueues_continuation(self):
 		from omni_crm.pipeline.locks import lock_key

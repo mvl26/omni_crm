@@ -169,4 +169,5 @@ Bước 0 của D1-08 không làm được: developers.zalo.me là trang SPA, We
 | 2026-10-29 | D1-10: hộp xác nhận "Xóa dữ liệu khách" nằm ở trang `omni-monitor` (nhập Lead + lý do + `frappe.confirm`), không phải nút trên Lead (giao diện Lead là SPA của app crm, không sửa). API `erase_customer_data` không tự đòi cờ xác nhận. | Thấp | — | D1-10 |
 | 2026-10-29 | D1-10: Comment trên CRM Lead kích hoạt hook CRM `frappe.enqueue(update_modified_background)`; khi Redis queue hỏng `erase_customer_data` lỗi và rollback toàn bộ (không xóa dở). Test mock `frappe.enqueue`. | Thấp | Redis queue phải chạy ở production (đã là yêu cầu). | D1-10 |
 
-- **Test chập chờn (điều phối, sau D1-09):** `omni_crm.tests.test_worker.TestWorker.test_lock_is_extended_each_round` dùng khóa 4 giây và `sleep` thật 1,5 giây mỗi lô nên phụ thuộc tốc độ máy. Đỏ một lần khi chạy cả bộ lúc máy bận; chạy riêng module 5/5 lần qua. Chưa nới test. Đề xuất: bỏ `sleep` thật, mock đồng hồ hoặc đọc TTL trực tiếp trước/sau mỗi vòng.
+
+- **Test chập chờn đã sửa (điều phối):** `test_lock_is_extended_each_round` từng đo thời gian thật nên đỏ khi máy bận (2/3 lần chạy cả bộ). Viết lại kiểm trực tiếp lời gọi `Lock.extend(LOCK_TIMEOUT, replace_ttl=True)` trước mỗi lô; đã kiểm bằng cách bỏ dòng gia hạn thì test đỏ.
