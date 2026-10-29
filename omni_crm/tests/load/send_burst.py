@@ -24,6 +24,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import math
 import os
 import random
 import statistics
@@ -63,7 +64,7 @@ def percentile(sorted_ms: list[float], p: float) -> float:
 	"""Phân vị p (0..1) của danh sách đã sắp xếp (phương pháp hạng gần nhất)."""
 	if not sorted_ms:
 		return float("nan")
-	k = max(0, min(len(sorted_ms) - 1, int(round(p * len(sorted_ms) + 0.5)) - 1))
+	k = max(0, min(len(sorted_ms) - 1, math.ceil(p * len(sorted_ms)) - 1))
 	return sorted_ms[k]
 
 

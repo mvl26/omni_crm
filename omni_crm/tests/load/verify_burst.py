@@ -11,6 +11,7 @@ hết hàng đợi, số tin vào / số mong đợi, số Lead / số khách, s
 from __future__ import annotations
 
 import json
+import math
 import time
 
 import frappe
@@ -30,7 +31,7 @@ def _pct(vals: list[float], p: float) -> float | None:
 	if not vals:
 		return None
 	vals = sorted(vals)
-	return round(vals[max(0, min(len(vals) - 1, int(round(p * len(vals) + 0.5)) - 1))], 2)
+	return round(vals[max(0, min(len(vals) - 1, math.ceil(p * len(vals)) - 1))], 2)
 
 
 def run(channel: str, expected_unique: int, expected_customers: int, wait_minutes: int = 10) -> None:
