@@ -1,0 +1,1 @@
+"""Interface tổng đài chung."""

@@ -1,0 +1,9 @@
+group_name,always_handoff,description
+Giờ làm việc,0,"Khách hỏi giờ mở cửa, giờ nhận đơn, ngày nghỉ"
+Địa chỉ và liên hệ,0,"Khách hỏi địa chỉ văn phòng, kho, số hotline, email"
+Thông tin sản phẩm,0,"Khách hỏi sản phẩm có trong danh mục, quy cách, xuất xứ, giấy tờ có trong kho tri thức"
+Thủ tục mua hàng,0,"Khách hỏi cách đặt hàng, hồ sơ cần thiết, hình thức thanh toán đã công bố"
+Hỏi giá,1,"Khách hỏi giá, chiết khấu, báo giá, so sánh giá"
+Đặt hàng,1,"Khách muốn đặt hàng, nêu số lượng cụ thể, cần báo giá chính thức"
+Khiếu nại,1,"Khách phàn nàn: giao sai, giao thiếu, chất lượng, chậm trễ"
+Khác,1,Không thuộc nhóm nào ở trên

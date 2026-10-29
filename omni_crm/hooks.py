@@ -8,7 +8,7 @@ app_license = "agpl-3.0"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["crm"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -135,36 +135,41 @@ app_license = "agpl-3.0"
 
 # Document Events
 # ---------------
-# Hook on document methods and events
+# Khung theo docs/01 mục 6. Chưa bật; các prompt sau bỏ chú thích từng mục.
 
 # doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
+# 	"Communication": {"after_insert": "omni_crm.channels.email.adapter.on_communication_insert"},  # D1-07
+# 	"CRM Lead": {
+# 		"validate": "omni_crm.crm_bridge.lead.compute_normalized_fields",  # D1-05
+# 		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06
+# 	},
 # }
 
 # Scheduled Tasks
 # ---------------
+# Khung theo docs/01 mục 5-6. Chưa bật.
 
 # scheduler_events = {
-# 	"all": [
-# 		"omni_crm.tasks.all"
-# 	],
-# 	"daily": [
-# 		"omni_crm.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"omni_crm.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"omni_crm.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"omni_crm.tasks.monthly"
-# 	],
+# 	"cron": {
+# 		"*/5 * * * *": [
+# 			"omni_crm.pipeline.sweeper.requeue_stuck",
+# 			"omni_crm.monitoring.alerts.run_checks",
+# 		],
+# 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],
+# 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],
+# 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],
+# 	},
+# 	"hourly": ["omni_crm.bot.ai_client.report_budget"],
 # }
+
+# Fixtures
+# --------
+fixtures = [
+	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},
+	# Bật từ D1-02:
+	# {"dt": "Custom Field", "filters": [["module", "=", "Omni CRM"]]},
+	# {"dt": "Property Setter", "filters": [["module", "=", "Omni CRM"]]},
+]
 
 # Testing
 # -------
@@ -246,4 +251,3 @@ app_license = "agpl-3.0"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

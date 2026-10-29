@@ -1,0 +1,53 @@
+# 09 · Công tắc và cấu hình
+
+Mỗi phần có thể tắt **tức thì, không cần deploy, không mất dữ liệu**. Tắt một phần = phần đó ngừng hành động, nhưng tin vào vẫn được lưu để xử lý bù khi bật lại.
+
+## 1. Bảng công tắc
+
+| Công tắc | Ở đâu | Tắt thì | Đợt |
+| --- | --- | --- | --- |
+| `sandbox_mode` | Omni Settings | (Bật) không gửi gì thật ra ngoài | 1 |
+| `enabled` | Omni Channel | Webhook vẫn trả 200 và **lưu** tin, không xử lý | 1 |
+| `outbound_enabled` | Omni Channel | Tin ra bị `Blocked` | 1 |
+| `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
+| `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời | 2 |
+| `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
+| `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
+| `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI) | 2 |
+| `bot_paused_until` | Omni Identity | Bot im với một khách | 3 |
+
+## 2. Đọc công tắc — `flags.py`
+
+```python
+def channel_enabled(channel: str) -> bool: ...
+def outbound_enabled(channel: str) -> bool: ...
+def sandbox() -> bool: ...
+def bot_analyze_enabled() -> bool: ...
+def bot_reply_mode() -> str: ...            # "Off" | "Shadow" | "Draft"
+def group_auto_send(group: str) -> bool: ...
+def recording_enabled() -> bool: ...
+```
+
+- Đọc qua cache của Frappe (`frappe.get_cached_doc` / `get_cached_value`); cache tự xóa khi lưu Settings. Không cache riêng lâu hơn 30 giây.
+- Kiểm tra công tắc **ngay trước hành động có tác động ra ngoài** (gọi AI, gửi tin), không chỉ ở đầu job.
+
+## 3. Ghi vết
+
+Mọi lần bật/tắt công tắc (trừ `bot_paused_until`) ghi Version (bật `track_changes` cho Omni Settings, Omni Channel, Omni Question Group). Màn hình giám sát hiện trạng thái công tắc hiện tại ở đầu trang.
+
+## 4. Cấu hình bổ sung cho chuyển người (Đợt 3)
+
+| Trường (Omni Settings) | Kiểu | Mặc định |
+| --- | --- | --- |
+| `handoff_message_in_hours` | Small Text | "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị trong ít phút." |
+| `handoff_message_after_hours` | Small Text | "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị vào {gio_lam_viec_ke_tiep}." |
+| `handoff_notify_channels` | Small Text | "system,email" |
+
+## 5. Bảng cấu hình theo môi trường
+
+| Cấu hình | Dev | Staging | Production |
+| --- | --- | --- | --- |
+| `sandbox_mode` | Bật | Bật (tắt khi chạy thử với người nhận chỉ định) | **Tắt** |
+| `zalo_skip_signature` | Có thể bật | Tắt | Tắt (bật = cổng từ chối) |
+| `daily_token_budget` | Thấp | Thấp | Theo quyết định chi phí |
+| Worker `omni` | 1 | 2 | ≥ 2, tăng khi chạy chiến dịch |

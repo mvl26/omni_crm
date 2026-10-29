@@ -1,0 +1,8 @@
+item_id,question_group,question,answer,source,owner_email
+KB-00001,Giờ làm việc,"Bên mình làm việc mấy giờ?
+Mấy giờ thì nhận đơn?","[Điền giờ làm việc thực tế của Miyano, ví dụ: Miyano làm việc từ … đến … các ngày …]",[Tài liệu nguồn],[email người phụ trách]
+KB-00002,Địa chỉ và liên hệ,"Văn phòng Miyano ở đâu?
+Cho xin địa chỉ công ty",[Điền địa chỉ văn phòng và kho đang công bố],[Tài liệu nguồn],[email người phụ trách]
+KB-00003,Địa chỉ và liên hệ,Số hotline là gì?,[Điền số hotline chính thức],[Tài liệu nguồn],[email người phụ trách]
+KB-00004,Thủ tục mua hàng,Muốn đặt hàng thì làm thế nào?,"[Điền quy trình đặt hàng chính thức: kênh đặt, thông tin cần cung cấp]",[Tài liệu nguồn],[email người phụ trách]
+KB-00005,Thông tin sản phẩm,[Câu khách hay hỏi về một sản phẩm cụ thể],"[Thông tin đã được duyệt để công bố: quy cách, xuất xứ, giấy phép lưu hành… KHÔNG ghi giá]",[Catalogue / hồ sơ sản phẩm],[email người phụ trách]

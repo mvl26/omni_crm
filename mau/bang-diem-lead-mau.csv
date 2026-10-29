@@ -1,0 +1,11 @@
+signal,points,note
+has_phone,15,Có số điện thoại hợp lệ
+has_email,5,Có email
+has_org,10,Nêu tên đơn vị (bệnh viện / phòng khám / công ty)
+intent_price,15,Hỏi giá hoặc báo giá
+intent_purchase,25,Muốn đặt hàng
+quantity_given,15,Nêu số lượng cụ thể
+timeframe_within_30d,15,Cần trong vòng 30 ngày
+urgency_high,10,Khách nói gấp
+repeat_contact,5,Liên hệ từ lần thứ 2 trở lên trong 30 ngày
+complaint,-10,Đang khiếu nại (ưu tiên xử lý nhưng không phải Lead nóng)

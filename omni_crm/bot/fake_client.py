@@ -1,0 +1,1 @@
+"""FakeAIClient dùng cho test."""

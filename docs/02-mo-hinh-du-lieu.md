@@ -1,0 +1,326 @@
+# 02 · Mô hình dữ liệu
+
+Module Frappe: **Omni CRM**. Tất cả DocType có tiền tố `Omni`. Cột "Đợt" cho biết prompt nào tạo; DocType của Đợt 2–3 **không tạo sớm**.
+
+Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` ở mức DB; trường kiểu `Password` không bao giờ in ra log.
+
+## 1. Danh sách
+
+| DocType | Loại | Đợt | Vai trò |
+| --- | --- | --- | --- |
+| Omni Settings | Single | 1 (bổ sung ở 2) | Công tắc, tham số chung, cấu hình AI |
+| Omni Channel | Thường | 1 | Cấu hình từng kênh, bí mật, token |
+| Omni Identity | Thường | 1 | Một định danh của khách trên một kênh |
+| Omni Inbound Message | Thường | 1 | Bảng tin gốc — mọi sự kiện vào |
+| Omni Outbound Message | Thường | 1 | Mọi tin gửi ra |
+| Omni Duplicate Candidate | Thường | 1 | Cặp Lead nghi trùng chờ người quyết |
+| Omni Call | Thường | 2 | Cuộc gọi từ tổng đài |
+| Omni Agent Map | Bảng con của Omni Channel | 2 | Ánh xạ nhân viên tổng đài → User (xem `docs/07` mục 5) |
+| Omni Question Group | Thường | 2 | Nhóm câu hỏi, công tắc tự động theo nhóm |
+| Omni Knowledge Item | Thường | 2 | Kho tri thức cho bot |
+| Omni Score Rule | Bảng con của Omni Settings | 2 | Bảng điểm Lead |
+| Omni Bot Run | Thường | 2 | Nhật ký mỗi lần gọi AI |
+| Omni Bot Draft | Thường | 2 | Câu trả lời bot soạn (ngầm, nháp, tự động) |
+| Omni Eval Case | Thường | 2 | Một ca trong bộ đề |
+| Omni Eval Run | Thường | 2 | Một lần chạy bộ đề và kết quả |
+
+## 2. Omni Settings (Single)
+
+| Trường | Kiểu | Options / mặc định | Ghi chú |
+| --- | --- | --- | --- |
+| `sandbox_mode` | Check | 1 | Bật: chiều ra không gọi API thật. **Production phải tắt có chủ đích** |
+| `debounce_seconds` | Int | 5 | Chờ gộp tin liên tiếp của một khách |
+| `max_attempts` | Int | 3 | Số lần thử tối đa trước khi chuyển Manual |
+| `retry_backoff_minutes` | Data | "1,5" | Phần tử thứ n = thời gian chờ sau lần lỗi thứ n. Có `max_attempts − 1` phần tử; lỗi ở lần thứ `max_attempts` → Manual |
+| `stuck_after_minutes` | Int | 10 | Tin ở Processing quá lâu thì đưa lại hàng đợi |
+| `raw_payload_retention_days` | Int | 180 | Sau hạn này xóa `raw_payload`, giữ nội dung đã chuẩn hóa |
+| `recording_retention_days` | Int | 365 | Thời hạn giữ ghi âm (Đợt 3) |
+| `default_lead_source_map` | JSON | `{"Email":"Email","Zalo OA":"Zalo OA","Telephony":"Điện thoại"}` | Ánh xạ kênh → CRM Lead Source |
+| `alert_recipients` | Small Text | | Email nhận cảnh báo, mỗi dòng một địa chỉ |
+| `business_hours` | JSON | `{"mon-fri":"08:00-17:30","sat":"08:00-12:00"}` | Giờ làm việc (hạn gọi lại, tin ngoài giờ) |
+| `missed_call_callback_minutes` | Int | 30 | Đợt 2: hạn gọi lại khách gọi nhỡ, tính trong giờ làm việc |
+| `callback_fallback_user` | Link User | | Đợt 2: người nhận việc gọi lại khi Lead chưa có người phụ trách |
+| `holidays` | JSON | `[]` | Đợt 2: danh sách ngày nghỉ lễ `["2027-01-01", …]` cho tính giờ làm việc |
+| `assignment_fallback_users` | Small Text | | Đợt 1: chỉ dùng nếu Assignment Rule của CRM không áp dụng được (G11) — mỗi dòng một user, chia vòng tròn |
+| `bot_active_hours` | JSON | để trống = 24/7 | Đợt 3: giờ bot được tự gửi (Q6); ngoài giờ chỉ soạn nháp |
+| `recording_enabled` | Check | 0 | Đợt 3: công tắc tải ghi âm và chuyển văn bản |
+| `stt_provider` | Select | (theo D3-03) | Đợt 3: nhà cung cấp chuyển giọng nói |
+| `stt_api_key` | Password | | Đợt 3 |
+| `stt_min_confidence` | Float | theo báo cáo D3-03 | Đợt 3: dưới ngưỡng thì không phân tích bản ghi |
+| **Bot (Đợt 2)** | | | |
+| `bot_analyze_enabled` | Check | 0 | Công tắc bot phân tích |
+| `bot_reply_mode` | Select | Off / Shadow / Draft | Chế độ trả lời toàn cục. Tự động bật **theo nhóm** ở Omni Question Group |
+| `ai_api_key` | Password | | Khóa Claude API |
+| `analyze_model` | Data | `claude-haiku-5-5` | Mô hình cho phân tích |
+| `reply_model` | Data | `claude-sonnet-5-5` | Mô hình cho soạn trả lời |
+| `daily_token_budget` | Int | 2000000 | Vượt thì bot tạm dừng đến hôm sau, gửi cảnh báo |
+| `analyze_prompt_version`, `reply_prompt_version`, `summarize_prompt_version` | Data | (chỉ đọc) | Phiên bản câu lệnh đang dùng; `bot/prompts/loader.py` ghi khi nạp tệp mới nhất. `Omni Bot Run.prompt_version` lưu bản thực sự đã dùng |
+| `kb_version` | Int | (chỉ đọc) | Tăng mỗi khi kho tri thức thay đổi |
+| `score_rules` | Table | Omni Score Rule | Bảng điểm |
+| `hot_lead_threshold` | Int | 60 | Từ ngưỡng này là Lead nóng, báo sale ngay |
+| `handoff_pause_hours` | Int | 24 | Sau khi chuyển người, bot im với khách đó trong bao lâu |
+| `handoff_message_in_hours`, `handoff_message_after_hours`, `handoff_notify_channels` | Small Text | xem `docs/09` mục 4 | Đợt 3 |
+
+## 3. Omni Channel
+
+Mỗi bản ghi là một kênh cụ thể (một hộp thư, một OA, một tổng đài).
+
+| Trường | Kiểu | Options | Ghi chú |
+| --- | --- | --- | --- |
+| `channel_name` | Data | Bắt buộc, duy nhất | Đặt tên, làm `name` |
+| `channel_type` | Select | Email / Zalo OA / Telephony | |
+| `enabled` | Check | | Công tắc kênh: tắt thì webhook trả 200 nhưng **chỉ lưu**, không enqueue |
+| `outbound_enabled` | Check | | Công tắc chiều ra |
+| `webhook_token` | Password | | Token bí mật trong URL webhook (tổng đài, lớp bảo vệ thêm) |
+| `email_account` | Link | Email Account | Với Email |
+| `zalo_app_id` | Data | | Với Zalo |
+| `zalo_oa_id` | Data | | |
+| `zalo_app_secret` | Password | | Dùng làm `secret_key` khi lấy token |
+| `zalo_oa_secret_key` | Password | | Dùng xác thực chữ ký webhook |
+| `zalo_access_token` | Password | | |
+| `zalo_refresh_token` | Password | | Mỗi lần làm mới nhận refresh token mới, phải lưu ngay |
+| `zalo_token_expires_at` | Datetime | | |
+| `zalo_cs_free_hours` | Int | 48 | Khung gửi tin tư vấn miễn phí sau tương tác cuối (xác nhận quy định hiện hành) |
+| `zalo_cs_max_days` | Int | 7 | Quá hạn này không gửi được tin tư vấn |
+| `zalo_skip_signature` | Check | 0 | **Chỉ cho site dev.** Bật trên production thì cổng từ chối xử lý và cảnh báo |
+| `zalo_create_lead_on_follow` | Check | 0 | Tạo Lead khi khách chỉ bấm quan tâm OA |
+| `zalo_oauth_state` | Data (ẩn) | | Chống giả mạo trong luồng cấp quyền |
+| `telephony_provider` | Select | Stringee / (thêm sau) | |
+| `telephony_api_key_sid` | Data | | |
+| `telephony_api_key_secret` | Password | | |
+| `telephony_hotline` | Data | | Đầu số |
+| `agent_map` | Table | Omni Agent Map | Đợt 2: nhân viên tổng đài → User |
+| `last_success_at` | Datetime | chỉ đọc | Lần nhận/gửi thành công gần nhất — để giám sát |
+| `last_error` | Small Text | chỉ đọc | Lỗi gần nhất (đã lọc bí mật) |
+
+## 4. Omni Identity
+
+| Trường | Kiểu | Options | Ghi chú |
+| --- | --- | --- | --- |
+| `identity_key` | Data | Bắt buộc, **duy nhất** | `"{channel_type}:{external_id}"`, ví dụ `Zalo OA:2973...`, `Email:an@abc.vn`, `Telephony:+84912345678` |
+| `channel_type` | Select | như trên | |
+| `external_id` | Data | | Zalo user id / email đã chuẩn hóa / SĐT E.164 |
+| `display_name` | Data | | Tên hiển thị kênh cung cấp |
+| `phone_e164` | Data | chỉ mục | SĐT khách cung cấp (kể cả khi định danh là Zalo/email) |
+| `email_norm` | Data | chỉ mục | Email chữ thường |
+| `lead` | Link | CRM Lead | Lead đang gắn |
+| `last_inbound_at` | Datetime | | Tương tác cuối của khách — dùng cho khung gửi Zalo |
+| `is_follower` | Check | | Zalo: đang quan tâm OA |
+| `phone_requested_at` | Datetime | | Lần gần nhất gửi yêu cầu SĐT qua Zalo (không gửi lại trong 7 ngày) |
+| `bot_paused_until` | Datetime | | Tạo ở D2-07 (bot trả lời kiểm tra), dùng đầy đủ ở D3-02: bot im với khách này đến thời điểm này |
+
+## 5. Omni Inbound Message
+
+| Trường | Kiểu | Options | Ghi chú |
+| --- | --- | --- | --- |
+| `dedupe_key` | Data | Bắt buộc, **duy nhất** | `"{channel}:{external_message_id}"` |
+| `channel` | Link | Omni Channel | |
+| `channel_type` | Data | | Sao chép để lọc nhanh |
+| `event_type` | Data | | message, follow, unfollow, user_info, call_ended, oa_echo… |
+| `external_message_id` | Data | | |
+| `external_sender_id` | Data | chỉ mục | |
+| `identity_key` | Data | Bắt buộc, chỉ mục | `"{channel_type}:{external_id chuẩn hóa}"` — điền ngay khi lưu ở `save_inbound`; worker tìm tin theo trường này |
+| `identity` | Link | Omni Identity | Điền khi worker xử lý |
+| `communication` | Link | Communication | Với kênh email: thư gốc (không mất khi xóa `raw_payload`) |
+| `lead` | Link | CRM Lead | Điền khi worker xử lý |
+| `received_at` | Datetime | chỉ mục | |
+| `text` | Long Text | | Nội dung đã làm sạch |
+| `attachments` | JSON | | |
+| `sender_profile` | JSON | | |
+| `raw_payload` | JSON | | Payload gốc; xóa sau `raw_payload_retention_days` |
+| `status` | Select | New / Processing / Done / Retry / Manual / Ignored | chỉ mục |
+| `attempts` | Int | 0 | |
+| `next_attempt_at` | Datetime | | Với Retry |
+| `last_error` | Small Text | | Đã lọc bí mật |
+| `processing_started_at` | Datetime | | Để phát hiện kẹt |
+| `batch_id` | Data | chỉ mục | Mã lượt xử lý (các tin gộp chung một lượt có cùng mã) |
+
+Chỉ mục ghép: (`identity_key`, `status`), (`status`, `next_attempt_at`).
+
+## 6. Omni Outbound Message
+
+| Trường | Kiểu | Options | Ghi chú |
+| --- | --- | --- | --- |
+| `channel` | Link | Omni Channel | |
+| `identity` | Link | Omni Identity | Người nhận |
+| `lead` | Link | CRM Lead | |
+| `text` | Long Text | | |
+| `source` | Select | Sale / Bot / System | |
+| `sent_by` | Link | User | Với Sale |
+| `bot_draft` | Link | Omni Bot Draft | Với tin từ bot |
+| `status` | Select | Queued / Sent / Failed / Blocked | Blocked = quá khung gửi hoặc kênh tắt |
+| `attempts` | Int | | |
+| `next_attempt_at` | Datetime | | Thử lại khi lỗi tạm thời; tác vụ quét đẩy lại |
+| `external_message_id` | Data | | |
+| `sent_at` | Datetime | | |
+| `last_error` | Small Text | | |
+| `is_sandbox` | Check | | Tạo khi `sandbox_mode` bật |
+
+## 7. Omni Duplicate Candidate
+
+| Trường | Kiểu | Options | Ghi chú |
+| --- | --- | --- | --- |
+| `lead_a` | Link | CRM Lead | |
+| `lead_b` | Link | CRM Lead | `lead_a < lead_b` theo tên để không có cặp đảo |
+| `reason` | Small Text | | Ví dụ: "Cùng tên, khác SĐT" |
+| `score` | Int | | Độ giống 0–100 |
+| `status` | Select | Open / Merged / Dismissed | |
+| `decided_by` | Link | User | |
+
+Ràng buộc duy nhất trên (`lead_a`, `lead_b`).
+
+## 8. Omni Call (Đợt 2)
+
+| Trường | Kiểu | Options | Ghi chú |
+| --- | --- | --- | --- |
+| `provider` | Data | | |
+| `call_id` | Data | Bắt buộc, **duy nhất** | Mã cuộc gọi của nhà cung cấp |
+| `direction` | Select | Inbound / Outbound | |
+| `from_number`, `to_number` | Data | | E.164 |
+| `status` | Select | Answered / Missed / Busy / Failed / Voicemail | |
+| `started_at`, `answered_at`, `ended_at` | Datetime | | |
+| `duration_seconds` | Int | | |
+| `agent` | Link | User | Sale nghe máy |
+| `lead` | Link | CRM Lead | |
+| `crm_call_log` | Link | CRM Call Log | Bản ghi tương ứng trong CRM |
+| `callback_task` | Link | CRM Task | Với gọi nhỡ |
+| `recording_ref` | Data | | Đường dẫn/ID ghi âm phía nhà cung cấp |
+| `recording_file` | Attach | private | Đợt 3 |
+| `transcript` | Long Text | | Đợt 3 |
+| `summary` | Small Text | | Đợt 3 |
+| `stt_status` | Select | Not Started / Pending / Done / Failed / Skipped | Đợt 3 |
+| `raw_events` | JSON | | Các sự kiện gốc của cuộc gọi (kể cả trung gian) |
+| `unverified` | Check | | Không xác minh được `call_id` qua API nhà cung cấp |
+
+## 9. Omni Question Group (Đợt 2)
+
+| Trường | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `group_name` | Data, duy nhất | Ví dụ: Giờ làm việc, Địa chỉ, Thông tin sản phẩm, Hỏi giá, Khiếu nại |
+| `always_handoff` | Check | Nhóm luôn chuyển người (Hỏi giá, Khiếu nại) |
+| `auto_send_enabled` | Check | Đợt 3: bot tự gửi cho nhóm này |
+| `auto_send_enabled_at`, `auto_send_enabled_by` | Datetime, Link User | Dấu vết ai bật, khi nào |
+| `description` | Small Text | Mô tả để bot phân loại |
+
+## 10. Omni Knowledge Item (Đợt 2)
+
+| Trường | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `item_id` | Data, duy nhất, làm `name` | Dạng `KB-00001`; giữ nguyên khi nhập lại CSV (nhập = cập nhật theo `item_id`) để nháp và lần chấm cũ vẫn trỏ đúng |
+| `question_group` | Link Omni Question Group | |
+| `question` | Small Text | Câu hỏi mẫu (có thể nhiều cách hỏi, mỗi dòng một cách) |
+| `answer` | Text Editor | Câu trả lời chuẩn |
+| `active` | Check | |
+| `source` | Data | Tài liệu gốc |
+| `owner_user` | Link User | Người chịu trách nhiệm nội dung |
+| `reviewed_at` | Date | Lần duyệt gần nhất |
+
+Bật `track_changes`. Mỗi lần lưu, tăng `Omni Settings.kb_version` (Int, chỉ đọc) để gắn vào `Omni Bot Run`.
+
+## 11. Omni Score Rule (bảng con, Đợt 2)
+
+| Trường | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `signal` | Select | has_phone / has_email / has_org / intent_price / intent_purchase / quantity_given / timeframe_within_30d / urgency_high / repeat_contact / complaint |
+| `points` | Int | Có thể âm |
+| `note` | Data | |
+
+## 12. Omni Bot Run (Đợt 2)
+
+| Trường | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `kind` | Select | Analyze / Reply / Summarize / Judge |
+| `lead`, `identity` | Link | |
+| `batch_id` | Data | Lượt xử lý tương ứng |
+| `model` | Data | |
+| `prompt_version`, `kb_version` | Data, Int | |
+| `input_tokens`, `output_tokens`, `cache_read_tokens` | Int | |
+| `latency_ms` | Int | |
+| `status` | Select | Success / Invalid Output / Error / Skipped Budget / Skipped Switch |
+| `request_digest` | Small Text | Tóm tắt đầu vào (không lưu toàn văn nếu không cần) |
+| `output_json` | JSON | Kết quả có cấu trúc |
+| `error` | Small Text | |
+
+## 13. Omni Bot Draft (Đợt 2, hiện cho sale từ Đợt 3)
+
+| Trường | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `lead`, `identity`, `channel` | Link | |
+| `batch_id` | Data | |
+| `bot_run` | Link Omni Bot Run | |
+| `mode` | Select | Shadow / Draft / Auto | Chế độ lúc soạn |
+| `action` | Select | Reply / Handoff | Bot đề xuất trả lời hay chuyển người |
+| `question_group` | Link Omni Question Group | |
+| `draft_text` | Long Text | |
+| `kb_items` | Small Text | Danh sách Omni Knowledge Item đã dùng |
+| `confidence` | Float | 0–1, bot tự đánh giá (chỉ tham khảo) |
+| `guard_flags` | Small Text | Lý do bị chặn bởi `guards.py` nếu có |
+| `handoff_reason` | Small Text | |
+| `decision` | Select | Pending / Sent As Is / Sent Edited / Discarded / Expired / Shadow Compared |
+| `final_text` | Long Text | Câu thực sự gửi |
+| `edit_distance_ratio` | Float | Mức sửa so với nháp, 0 = giữ nguyên |
+| `sale_reply_text` | Long Text | Chế độ ngầm: câu sale thật sự gửi trong lượt đó, để so |
+| `sale_handoff` | Check | Chế độ ngầm: câu sale chứa thông tin ngoài kho tri thức (thực tế là ca phải chuyển người) |
+| `decided_by`, `decided_at` | Link User, Datetime | |
+| `rating` | Select | Đúng / Sai / Thiếu | Sale chấm |
+| `rating_note` | Small Text | Ghi chú khi chấm; đánh dấu "nghiêm trọng" nếu sai về giá, cam kết, y khoa |
+| `critical` | Check | Sale hoặc người duyệt đánh dấu lỗi nghiêm trọng |
+
+## 14. Omni Eval Case và Omni Eval Run (Đợt 2)
+
+**Omni Eval Case**: `case_id` (duy nhất), `source` (Real / Synthetic), `conversation` (JSON: danh sách lượt `{role: customer|sale, text}`), `expected_fields` (JSON), `expected_action` (Reply/Handoff), `expected_group` (Link), `reference_answer` (Long Text), `critical` (Check — ca bắt lỗi nghiêm trọng), `active` (Check).
+
+**Omni Eval Run**: `started_at`, `prompt_version`, `kb_version`, `model`, `total_cases`, `field_accuracy` (Float), `action_accuracy`, `answer_pass_rate`, `critical_failures` (Int), `result_json` (JSON chi tiết từng ca), `passed_gate` (Check).
+
+## 15. Custom Field trên `CRM Lead` (fixtures, module Omni CRM)
+
+Đợt 1:
+
+| fieldname | Kiểu | Nhãn |
+| --- | --- | --- |
+| `omni_first_channel` | Data | Kênh liên hệ đầu tiên |
+| `omni_last_inbound_at` | Datetime | Khách liên hệ gần nhất |
+| `omni_manual_fields` | JSON (ẩn) | Các trường sale đã sửa tay — bot không ghi đè |
+| `omni_phone_e164` | Data (ẩn, search_index) | SĐT chuẩn hóa từ `mobile_no`/`phone` (xem `docs/04` mục 4) |
+| `omni_email_norm` | Data (ẩn, search_index) | Email chuẩn hóa |
+| `omni_merged_into` | Link CRM Lead | Lead bị gộp trỏ về Lead chính |
+
+Đợt 2:
+
+| fieldname | Kiểu | Nhãn |
+| --- | --- | --- |
+| `omni_need` | Small Text | Nhu cầu |
+| `omni_products` | Small Text | Sản phẩm quan tâm |
+| `omni_quantity` | Data | Số lượng |
+| `omni_timeframe` | Data | Thời điểm mua dự kiến |
+| `omni_urgency` | Select (Thấp/Trung bình/Cao) | Mức gấp |
+| `omni_intent` | Select (Tư vấn/Hỏi giá/Đặt hàng/Khiếu nại/Khác) | Ý định gần nhất |
+| `omni_score` | Int | Điểm Lead |
+| `omni_score_breakdown` | JSON (ẩn) | Các tín hiệu đã cộng điểm và lúc đã báo Lead nóng |
+| `omni_bot_summary` | Small Text | Tóm tắt của bot |
+
+Custom Field trên `Communication` và `Comment` (Đợt 1):
+
+| fieldname | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `omni_inbound_message` | Link Omni Inbound Message (ẩn, search_index) | Khóa chống ghi trùng dòng thời gian cho tin vào |
+| `omni_outbound_message` | Link Omni Outbound Message (ẩn, search_index) | Như trên cho tin ra |
+
+Chỉ tạo trên DocType mà ADR "Cách hiển thị hội thoại" (D1-06) thực sự dùng.
+
+Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không trùng trường có sẵn (ví dụ `mobile_no`, `email`, `organization`, `source`, `lead_owner`, `status`); (2) chọn `insert_after` hợp lý. Ghi kết quả đọc vào `docs/12-quyet-dinh-mo.md`.
+
+## 16. Quyền
+
+| DocType | Omni Admin | Sales User | Omni Knowledge Editor |
+| --- | --- | --- | --- |
+| Omni Settings, Omni Channel | Đọc/Ghi | — | — |
+| Omni Inbound/Outbound Message | Đọc/Ghi | Đọc (theo Lead xem được); tạo Outbound **chỉ qua API** `send_reply` | — |
+| Omni Identity | Đọc/Ghi | Đọc | — |
+| Omni Duplicate Candidate | Đọc/Ghi | Đọc; quyết định (gộp/bỏ) **chỉ qua API** `merge`/`dismiss`, có kiểm quyền ghi hai Lead | — |
+| Omni Call | Đọc/Ghi | Đọc theo Lead | — |
+| Omni Knowledge Item, Omni Question Group | Đọc/Ghi | Đọc | Đọc/Ghi |
+| Omni Bot Draft | Đọc/Ghi | Đọc/Ghi theo Lead | Đọc |
+| Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
+
+"Theo Lead xem được": kiểm tra quyền bằng `frappe.has_permission("CRM Lead", doc=lead)` trong API, không chỉ dựa vào quyền DocType.
