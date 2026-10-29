@@ -7,9 +7,9 @@ import uuid
 from typing import Any
 
 import frappe
+from frappe.utils import now_datetime
 from redis.exceptions import LockError
 from redis.lock import Lock
-from frappe.utils import now_datetime
 
 from omni_crm import flags
 from omni_crm.crm_bridge import timeline
