@@ -1,0 +1,202 @@
+{
+ "autoname": "OIN-.YYYY.-.########",
+ "naming_rule": "Expression (old style)",
+ "title_field": "dedupe_key",
+ "sort_field": "creation",
+ "name": "Omni Inbound Message",
+ "doctype": "DocType",
+ "module": "Omni CRM",
+ "engine": "InnoDB",
+ "field_order": [
+  "dedupe_key",
+  "channel",
+  "channel_type",
+  "event_type",
+  "external_message_id",
+  "external_sender_id",
+  "identity_key",
+  "col_in",
+  "identity",
+  "communication",
+  "lead",
+  "received_at",
+  "sec_content",
+  "text",
+  "attachments",
+  "sender_profile",
+  "raw_payload",
+  "sec_proc",
+  "status",
+  "attempts",
+  "next_attempt_at",
+  "last_error",
+  "processing_started_at",
+  "batch_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "dedupe_key",
+   "fieldtype": "Data",
+   "label": "Khóa chống trùng",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "\"{channel}:{external_message_id}\""
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Link",
+   "label": "Kênh",
+   "options": "Omni Channel",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "channel_type",
+   "fieldtype": "Data",
+   "label": "Loại kênh"
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Data",
+   "label": "Loại sự kiện",
+   "description": "message, follow, unfollow, user_info, call_ended, oa_echo..."
+  },
+  {
+   "fieldname": "external_message_id",
+   "fieldtype": "Data",
+   "label": "Mã tin bên ngoài"
+  },
+  {
+   "fieldname": "external_sender_id",
+   "fieldtype": "Data",
+   "label": "Mã người gửi bên ngoài",
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity_key",
+   "fieldtype": "Data",
+   "label": "Khóa định danh",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_in",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Định danh",
+   "options": "Omni Identity"
+  },
+  {
+   "fieldname": "communication",
+   "fieldtype": "Link",
+   "label": "Communication",
+   "options": "Communication"
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Nhận lúc",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sec_content",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "text",
+   "fieldtype": "Long Text",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "attachments",
+   "fieldtype": "JSON",
+   "label": "Tệp đính kèm"
+  },
+  {
+   "fieldname": "sender_profile",
+   "fieldtype": "JSON",
+   "label": "Hồ sơ người gửi"
+  },
+  {
+   "fieldname": "raw_payload",
+   "fieldtype": "JSON",
+   "label": "Payload gốc",
+   "description": "Xóa sau raw_payload_retention_days."
+  },
+  {
+   "fieldname": "sec_proc",
+   "fieldtype": "Section Break",
+   "label": "Xử lý"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "New\nProcessing\nDone\nRetry\nManual\nIgnored",
+   "default": "New",
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Số lần thử",
+   "default": "0"
+  },
+  {
+   "fieldname": "next_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Thử lại lúc"
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Lỗi gần nhất"
+  },
+  {
+   "fieldname": "processing_started_at",
+   "fieldtype": "Datetime",
+   "label": "Bắt đầu xử lý lúc"
+  },
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "Mã lượt xử lý",
+   "search_index": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "email": 0,
+   "print": 0,
+   "share": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ],
+ "sort_order": "DESC",
+ "states": []
+}
