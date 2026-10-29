@@ -45,10 +45,12 @@ class OutboundTestCase(test_inbox.InboxTestCase):
 		p.start()
 		self.addCleanup(p.stop)
 
-	def queue(self, text="Dạ em chào anh", source="Sale") -> str:
+	def queue(self, text="Dạ em chào anh", source="Sale", confirmed_paid=False) -> str:
 		with mock.patch("frappe.enqueue"):
 			name = outbound.queue_outbound(
-				OutboundRequest(self.channel.name, self.ident1, text, None, source), user=SALE1
+				OutboundRequest(self.channel.name, self.ident1, text, None, source),
+				user=SALE1,
+				confirmed_paid=confirmed_paid,
 			)
 			frappe.db.commit()
 		return name
@@ -283,9 +285,38 @@ class TestSendOutbound(OutboundTestCase):
 		self.sandbox(True)
 		self.set_last_inbound(hours_ago=72)
 		bot = self.queue(source="Bot")
-		sale = self.queue(source="Sale")
+		sale = self.queue(source="Sale", confirmed_paid=True)
 		self.assertEqual(outbound.send_outbound(bot), "Blocked")
 		self.assertEqual(outbound.send_outbound(sale), "Sent")
+
+	def test_free_at_queue_then_paid_at_send_is_blocked(self):
+		self.sandbox(True)
+		name = self.queue()  # khung miễn phí lúc xếp hàng
+		self.set_last_inbound(hours_ago=72)  # trong lúc chờ chuyển sang có phí
+		self.assertEqual(outbound.send_outbound(name), "Blocked")
+		self.assertIn("có phí", self.row(name).last_error)
+
+	def test_paid_confirmed_at_queue_still_sends(self):
+		self.sandbox(True)
+		self.set_last_inbound(hours_ago=72)
+		name = self.queue(confirmed_paid=True)
+		self.assertEqual(outbound.send_outbound(name), "Sent")
+
+	def test_paid_without_confirmation_flag_is_blocked(self):
+		self.sandbox(True)
+		self.set_last_inbound(hours_ago=72)
+		name = self.queue()
+		self.assertEqual(outbound.send_outbound(name), "Blocked")
+
+	def test_send_reply_confirm_paid_sets_flag(self):
+		self.sandbox(True)
+		self.set_last_inbound(hours_ago=72)
+		self.as_user(SALE1)
+		with mock.patch("frappe.enqueue"):
+			res = inbox.send_reply(self.lead1, "Zalo OA", "x", confirm_paid=1)
+			frappe.db.commit()
+		frappe.set_user("Administrator")
+		self.assertEqual(outbound.send_outbound(res["outbound"]), "Sent")
 
 	def test_channel_outbound_disabled_is_blocked(self):
 		self.sandbox(True)

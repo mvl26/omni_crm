@@ -435,6 +435,7 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 			source="Sale",
 		),
 		user=frappe.session.user,
+		confirmed_paid=bool(cint(confirm_paid)),
 	)
 	timeline.notify(lead, ["Zalo OA"])
 	return {"status": "Queued", "outbound": name, "warning": reason or ""}

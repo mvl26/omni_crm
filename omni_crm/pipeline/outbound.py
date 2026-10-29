@@ -35,6 +35,7 @@ QUEUE = "omni"
 WORKER_METHOD = "omni_crm.pipeline.outbound.send_outbound"
 SENDING_MARK = "[đang gửi]"  # last_error khi đã nhận việc nhưng chưa có kết quả
 LEASE_MINUTES = 5
+PAID_OK_TTL = 900  # giây: hiệu lực của xác nhận khung gửi (không thêm trường DocType, xem docs/12)
 MAX_TEXT_CHARS = 6000  # tối đa cho một lần trả lời (client tách tin theo giới hạn từng đoạn của kênh)
 LAST_ERROR_MAX = 500
 _AMBIGUOUS_MSG = (
@@ -76,8 +77,35 @@ def enqueue_outbound(name: str, *, after_commit: bool = True) -> None:
 		_enqueue()
 
 
-def queue_outbound(req: OutboundRequest, user: str | None = None) -> str:
-	"""Tạo Omni Outbound Message (Queued) và đẩy job gửi; trả tên bản ghi."""
+def paid_ok_key(name: str) -> str:
+	"""Khóa cache cờ "khung gửi đã được xác nhận" của một tin ra."""
+	return f"omni:paid_ok:{name}"
+
+
+def _window_confirmation(req: OutboundRequest, confirmed_paid: bool) -> str | None:
+	""" "paid" nếu khung có phí lúc xếp hàng đã được Sale xác nhận; "free" nếu lúc đó miễn phí; None nếu không có."""
+	if req.source != "Sale":
+		return None
+	try:
+		channel_doc = frappe.get_doc(CHANNEL, req.channel)
+		ok, reason = get_adapter(channel_doc.channel_type).can_send_now(
+			frappe.get_doc(IDENTITY, req.identity), channel_doc, source="Sale"
+		)
+	except Exception:
+		return None
+	if not ok:
+		return None
+	if not reason:
+		return "free"
+	return "paid" if confirmed_paid else None
+
+
+def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid: bool = False) -> str:
+	"""Tạo Omni Outbound Message (Queued) và đẩy job gửi; trả tên bản ghi.
+
+	Đặt cờ cache `omni:paid_ok:<tên>` (15 phút): "paid" nếu khung có phí đã được Sale xác nhận, "free" nếu lúc đó
+	miễn phí. send_outbound chỉ cho tin Sale đi khi khung có phí nếu cờ là "paid" (free chuyển sang paid giữa chừng bị chặn).
+	"""
 	text = (req.text or "").strip()
 	if not text:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
@@ -99,6 +127,9 @@ def queue_outbound(req: OutboundRequest, user: str | None = None) -> str:
 		}
 	)
 	doc.insert(ignore_permissions=True)
+	confirmation = _window_confirmation(req, confirmed_paid)
+	if confirmation:
+		frappe.cache().set_value(paid_ok_key(doc.name), confirmation, expires_in_sec=PAID_OK_TTL)
 	enqueue_outbound(doc.name)
 	return doc.name
 
@@ -267,6 +298,11 @@ def send_outbound(outbound_name: str) -> str:
 	allowed, reason = adapter.can_send_now(identity_doc, channel_doc, source=row.source)
 	if not allowed:
 		return _block_locked(outbound_name, reason)
+	if reason and row.source == "Sale" and frappe.cache().get_value(paid_ok_key(outbound_name)) != "paid":
+		return _block_locked(
+			outbound_name,
+			_("Khung gửi đã chuyển sang có phí trong lúc chờ; hãy gửi lại và xác nhận phí."),
+		)
 	if flags.sandbox():
 		return _sandbox_sent(outbound_name)
 	claimed = _claim(outbound_name)
