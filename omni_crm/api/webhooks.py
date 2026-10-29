@@ -1,8 +1,9 @@
-"""Webhook nhận sự kiện từ Zalo OA và tổng đài."""
+"""Webhook nhận sự kiện từ Zalo OA và tổng đài; telephony_lookup là API tra cứu đồng bộ (chỉ đọc)."""
 
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
 
 import frappe
@@ -177,3 +178,79 @@ def zalo_oauth_callback(code: str | None = None, state: str | None = None, **_kw
 	except ZaloError as e:
 		frappe.throw(e.message_vi)
 	_redirect(frappe.utils.get_url(f"/app/omni-channel/{channel}"))
+
+
+@frappe.whitelist(allow_guest=True)
+def telephony_event() -> dict:
+	"""Webhook sự kiện cuộc gọi: POST /api/method/omni_crm.api.webhooks.telephony_event?ch=<kênh>&t=<webhook_token>."""
+	return _handle_webhook("Telephony")
+
+
+def _lookup_channel(query: dict):
+	"""Kênh Telephony hợp lệ cho tra cứu, hoặc None (không tồn tại, sai loại, tắt, sai token, thiếu nhà cung cấp)."""
+	from omni_crm.channels.telephony.adapter import verify_token
+
+	name = query.get("ch")
+	if not name or not frappe.db.exists("Omni Channel", name):
+		return None
+	channel_doc = frappe.get_cached_doc("Omni Channel", name)
+	if channel_doc.channel_type != "Telephony" or not channel_doc.enabled:
+		return None
+	return channel_doc if verify_token(channel_doc, query.get("t")) else None
+
+
+def _send_raw(payload: dict | str) -> None:
+	"""Trả nguyên văn phản hồi của nhà cung cấp (không bọc trong {"message": ...} của Frappe)."""
+	if isinstance(payload, dict):
+		frappe.local.response.update(payload)
+		return
+	frappe.local.response.update(
+		{
+			"type": "download",
+			"filename": "lookup.txt",
+			"filecontent": str(payload).encode(),
+			"display_content_as": "inline",
+		}
+	)
+
+
+@frappe.whitelist(allow_guest=True)
+def telephony_lookup() -> None:
+	"""Tra cứu khách khi chuông reo (GET/POST): CHỈ ĐỌC, không ghi DB, không enqueue, không Error Log.
+
+	Mọi lỗi (sai token, kênh tắt/không có, số sai, DB chậm hoặc lỗi) vẫn trả HTTP 200 với phản hồi "khách mới"
+	hợp lệ của nhà cung cấp, để không làm hỏng cuộc gọi và không lộ khách có trong hệ thống hay không.
+	"""
+	from omni_crm.channels.telephony import lookup
+	from omni_crm.channels.telephony.adapter import request_query
+	from omni_crm.channels.telephony.base import LookupResult
+	from omni_crm.channels.telephony.registry import provider_for_channel
+
+	deadline = time.monotonic() + lookup.BUDGET_SECONDS
+	frappe.local.response["http_status_code"] = 200
+	channel_doc = provider = None
+	try:
+		query = request_query()
+		channel_doc = _lookup_channel(query)
+		if channel_doc is None:
+			return _send_raw({})
+		provider = provider_for_channel(channel_doc)
+		result = LookupResult()
+		try:
+			body = _read_body(frappe.local.request)[: 64 * 1024]
+			caller, _to = provider.parse_lookup_request(query, body)
+			with lookup.statement_limit():
+				result = lookup.find_customer(caller, deadline)
+		except Exception as e:
+			# Không ghi DB (log_error sẽ ghi): chỉ log tệp, không kèm số điện thoại hay nội dung lỗi.
+			frappe.logger("omni").warning("omni: tra cuu tong dai loi (%s)", type(e).__name__)
+			result = LookupResult()
+		return _send_raw(provider.lookup_response(result, channel_doc))
+	except Exception as e:
+		frappe.logger("omni").warning("omni: phan hoi tra cuu tong dai loi (%s)", type(e).__name__)
+		try:
+			if provider is not None:
+				return _send_raw(provider.lookup_response(LookupResult(), channel_doc))
+		except Exception:
+			pass
+		return _send_raw({})
