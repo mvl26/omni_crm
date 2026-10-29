@@ -84,6 +84,7 @@ required_apps = ["crm"]
 
 # before_install = "omni_crm.install.before_install"
 after_install = "omni_crm.install.after_install"
+after_migrate = "omni_crm.install.after_migrate"  # D2-04: ghi phiên bản câu lệnh bot vào Omni Settings
 
 # Uninstallation
 # ------------
