@@ -1,13 +1,216 @@
-"""Ghi dòng thời gian của Lead."""
+"""Ghi dòng thời gian của Lead/Deal (ADR 0004: mỗi tin Zalo là một Communication, medium "Chat").
+
+CRM lấy hoạt động của Lead/Deal từ `frappe.desk.form.load.get_docinfo`, trong đó Communication thuộc
+mọi `communication_medium` đều được trả về nếu `reference_doctype`/`reference_name` trỏ tới Lead/Deal. Khóa
+chống ghi trùng là Custom Field `omni_inbound_message` / `omni_outbound_message` trên Communication.
+"""
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
+import frappe
+from frappe import _
+from frappe.utils import escape_html, now_datetime
 
-def append(lead: str | None, msgs: list[Any]) -> None:
-	"""Ghi các tin vào dòng thời gian của Lead; lead None thì không làm gì.
+LEAD = "CRM Lead"
+DEAL = "CRM Deal"
+INBOUND = "Omni Inbound Message"
+OUTBOUND = "Omni Outbound Message"
+COMMUNICATION = "Communication"
+EMAIL = "Email"
+# Sự kiện có nội dung hội thoại để hiện trên dòng thời gian (follow/unfollow/user_info... không hiện).
+TIMELINE_EVENTS = {"message", "oa_echo"}
+SUBJECT_LEN = 80
+REALTIME_EVENT = "omni_inbox_update"
 
-	# Thay thế ở D1-06: bản tạm không làm gì.
-	"""
+
+def resolve_target(target: str | None) -> tuple[str, str] | None:
+	"""(doctype, tên) của Lead hoặc Deal theo tên; None nếu rỗng hoặc không tồn tại."""
+	if not target:
+		return None
+	if frappe.db.exists(DEAL, target):
+		return DEAL, target
+	if frappe.db.exists(LEAD, target):
+		return LEAD, target
 	return None
+
+
+def render_text(text: str | None, attachments: list[dict] | None = None) -> str:
+	"""HTML an toàn cho nội dung tin: thoát ký tự, xuống dòng thành <br>, đính kèm là liên kết http(s)."""
+	html = escape_html(text or "").replace("\r\n", "\n").replace("\n", "<br>")
+	links = []
+	for att in attachments or []:
+		url = str(att.get("url") or "")
+		if url.startswith(("http://", "https://")):
+			label = escape_html(str(att.get("name") or url))
+			links.append(f'<a href="{escape_html(url)}" target="_blank" rel="noopener">{label}</a>')
+	if links:
+		html += "<br>" + "<br>".join(links)
+	return f"<p>{html}</p>"
+
+
+def parse_attachments(raw: Any) -> list[dict]:
+	"""Danh sách đính kèm từ trường JSON (chuỗi hoặc list); dữ liệu hỏng thì trả danh sách rỗng."""
+	if not raw:
+		return []
+	try:
+		value = json.loads(raw) if isinstance(raw, str) else raw
+	except ValueError:
+		return []
+	return [a for a in value if isinstance(a, dict)] if isinstance(value, list) else []
+
+
+def _subject(channel_type: str, text: str | None) -> str:
+	snippet = " ".join((text or "").split())[:SUBJECT_LEN]
+	return f"[{channel_type}] {snippet}".strip()
+
+
+def _insert_communication(values: dict) -> str:
+	doc = frappe.get_doc(
+		{
+			"doctype": COMMUNICATION,
+			"communication_type": "Communication",
+			"communication_medium": "Chat",
+			**values,
+		}
+	)
+	doc.flags.ignore_permissions = True
+	doc.insert()
+	return doc.name
+
+
+def _link_email(target: tuple[str, str], row: Any) -> bool:
+	"""Email đã là Communication: chỉ trỏ tham chiếu về Lead/Deal và ghi khóa, không tạo bản sao."""
+	if not row.communication or not frappe.db.exists(COMMUNICATION, row.communication):
+		return False
+	frappe.db.set_value(
+		COMMUNICATION,
+		row.communication,
+		{
+			"reference_doctype": target[0],
+			"reference_name": target[1],
+			"omni_inbound_message": row.name,
+		},
+		update_modified=False,
+	)
+	return True
+
+
+def append(target: str | None, msgs: list[Any]) -> int:
+	"""Ghi các tin vào dòng thời gian của Lead hoặc Deal; trả số bản ghi mới tạo/gắn.
+
+	`target` là tên Lead hoặc Deal (Q10: Lead đã chuyển thì truyền tên Deal); None thì không làm gì. Chạy lại
+	cùng tin không tạo bản ghi thứ hai (khóa `omni_inbound_message`). Không commit.
+	"""
+	tgt = resolve_target(target)
+	names = [m.name for m in msgs if getattr(m, "name", None)]
+	if not tgt or not names:
+		return 0
+	rows = frappe.get_all(
+		INBOUND,
+		filters={"name": ["in", names]},
+		fields=[
+			"name",
+			"channel_type",
+			"event_type",
+			"text",
+			"attachments",
+			"communication",
+			"received_at",
+			"identity",
+			"external_sender_id",
+		],
+		order_by="received_at asc, name asc",
+	)
+	done = 0
+	for row in rows:
+		if row.channel_type == EMAIL:
+			done += int(_link_email(tgt, row))
+			continue
+		if row.event_type not in TIMELINE_EVENTS:
+			continue
+		if frappe.db.exists(COMMUNICATION, {"omni_inbound_message": row.name}):
+			continue  # đã ghi ở lượt trước
+		echo = row.event_type == "oa_echo"
+		who = (
+			frappe.db.get_value("Omni Identity", row.identity, "display_name") if row.identity else None
+		) or row.external_sender_id
+		_insert_communication(
+			{
+				"sent_or_received": "Sent" if echo else "Received",
+				"subject": _subject(row.channel_type, row.text),
+				"content": render_text(row.text, parse_attachments(row.attachments)),
+				"sender_full_name": _("{0} (gửi ngoài hệ thống)").format(row.channel_type) if echo else who,
+				"communication_date": row.received_at or now_datetime(),
+				"reference_doctype": tgt[0],
+				"reference_name": tgt[1],
+				"omni_inbound_message": row.name,
+			}
+		)
+		done += 1
+	return done
+
+
+def append_outbound(target: str | None, outbound: str | Any) -> str | None:
+	"""Ghi một tin ra (Omni Outbound Message) vào dòng thời gian; trả tên Communication hoặc None.
+
+	Kênh Email không tạo bản sao (thư gửi đi đã là Communication, xử lý ở D1-07/D1-09). Chạy lại không
+	tạo bản ghi thứ hai.
+	"""
+	tgt = resolve_target(target)
+	name = outbound if isinstance(outbound, str) else getattr(outbound, "name", None)
+	if not tgt or not name:
+		return None
+	row = frappe.db.get_value(
+		OUTBOUND,
+		name,
+		["name", "channel", "text", "source", "sent_by", "sent_at", "creation"],
+		as_dict=True,
+	)
+	if not row:
+		return None
+	channel_type = frappe.db.get_value("Omni Channel", row.channel, "channel_type") or ""
+	if channel_type == EMAIL:
+		return None
+	existing = frappe.db.get_value(COMMUNICATION, {"omni_outbound_message": row.name}, "name")
+	if existing:
+		return existing
+	if row.sent_by:
+		full_name = frappe.db.get_value("User", row.sent_by, "full_name") or row.sent_by
+	else:
+		full_name = _("Bot") if row.source == "Bot" else _("Hệ thống")
+	return _insert_communication(
+		{
+			"sent_or_received": "Sent",
+			"subject": _subject(channel_type, row.text),
+			"content": render_text(row.text),
+			"sender": row.sent_by,
+			"sender_full_name": full_name,
+			"communication_date": row.sent_at or row.creation or now_datetime(),
+			"reference_doctype": tgt[0],
+			"reference_name": tgt[1],
+			"omni_outbound_message": row.name,
+		}
+	)
+
+
+def notify(lead: str | None, channel_types: list[str] | None = None) -> None:
+	"""Báo realtime (sau commit) rằng hội thoại của Lead có tin mới; KHÔNG kèm nội dung tin.
+
+	Chỉ gửi tới phòng của chính Lead (Frappe kiểm quyền đọc khi người dùng đăng ký phòng) và tới người phụ
+	trách/được giao. Client nhận rồi gọi API (có kiểm quyền) để tải lại.
+	"""
+	if not lead:
+		return
+	payload = {"lead": lead, "channels": sorted(set(channel_types or []))}
+	frappe.publish_realtime(REALTIME_EVENT, payload, doctype=LEAD, docname=lead, after_commit=True)
+	row = frappe.db.get_value(LEAD, lead, ["lead_owner", "_assign"], as_dict=True) or {}
+	users = {row.get("lead_owner")}
+	try:
+		users.update(json.loads(row.get("_assign") or "[]"))
+	except ValueError:
+		pass
+	for user in filter(None, users):
+		frappe.publish_realtime(REALTIME_EVENT, payload, user=user, after_commit=True)

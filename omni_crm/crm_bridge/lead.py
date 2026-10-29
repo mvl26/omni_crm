@@ -2,15 +2,39 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import frappe
 from frappe import _
+from frappe.utils import escape_html
 
+from omni_crm import flags
 from omni_crm.identity.normalize import is_mobile_phone, is_system_email, normalize_email, normalize_phone
 
 LEAD = "CRM Lead"
 MAX_MERGE_HOPS = 10
+LEAD_SOURCE = "CRM Lead Source"
+DEFAULT_SOURCE_MAP = {"Email": "Email", "Zalo OA": "Zalo OA", "Telephony": "Điện thoại"}
+INBOX_ROUTE = "/app/omni-inbox"
+
+# Trường mà sale sửa tay thì bot không được ghi đè (docs/02 mục 15, docs/08). Trường `omni_*` do bot ghi từ
+# Đợt 2; trường chưa tồn tại trên site thì has_value_changed luôn False nên không ảnh hưởng.
+TRACKED_FIELDS = [
+	"first_name",
+	"middle_name",
+	"last_name",
+	"mobile_no",
+	"phone",
+	"email",
+	"organization",
+	"omni_need",
+	"omni_products",
+	"omni_quantity",
+	"omni_timeframe",
+	"omni_urgency",
+	"omni_intent",
+]
 
 
 def normalized_fields(mobile_no: str | None, phone: str | None, email: str | None) -> tuple[str, str]:
@@ -88,6 +112,7 @@ def create_lead_for_identity(identity: str, signals: dict) -> str:
 			"doctype": LEAD,
 			"first_name": name[:140],
 			"mobile_no": signals.get("phone") or None,
+			"source": lead_source_for_channel(ident.channel_type),
 			"omni_first_channel": ident.channel_type,
 			"omni_last_inbound_at": signals.get("last_inbound_at"),
 		}
@@ -96,7 +121,14 @@ def create_lead_for_identity(identity: str, signals: dict) -> str:
 	# Không truyền email vào insert: CRM Lead.validate gọi has_gravatar (mạng, timeout 5 giây) cho Lead mới
 	# có email, mà lúc đó `set_new_name` đã giữ khóa dòng của bộ đếm tên (tabSeries), làm nghẽn mọi Lead
 	# đang được tạo. Email (đã qua normalize_email) được ghi sau bằng db.set_value, không qua validate.
-	doc.insert()
+	with flags.omni_bot():
+		doc.insert()
+	try:
+		add_inbox_link(doc.name)
+	except Exception:
+		# Liên kết chỉ là tiện ích: CRM `on_comment_insert` có thể enqueue (Redis lỗi) nhưng không được làm
+		# hỏng việc tạo Lead. Bản ghi Comment đã nằm trong transaction nếu lỗi xảy ra sau khi chèn.
+		frappe.log_error(title="Omni: không thêm được liên kết Hộp thư", message=f"lead={doc.name}")
 	email = signals.get("email")
 	if email:
 		frappe.db.set_value(
@@ -130,3 +162,85 @@ def fill_blank_contact(lead: str, phone: str | None, email: str | None) -> bool:
 	# db.set_value: không chạy validate của CRM (tránh has_gravatar qua mạng); tự tính trường chuẩn hóa.
 	frappe.db.set_value(LEAD, lead, values)
 	return True
+
+
+def lead_source_for_channel(channel_type: str | None) -> str | None:
+	"""Tên CRM Lead Source cho kênh theo `Omni Settings.default_lead_source_map`; tạo nếu chưa có.
+
+	JSON hỏng hoặc kênh không có trong bản đồ thì dùng bản đồ mặc định; kênh lạ thì trả None.
+	"""
+	if not channel_type:
+		return None
+	mapping = dict(DEFAULT_SOURCE_MAP)
+	raw = frappe.db.get_single_value("Omni Settings", "default_lead_source_map")
+	if raw:
+		try:
+			loaded = json.loads(raw)
+			if isinstance(loaded, dict):
+				mapping.update({str(k): str(v) for k, v in loaded.items() if v})
+		except ValueError:
+			pass
+	source = mapping.get(channel_type)
+	if source and not frappe.db.exists(LEAD_SOURCE, source):
+		frappe.get_doc({"doctype": LEAD_SOURCE, "source_name": source}).insert(ignore_permissions=True)
+	return source
+
+
+def inbox_url(lead: str) -> str:
+	"""Đường dẫn mở Hộp thư Omni tại hội thoại của Lead."""
+	return f"{INBOX_ROUTE}?lead={lead}"
+
+
+def add_inbox_link(lead: str) -> bool:
+	"""Thêm (một lần) Comment trên Lead có liên kết mở Hộp thư Omni; trả True nếu vừa tạo.
+
+	CRM hiện Comment trong tab hoạt động của Lead; đây là cách mở rộng không cần sửa app `crm` (ADR 0004).
+	"""
+	if frappe.db.exists(
+		"Comment",
+		{
+			"reference_doctype": LEAD,
+			"reference_name": lead,
+			"comment_type": "Comment",
+			"content": ["like", f"%{INBOX_ROUTE}%"],
+		},
+	):
+		return False
+	link = f'<a href="{escape_html(inbox_url(lead))}">{escape_html(_("Mở Hộp thư Omni"))}</a>'
+	frappe.get_doc(
+		{
+			"doctype": "Comment",
+			"comment_type": "Comment",
+			"reference_doctype": LEAD,
+			"reference_name": lead,
+			"comment_by": "Omni CRM",
+			"content": f"<p>{escape_html(_('Hội thoại đa kênh của khách này'))}: {link}</p>",
+		}
+	).insert(ignore_permissions=True)
+	return True
+
+
+def _parse_fields(raw: Any) -> list[str]:
+	if not raw:
+		return []
+	try:
+		value = json.loads(raw) if isinstance(raw, str) else raw
+	except ValueError:
+		return []
+	return [str(v) for v in value] if isinstance(value, list) else []
+
+
+def track_manual_edits(doc: Any, method: str | None = None) -> None:
+	"""Hook `CRM Lead.on_update`: người dùng sửa trường theo dõi thì ghi tên trường vào `omni_manual_fields`.
+
+	Bỏ qua khi tạo mới, khi code hệ thống ghi (cờ in_omni_bot, job nền, migrate/patch).
+	"""
+	if doc.flags.in_insert or flags.is_system_write():
+		return
+	changed = [f for f in TRACKED_FIELDS if doc.has_value_changed(f)]
+	if not changed:
+		return
+	current = _parse_fields(doc.get("omni_manual_fields"))
+	updated = current + [f for f in changed if f not in current]
+	if updated != current:
+		doc.db_set("omni_manual_fields", json.dumps(updated), update_modified=False)

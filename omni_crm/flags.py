@@ -1,5 +1,8 @@
 """Đọc các công tắc từ Omni Settings và Omni Channel (Đợt 1)."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import frappe
 
 
@@ -28,3 +31,22 @@ def _channel_flag(channel: str, fieldname: str) -> bool:
 		return bool(frappe.get_cached_doc("Omni Channel", channel).get(fieldname))
 	except frappe.DoesNotExistError:
 		return False
+
+
+@contextmanager
+def omni_bot() -> Iterator[None]:
+	"""Đánh dấu code hệ thống đang ghi (frappe.flags.in_omni_bot) để không tính là sale sửa tay."""
+	previous = frappe.flags.get("in_omni_bot")
+	frappe.flags.in_omni_bot = True
+	try:
+		yield
+	finally:
+		frappe.flags.in_omni_bot = previous
+
+
+def is_system_write() -> bool:
+	"""True nếu lần ghi hiện tại do hệ thống thực hiện (cờ in_omni_bot, job nền, migrate, patch, cài đặt)."""
+	f = frappe.flags
+	if f.get("in_omni_bot") or f.get("in_migrate") or f.get("in_patch") or f.get("in_install"):
+		return True
+	return bool(getattr(frappe.local, "job", None))
