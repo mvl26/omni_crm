@@ -77,7 +77,7 @@ class TestNormalizePhone(FrappeTestCase):
 				self.assertEqual(normalize_phone(old + "2345678"), "+84" + new[1:] + "2345678")
 
 	def test_idempotent(self):
-		for raw, expected in PHONE_CASES:
+		for _raw, expected in PHONE_CASES:
 			if expected:
 				self.assertEqual(normalize_phone(expected), expected)
 
