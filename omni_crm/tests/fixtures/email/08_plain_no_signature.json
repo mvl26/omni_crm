@@ -1,0 +1,15 @@
+{
+ "client": "Webmail (văn bản ngắn)",
+ "format": "text",
+ "subject": "Hỏi thăm",
+ "sender": "nguoi.la@example.com",
+ "sender_name": "",
+ "body": "Cảm ơn anh, em cần tư vấn xe nâng điện cho kho lạnh. Em chưa có số điện thoại công ty.",
+ "keep": [
+  "Cảm ơn anh, em cần tư vấn xe nâng điện cho kho lạnh. Em chưa có số điện thoại công ty."
+ ],
+ "ignored": null,
+ "cut": [],
+ "signature_phones": [],
+ "signature_emails": []
+}

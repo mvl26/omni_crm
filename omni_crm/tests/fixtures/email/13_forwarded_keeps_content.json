@@ -1,0 +1,16 @@
+{
+ "client": "Gmail (chuyển tiếp)",
+ "format": "text",
+ "subject": "Fwd: Nhu cầu xe nâng",
+ "sender": "sep.tong@example.com",
+ "sender_name": "Trần Quốc Việt",
+ "body": "Nhờ Miyano hỗ trợ khách này.\n\n---------- Forwarded message ---------\nNội dung khách cần: xe nâng 5 tấn, dùng ngoài trời.",
+ "keep": [
+  "Nhờ Miyano hỗ trợ khách này.",
+  "xe nâng 5 tấn, dùng ngoài trời"
+ ],
+ "ignored": null,
+ "cut": [],
+ "signature_phones": [],
+ "signature_emails": []
+}

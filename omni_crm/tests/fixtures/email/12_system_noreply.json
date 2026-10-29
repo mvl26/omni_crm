@@ -1,0 +1,13 @@
+{
+ "client": "Thông báo hệ thống",
+ "format": "text",
+ "subject": "Xác nhận đơn hàng #12345",
+ "sender": "no-reply@example-shop.com",
+ "sender_name": "Example Shop",
+ "body": "Đơn hàng của bạn đã được xác nhận.",
+ "ignored": "system_sender",
+ "keep": [],
+ "cut": [],
+ "signature_phones": [],
+ "signature_emails": []
+}

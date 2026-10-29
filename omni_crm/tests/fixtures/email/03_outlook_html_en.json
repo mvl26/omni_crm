@@ -1,0 +1,19 @@
+{
+ "client": "Outlook desktop (HTML)",
+ "format": "html",
+ "subject": "RE: Delivery schedule",
+ "sender": "ops@example.net",
+ "sender_name": "Pham Quoc Bao",
+ "body": "<html><body><div>Hi team,</div><div>Can you deliver the pallet trucks before 5 November?</div><div>Best regards,</div><div>Pham Quoc Bao<br>Tel: 028 3822 1234</div><hr><div id=\"divRplyFwdMsg\"><b>From:</b> Miyano Sales &lt;sales@example.org&gt;<br><b>Sent:</b> Thursday, October 29, 2026 9:15 AM<br><b>To:</b> Pham Quoc Bao<br><b>Subject:</b> Delivery schedule</div><div>We can deliver within 10 days.</div></body></html>",
+ "keep": [
+  "Can you deliver the pallet trucks before 5 November?"
+ ],
+ "cut": [
+  "Best regards",
+  "028 3822 1234",
+  "We can deliver within 10 days"
+ ],
+ "ignored": null,
+ "signature_phones": [],
+ "signature_emails": []
+}

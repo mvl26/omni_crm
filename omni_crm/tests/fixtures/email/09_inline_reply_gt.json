@@ -1,0 +1,19 @@
+{
+ "client": "Thunderbird (trả lời xen kẽ)",
+ "format": "text",
+ "subject": "Re: Điều kiện thanh toán",
+ "sender": "ketoan@example.org",
+ "sender_name": "Hoàng Thị Mai",
+ "body": "> Điều kiện thanh toán là 30% đặt cọc.\nĐồng ý với điều kiện này.\n> Giao hàng sau 15 ngày.\nGiao hàng sớm hơn được không?",
+ "keep": [
+  "Đồng ý với điều kiện này.",
+  "Giao hàng sớm hơn được không?"
+ ],
+ "cut": [
+  "30% đặt cọc",
+  "Giao hàng sau 15 ngày"
+ ],
+ "ignored": null,
+ "signature_phones": [],
+ "signature_emails": []
+}
