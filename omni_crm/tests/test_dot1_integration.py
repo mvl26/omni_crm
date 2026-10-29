@@ -253,5 +253,6 @@ class TestRealRequestParsing(FrappeTestCase):
 		self.assertEqual(self._call("application/json"), 200)
 		self.assertEqual(frappe.db.count(INBOUND, {"channel": self.channel.name}), before + 1)
 
-	def test_form_encoded_body_still_works(self):
+	def test_form_encoded_body_not_regressed(self):
+		"""Chống hồi quy: ca không phải JSON vốn đã đọc được ch, bản sửa E1 không đổi nó."""
 		self.assertEqual(self._call("text/plain"), 200)

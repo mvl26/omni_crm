@@ -32,6 +32,8 @@ OK (skipped=4)
 
 Đối chiếu theo **nội dung assert** có khớp cột "Kỳ vọng" hay không, không theo tên test. Test mới viết ở D1-11 nằm trong `omni_crm/tests/test_dot1_integration.py` (tên `test_iNN_...`).
 
+Lưu ý: các test I-xx dùng `SignedZaloCase` gán `form_dict` bằng tay nên không đi qua `make_form_dict` của Frappe. Phần đọc request thật được phủ bởi `TestRealRequestParsing` (E1) và số đo HTTP thật ở mục 3 và 5.
+
 | # | Kỳ vọng | Test chính | Test bổ trợ | Ghi chú |
 | --- | --- | --- | --- | --- |
 | I-01 | 1 Lead, 1 lượt (cùng `batch_id`), 3 dòng thời gian | `test_dot1_integration.TestI01toI02.test_i01_three_messages_one_lead_one_batch_three_timeline_entries` (webhook ký -> worker -> `get_activities` có 3 dòng) | `test_worker.test_three_new_messages_one_batch_all_done` | Mới ở D1-11 (test cũ không kiểm 3 dòng thời gian và không đi qua webhook) |
