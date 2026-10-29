@@ -208,11 +208,12 @@ def _post_batch(batch_id: str, lead: str | None) -> None:
 
 
 def post_batch_hooks(batch_id: str, lead: str | None) -> None:
-	"""Điểm nối Đợt 2: việc gọi lại cho cuộc gọi nhỡ (D2-03), bot phân tích (D2-05); reply_batch ở prompt sau."""
-	from omni_crm.bot import analyze
+	"""Điểm nối Đợt 2: việc gọi lại cho cuộc gọi nhỡ (D2-03), bot phân tích (D2-05), chấm điểm (D2-06); reply_batch ở prompt sau."""
+	from omni_crm.bot import analyze, scoring
 	from omni_crm.channels.telephony import callbacks
 
 	try:
 		callbacks.after_batch(batch_id)
 	finally:  # lỗi ở việc gọi lại không được làm mất lượt phân tích, và ngược lại enqueue_analyze tự bắt lỗi
-		analyze.enqueue_analyze(batch_id, lead)
+		if not analyze.enqueue_analyze(batch_id, lead):
+			scoring.on_batch_done(batch_id, lead)  # không qua bot (cuộc gọi, bot tắt): chấm điểm ngay (D2-06)
