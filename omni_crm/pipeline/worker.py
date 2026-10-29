@@ -12,6 +12,7 @@ from redis.exceptions import LockError
 from redis.lock import Lock
 
 from omni_crm import flags
+from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
 from omni_crm.identity import resolver
 from omni_crm.ingest.gateway import enqueue_identity
@@ -128,8 +129,14 @@ def _run_rounds(identity_key: str, lock: Lock) -> int:
 
 def _process_batch(identity_key: str, msgs: list[Any], batch_id: str) -> str | None:
 	"""Khớp định danh, ghi dòng thời gian, đánh dấu Done. Không commit; trả tên Lead (hoặc None)."""
-	identity, lead = resolver.resolve(msgs)
-	timeline.append(lead, msgs)
+	with flags.omni_bot():  # code hệ thống ghi Lead/Communication: không tính là sale sửa tay
+		res = resolver.resolve_full(msgs)
+		identity, lead = res.identity, res.lead
+		if lead:
+			lead_bridge.ensure_inbox_link(lead)  # sau commit của resolver, trước khi ghi Communication
+		# Q10: Lead đã chuyển thành Deal thì tin mới ghi vào Deal.
+		timeline.append(res.deal or lead, msgs)
+	timeline.notify(lead, [m.channel_type for m in msgs])
 	last_inbound = max((m.received_at for m in msgs if m.received_at), default=now_datetime())
 	frappe.db.set_value(
 		INBOUND,

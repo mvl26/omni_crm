@@ -137,6 +137,8 @@ Mỗi bản ghi là một kênh cụ thể (một hộp thư, một OA, một t�
 
 Chỉ mục ghép: (`identity_key`, `status`), (`status`, `next_attempt_at`).
 
+D1-06 bổ sung: chỉ mục ghép (`lead`, `received_at`) cho Hộp thư; `raw_payload` ở **permlevel 1** (chỉ Omni Admin đọc/ghi; Sales User và vai trò khác không thấy trường này qua Desk/API chuẩn).
+
 ## 6. Omni Outbound Message
 
 | Trường | Kiểu | Options | Ghi chú |
@@ -155,6 +157,8 @@ Chỉ mục ghép: (`identity_key`, `status`), (`status`, `next_attempt_at`).
 | `sent_at` | Datetime | | |
 | `last_error` | Small Text | | |
 | `is_sandbox` | Check | | Tạo khi `sandbox_mode` bật |
+
+D1-06 bổ sung: chỉ mục ghép (`lead`, `creation`) cho Hộp thư.
 
 ## 7. Omni Duplicate Candidate
 
@@ -324,3 +328,5 @@ Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không tr�
 | Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
 
 "Theo Lead xem được": kiểm tra quyền bằng `frappe.has_permission("CRM Lead", doc=lead)` trong API, không chỉ dựa vào quyền DocType.
+
+D1-06 thi hành: hook `permission_query_conditions` và `has_permission` (`omni_crm/permissions.py`) cho Omni Inbound Message, Omni Outbound Message và Omni Identity, gọi lại điều kiện của chính CRM Lead nên Sales User chỉ thấy bản ghi có `lead` mà CRM cho phép xem; Omni Admin, System Manager, Administrator không bị giới hạn. Bản ghi chưa có `lead` chỉ Omni Admin/System Manager thấy.

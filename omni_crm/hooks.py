@@ -117,13 +117,19 @@ after_install = "omni_crm.install.after_install"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+	"Omni Inbound Message": "omni_crm.permissions.inbound_conditions",
+	"Omni Outbound Message": "omni_crm.permissions.outbound_conditions",
+	"Omni Identity": "omni_crm.permissions.identity_conditions",
+	"Omni Duplicate Candidate": "omni_crm.permissions.candidate_conditions",
+}
+
+has_permission = {
+	"Omni Inbound Message": "omni_crm.permissions.has_lead_scoped_permission",
+	"Omni Outbound Message": "omni_crm.permissions.has_lead_scoped_permission",
+	"Omni Identity": "omni_crm.permissions.has_lead_scoped_permission",
+	"Omni Duplicate Candidate": "omni_crm.permissions.has_candidate_permission",
+}
 
 # DocType Class
 # ---------------
@@ -165,7 +171,10 @@ scheduler_events = {
 # Fixtures
 # --------
 doc_events = {
-	"CRM Lead": {"validate": "omni_crm.crm_bridge.lead.compute_normalized_fields"},
+	"CRM Lead": {
+		"validate": "omni_crm.crm_bridge.lead.compute_normalized_fields",  # D1-05
+		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06
+	},
 }
 fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},

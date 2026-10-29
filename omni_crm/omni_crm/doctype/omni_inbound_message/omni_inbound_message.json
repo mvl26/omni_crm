@@ -134,6 +134,7 @@
    "fieldname": "raw_payload",
    "fieldtype": "JSON",
    "label": "Payload gốc",
+   "permlevel": 1,
    "description": "Xóa sau raw_payload_retention_days."
   },
   {
@@ -195,6 +196,12 @@
   {
    "role": "Sales User",
    "read": 1
+  },
+  {
+   "role": "Omni Admin",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1
   }
  ],
  "sort_order": "DESC",

@@ -84,6 +84,8 @@ App `crm` hiển thị email, bình luận, cuộc gọi, ghi chú, công việc
 
 Đề xuất mặc định: **C + A** (A nếu CRM hiển thị được, nếu không thì C + B).
 
+**Đã chọn ở D1-06: C + A** (CRM hiển thị được Communication `Chat`; xem `docs/adr/0004-cach-hien-thi-hoi-thoai-zalo.md`).
+
 ## 9. Test bắt buộc
 
 - Chữ ký đúng/sai/thiếu; timestamp quá cũ.

@@ -1,0 +1,21 @@
+.omni-inbox { display: flex; gap: 12px; height: calc(100vh - 170px); min-height: 420px; }
+.omni-inbox .oi-left { width: 340px; flex: none; display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); }
+.omni-inbox .oi-right { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); }
+.omni-inbox .oi-filters { padding: 8px; border-bottom: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.omni-inbox .oi-filters .form-control { height: 28px; font-size: 12px; }
+.omni-inbox .oi-filters label { margin: 0; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.omni-inbox .oi-list { flex: 1; overflow-y: auto; }
+.omni-inbox .oi-item { padding: 8px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+.omni-inbox .oi-item:hover, .omni-inbox .oi-item.active { background: var(--control-bg); }
+.omni-inbox .oi-item .oi-top { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.omni-inbox .oi-item .oi-time, .omni-inbox .oi-meta { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.omni-inbox .oi-snippet { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.omni-inbox .oi-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--red-500, #e03636); margin-right: 4px; }
+.omni-inbox .oi-chan { font-size: 10px; padding: 0 5px; border-radius: 8px; background: var(--gray-200, #e2e2e2); color: var(--text-color); margin-right: 3px; }
+.omni-inbox .oi-head { padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.omni-inbox .oi-thread { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.omni-inbox .oi-msg { max-width: 75%; padding: 6px 10px; border-radius: 10px; background: var(--control-bg); word-break: break-word; }
+.omni-inbox .oi-msg.out { align-self: flex-end; background: var(--blue-100, #dbeafe); }
+.omni-inbox .oi-msg .oi-meta { margin-bottom: 2px; }
+.omni-inbox .oi-empty { padding: 24px; text-align: center; color: var(--text-muted); }
+@media (max-width: 768px) { .omni-inbox { flex-direction: column; height: auto; } .omni-inbox .oi-left { width: 100%; max-height: 40vh; } }

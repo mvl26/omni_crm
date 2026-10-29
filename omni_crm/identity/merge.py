@@ -9,6 +9,7 @@ from frappe import _
 from frappe.utils import escape_html
 
 from omni_crm.crm_bridge.lead import normalized_fields
+from omni_crm.flags import omni_bot
 
 LEAD = "CRM Lead"
 SAVEPOINT = "omni_merge_leads"
@@ -149,7 +150,15 @@ def _close_related_candidates(primary: str, secondary: str, user: str, candidate
 
 
 def merge_leads(primary: str, secondary: str, user: str, candidate: str | None = None) -> dict:
-	"""Gộp Lead `secondary` vào `primary` trong một transaction (savepoint); chạy lại lần hai không lỗi."""
+	"""Gộp Lead `secondary` vào `primary` trong một transaction (savepoint); chạy lại lần hai không lỗi.
+
+	Ghi Lead trong lúc gộp là việc của hệ thống: không tính vào `omni_manual_fields` (D1-06).
+	"""
+	with omni_bot():
+		return _merge_leads(primary, secondary, user, candidate)
+
+
+def _merge_leads(primary: str, secondary: str, user: str, candidate: str | None = None) -> dict:
 	if primary == secondary:
 		frappe.throw(_("Không thể gộp một Lead vào chính nó"))
 	for lead in (primary, secondary):
