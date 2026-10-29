@@ -17,7 +17,10 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời | 2 |
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
-| `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI) | 2 |
+| `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI); lần gọi ghi `Skipped Budget`. Site đã migrate bắt đầu ở 0 cho đến khi đặt hạn mức | 2 |
+| Ngắt mạch AI (tự động) | cache `omni:ai:breaker_open` | 5 lần lỗi liên tiếp → 5 phút mọi lần gọi ghi `Skipped Switch`; xóa khóa để mở lại ngay | 2 |
+| site_config `omni_ai_allow_customer_data` | site_config | Không bật (mặc định) thì lời gọi API thật chỉ chạy với hội thoại tổng hợp (`synthetic=True`); chỉ bật sau khi Q11 được chốt | 2 |
+| site_config `omni_ai_timeout_seconds` | site_config | Timeout mỗi lần gọi AI, mặc định 60 | 2 |
 | `bot_paused_until` | Omni Identity | Bot im với một khách | 3 |
 | `alert_recipients` (trống) | Omni Settings | Không gửi thư cảnh báo (Notification Log cho Omni Admin vẫn tạo; không có công tắc riêng, xem docs/12 mục D) | 1 |
 | `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload` | 1 |
@@ -32,6 +35,7 @@ def bot_analyze_enabled() -> bool: ...
 def bot_reply_mode() -> str: ...            # "Off" | "Shadow" | "Draft"
 def group_auto_send(group: str) -> bool: ...
 def recording_enabled() -> bool: ...
+# Kind → công tắc của call_tool: Analyze → bot_analyze_enabled; Reply → bot_reply_mode != Off; Summarize → recording_enabled; Judge → không có (chỉ chịu hạn mức)
 ```
 
 - Đọc qua cache của Frappe (`frappe.get_cached_doc` / `get_cached_value`); cache tự xóa khi lưu Settings. Không cache riêng lâu hơn 30 giây.
