@@ -14,7 +14,7 @@ from omni_crm.crm_bridge import timeline
 from omni_crm.identity import resolver
 from omni_crm.ingest.gateway import enqueue_identity
 from omni_crm.pipeline.locks import LockBusy, identity_lock
-from omni_crm.pipeline.retry import is_transient, mark_retry
+from omni_crm.pipeline.retry import is_transient, mark_retry, redact
 
 INBOUND = "Omni Inbound Message"
 MAX_ROUNDS = 5
@@ -107,7 +107,10 @@ def _run_rounds(identity_key: str) -> int:
 				# Chỉ ghi loại lỗi và batch_id, không ghi nội dung (có thể chứa dữ liệu khách).
 				frappe.log_error(
 					title="Omni: lỗi xử lý lô tin",
-					message=f"batch_id={batch_id}\nloai_loi={type(e).__name__}\n{frappe.get_traceback(with_context=False)[-1500:]}",
+					message=redact(
+						f"batch_id={batch_id}\nloai_loi={type(e).__name__}\n"
+						f"{frappe.get_traceback(with_context=False)[-1500:]}"
+					),
 				)
 				frappe.db.commit()
 			break  # dừng vòng; tin mới hơn (nếu có) do job tiếp nối xử lý

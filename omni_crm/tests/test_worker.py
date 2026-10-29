@@ -151,6 +151,25 @@ class TestWorker(PipelineTestCase):
 		self.assertEqual(self._row(name).status, "Done")
 		self.assertEqual(frappe.db.count("Omni Identity", {"identity_key": KEY}), 1)
 
+	def test_error_log_message_is_redacted(self):
+		self.add_msg("x1")
+		ch = frappe.get_doc("Omni Channel", self.channel.name)
+		ch.zalo_app_secret = "mk-that-su-ngan"
+		ch.save()
+		frappe.db.commit()
+		token = "tok0123456789abcdef0123456789abcdef0123"
+		err = ValueError(f"401 for token={token} secret=mk-that-su-ngan")
+		with (
+			mock.patch.object(worker.timeline, "append", side_effect=err),
+			mock.patch("frappe.log_error") as log,
+		):
+			process_identity(KEY, 0)
+		log.assert_called_once()
+		text = str(log.call_args)
+		self.assertNotIn(token, text)
+		self.assertNotIn("mk-that-su-ngan", text)
+		self.assertIn("loai_loi=ValueError", text)
+
 	def test_rerun_of_done_message_is_noop(self):
 		name = self.add_msg("d1")
 		process_identity(KEY, 0)
