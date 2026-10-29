@@ -12,6 +12,7 @@ from redis.exceptions import LockError
 from redis.lock import Lock
 
 from omni_crm import flags
+from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
 from omni_crm.identity import resolver
@@ -20,6 +21,8 @@ from omni_crm.pipeline.locks import LockBusy, identity_lock
 from omni_crm.pipeline.retry import is_transient, mark_retry, redact
 
 INBOUND = "Omni Inbound Message"
+# Sự kiện không phải khách chủ động liên hệ: không tính vào last_inbound_at (khung gửi tin của Zalo).
+NON_INBOUND_EVENTS = {"oa_echo", "unfollow"}
 MAX_ROUNDS = 5
 BATCH_LIMIT = 200
 LOCK_TIMEOUT = 120
@@ -30,6 +33,7 @@ FIELDS = [
 	"channel_type",
 	"event_type",
 	"external_sender_id",
+	"external_message_id",
 	"identity_key",
 	"communication",
 	"received_at",
@@ -131,14 +135,23 @@ def _run_rounds(identity_key: str, lock: Lock) -> int:
 def _process_batch(identity_key: str, msgs: list[Any], batch_id: str) -> str | None:
 	"""Khớp định danh, ghi dòng thời gian, đánh dấu Done. Không commit; trả tên Lead (hoặc None)."""
 	with flags.omni_bot():  # code hệ thống ghi Lead/Communication: không tính là sale sửa tay
-		res = resolver.resolve_full(msgs)
-		identity, lead = res.identity, res.lead
-		if lead:
-			lead_bridge.ensure_inbox_link(lead)  # sau commit của resolver, trước khi ghi Communication
-		# Q10: Lead đã chuyển thành Deal thì tin mới ghi vào Deal.
-		timeline.append(res.deal or lead, msgs)
+		to_resolve = _adapter_step("prepare_batch", msgs)  # kênh có thể xử lý trước/loại bớt tin (vd follow)
+		if to_resolve:
+			res = resolver.resolve_full(to_resolve)
+			identity, lead = res.identity, res.lead
+			if lead:
+				lead_bridge.ensure_inbox_link(lead)  # sau commit của resolver, trước khi ghi Communication
+			_adapter_step("after_resolve", to_resolve, res=res)
+			# Q10: Lead đã chuyển thành Deal thì tin mới ghi vào Deal.
+			timeline.append(res.deal or lead, to_resolve)
+		else:  # mọi tin đã được adapter xử lý (vd chỉ có follow/unfollow): không tạo Lead
+			row = frappe.db.get_value(
+				"Omni Identity", {"identity_key": identity_key}, ["name", "lead"], as_dict=True
+			)
+			identity, lead = (row.name, row.lead) if row else (None, None)
 	timeline.notify(lead, [m.channel_type for m in msgs])
-	last_inbound = max((m.received_at for m in msgs if m.received_at), default=now_datetime())
+	inbound_times = [m.received_at for m in msgs if m.received_at and m.event_type not in NON_INBOUND_EVENTS]
+	last_inbound = max(inbound_times, default=None)
 	frappe.db.set_value(
 		INBOUND,
 		[m.name for m in msgs],
@@ -152,8 +165,35 @@ def _process_batch(identity_key: str, msgs: list[Any], batch_id: str) -> str | N
 		},
 		update_modified=False,
 	)
-	frappe.db.set_value("Omni Identity", identity, "last_inbound_at", last_inbound, update_modified=False)
+	if identity and last_inbound:
+		frappe.db.set_value("Omni Identity", identity, "last_inbound_at", last_inbound, update_modified=False)
 	return lead
+
+
+def _adapter_step(hook: str, msgs: list[Any], res: Any = None) -> list[Any]:
+	"""Gọi hook tùy chọn `prepare_batch`/`after_resolve` của adapter theo từng kênh; adapter không có hook thì giữ nguyên.
+
+	Trả danh sách tin còn lại sau `prepare_batch` (giữ thứ tự gốc); `after_resolve` trả danh sách đầu vào.
+	"""
+	by_channel: dict[str, list[Any]] = {}
+	for m in msgs:
+		by_channel.setdefault(m.channel, []).append(m)
+	kept: set[str] = set()
+	for channel, group in by_channel.items():
+		try:
+			fn = getattr(get_adapter(group[0].channel_type), hook, None)
+		except AdapterNotFoundError:
+			fn = None
+		if fn is None:
+			kept.update(m.name for m in group)
+			continue
+		channel_doc = frappe.get_cached_doc("Omni Channel", channel)
+		if hook == "prepare_batch":
+			kept.update(m.name for m in fn(group, channel_doc))
+		else:
+			fn(res, group, channel_doc)
+			kept.update(m.name for m in group)
+	return [m for m in msgs if m.name in kept]
 
 
 def _post_batch(batch_id: str, lead: str | None) -> None:
