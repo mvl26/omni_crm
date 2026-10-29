@@ -37,6 +37,7 @@
   "telephony_api_key_sid",
   "telephony_api_key_secret",
   "telephony_hotline",
+  "agent_map",
   "sec_status",
   "last_success_at",
   "last_error"
@@ -229,7 +230,7 @@
    "fieldname": "telephony_provider",
    "fieldtype": "Select",
    "label": "Nhà cung cấp tổng đài",
-   "options": "\nStringee",
+   "options": "\nStringee\nFake",
    "depends_on": "eval:doc.channel_type=='Telephony'"
   },
   {
@@ -253,6 +254,13 @@
    "fieldname": "telephony_hotline",
    "fieldtype": "Data",
    "label": "Đầu số hotline",
+   "depends_on": "eval:doc.channel_type=='Telephony'"
+  },
+  {
+   "fieldname": "agent_map",
+   "fieldtype": "Table",
+   "label": "Ánh xạ nhân viên tổng đài",
+   "options": "Omni Agent Map",
    "depends_on": "eval:doc.channel_type=='Telephony'"
   },
   {

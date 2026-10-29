@@ -13,10 +13,11 @@ from omni_crm.channels.base import ChannelAdapter
 
 _ADAPTERS: dict[str, ChannelAdapter] = {}
 
-# loại kênh -> module chứa adapter (D1-08: Zalo OA; D1-07: Email; Telephony thêm ở D2-02)
+# loại kênh -> module chứa adapter (D1-08: Zalo OA; D1-07: Email; Telephony: D2-01)
 _LAZY_MODULES: dict[str, str] = {
 	"Email": "omni_crm.channels.email.adapter",
 	"Zalo OA": "omni_crm.channels.zalo.adapter",
+	"Telephony": "omni_crm.channels.telephony.adapter",
 }
 
 

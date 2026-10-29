@@ -85,7 +85,7 @@ Mỗi bản ghi là một kênh cụ thể (một hộp thư, một OA, một t�
 | `zalo_skip_signature` | Check | 0 | **Chỉ cho site dev.** Bật trên production thì cổng từ chối xử lý và cảnh báo |
 | `zalo_create_lead_on_follow` | Check | 0 | Tạo Lead khi khách chỉ bấm quan tâm OA |
 | `zalo_oauth_state` | Data (ẩn) | | Chống giả mạo trong luồng cấp quyền |
-| `telephony_provider` | Select | Stringee / (thêm sau) | |
+| `telephony_provider` | Select | Stringee / Fake (thêm sau) | `Fake` chỉ chọn được khi `developer_mode` bật hoặc đang test (D2-01) |
 | `telephony_api_key_sid` | Data | | |
 | `telephony_api_key_secret` | Password | | |
 | `telephony_hotline` | Data | | Đầu số |

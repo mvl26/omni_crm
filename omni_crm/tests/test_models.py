@@ -79,7 +79,6 @@ class TestOmniModels(FrappeTestCase):
 
 	def test_doctypes_of_later_phases_absent(self):
 		for dt in (
-			"Omni Call",
 			"Omni Bot Run",
 			"Omni Bot Draft",
 			"Omni Knowledge Item",
@@ -91,7 +90,9 @@ class TestOmniModels(FrappeTestCase):
 			self.assertNotIn(fn, settings_fields)
 		for fn in ("assignment_fallback_users", "raw_payload_retention_days", "recording_retention_days"):
 			self.assertIn(fn, settings_fields)
-		self.assertNotIn("agent_map", {f.fieldname for f in frappe.get_meta("Omni Channel").fields})
+		# D2-01 đã tạo Omni Call, Omni Agent Map và trường agent_map
+		self.assertTrue(frappe.db.exists("DocType", "Omni Call"))
+		self.assertIn("agent_map", {f.fieldname for f in frappe.get_meta("Omni Channel").fields})
 		self.assertNotIn("bot_paused_until", {f.fieldname for f in frappe.get_meta("Omni Identity").fields})
 		self.assertNotIn("bot_draft", {f.fieldname for f in frappe.get_meta("Omni Outbound Message").fields})
 

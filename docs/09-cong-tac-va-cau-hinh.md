@@ -8,6 +8,7 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | --- | --- | --- | --- |
 | `sandbox_mode` | Omni Settings | (Bật) không gửi gì thật ra ngoài | 1 |
 | `enabled` | Omni Channel | Webhook vẫn trả 200 và **lưu** tin, không xử lý | 1 |
+| `enabled` (kênh Telephony) | Omni Channel | Sự kiện cuộc gọi vẫn được lưu (200) nhưng không xử lý; `telephony_lookup` trả phản hồi "khách mới" rỗng, không tra DB | 2 |
 | `outbound_enabled` | Omni Channel | Tin ra bị `Blocked` | 1 |
 | `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
 | `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời | 2 |

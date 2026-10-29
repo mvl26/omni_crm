@@ -89,6 +89,48 @@ def _channel_rows(now) -> list[dict[str, Any]]:
 	return rows
 
 
+def _telephony(now) -> dict[str, Any]:
+	"""Khối Tổng đài: cuộc gọi hôm nay (đã kết thúc), gọi nhỡ, kênh tổng đài. Số khác bổ sung ở D2-03."""
+	by_status = {"Answered": 0, "Missed": 0, "Busy": 0, "Failed": 0, "Voicemail": 0}
+	by_status.update(
+		dict(
+			frappe.db.sql(
+				"""select status, count(*) from `tabOmni Call`
+				where creation >= %s and status in ('Answered', 'Missed', 'Busy', 'Failed', 'Voicemail')
+				group by status""",
+				today(),
+			)
+		)
+	)
+	missed_in = frappe.db.sql(
+		"select count(*) from `tabOmni Call` where creation >= %s and status = 'Missed' and direction = 'Inbound'",
+		today(),
+	)[0][0]
+	last_call = dict(frappe.db.sql("select provider, max(creation) from `tabOmni Call` group by provider"))
+	channels = frappe.get_all(
+		CHANNEL,
+		filters={"channel_type": "Telephony"},
+		fields=["name", "enabled", "telephony_provider", "last_success_at"],
+		order_by="creation asc",
+	)
+	return {
+		"calls_today": sum(cint(v) for v in by_status.values()),
+		"answered_today": cint(by_status["Answered"]),
+		"missed_today": cint(missed_in),
+		"by_status_today": {k: cint(v) for k, v in by_status.items()},
+		"channels": [
+			{
+				"name": c.name,
+				"enabled": cint(c.enabled),
+				"provider": c.telephony_provider,
+				"last_call_at": last_call.get(c.telephony_provider),
+				"last_success_at": c.last_success_at,
+			}
+			for c in channels
+		],
+	}
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -139,6 +181,7 @@ def build_snapshot() -> dict[str, Any]:
 			"failed_last_hour": cint(failed_1h),
 		},
 		"duplicates": {"open": cint(frappe.db.count(CANDIDATE, {"status": "Open"}))},
+		"telephony": _telephony(now),
 		"sweeper": {
 			"last_run_age_seconds": sweep_age,
 			"stale": sweep_age is None or sweep_age > SWEEP_STALE_MINUTES * 60,
