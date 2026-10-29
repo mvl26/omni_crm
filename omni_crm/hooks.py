@@ -162,9 +162,10 @@ scheduler_events = {
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",
 			"omni_crm.monitoring.alerts.run_checks",  # D1-10
+			"omni_crm.channels.telephony.callbacks.sweep_pending",  # D2-03
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
-		# "30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],
+		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
 	},
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],

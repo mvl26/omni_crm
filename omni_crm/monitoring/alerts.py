@@ -29,6 +29,7 @@ DUPLICATES_OPEN_MAX = 20
 SILENT_CHANNEL_SECONDS = 4 * 3600
 TOKEN_MIN_SECONDS = 3600
 MONITOR_ROUTE = "/app/omni-monitor"
+CRM_TASKS_ROUTE = "/crm/tasks"  # người được giao việc (Sales User) không mở được màn hình giám sát
 ZALO_REFRESH_ALERT_KIND = "làm mới token thất bại"  # khớp token._alert
 
 
@@ -41,6 +42,9 @@ class Alert:
 	subject: str
 	detail: str
 	email: bool = True
+	users: tuple[
+		str, ...
+	] = ()  # người dùng khác ngoài Omni Admin nhận Notification Log (vd người được giao việc)
 
 
 def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
@@ -100,6 +104,19 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				_("Có {0} cặp nghi trùng đang Open (ngưỡng {1}).").format(
 					snap["duplicates"]["open"], DUPLICATES_OPEN_MAX
 				),
+			)
+		)
+	tel = snap.get("telephony") or {}
+	if cint(tel.get("callbacks_overdue")):
+		out.append(
+			Alert(
+				"goi_lai_qua_han",
+				"",
+				_("Có việc gọi lại quá hạn"),
+				_(
+					"Có {0} việc gọi lại khách gọi nhỡ đã quá hạn mà chưa xong. Vào CRM > Tasks để xử lý."
+				).format(tel["callbacks_overdue"]),
+				users=tuple(tel.get("callbacks_overdue_users") or ()),
 			)
 		)
 	sandbox = cint(snap["switches"]["sandbox_mode"])
@@ -200,7 +217,8 @@ def _notify_admins(alert: Alert, link: str) -> set[str]:
 	)
 
 	mailed: set[str] = set()
-	for user in _admin_users():
+	admins = set(_admin_users())
+	for user in dict.fromkeys([*_admin_users(), *alert.users]):
 		try:
 			frappe.get_doc(
 				{
@@ -209,7 +227,7 @@ def _notify_admins(alert: Alert, link: str) -> set[str]:
 					"for_user": user,
 					"subject": alert.subject,
 					"email_content": alert.detail,
-					"link": link,
+					"link": link if user in admins else CRM_TASKS_ROUTE,
 				}
 			).insert(ignore_permissions=True)
 			if is_email_notifications_enabled_for_type(user, "Alert"):
@@ -232,6 +250,24 @@ def _deliver(alert: Alert) -> None:
 			subject=f"[Omni CRM] {alert.subject}",
 			message=body.replace("\n", "<br>"),
 		)
+
+
+def deliver_now(alert: Alert) -> bool:
+	"""Gửi ngay một cảnh báo (chống lặp 30 phút như mọi cảnh báo); True nếu đã gửi. Dùng cho tác vụ đêm."""
+	if not _claim(alert):
+		return False
+	try:
+		_deliver(alert)
+		frappe.db.commit()
+		return True
+	except Exception:
+		frappe.db.rollback()
+		_release(alert)
+		frappe.log_error(
+			title="Omni: không gửi được cảnh báo", message=f"loai={alert.kind} pham_vi={alert.scope}"
+		)
+		frappe.db.commit()
+		return False
 
 
 def run_checks() -> dict[str, int]:

@@ -130,6 +130,16 @@ class OmniMonitor {
 			cards.push(this.card(__("Tổng đài (hôm nay)"),
 				this.row(__("Cuộc gọi"), tel.calls_today) + this.row(__("Đã nghe máy"), tel.answered_today) +
 				this.row(__("Gọi nhỡ"), tel.missed_today, tel.missed_today > 0) +
+				this.row(__("Việc gọi lại quá hạn"), tel.callbacks_overdue, tel.callbacks_overdue > 0) +
+				tel.channels.map((c) => {
+					const r = (tel.reconcile || {})[c.name];
+					const u = (tel.unverified_calls || {})[c.name];
+					const rec = !r ? __("chưa chạy") : r.skipped ? __("bỏ qua (sandbox)") : r.error ? `${__("LỖI")}: ${r.error}` :
+						`${r.date}: ${__("tổng")} ${r.total}, ${__("đã có")} ${r.existing}, ${__("bù thêm")} ${r.filled}`;
+					const bad = !!r && (!!r.error || (r.total && r.filled * 100 / r.total > 1));
+					return this.row(`${c.name} · ${__("đối soát đêm")}`, rec, bad) +
+						this.row(`${c.name} · ${__("cuộc gọi nhỡ chưa xác minh")}`, u === null || u === undefined ? "-" : u, u > 0);
+				}).join("") +
 				tel.channels.map((c) => this.row(c.name, `${this.yes_no(c.enabled)} · ${__("cuộc gọi gần nhất")}: ${c.last_call_at || "-"}`)).join("")));
 		}
 
