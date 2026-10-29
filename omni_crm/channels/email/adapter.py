@@ -180,4 +180,5 @@ class EmailAdapter:
 		return row.message_id or reply_to_external_id, subject
 
 
+ADAPTER_CLASS = EmailAdapter
 register_adapter(CHANNEL_TYPE, EmailAdapter())
