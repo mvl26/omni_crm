@@ -202,11 +202,6 @@
    "permlevel": 1,
    "read": 1,
    "write": 1
-  },
-  {
-   "role": "System Manager",
-   "permlevel": 1,
-   "read": 1
   }
  ],
  "sort_order": "DESC",

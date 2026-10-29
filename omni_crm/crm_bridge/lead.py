@@ -123,12 +123,6 @@ def create_lead_for_identity(identity: str, signals: dict) -> str:
 	# đang được tạo. Email (đã qua normalize_email) được ghi sau bằng db.set_value, không qua validate.
 	with flags.omni_bot():
 		doc.insert()
-	try:
-		add_inbox_link(doc.name)
-	except Exception:
-		# Liên kết chỉ là tiện ích: CRM `on_comment_insert` có thể enqueue (Redis lỗi) nhưng không được làm
-		# hỏng việc tạo Lead. Bản ghi Comment đã nằm trong transaction nếu lỗi xảy ra sau khi chèn.
-		frappe.log_error(title="Omni: không thêm được liên kết Hộp thư", message=f"lead={doc.name}")
 	email = signals.get("email")
 	if email:
 		frappe.db.set_value(
@@ -189,6 +183,19 @@ def lead_source_for_channel(channel_type: str | None) -> str | None:
 def inbox_url(lead: str) -> str:
 	"""Đường dẫn mở Hộp thư Omni tại hội thoại của Lead."""
 	return f"{INBOX_ROUTE}?lead={lead}"
+
+
+def ensure_inbox_link(lead: str) -> bool:
+	"""Như `add_inbox_link` nhưng lỗi không lan ra: liên kết chỉ là tiện ích, không được làm hỏng lô tin.
+
+	Gọi từ worker SAU khi resolver đã commit (không giữ khóa tên Lead/khóa tín hiệu): CRM
+	`on_comment_insert` gọi `frappe.enqueue`, một lượt Redis có thể chậm hoặc lỗi.
+	"""
+	try:
+		return add_inbox_link(lead)
+	except Exception:
+		frappe.log_error(title="Omni: không thêm được liên kết Hộp thư", message=f"lead={lead}")
+		return False
 
 
 def add_inbox_link(lead: str) -> bool:

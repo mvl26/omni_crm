@@ -70,6 +70,27 @@ class TestLeadSource(BridgeTestCase):
 		self.assertFalse(lead_bridge.add_inbox_link(lead))
 
 
+class TestSwitches(BridgeTestCase):
+	def test_disabled_channel_writes_nothing_and_raises_nothing(self):
+		"""Công tắc `enabled` của Omni Channel (docs/09): tin được lưu, không có Lead/Communication/Comment."""
+		frappe.db.set_value("Omni Channel", self.channel.name, "enabled", 0)
+		frappe.db.commit()
+		frappe.clear_cache()
+		with mock.patch.object(timeline, "notify") as notify:
+			msg = self.send("m1")
+		self.assertEqual(frappe.db.get_value("Omni Inbound Message", msg, "status"), "New")
+		self.assertIsNone(self.lead_of(msg))
+		self.assertFalse(notify.called)
+		self.assertFalse(frappe.db.exists("Communication", {"omni_inbound_message": msg}))
+		# bật lại: xử lý bù
+		frappe.db.set_value("Omni Channel", self.channel.name, "enabled", 1)
+		frappe.db.commit()
+		frappe.clear_cache()
+		self.send("m2")
+		self.assertTrue(self.lead_of(msg))
+		self.assertTrue(frappe.db.exists("Communication", {"omni_inbound_message": msg}))
+
+
 class TestAssignment(BridgeTestCase):
 	def test_assignment_rule_assigns_lead_created_in_background_job(self):
 		"""G11: Assignment Rule của Frappe chạy khi worker (người dùng Guest) insert Lead."""

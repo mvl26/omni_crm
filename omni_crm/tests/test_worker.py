@@ -17,6 +17,14 @@ KEY = f"Zalo OA:{PREFIX}U1"
 
 
 class TestWorker(PipelineTestCase):
+	def setUp(self):
+		super().setUp()
+		# D1-06: Comment liên kết Hộp thư kích hoạt hook CRM `on_comment_insert` -> frappe.enqueue; Redis queue
+		# của bench dev đang hỏng nên mock (các test dưới đây kiểm tra thử lại/log, không kiểm tra hàng đợi).
+		patcher = mock.patch("frappe.enqueue")
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
 	def _row(self, name):
 		return frappe.db.get_value(
 			"Omni Inbound Message",
