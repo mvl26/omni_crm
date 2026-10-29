@@ -391,12 +391,15 @@ def call_tool(
 	prompt_version: str | None = None,
 	max_tokens: int = DEFAULT_MAX_TOKENS,
 	synthetic: bool = False,
+	eval_mode: bool = False,
 ) -> dict | None:
 	"""Gọi AI ép dùng `tool`, trả đầu vào tool đã kiểm schema; None nếu bị bỏ qua hoặc lỗi (đã ghi Omni Bot Run).
 
 	Bỏ qua (Skipped Switch) khi công tắc tắt, thiếu khóa, hoặc dữ liệu khách chưa được cho phép gửi sang AI (Q11;
-	`synthetic=True` cho hội thoại tổng hợp). Bỏ qua (Skipped Budget) khi vượt `daily_token_budget`. Thử lại tối đa
-	2 lần khi lỗi tạm thời và 1 lần khi sai schema.
+	`synthetic=True` cho hội thoại tổng hợp). `eval_mode=True` (chỉ `bot/eval/run.py`): bộ đề chạy tay trước khi bật
+	bot nên không đòi công tắc Analyze/Reply; cổng Q11, hạn mức token và ngắt mạch vẫn áp dụng.
+	Bỏ qua (Skipped Budget) khi vượt `daily_token_budget`. Thử lại tối đa 2 lần khi lỗi tạm thời và 1 lần khi sai
+	schema.
 	"""
 	outcome = _Outcome()
 	meta = {
@@ -428,7 +431,7 @@ def call_tool(
 				pass
 		return output
 
-	if not switch_on(kind):
+	if not eval_mode and not switch_on(kind):
 		return finish("Skipped Switch", _("Công tắc tương ứng đang tắt"))
 	budget = cint(frappe.get_cached_doc("Omni Settings").get("daily_token_budget"))
 	used = tokens_today()

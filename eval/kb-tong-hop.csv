@@ -1,0 +1,51 @@
+item_id,question_group,question,answer,source,owner_email
+KB-90001,Giờ làm việc,"Bên mình làm việc mấy giờ?
+Giờ mở cửa của công ty là mấy giờ?","Miyano làm việc từ 8 giờ đến 17 giờ 30 các ngày từ thứ Hai đến thứ Sáu.",Tổng hợp thử nghiệm,
+KB-90002,Giờ làm việc,"Thứ Bảy có làm việc không?
+Cuối tuần bên mình có nhận đơn không?","Miyano làm việc sáng thứ Bảy từ 8 giờ đến 12 giờ và nghỉ Chủ nhật.",Tổng hợp thử nghiệm,
+KB-90003,Địa chỉ và liên hệ,"Văn phòng Miyano ở đâu?
+Cho xin địa chỉ công ty","Văn phòng Miyano đặt tại số 1 đường Ví Dụ, quận Mẫu, Hà Nội (địa chỉ thử nghiệm).",Tổng hợp thử nghiệm,
+KB-90004,Địa chỉ và liên hệ,"Số hotline là gì?
+Gọi điện cho bên mình qua số nào?","Hotline của Miyano là 1900 0000.",Tổng hợp thử nghiệm,
+KB-90005,Địa chỉ và liên hệ,"Email liên hệ của công ty là gì?
+Gửi thư cho bên mình qua địa chỉ nào?","Email liên hệ của Miyano là lienhe@example.com.",Tổng hợp thử nghiệm,
+KB-90006,Địa chỉ và liên hệ,"Kho hàng ở đâu?
+Em muốn đến kho lấy hàng thì đi đâu?","Kho của Miyano đặt tại số 2 đường Kho Mẫu, quận Ví Dụ, Hà Nội (địa chỉ thử nghiệm). Anh/chị liên hệ hotline trước khi đến lấy hàng.",Tổng hợp thử nghiệm,
+KB-90007,Thông tin sản phẩm,"Găng tay y tế bên mình có những size nào?
+Găng tay nitrile có size gì?","Găng tay nitrile của Miyano có các size S, M, L và XL.",Tổng hợp thử nghiệm,
+KB-90008,Thông tin sản phẩm,"Một hộp găng tay có bao nhiêu cái?
+Quy cách đóng gói của găng tay là gì?","Găng tay nitrile đóng hộp 100 cái, mỗi thùng gồm 10 hộp.",Tổng hợp thử nghiệm,
+KB-90009,Thông tin sản phẩm,"Khẩu trang y tế loại mấy lớp?
+Khẩu trang bên mình có bao nhiêu lớp?","Khẩu trang y tế của Miyano loại 4 lớp, đóng hộp 50 cái.",Tổng hợp thử nghiệm,
+KB-90010,Thông tin sản phẩm,"Kim luồn tĩnh mạch có những cỡ nào?
+Kim luồn có đủ các cỡ không?","Kim luồn tĩnh mạch của Miyano có các cỡ 18G, 20G, 22G và 24G.",Tổng hợp thử nghiệm,
+KB-90011,Thông tin sản phẩm,"Kim luồn đã tiệt trùng chưa?
+Kim luồn có tiệt trùng sẵn không?","Kim luồn tĩnh mạch được tiệt trùng sẵn, đóng gói riêng từng cái.",Tổng hợp thử nghiệm,
+KB-90012,Thông tin sản phẩm,"Bơm tiêm có những dung tích nào?
+Bơm tiêm dùng một lần loại nào có sẵn?","Bơm tiêm dùng một lần của Miyano có các dung tích 1 ml, 3 ml, 5 ml và 10 ml.",Tổng hợp thử nghiệm,
+KB-90013,Thông tin sản phẩm,"Gạc y tế có loại vô trùng không?
+Gạc phẫu thuật bên mình thế nào?","Miyano có gạc y tế vô trùng đóng gói riêng từng gói.",Tổng hợp thử nghiệm,
+KB-90014,Thông tin sản phẩm,"Sản phẩm xuất xứ từ đâu?
+Hàng này sản xuất ở nước nào?","Xuất xứ của từng sản phẩm được ghi trên bao bì và trong hồ sơ sản phẩm do Miyano cung cấp.",Tổng hợp thử nghiệm,
+KB-90015,Thông tin sản phẩm,"Bên mình có giấy tờ chứng nhận sản phẩm không?
+Có CO CQ không?","Miyano cung cấp hồ sơ sản phẩm gồm giấy chứng nhận xuất xứ và chất lượng khi khách có yêu cầu.",Tổng hợp thử nghiệm,
+KB-90016,Thông tin sản phẩm,"Cho em xin catalogue sản phẩm
+Bên mình có danh mục sản phẩm không?","Anh/chị vui lòng để lại email, nhân viên Miyano sẽ gửi danh mục sản phẩm.",Tổng hợp thử nghiệm,
+KB-90017,Thông tin sản phẩm,"Hạn sử dụng của sản phẩm xem ở đâu?
+Làm sao biết hạn dùng của lô hàng?","Hạn sử dụng được in trên bao bì của từng lô hàng.",Tổng hợp thử nghiệm,
+KB-90018,Thông tin sản phẩm,"Bên mình bán những nhóm sản phẩm nào?
+Công ty cung cấp những mặt hàng gì?","Miyano cung cấp vật tư y tế tiêu hao như găng tay, khẩu trang, kim luồn, bơm tiêm và gạc.",Tổng hợp thử nghiệm,
+KB-90019,Thủ tục mua hàng,"Muốn đặt hàng thì làm thế nào?
+Quy trình đặt hàng như thế nào?","Anh/chị gửi yêu cầu qua Zalo OA hoặc email, nêu tên sản phẩm, số lượng và địa chỉ nhận hàng để nhân viên Miyano xử lý.",Tổng hợp thử nghiệm,
+KB-90020,Thủ tục mua hàng,"Mua hàng cần hồ sơ gì?
+Đơn vị em cần chuẩn bị giấy tờ gì để mua?","Khách là đơn vị cần cung cấp bản sao giấy đăng ký kinh doanh và thông tin xuất hóa đơn.",Tổng hợp thử nghiệm,
+KB-90021,Thủ tục mua hàng,"Thanh toán bằng hình thức nào?
+Bên mình nhận chuyển khoản không?","Miyano nhận thanh toán bằng chuyển khoản ngân hàng.",Tổng hợp thử nghiệm,
+KB-90022,Thủ tục mua hàng,"Bên mình có xuất hóa đơn VAT không?
+Em cần hóa đơn đỏ cho đơn vị","Miyano xuất hóa đơn điện tử theo thông tin xuất hóa đơn mà khách cung cấp.",Tổng hợp thử nghiệm,
+KB-90023,Thủ tục mua hàng,"Muốn xem mẫu sản phẩm thì làm sao?
+Có nhận gửi mẫu tham khảo không?","Anh/chị để lại thông tin liên hệ và sản phẩm cần xem, nhân viên Miyano sẽ trao đổi về việc cung cấp mẫu.",Tổng hợp thử nghiệm,
+KB-90024,Thủ tục mua hàng,"Đặt hàng qua Zalo được không?
+Em nhắn đặt hàng qua Zalo có được không?","Anh/chị có thể gửi yêu cầu đặt hàng qua Zalo OA của Miyano, nhân viên sẽ tiếp nhận và phản hồi.",Tổng hợp thử nghiệm,
+KB-90025,Thủ tục mua hàng,"Công ty có làm hợp đồng cung cấp không?
+Đơn vị em muốn ký hợp đồng thì làm sao?","Với khách là đơn vị, Miyano có thể làm việc theo hợp đồng cung cấp. Anh/chị để lại thông tin liên hệ để nhân viên trao đổi chi tiết.",Tổng hợp thử nghiệm,

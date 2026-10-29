@@ -61,3 +61,13 @@ Kết quả ghi `Omni Eval Run` và một báo cáo Markdown `eval/reports/<ngà
 | Bật bot phân tích (Đợt 2) | Trường đúng ≥ 90% |
 | Bật nháp cho sale (Đợt 3) | Trường đúng ≥ 90%, hành động đúng ≥ 90%, trả lời đạt ≥ 85%, lỗi nghiêm trọng = 0 |
 | Đổi câu lệnh/mô hình khi đang chạy | Không chỉ số nào giảm quá 2 điểm phần trăm so với lần chạy được chấp nhận gần nhất, lỗi nghiêm trọng = 0 |
+
+## 5. Công cụ (D2-08)
+
+- Định dạng mở rộng của ca: lượt cuối có thể ghi `"at": "YYYY-MM-DD HH:MM"` (để thử ngoài giờ làm việc; không ghi thì chạy lúc thứ Ba 10:00); khóa `reviewed` (ca do `builder` sinh mang `false` và bị importer từ chối cho tới khi người duyệt đổi) và `note`.
+- Nhập/xuất: `bench --site <site> execute omni_crm.bot.eval.importer.import_jsonl --kwargs "{'path': 'eval/cases/synthetic-2026-10-30.jsonl'}"`; `export_jsonl`.
+- Bộ tổng hợp: `eval/cases/synthetic-<ngày>.jsonl` sinh bằng `python3 eval/sinh_ca_tong_hop.py` (xác định, không dữ liệu thật; ngoài cơ cấu mục 2 còn ca GIO ngoài giờ và SPAM số điện thoại). Kho tri thức BỊA đi kèm: `eval/kb-tong-hop.csv` (dùng với `kb_file`, không nhập vào site).
+- Ca thật: `omni_crm.bot.eval.builder.build_from_real` (chỉ chạy khi Q11 cho phép) ra `eval/cases/real-<ngày>.jsonl` (không đưa vào git) và `real-<ngày>.quy-tac-che.md`.
+- Chạy: `bench --site <site> execute omni_crm.bot.eval.run.run_cli --kwargs "{'gate': 'phan_tich'}"` (`nhap`, `doi_cau_lenh`); `fake: True` dùng client giả chỉ để kiểm hạ tầng; client thật cần `allow_real: True`. Ca không đo được ghi "chưa đo" và làm cổng KHÔNG qua.
+- Chấm lại: `export_regrade_csv(run)` rồi `import_regrade(run, path)`; ngưỡng cổng ở `grading.GATES`.
+

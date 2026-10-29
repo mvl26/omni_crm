@@ -1,0 +1,124 @@
+{
+ "autoname": "field:case_id",
+ "naming_rule": "By fieldname",
+ "field_order": [
+  "case_id",
+  "source",
+  "active",
+  "critical",
+  "col_a",
+  "expected_action",
+  "expected_group",
+  "sec_body",
+  "conversation",
+  "expected_fields",
+  "reference_answer"
+ ],
+ "fields": [
+  {
+   "fieldname": "case_id",
+   "fieldtype": "Data",
+   "label": "Mã ca",
+   "unique": 1,
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Nguồn",
+   "options": "Real\nSynthetic",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Đang dùng",
+   "default": "1",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "critical",
+   "fieldtype": "Check",
+   "label": "Ca nghiêm trọng",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Trả lời sai ca này là lỗi nghiêm trọng (giá, cam kết, chèn lệnh, y khoa)"
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "expected_action",
+   "fieldtype": "Select",
+   "label": "Hành động kỳ vọng",
+   "options": "Reply\nHandoff",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "expected_group",
+   "fieldtype": "Link",
+   "label": "Nhóm kỳ vọng",
+   "options": "Omni Question Group"
+  },
+  {
+   "fieldname": "sec_body",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "conversation",
+   "fieldtype": "JSON",
+   "label": "Hội thoại",
+   "reqd": 1,
+   "description": "Danh sách lượt {role: customer|sale, text}; kết thúc bằng lượt của khách"
+  },
+  {
+   "fieldname": "expected_fields",
+   "fieldtype": "JSON",
+   "label": "Trường kỳ vọng",
+   "description": "Chỉ ghi trường muốn chấm"
+  },
+  {
+   "fieldname": "reference_answer",
+   "fieldtype": "Long Text",
+   "label": "Câu trả lời tham chiếu"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Omni Knowledge Editor",
+   "read": 1
+  }
+ ],
+ "name": "Omni Eval Case",
+ "description": "Một ca trong bộ đề kiểm thử bot",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "actions": [],
+ "creation": "2026-10-30 12:00:00.000000",
+ "modified": "2026-10-30 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "module": "Omni CRM",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "links": [],
+ "states": []
+}

@@ -151,11 +151,16 @@ def _esc(text: str) -> str:
 	return html.escape(text or "", quote=True)
 
 
-def render_kb(active_only: bool = True) -> str:
-	"""`<kho_tri_thuc><muc id="KB-…" nhom="…"><hoi>…</hoi><dap>…</dap></muc>…</kho_tri_thuc>`, nội dung đã thoát."""
+def render_items(items: list[dict[str, str]]) -> str:
+	"""`<kho_tri_thuc>` từ danh sách mục {id, group, question, answer} (dùng chung với bộ đề đọc kho từ tệp)."""
 	parts = [
 		f'<muc id="{_esc(i["id"])}" nhom="{_esc(i["group"])}"><hoi>{_esc(i["question"])}</hoi>'
 		f"<dap>{_esc(i['answer'])}</dap></muc>"
-		for i in kb_items(active_only=active_only)
+		for i in items
 	]
 	return "\n".join(["<kho_tri_thuc>", *parts, "</kho_tri_thuc>"])
+
+
+def render_kb(active_only: bool = True) -> str:
+	"""`<kho_tri_thuc><muc id="KB-…" nhom="…"><hoi>…</hoi><dap>…</dap></muc>…</kho_tri_thuc>`, nội dung đã thoát."""
+	return render_items(kb_items(active_only=active_only))

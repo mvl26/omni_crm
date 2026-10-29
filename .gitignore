@@ -5,3 +5,8 @@
 tags
 node_modules
 __pycache__
+# Ca đề lấy từ dữ liệu thật (đã che) chỉ ở staging/máy phụ trách, không đưa vào repo
+eval/cases/real-*
+# CSV chấm lại có nội dung ca (có thể là ca Real đã che): không đưa vào git
+eval/reports/*-cham-lai.csv
+eval/reports/*-real.md
