@@ -125,6 +125,14 @@ class OmniMonitor {
 			this.row("Queued", o.queued) + this.row("Sent", o.sent) + this.row("Failed", o.failed) + this.row("Blocked", o.blocked) +
 			this.row(__("Failed trong 1 giờ"), o.failed_last_hour, o.failed_last_hour > 5)));
 
+		const tel = s.telephony || {};
+		if ((tel.channels || []).length) {
+			cards.push(this.card(__("Tổng đài (hôm nay)"),
+				this.row(__("Cuộc gọi"), tel.calls_today) + this.row(__("Đã nghe máy"), tel.answered_today) +
+				this.row(__("Gọi nhỡ"), tel.missed_today, tel.missed_today > 0) +
+				tel.channels.map((c) => this.row(c.name, `${this.yes_no(c.enabled)} · ${__("cuộc gọi gần nhất")}: ${c.last_call_at || "-"}`)).join("")));
+		}
+
 		const d = s.duplicates || {};
 		cards.push(this.card(__("Nghi trùng"), this.row(__("Cặp đang Open"), d.open, d.open > 20)));
 

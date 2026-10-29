@@ -23,6 +23,8 @@ LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
 OUTBOUND = "Omni Outbound Message"
 IDENTITY = "Omni Identity"
+CALL = "Omni Call"
+CALL_FINAL_STATUSES = ("Answered", "Missed", "Busy", "Failed", "Voicemail")
 MAX_CANDIDATES = 300  # số Lead gần nhất được xét cho một lần tải danh sách
 THREAD_LIMIT = 300
 SNIPPET_LEN = 120
@@ -251,6 +253,25 @@ def get_thread(lead: str) -> dict:
 		r.name: r.display_name
 		for r in frappe.get_all(IDENTITY, filters={"lead": lead}, fields=["name", "display_name"])
 	}
+	call_rows = frappe.get_all(
+		CALL,
+		filters={
+			"lead": lead,
+			"status": ["in", list(CALL_FINAL_STATUSES)],
+		},  # bỏ cuộc gọi tạm (chưa kết thúc)
+		fields=[
+			"name",
+			"direction",
+			"status",
+			"duration_seconds",
+			"agent",
+			"started_at",
+			"ended_at",
+			"creation",
+		],
+		order_by="creation desc",
+		limit_page_length=THREAD_LIMIT,
+	)
 	channel_types = {
 		r.name: r.channel_type
 		for r in frappe.get_all("Omni Channel", fields=["name", "channel_type"])
@@ -274,6 +295,8 @@ def get_thread(lead: str) -> dict:
 				"status": None,
 			}
 		)
+	for c in call_rows:
+		items.append(_call_item(c))
 	# Tin Sale trả lời ngoài hệ thống (oa_echo) có cả Omni Outbound Message cùng mã tin: chỉ hiện bản echo.
 	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
 	for o in outbound:
@@ -315,8 +338,45 @@ def get_thread(lead: str) -> dict:
 			IDENTITY, filters={"lead": lead}, fields=["name", "channel_type", "display_name", "is_follower"]
 		),
 		"messages": items,
-		"truncated": len(inbound) >= THREAD_LIMIT or len(outbound) >= THREAD_LIMIT,
+		"truncated": max(len(inbound), len(outbound), len(call_rows)) >= THREAD_LIMIT,
 		"compose": compose_state(lead),
+	}
+
+
+def _duration_text(seconds: int | None) -> str:
+	minutes, secs = divmod(max(0, int(seconds or 0)), 60)
+	if not minutes:
+		return _("{0} giây").format(secs)
+	return _("{0} phút {1} giây").format(minutes, secs) if secs else _("{0} phút").format(minutes)
+
+
+def _call_item(c: Any) -> dict:
+	"""Dòng cuộc gọi trong hội thoại: chiều, trạng thái, thời lượng, người nghe máy (không kèm số, ghi âm, sự kiện gốc)."""
+	inbound = c.direction != "Outbound"
+	labels = {
+		"Answered": _("Đã nghe máy"),
+		"Missed": _("Gọi nhỡ") if inbound else _("Khách không nghe máy"),
+		"Busy": _("Máy bận"),
+		"Failed": _("Cuộc gọi lỗi"),
+		"Voicemail": _("Để lại lời nhắn"),
+	}
+	parts = [_("Cuộc gọi đến") if inbound else _("Cuộc gọi đi"), labels.get(c.status, c.status)]
+	if c.status == "Answered" and c.duration_seconds is not None:
+		parts.append(_duration_text(c.duration_seconds))
+	agent = frappe.db.get_value("User", c.agent, "full_name") or c.agent if c.agent else None
+	if agent:
+		parts.append((_("Nghe máy: {0}") if inbound else _("Gọi bởi: {0}")).format(agent))
+	return {
+		"name": c.name,
+		"doctype": CALL,
+		"kind": "call",
+		"direction": "in" if inbound else "out",
+		"channel_type": "Telephony",
+		"sender": agent or _("Tổng đài"),
+		"text": " · ".join(parts),
+		"attachments": [],
+		"at": c.ended_at or c.started_at or c.creation,
+		"status": None,
 	}
 
 
