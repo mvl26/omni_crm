@@ -1,6 +1,6 @@
 # Báo cáo chạy bộ đề — 2026-10-30 — analyze-v1_reply-v1_judge-v1
 
-- Lần chạy: `EVR-2026-00143`; bắt đầu 2026-10-30 04:16:46.255985; cổng kiểm: **nhap**
+- Lần chạy: `EVR-2026-00195`; bắt đầu 2026-10-30 04:29:19.735376; cổng kiểm: **nhap**
 - Chế độ: **Fake** — client giả trả đúng kỳ vọng; chỉ kiểm hạ tầng bộ chấm, **KHÔNG PHẢI điểm của bot**
 - Bộ đề: 220 ca (Real 0, Synthetic 220); **CHƯA được người duyệt**
 - Kho tri thức: file:9fde467d (nguồn tệp); mô hình: claude-haiku-5-5 | claude-sonnet-5-5 | claude-sonnet-5-5; che SĐT/email khi gửi AI: có

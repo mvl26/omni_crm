@@ -352,8 +352,9 @@ def run_case(
 		"critical": case["critical"],
 		"expected_action": case["expected_action"],
 		"expected_group": case["expected_group"],
-		"question": turns[-1]["text"] if case["source"] == "Synthetic" else None,
-		"reference": case["reference_answer"] if case["source"] == "Synthetic" else None,
+		# Đầu vào ca đã che sẵn (builder), câu trả lời của bot không chứa dữ liệu khách: lưu để người chấm lại đọc
+		"question": turns[-1]["text"],
+		"reference": case["reference_answer"],
 		"field_checked": 0,
 		"field_correct": 0,
 		"field_wrong": {},
@@ -368,7 +369,9 @@ def run_case(
 		"status": None,
 	}
 	analysis = None
-	if "analyze" in steps and expected_fields:
+	if "analyze" in steps and (expected_fields or "reply" in steps):
+		# Bước soạn trả lời cần intent/wants_human của phân tích như trên production, nên ca nào cũng phân tích
+		# khi có bước trả lời; chỉ CHẤM trường khi ca có expected_fields.
 		analysis = analyze_case(case, turns, tag, mask, settings)
 		if "unmeasured" in analysis:
 			res.update(unmeasured=analysis["unmeasured"], status=analysis.get("status"))
@@ -396,7 +399,7 @@ def run_case(
 		verdict = None
 		if decision["action"] == "Reply":
 			text = decision["text"] or ""
-			res["reply_text"] = text if case["source"] == "Synthetic" else None
+			res["reply_text"] = text
 			leak = grading.guard_leak(text, out["kb_texts"], out["allowed"])
 			if judge:
 				judged = judge_case(case, turns, text, out["kb_texts"], tag, mask)
@@ -410,6 +413,8 @@ def run_case(
 			res["critical_reasons"] = grading.critical_reasons(case, "Reply", verdict, leak)
 		else:
 			res["critical_reasons"] = grading.critical_reasons(case, "Handoff", None, [])
+	res["critical_reasons_auto"] = list(res["critical_reasons"])  # trước khi người chấm lại thay đổi
+	res["answer_pass_auto"] = res["answer_pass"]
 	return res
 
 
@@ -588,7 +593,7 @@ def _failure_lines(results: list[dict]) -> dict[str, list[str]]:
 				why.append("NGHIÊM TRỌNG: " + ", ".join(r["critical_reasons"]))
 		if why:
 			mark = " [critical]" if r["critical"] else ""
-			text = f" - “{r['question'][:100]}”" if r.get("question") else ""
+			text = f" - “{r['question'][:100]}”" if r.get("question") and r["source"] == "Synthetic" else ""
 			grouped.setdefault(r["category"], []).append(
 				f"- `{r['case_id']}`{mark}{text}: " + " | ".join(why)
 			)
@@ -730,8 +735,8 @@ def export_regrade_csv(run_name: str, path: str | None = None) -> str:
 				[
 					r["case_id"],
 					why,
-					r.get("question") or "(ca Real: xem trong Omni Eval Case)",
-					r.get("reply_text") or "(ca Real: không lưu)",
+					r.get("question") or "",
+					r.get("reply_text") or "",
 					r.get("reference") or "",
 					"co" if j["pass"] else "khong",
 					j["reason"],
@@ -766,10 +771,17 @@ def apply_reviews(results: list[dict], reviews: dict[str, dict]) -> list[dict]:
 	for r in results:
 		r = dict(r)
 		rv = reviews.get(r["case_id"])
+		if not rv:  # ca không còn trong danh sách chấm tay: trả về kết quả tự động
+			r["critical_reasons"] = list(r.get("critical_reasons_auto", r["critical_reasons"]))
+			r["answer_pass"] = r.get("answer_pass_auto", r["answer_pass"])
+			r.pop("human", None)
 		if rv and r.get("judge"):
 			if r["expected_action"] == "Reply":
 				r["answer_pass"] = rv["pass"] and not rv["critical"]
-			kept = [x for x in r["critical_reasons"] if not x.startswith("judge_")]
+			auto = r.get(
+				"critical_reasons_auto", r["critical_reasons"]
+			)  # luôn tính từ kết quả tự động, không cộng dồn
+			kept = [x for x in auto if not x.startswith("judge_")]
 			r["critical_reasons"] = kept + (["nguoi_cham_r3_r5"] if rv["critical"] else [])
 			r["human"] = rv
 		out.append(r)

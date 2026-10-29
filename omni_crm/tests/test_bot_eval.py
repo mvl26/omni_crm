@@ -685,6 +685,29 @@ class TestRun(RunTestCase):
 		self.assertAlmostEqual(data["metrics"]["field_accuracy"], 2 / 3)  # 1 sai trên 3 trường được chấm
 		self.assertFalse(data["gate"]["passed"])
 
+	def test_case_without_expected_fields_still_analyzed_for_reply(self):
+		"""Chốt chặn dùng intent/wants_human của phân tích như production, nên ca `{}` (vd chèn lệnh) vẫn phân tích."""
+		self.add_cases([case_row("T08-001", expected_fields={})])
+		_, data = self.go("nhap")
+		self.assertEqual([c["kind"] for c in self.fake.calls if c["kind"] == "Analyze"], ["Analyze"])
+		self.assertEqual(data["cases"][0]["field_checked"], 0)
+		self.fake.calls.clear()
+		self.go("phan_tich")  # chỉ phân tích: ca không có trường để chấm thì khỏi gọi
+		self.assertEqual(self.fake.calls, [])
+
+	def test_real_case_keeps_reply_text_for_human_regrade(self):
+		self.add_cases([case_row("T08-001", source="Real")])
+		with mock.patch.dict(frappe.conf, {ai_client.ALLOW_DATA_CONF: 1}):
+			name, data = self.go()
+		row = data["cases"][0]
+		self.assertEqual(row["reply_text"], KB_ANSWER)
+		self.assertTrue(row["question"])
+		path = run.export_regrade_csv(name, str(self.tmp / "cl.csv"))
+		self.assertIn(KB_ANSWER, open(path, encoding="utf-8-sig").read())
+		self.assertNotIn(
+			"Mấy giờ", next(p for p in self.tmp.glob("*.md")).read_text(encoding="utf-8")
+		)  # báo cáo không in lời ca Real
+
 	def test_phan_tich_gate_runs_only_analysis(self):
 		self.add_cases(self.good_set(5))
 		_, data = self.go("phan_tich", judge=True)
@@ -871,6 +894,26 @@ class TestRegrade(RunTestCase):
 		doc = frappe.get_doc(RUN, self.name)
 		self.assertEqual((doc.critical_failures, doc.passed_gate), (1, 0))
 		self.assertIn("nguoi_cham_r3_r5", frappe.db.get_value(RUN, self.name, "result_json"))
+
+	def test_second_import_can_retract_earlier_flag(self):
+		path = self.tmp / "cl.csv"
+		run.export_regrade_csv(self.name, str(path))
+		rows = list(csv.DictReader(open(path, encoding="utf-8-sig")))
+		rows[0].update(ket_luan_nguoi="Truot", truot_r3_hoac_r5="co")
+
+		def save(rs):
+			with open(path, "w", encoding="utf-8-sig", newline="") as f:
+				w = csv.DictWriter(f, fieldnames=list(rs[0]))
+				w.writeheader()
+				w.writerows(rs)
+
+		save(rows)
+		self.assertEqual(run.import_regrade(self.name, str(path))["metrics"]["critical_failures"], 1)
+		rows[0].update(ket_luan_nguoi="Dat", truot_r3_hoac_r5="")  # người chấm đổi ý
+		save(rows)
+		out = run.import_regrade(self.name, str(path))
+		self.assertEqual(out["metrics"]["critical_failures"], 0)
+		self.assertEqual(out["metrics"]["answer_pass_rate"], 1.0)
 
 	def test_import_rejects_unknown_case(self):
 		path = self.tmp / "cl.csv"
