@@ -45,6 +45,8 @@ Mọi lần bật/tắt công tắc (trừ `bot_paused_until`) ghi Version (bậ
 
 ## 5. Bảng cấu hình theo môi trường
 
+**`sandbox_mode` chặn MỌI HTTP ra Zalo** (không chỉ gửi tin): gửi tin tư vấn, tin yêu cầu thông tin, lấy hồ sơ khách, làm mới token (`refresh_if_needed` bỏ qua) và đổi mã cấp quyền OAuth (nút "Kết nối Zalo OA" vẫn chuyển hướng được nhưng callback không đổi code lấy token). Lý do: refresh token của Zalo dùng một lần, site dev/staging chép từ DB production mà làm mới sẽ làm hỏng token production. Muốn thử thật phải tắt sandbox có chủ đích và có người phụ trách chỉ định.
+
 | Cấu hình | Dev | Staging | Production |
 | --- | --- | --- | --- |
 | `sandbox_mode` | Bật | Bật (tắt khi chạy thử với người nhận chỉ định) | **Tắt** |

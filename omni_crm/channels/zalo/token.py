@@ -19,6 +19,7 @@ import requests
 from frappe import _
 from frappe.utils import add_to_date, now_datetime
 
+from omni_crm import flags
 from omni_crm.channels.zalo import config
 from omni_crm.channels.zalo.errors import PERMANENT, ZaloError
 from omni_crm.pipeline.retry import redact
@@ -75,7 +76,9 @@ def _parse_token_response(resp: requests.Response) -> dict[str, Any]:
 
 
 def _post_token(app_id: str, app_secret: str, form: dict) -> dict[str, Any]:
-	"""POST tới endpoint token của OAuth v4; không ghi log nội dung (có token)."""
+	"""POST tới endpoint token của OAuth v4; không ghi log nội dung (có token). Sandbox: không gọi."""
+	if flags.sandbox():
+		raise ZaloError(None, PERMANENT, _("Chế độ thử (sandbox) đang bật: không gọi API Zalo"))
 	url = config.get("oauth_base") + config.get("oauth_token_path")
 	try:
 		resp = requests.post(
@@ -119,6 +122,8 @@ def refresh_channel(channel: str, force: bool = False, stale_access_token: str |
 	(`force` + `stale_access_token` = token vừa bị Zalo từ chối; khác token hiện tại nghĩa là đã làm mới).
 	Không lấy được khóa trong LOCK_WAIT giây thì trả False. Lỗi API -> cảnh báo rồi ném ZaloError.
 	"""
+	if flags.sandbox():
+		raise ZaloError(None, PERMANENT, _("Chế độ thử (sandbox) đang bật: không gọi API Zalo"))
 	cache = frappe.cache()
 	lock = cache.lock(
 		cache.make_key(f"omni:zalo:refresh:{channel}"),
@@ -160,8 +165,22 @@ def refresh_channel(channel: str, force: bool = False, stale_access_token: str |
 			pass
 
 
+def _log_error_limited(channel: str) -> None:
+	"""Ghi Error Log lỗi làm mới tối đa 1 dòng/giờ/kênh (tránh tràn log mỗi 30 phút)."""
+	cache = frappe.cache()
+	key = f"omni:errlog:zalo_refresh:{channel}"
+	if cache.get_value(key, expires=True):
+		return
+	cache.set_value(key, 1, expires_in_sec=ALERT_TTL)
+	frappe.log_error(title="Omni: lỗi làm mới token Zalo", message=f"kenh={channel}")
+	frappe.db.commit()
+
+
 def refresh_if_needed() -> None:
 	"""Tác vụ định kỳ (*/30 phút): làm mới token mọi kênh Zalo OA đang bật khi sắp hết hạn."""
+	if flags.sandbox():  # refresh token dùng một lần: site dev chép từ production không được làm hỏng nó
+		frappe.logger("omni").info("omni zalo: sandbox bật, bỏ qua làm mới token")
+		return
 	for name in frappe.get_all(CHANNEL, filters={"channel_type": "Zalo OA", "enabled": 1}, pluck="name"):
 		try:
 			doc = frappe.get_doc(CHANNEL, name)
@@ -169,8 +188,7 @@ def refresh_if_needed() -> None:
 				refresh_channel(name)
 		except Exception:
 			frappe.db.rollback()
-			frappe.log_error(title="Omni: lỗi làm mới token Zalo", message=f"kenh={name}")
-			frappe.db.commit()
+			_log_error_limited(name)
 
 
 # --- Luồng cấp quyền ban đầu (OAuth v4 + PKCE) ---
@@ -208,14 +226,17 @@ def start_authorization(channel: str) -> str:
 
 def complete_authorization(code: str, state: str) -> str:
 	"""Kiểm state (chống giả mạo), đổi code lấy token, lưu; trả tên kênh. Ném lỗi nếu state sai/hết hạn."""
-	info = frappe.cache().get_value(_state_key(state or ""), expires=True) if state else None
-	if not info:
+	if flags.sandbox():
+		frappe.throw(_("Chế độ thử (sandbox) đang bật: không đổi mã cấp quyền lấy token Zalo"))
+	cache = frappe.cache()
+	info = cache.get_value(_state_key(state), expires=True) if state else None
+	# DEL trả 1 chỉ cho đúng một lời gọi: hai callback đua nhau thì chỉ một cái được dùng state
+	if not info or cache.delete(cache.make_key(_state_key(state))) != 1:
 		frappe.throw(_("Phiên cấp quyền không hợp lệ hoặc đã hết hạn"), frappe.PermissionError)
 	channel = info["channel"]
 	stored = frappe.db.get_value(CHANNEL, channel, "zalo_oauth_state") or ""
 	if not secrets.compare_digest(stored.encode(), state.encode()):
 		frappe.throw(_("Phiên cấp quyền không hợp lệ hoặc đã hết hạn"), frappe.PermissionError)
-	frappe.cache().delete_value(_state_key(state))  # state dùng một lần
 	frappe.db.set_value(CHANNEL, channel, "zalo_oauth_state", None, update_modified=False)
 	frappe.db.commit()
 	doc = frappe.get_doc(CHANNEL, channel)

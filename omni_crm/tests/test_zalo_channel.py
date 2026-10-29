@@ -15,6 +15,7 @@ from omni_crm.channels.registry import (
 	register_adapter,
 	unregister_adapter,
 )
+from omni_crm.channels.zalo import adapter as adapter_mod
 from omni_crm.channels.zalo import errors, signature
 from omni_crm.channels.zalo import token as token_mod
 from omni_crm.channels.zalo.adapter import ZaloAdapter, parse_event
@@ -866,3 +867,108 @@ class TestWorkerFlows(ZaloTestCase):
 		comm = frappe.get_all("Communication", filters={"reference_name": lead}, fields=["content"])[0]
 		self.assertIn("[Ảnh]", comm.content)
 		self.assertIn("https://example.invalid/a.jpg", comm.content)
+
+
+SANDBOX_ON = "omni_crm.flags.sandbox"
+
+
+class TestSandboxBlocksAllZaloHttp(ZaloTestCase):
+	"""CLAUDE.md điều 6: sandbox_mode=1 thì không có HTTP nào ra Zalo (kể cả OAuth và đọc hồ sơ)."""
+
+	def soon(self):
+		frappe.db.set_value(
+			"Omni Channel", self.channel.name, "zalo_token_expires_at", add_to_date(None, hours=1)
+		)
+		frappe.db.commit()
+
+	def test_refresh_if_needed_skips_in_sandbox_but_runs_otherwise(self):
+		self.soon()
+		new = {"access_token": "a-new", "refresh_token": "r-new", "expires_in": "90000"}
+		with mock.patch(SANDBOX_ON, return_value=True), mock.patch(POST) as post, mock.patch(REQ) as req:
+			token_mod.refresh_if_needed()
+		post.assert_not_called()
+		req.assert_not_called()
+		with mock.patch(POST, return_value=response(new)) as post:
+			token_mod.refresh_if_needed()
+		post.assert_called_once()
+
+	def test_refresh_channel_direct_is_blocked_too(self):
+		self.soon()
+		with mock.patch(SANDBOX_ON, return_value=True), mock.patch(POST) as post:
+			with self.assertRaises(errors.ZaloError):
+				token_mod.refresh_channel(self.channel.name)
+		post.assert_not_called()
+
+	def test_profile_not_fetched_for_message_and_follow(self):
+		for data in (load("user_send_text"), load("follow", user=f"{PREFIX}U2")):
+			with mock.patch(SANDBOX_ON, return_value=True):
+				msg = self.deliver(data, profile={"display_name": "Khong Duoc Goi Td108"})
+			self.http.assert_not_called()
+			self.assertEqual(frappe.db.get_value("Omni Inbound Message", msg, "status"), "Done")
+		self.assertFalse(self.identity().display_name)
+
+	def test_profile_fetched_when_not_sandbox(self):
+		self.deliver(load("user_send_text"), profile={"display_name": "Co Goi Td108"})
+		self.http.assert_called()
+		self.assertEqual(self.identity().display_name, "Co Goi Td108")
+
+	def test_send_makes_no_http_in_sandbox(self):
+		ident = frappe.get_doc(
+			{
+				"doctype": "Omni Identity",
+				"identity_key": f"Zalo OA:{USER}",
+				"channel_type": "Zalo OA",
+				"external_id": USER,
+			}
+		).insert(ignore_permissions=True)
+		req = OutboundRequest(self.channel.name, ident.name, "chào", None, "Sale")
+		with mock.patch(SANDBOX_ON, return_value=True), mock.patch(REQ) as http, mock.patch(POST) as post:
+			mid = self.adapter.send(req, frappe.get_doc("Omni Channel", self.channel.name))
+		http.assert_not_called()
+		post.assert_not_called()
+		self.assertTrue(mid.startswith("sandbox:"))
+
+	def test_oauth_code_exchange_blocked_in_sandbox_redirect_still_allowed(self):
+		frappe.set_user("Administrator")
+		with mock.patch(SANDBOX_ON, return_value=True), mock.patch(POST) as post:
+			webhooks.zalo_oauth_start(self.channel.name)
+			self.assertEqual(frappe.local.response["type"], "redirect")
+			state = frappe.db.get_value("Omni Channel", self.channel.name, "zalo_oauth_state")
+			with self.assertRaises(frappe.ValidationError):
+				webhooks.zalo_oauth_callback(code="c", state=state)
+		post.assert_not_called()
+
+
+class TestHardening(ZaloTestCase):
+	def test_skip_signature_needs_real_developer_mode_value(self):
+		for value, allowed in (("0", False), (0, False), ("1", True), (1, True), (None, False)):
+			with mock.patch.dict(frappe.conf, {"developer_mode": value}):
+				self.assertEqual(adapter_mod._env_allows_skip(), allowed, repr(value))
+
+	def test_refresh_if_needed_error_log_rate_limited(self):
+		with (
+			mock.patch.object(token_mod, "needs_refresh", return_value=True),
+			mock.patch.object(token_mod, "refresh_channel", side_effect=RuntimeError("loi")),
+			mock.patch("frappe.log_error") as log,
+		):
+			token_mod.refresh_if_needed()
+			token_mod.refresh_if_needed()
+		mine = [c for c in log.call_args_list if self.channel.name in c.kwargs.get("message", "")]
+		self.assertEqual(len(mine), 1)  # mỗi kênh tối đa 1 dòng/giờ
+
+	def test_authorization_state_is_consumed_atomically(self):
+		frappe.set_user("Administrator")
+		webhooks.zalo_oauth_start(self.channel.name)
+		state = frappe.db.get_value("Omni Channel", self.channel.name, "zalo_oauth_state")
+		info = frappe.cache().get_value(token_mod._state_key(state), expires=True)
+		new = {"access_token": "a", "refresh_token": "r", "expires_in": "1"}
+		# hai callback cùng đọc được state (đua nhau): chỉ một cái được dùng
+		with (
+			mock.patch("frappe.utils.redis_wrapper.RedisWrapper.get_value", return_value=info),
+			mock.patch(POST, return_value=response(new)) as post,
+		):
+			token_mod.complete_authorization("c1", state)
+			frappe.db.set_value("Omni Channel", self.channel.name, "zalo_oauth_state", state)  # mô phỏng đua
+			with self.assertRaises(frappe.PermissionError):
+				token_mod.complete_authorization("c2", state)
+		self.assertEqual(post.call_count, 1)

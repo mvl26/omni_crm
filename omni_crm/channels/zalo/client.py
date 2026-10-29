@@ -60,6 +60,8 @@ class ZaloClient:
 		self, method: str, path: str, *, params: dict | None = None, body: dict | None = None
 	) -> dict:
 		"""Gọi API, trả phần `data` của phản hồi; token lỗi thì làm mới một lần rồi thử lại."""
+		if flags.sandbox():  # chốt chặn cuối: sandbox không có HTTP ra Zalo
+			raise ZaloError(None, "permanent", _("Chế độ thử (sandbox) đang bật: không gọi API Zalo"))
 		refreshed = False
 		attempt = 0
 		retries = config.get("get_retries") if method == "GET" else 0

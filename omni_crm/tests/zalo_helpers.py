@@ -111,6 +111,10 @@ class ZaloTestCase(FrappeTestCase):
 		frappe.db.commit()
 		frappe.cache().delete_keys("omni:")
 		self.adapter = ZaloAdapter()
+		# site test bật sandbox mặc định; test kênh cần HTTP (mock) nên mặc định tắt, test sandbox tự bật lại
+		patcher = mock.patch("omni_crm.flags.sandbox", return_value=False)
+		patcher.start()
+		self.addCleanup(patcher.stop)
 
 	def deliver(self, data: dict, profile: dict | None = None, process: bool = True) -> str:
 		"""Parse, lưu, rồi chạy worker. `profile` != None: API hồ sơ Zalo trả giá trị này; None: không có token gọi được."""

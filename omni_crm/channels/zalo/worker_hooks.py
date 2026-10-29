@@ -13,6 +13,7 @@ from typing import Any
 import frappe
 from frappe import _
 
+from omni_crm import flags
 from omni_crm.channels.zalo.client import ZaloClient
 from omni_crm.pipeline.retry import redact
 
@@ -75,7 +76,12 @@ def _needs_profile(msg: Any, channel_doc: Any) -> bool:
 
 
 def fetch_profile(msg: Any, channel_doc: Any) -> dict:
-	"""Lấy hồ sơ Zalo của khách; lỗi thì ghi log đã lọc, đặt thời gian chờ và trả {} (không ném)."""
+	"""Lấy hồ sơ Zalo của khách; lỗi thì ghi log đã lọc, đặt thời gian chờ và trả {} (không ném).
+
+	Sandbox: không gọi API (trả {}).
+	"""
+	if flags.sandbox():
+		return {}
 	try:
 		return ZaloClient(channel_doc.name).get_user_profile(msg.external_sender_id)
 	except Exception as e:
