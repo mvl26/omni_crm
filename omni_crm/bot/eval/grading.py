@@ -160,13 +160,22 @@ def aggregate(results: list[dict]) -> dict[str, Any]:
 	}
 
 
-def gate_check(gate: str, metrics: dict, baseline: dict | None = None) -> dict[str, Any]:
-	"""Qua cổng `gate` không: {"passed": bool, "reasons": [...]}. Chỉ số chưa đo (None) hoặc còn ca chưa đo = KHÔNG qua."""
+def gate_check(
+	gate: str, metrics: dict, baseline: dict | None = None, review: dict | None = None
+) -> dict[str, Any]:
+	"""Qua cổng `gate` không: {"passed": bool, "reasons": [...]}. Chỉ số chưa đo (None) hoặc còn ca chưa đo = KHÔNG qua.
+
+	`review`: {"required": [...], "missing": [...]} - mẫu 20% người chấm lại; còn thiếu thì KHÔNG qua.
+	"""
 	if gate not in GATES:
 		raise ValueError(f"Cổng không có: {gate!r}; chọn một trong {sorted(GATES)}")
 	rule, reasons = GATES[gate], []
 	if metrics.get("unmeasured_cases"):
 		reasons.append(f"còn {metrics['unmeasured_cases']} ca chưa đo (AI bị bỏ qua hoặc lỗi)")
+	if review and review.get("missing"):
+		reasons.append(
+			f"chưa chấm lại tay: còn {len(review['missing'])}/{len(review['required'])} ca của mẫu 20%"
+		)
 	for name, threshold in rule.get("min", {}).items():
 		value = metrics.get(name)
 		if value is None:

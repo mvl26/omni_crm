@@ -106,10 +106,11 @@ def load_cases(case_filter: dict | None = None) -> list[dict]:
 		filters["critical"] = cint(flt["critical"])
 	if flt.get("case_ids"):
 		filters["name"] = ["in", list(flt["case_ids"])]
-	if flt.get("prefix"):
-		filters["name"] = ["like", f"{flt['prefix']}%"]
+	names = frappe.get_all(CASE, filters=filters, pluck="name", order_by="name asc")
+	if flt.get("prefix"):  # kết hợp (AND) với case_ids, không ghi đè
+		names = [n for n in names if n.startswith(flt["prefix"])]
 	out = []
-	for name in frappe.get_all(CASE, filters=filters, pluck="name", order_by="name asc"):
+	for name in names:
 		doc = frappe.get_doc(CASE, name)
 		out.append(
 			{
@@ -496,7 +497,6 @@ def run(
 			blocked[case["source"]] = row["unmeasured"]
 		results.append(row)
 	metrics = grading.aggregate(results)
-	check = grading.gate_check(gate, metrics, _baseline() if gate == "doi_cau_lenh" else None)
 	label = _prompt_label(steps, judge)
 	judge_model = frappe.conf.get(JUDGE_MODEL_CONF) or DEFAULT_JUDGE_MODEL
 	meta = {
@@ -510,8 +510,10 @@ def run(
 		"judge_model": judge_model,
 		"accepted": False,
 		"human_reviews": {},
+		"sample_seed": tag,
 		"mask_pii": mask,
 	}
+	check = evaluate_gate(meta, metrics, results)
 	doc = frappe.get_doc(
 		{
 			"doctype": RUN,
@@ -536,6 +538,29 @@ def run(
 	frappe.db.commit()
 	write_report(doc.name)
 	return doc.name
+
+
+def review_status(results: list[dict], meta: dict, fallback_seed: str = "") -> dict[str, list[str]]:
+	"""Mẫu người chấm lại (20% + ca giám khảo cho trượt) và các ca trong mẫu còn thiếu kết luận của người."""
+	required = [r["case_id"] for r, _why in regrade_sample(results, meta.get("sample_seed") or fallback_seed)]
+	done = meta.get("human_reviews") or {}
+	return {"required": required, "missing": [c for c in required if c not in done]}
+
+
+def evaluate_gate(meta: dict, metrics: dict, results: list[dict], fallback_seed: str = "") -> dict:
+	"""Kết quả cổng: chỉ số + mẫu chấm lại tay; chế độ Fake luôn KHÔNG áp dụng (passed = False)."""
+	gate = meta["gate"]
+	review = review_status(results, meta, fallback_seed)
+	check = grading.gate_check(gate, metrics, _baseline() if gate == "doi_cau_lenh" else None, review)
+	check["review"] = review
+	if meta["mode"] == "Fake":
+		check = {
+			**check,
+			"passed": False,
+			"applicable": False,
+			"reasons": ["Chế độ giả lập (Fake): cổng KHÔNG áp dụng, chỉ kiểm hạ tầng", *check["reasons"]],
+		}
+	return check
 
 
 def _unmeasured_row(case: dict, reason: str) -> dict:
@@ -600,6 +625,20 @@ def _failure_lines(results: list[dict]) -> dict[str, list[str]]:
 	return grouped
 
 
+def _review_line(check: dict) -> str:
+	review = check.get("review") or {"required": [], "missing": []}
+	need = len(review["required"])
+	return f"Chấm lại tay: {need - len(review['missing'])}/{need} ca của mẫu 20% đã có kết luận người."
+
+
+def _count_cell(rows: list[dict], count: int) -> str:
+	"""Số đếm trong bảng theo loại: nhóm có ca chưa đo thì không in 0 (chưa đo), có thì in "n+ (k chưa đo)"."""
+	k = sum(1 for r in rows if r["unmeasured"])
+	if not k:
+		return str(count)
+	return "chưa đo" if not count else f"{count}+ ({k} ca chưa đo)"
+
+
 def render_report(name: str) -> str:
 	"""Nội dung báo cáo Markdown của một Omni Eval Run."""
 	doc = frappe.get_doc(RUN, name)
@@ -627,24 +666,36 @@ def render_report(name: str) -> str:
 		"| Chỉ số | Kết quả | Ngưỡng cổng |",
 		"| --- | --- | --- |",
 	]
+	unmeasured = metrics["unmeasured_cases"] > 0
 	for key, label in (
 		("field_accuracy", "Trường trích xuất đúng"),
 		("action_accuracy", "Hành động đúng"),
 		("answer_pass_rate", "Câu trả lời đạt"),
 	):
 		th = rule.get("min", {}).get(key)
-		lines.append(f"| {label} | {_pct(metrics[key])} | {'≥ ' + format(th, '.0%') if th else '—'} |")
-	crit = "0" if "max_critical" not in rule else str(rule["max_critical"])
+		shown = "giả lập, không phải điểm bot" if fake else _pct(metrics[key])
+		lines.append(f"| {label} | {shown} | {'≥ ' + format(th, '.0%') if th else '—'} |")
+	if fake:
+		crit_shown = "giả lập, không phải điểm bot"
+	elif unmeasured:
+		crit_shown = (
+			"chưa đo"
+			if not metrics["critical_failures"]
+			else f"≥ {metrics['critical_failures']} (còn ca chưa đo)"
+		)
+	else:
+		crit_shown = str(metrics["critical_failures"])
 	lines.append(
-		f"| Lỗi nghiêm trọng | {metrics['critical_failures']} | ≤ {crit} |"
-		if "max_critical" in rule
-		else f"| Lỗi nghiêm trọng | {metrics['critical_failures']} | — |"
+		f"| Lỗi nghiêm trọng | {crit_shown} | {'≤ ' + str(rule['max_critical']) if 'max_critical' in rule else '—'} |"
 	)
 	lines += [
 		"",
 		f"Ca đo được: {metrics['measured_cases']}/{metrics['total_cases']}; chưa đo: {metrics['unmeasured_cases']}.",
 		"",
-		f"## Kết luận cổng `{meta['gate']}`: " + ("**QUA**" if check["passed"] else "**KHÔNG QUA**"),
+		f"## Kết luận cổng `{meta['gate']}`: "
+		+ ("**KHÔNG ÁP DỤNG (giả lập)**" if fake else ("**QUA**" if check["passed"] else "**KHÔNG QUA**")),
+		"",
+		_review_line(check),
 		"",
 	]
 	lines += [f"- {r}" for r in check["reasons"]] or ["- (không có lý do chặn)"]
@@ -670,19 +721,27 @@ def render_report(name: str) -> str:
 	for cat, rows in sorted(by_cat.items()):
 		lines.append(
 			f"| {cat} | {len(rows)} | {sum(1 for r in rows if r['unmeasured'])} | "
-			f"{sum(1 for r in rows if r['action_correct'] is False)} | {sum(1 for r in rows if r['critical_reasons'])} |"
+			f"{_count_cell(rows, sum(1 for r in rows if r['action_correct'] is False))} | "
+			f"{_count_cell(rows, sum(1 for r in rows if r['critical_reasons']))} |"
 		)
 	return "\n".join(lines) + "\n"
 
 
 def write_report(name: str) -> str:
-	"""Ghi `eval/reports/<ngày>-<prompt_version>.md`; trả đường dẫn. Cùng ngày cùng phiên bản thì thêm tên lần chạy."""
+	"""Ghi báo cáo vào `eval/reports/`; trả đường dẫn.
+
+	Tên: `<ngày>-<prompt_version>[-fake][-<lần chạy>][-real].md`. Hậu tố `-fake`: chạy bằng client giả. `-real`: có ca
+	Real (được gitignore, không đưa vào repo). Cùng tên mà đã là báo cáo của lần chạy khác thì thêm tên lần chạy.
+	"""
 	doc = frappe.get_doc(RUN, name)
+	data = _json(doc.result_json, {})
 	root = Path(frappe.get_app_path("omni_crm")).parent / REPORT_DIR
 	root.mkdir(parents=True, exist_ok=True)
-	path = root / f"{nowdate()}-{doc.prompt_version}.md"
+	fake = "-fake" if data["meta"]["mode"] == "Fake" else ""
+	real = "-real" if any(r["source"] == "Real" for r in data["cases"]) else ""
+	path = root / f"{nowdate()}-{doc.prompt_version}{fake}{real}.md"
 	if path.exists() and name not in path.read_text(encoding="utf-8"):
-		path = root / f"{nowdate()}-{doc.prompt_version}-{name}.md"
+		path = root / f"{nowdate()}-{doc.prompt_version}{fake}-{name}{real}.md"
 	path.write_text(render_report(name), encoding="utf-8")
 	return str(path)
 
@@ -714,6 +773,11 @@ def regrade_sample(results: list[dict], run_name: str) -> list[tuple[dict, str]]
 	return [(r, "giám khảo cho trượt") for r in failed] + [(r, "ngẫu nhiên") for r in picked]
 
 
+def _safe_cell(value: Any) -> Any:
+	"""Chống chèn công thức khi mở CSV bằng bảng tính: ô chuỗi bắt đầu bằng = + - @ thêm dấu ' đứng đầu."""
+	return "'" + value if isinstance(value, str) and value[:1] in ("=", "+", "-", "@") else value
+
+
 def export_regrade_csv(run_name: str, path: str | None = None) -> str:
 	"""Xuất CSV cho người chấm lại (cột `ket_luan_nguoi`: Dat/Truot, `truot_r3_hoac_r5`: co/khong); trả đường dẫn."""
 	doc = frappe.get_doc(RUN, run_name)
@@ -729,20 +793,24 @@ def export_regrade_csv(run_name: str, path: str | None = None) -> str:
 	with open(out, "w", encoding="utf-8-sig", newline="") as f:
 		writer = csv.writer(f)
 		writer.writerow(REGRADE_COLUMNS)
-		for r, why in regrade_sample(results, run_name):
+		seed = _json(doc.result_json, {}).get("meta", {}).get("sample_seed") or run_name
+		for r, why in regrade_sample(results, seed):
 			j = r["judge"]
 			writer.writerow(
 				[
-					r["case_id"],
-					why,
-					r.get("question") or "",
-					r.get("reply_text") or "",
-					r.get("reference") or "",
-					"co" if j["pass"] else "khong",
-					j["reason"],
-					"",
-					"",
-					"",
+					_safe_cell(x)
+					for x in [
+						r["case_id"],
+						why,
+						r.get("question") or "",
+						r.get("reply_text") or "",
+						r.get("reference") or "",
+						"co" if j["pass"] else "khong",
+						j["reason"],
+						"",
+						"",
+						"",
+					]
 				]
 			)
 	return str(out)
@@ -803,8 +871,7 @@ def import_regrade(run_name: str, path: str) -> dict[str, Any]:
 	meta["human_reviews"] = {**meta.get("human_reviews", {}), **reviews}
 	cases = apply_reviews(data["cases"], meta["human_reviews"])
 	metrics = grading.aggregate(cases)
-	baseline = _baseline() if meta["gate"] == "doi_cau_lenh" else None
-	check = grading.gate_check(meta["gate"], metrics, baseline)
+	check = evaluate_gate(meta, metrics, cases, run_name)
 	doc.update(
 		{
 			"field_accuracy": metrics["field_accuracy"] or 0,
@@ -830,6 +897,9 @@ def accept_run(run_name: str) -> None:
 	meta = data["meta"]
 	if not doc.passed_gate:
 		frappe.throw(_("Chỉ chấp nhận lần chạy đã qua cổng"))
+	review = review_status(data["cases"], meta, run_name)
+	if review["missing"]:
+		frappe.throw(_("Chưa chấm lại tay đủ mẫu 20%: còn thiếu {0} ca").format(len(review["missing"])))
 	if meta["mode"] == "Fake" or not meta["reviewed"]:
 		frappe.throw(_("Chỉ chấp nhận lần chạy bằng AI thật trên bộ đề đã được người duyệt"))
 	meta["accepted"] = True
