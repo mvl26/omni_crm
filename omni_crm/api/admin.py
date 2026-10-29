@@ -129,6 +129,13 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 	frappe.db.sql(
 		f"update `tabOmni Bot Run` set output_json = null, request_digest = null where {where}", params
 	)
+	# Bot Draft (D2-07) chứa nháp của bot và câu sale trả lời
+	frappe.db.sql(
+		f"""update `tabOmni Bot Draft`
+		set draft_text = null, final_text = null, sale_reply_text = null, rating_note = null
+		where {where}""",
+		params,
+	)
 	frappe.get_doc(
 		{
 			"doctype": "Comment",
