@@ -34,6 +34,7 @@ REFERENCE_LINKS: list[tuple[str, str, str]] = [
 	("CRM Call Log", "reference_doctype", "reference_docname"),
 	("CRM Task", "reference_doctype", "reference_docname"),
 	("FCRM Note", "reference_doctype", "reference_docname"),
+	("ToDo", "reference_type", "reference_name"),  # phân công sale (frappe/desk/doctype/todo)
 ]
 
 # Bảng con Dynamic Link: (DocType bảng con, parenttype, trường link_doctype, trường link_name).
@@ -157,18 +158,22 @@ def merge_leads(primary: str, secondary: str, user: str, candidate: str | None =
 	_check_permission(primary, user)
 	_check_permission(secondary, user)
 
-	p_merged = frappe.db.get_value(LEAD, primary, "omni_merged_into")
-	s_merged = frappe.db.get_value(LEAD, secondary, "omni_merged_into")
-	if p_merged:
-		frappe.throw(_("Lead chính {0} đã bị gộp vào {1}").format(primary, p_merged))
-	if s_merged:
-		if s_merged == primary:  # đã gộp trước đó: không làm lại, chỉ bảo đảm Candidate được đóng
-			_close_related_candidates(primary, secondary, user, candidate)
-			return {"already_merged": True, "moved": {}, "filled": [], "differences": []}
-		frappe.throw(_("Lead {0} đã bị gộp vào {1}").format(secondary, s_merged))
-
 	frappe.db.savepoint(SAVEPOINT)
 	try:
+		# Khóa hàng cả hai Lead theo thứ tự tên để hai lượt gộp ngược chiều đồng thời không cùng qua
+		# bước kiểm tra rồi tạo vòng omni_merged_into; kiểm tra trên giá trị mới nhất sau khi giữ khóa.
+		locked = {
+			n: frappe.db.get_value(LEAD, n, "omni_merged_into", for_update=True)
+			for n in sorted((primary, secondary))
+		}
+		p_merged, s_merged = locked[primary], locked[secondary]
+		if p_merged:
+			frappe.throw(_("Lead chính {0} đã bị gộp vào {1}").format(primary, p_merged))
+		if s_merged:
+			if s_merged == primary:  # đã gộp trước đó: không làm lại, chỉ bảo đảm Candidate được đóng
+				_close_related_candidates(primary, secondary, user, candidate)
+				return {"already_merged": True, "moved": {}, "filled": [], "differences": []}
+			frappe.throw(_("Lead {0} đã bị gộp vào {1}").format(secondary, s_merged))
 		moved = _move_references(primary, secondary)
 		filled, diffs = _fill_blanks(primary, secondary)
 

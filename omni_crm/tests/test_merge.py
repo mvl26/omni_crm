@@ -248,6 +248,80 @@ class TestMergeLeads(IdentityTestCase):
 			self.assertIn((parent, fieldname), covered)
 
 
+class TestMergeTodoDealAndRace(IdentityTestCase):
+	def setUp(self):
+		super().setUp()
+		enq = mock.patch("frappe.enqueue")
+		enq.start()
+		self.addCleanup(enq.stop)
+		self.p = self.make_lead("TD105 Chinh", mobile=phone(70))
+		self.s = self.make_lead("TD105 Phu", mobile=phone(71))
+
+	def test_todo_moves_to_primary(self):
+		todo = frappe.get_doc(
+			{
+				"doctype": "ToDo",
+				"reference_type": "CRM Lead",
+				"reference_name": self.s,
+				"allocated_to": "Administrator",
+				"description": "TD105 gọi lại",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(lambda: (frappe.db.delete("ToDo", {"name": todo.name}), frappe.db.commit()))
+		merge.merge_leads(self.p, self.s, "Administrator")
+		row = frappe.db.get_value("ToDo", todo.name, ["reference_type", "reference_name"], as_dict=True)
+		self.assertEqual((row.reference_type, row.reference_name), ("CRM Lead", self.p))
+
+	def test_deal_of_secondary_is_found_from_primary(self):
+		from omni_crm.crm_bridge.lead import get_deal_for_lead
+
+		frappe.get_doc({"doctype": "CRM Deal", "lead": self.s, "first_name": "x"}).insert(
+			ignore_permissions=True, ignore_mandatory=True
+		)
+		frappe.db.set_value("CRM Lead", self.s, "converted", 1)
+		deal = frappe.db.get_value("CRM Deal", {"lead": self.s}, "name")
+		self.assertIsNone(get_deal_for_lead(self.p))
+		merge.merge_leads(self.p, self.s, "Administrator")
+		self.assertEqual(get_deal_for_lead(self.p), deal)  # tin mới của khách đi về Deal cũ
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "lead"), self.s)  # Deal không bị sửa
+
+	def test_opposite_concurrent_merges_never_make_a_cycle(self):
+		import threading
+		import time
+
+		from omni_crm.tests.test_locks import _in_thread
+
+		barrier = threading.Barrier(2)
+		real = merge._move_references
+
+		def slow(primary, secondary):
+			time.sleep(1)  # nới cửa sổ tranh chấp
+			return real(primary, secondary)
+
+		def run(primary, secondary):
+			def go():
+				barrier.wait(10)
+				try:
+					return merge.merge_leads(primary, secondary, "Administrator")
+				finally:
+					frappe.db.commit()
+
+			return go
+
+		frappe.db.commit()
+		with mock.patch.object(merge, "_move_references", slow):
+			t1, r1 = _in_thread(run(self.p, self.s))
+			t2, r2 = _in_thread(run(self.s, self.p))
+			t1.join(60)
+			t2.join(60)
+		frappe.db.rollback()
+		into = {n: frappe.db.get_value("CRM Lead", n, "omni_merged_into") for n in (self.p, self.s)}
+		self.assertEqual(sum(1 for v in into.values() if v), 1, into)  # đúng một Lead bị gộp, không vòng
+		errors = [r.get("error") for r in (r1, r2) if r.get("error")]
+		self.assertEqual(len(errors), 1)
+		self.assertIsInstance(errors[0], frappe.ValidationError)
+
+
 class TestCandidateApi(IdentityTestCase):
 	def setUp(self):
 		super().setUp()

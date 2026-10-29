@@ -49,10 +49,20 @@ def follow_merged(lead: str | None) -> str | None:
 
 
 def get_deal_for_lead(lead: str) -> str | None:
-	"""Tên CRM Deal nếu Lead đã chuyển (CRM Lead.converted=1; Deal giữ `lead` trỏ về), ngược lại None."""
-	if not frappe.db.get_value(LEAD, lead, "converted"):
-		return None
-	return frappe.db.get_value("CRM Deal", {"lead": lead}, "name")
+	"""Tên CRM Deal nếu Lead đã chuyển (converted=1; Deal giữ `lead` trỏ về), ngược lại None.
+
+	Lead chính chưa chuyển nhưng đã gộp Lead phụ đã chuyển thì trả Deal của Lead phụ (ADR 0002:
+	không sửa `CRM Deal.lead`, chỉ tra theo `omni_merged_into`).
+	"""
+	if frappe.db.get_value(LEAD, lead, "converted"):
+		deal = frappe.db.get_value("CRM Deal", {"lead": lead}, "name")
+		if deal:
+			return deal
+	for merged in frappe.get_all(LEAD, filters={"omni_merged_into": lead, "converted": 1}, pluck="name"):
+		deal = frappe.db.get_value("CRM Deal", {"lead": merged}, "name")
+		if deal:
+			return deal
+	return None
 
 
 def default_lead_name(channel_type: str, external_id: str | None) -> str:
