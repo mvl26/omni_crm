@@ -94,6 +94,8 @@ def collect_signals(msgs: list[Any]) -> Signals:
 	medium_phones: list[str] = []
 	medium_emails: list[str] = []
 	for m in msgs:
+		if getattr(m, "event_type", None) == "oa_echo":
+			continue  # lời nhân viên trả lời ngoài hệ thống: không phải tín hiệu của khách (SĐT hotline...)
 		profile = _profile(m)
 		if m.channel_type == "Telephony":
 			_add(sig.strong_phones, normalize_phone(m.external_sender_id))  # số gọi đến

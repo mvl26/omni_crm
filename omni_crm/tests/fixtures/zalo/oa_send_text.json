@@ -1,0 +1,15 @@
+{
+ "app_id": "1111111111111111111",
+ "event_name": "oa_send_text",
+ "timestamp": "1761700000000",
+ "sender": {
+  "id": "2222222222222222222"
+ },
+ "recipient": {
+  "id": "3333333333333333333"
+ },
+ "message": {
+  "msg_id": "msg-echo-001",
+  "text": "Dạ em gửi báo giá ạ"
+ }
+}

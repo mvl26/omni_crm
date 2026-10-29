@@ -1,0 +1,16 @@
+{
+ "app_id": "1111111111111111111",
+ "event_name": "user_seen_message",
+ "timestamp": "1761700000000",
+ "sender": {
+  "id": "3333333333333333333"
+ },
+ "recipient": {
+  "id": "2222222222222222222"
+ },
+ "message": {
+  "msg_ids": [
+   "msg-text-001"
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "app_id": "1111111111111111111",
+ "event_name": "user_send_location",
+ "timestamp": "1761700000000",
+ "user_id_by_app": "9999",
+ "sender": {
+  "id": "3333333333333333333"
+ },
+ "recipient": {
+  "id": "2222222222222222222"
+ },
+ "message": {
+  "msg_id": "msg-loc-001",
+  "attachments": [
+   {
+    "type": "location",
+    "payload": {
+     "coordinates": {
+      "latitude": "21.0278",
+      "longitude": "105.8342"
+     }
+    }
+   }
+  ]
+ }
+}

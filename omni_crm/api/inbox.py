@@ -212,6 +212,7 @@ def get_thread(lead: str) -> dict:
 			"event_type",
 			"identity",
 			"external_sender_id",
+			"external_message_id",
 			"text",
 			"attachments",
 			"received_at",
@@ -232,6 +233,7 @@ def get_thread(lead: str) -> dict:
 			"sent_at",
 			"creation",
 			"is_sandbox",
+			"external_message_id",
 		],
 		order_by="creation desc",
 		limit_page_length=THREAD_LIMIT,
@@ -263,7 +265,11 @@ def get_thread(lead: str) -> dict:
 				"status": None,
 			}
 		)
+	# Tin Sale trả lời ngoài hệ thống (oa_echo) có cả Omni Outbound Message cùng mã tin: chỉ hiện bản echo.
+	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
 	for o in outbound:
+		if o.external_message_id and o.external_message_id in echo_ids:
+			continue
 		if o.sent_by:
 			sender = frappe.db.get_value("User", o.sent_by, "full_name") or o.sent_by
 		else:
