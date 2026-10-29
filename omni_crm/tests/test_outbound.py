@@ -240,12 +240,23 @@ class TestSendOutbound(OutboundTestCase):
 			self.assertIn("Không rõ", r.last_error)
 			self.assertIsNone(r.next_attempt_at)
 
-	def test_5xx_is_retried(self):
+	def test_gateway_5xx_without_zalo_json_fails_without_retry(self):
 		self.sandbox(False)
 		self.set_token()
-		name = self.queue()
-		with mock.patch(REQ, return_value=response({}, 502)):
-			self.assertEqual(outbound.send_outbound(name), "Queued")
+		for status, body in ((504, {}), (502, {"error": -1, "message": "x"}), (500, {})):
+			name = self.queue()
+			with mock.patch(REQ, return_value=response(body, status)) as http:
+				self.assertEqual(outbound.send_outbound(name), "Failed")
+			self.assertEqual(http.call_count, 1)
+			self.assertIn("Không rõ", self.row(name).last_error)
+
+	def test_503_with_zalo_json_and_429_are_retried(self):
+		self.sandbox(False)
+		self.set_token()
+		for status, body in ((503, {"error": -1, "message": "x"}), (429, {})):
+			name = self.queue()
+			with mock.patch(REQ, return_value=response(body, status)):
+				self.assertEqual(outbound.send_outbound(name), "Queued")
 
 	def test_partial_send_fails_without_retry(self):
 		self.sandbox(False)

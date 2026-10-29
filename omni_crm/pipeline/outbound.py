@@ -349,7 +349,10 @@ def _after_error(row: Any, exc: Exception) -> str:
 
 
 def _safe_to_retry(exc: BaseException) -> bool:
-	"""Chắc chắn tin CHƯA tới khách: kênh đã trả lời lỗi (mã lỗi/HTTP) hoặc chưa kết nối được (ConnectTimeout)."""
-	if getattr(exc, "code", None) is not None or getattr(exc, "http_status", None) is not None:
+	"""Chắc chắn tin CHƯA tới khách: Zalo trả lỗi có mã (trừ 502/504 của proxy), HTTP 429, hoặc chưa kết nối được."""
+	status = getattr(exc, "http_status", None)
+	if status in (502, 504):  # cổng/proxy hết hạn: Zalo có thể đã xử lý xong
+		return False
+	if status == 429 or getattr(exc, "code", None) is not None:
 		return True
 	return isinstance(exc.__cause__, requests.ConnectTimeout)
