@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "autoname": "BOT-.YYYY.-.######",
+ "naming_rule": "Expression (old style)",
+ "creation": "2026-10-30 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "kind",
+  "status",
+  "model",
+  "col_a",
+  "lead",
+  "identity",
+  "batch_id",
+  "sec_usage",
+  "prompt_version",
+  "kb_version",
+  "col_b",
+  "input_tokens",
+  "output_tokens",
+  "cache_read_tokens",
+  "latency_ms",
+  "sec_body",
+  "request_digest",
+  "output_json",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Loại",
+   "read_only": 1,
+   "options": "Analyze\nReply\nSummarize\nJudge",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "read_only": 1,
+   "options": "Success\nInvalid Output\nError\nSkipped Budget\nSkipped Switch",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Mô hình",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": "",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "read_only": 1,
+   "options": "CRM Lead",
+   "search_index": 1
+  },
+  {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Định danh",
+   "read_only": 1,
+   "options": "Omni Identity"
+  },
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "Mã lượt xử lý",
+   "read_only": 1,
+   "description": "Lượt xử lý tương ứng"
+  },
+  {
+   "fieldname": "sec_usage",
+   "fieldtype": "Section Break",
+   "label": "Chi phí",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prompt_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản câu lệnh",
+   "read_only": 1
+  },
+  {
+   "fieldname": "kb_version",
+   "fieldtype": "Int",
+   "label": "Phiên bản kho tri thức",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_b",
+   "fieldtype": "Column Break",
+   "label": "",
+   "read_only": 1
+  },
+  {
+   "fieldname": "input_tokens",
+   "fieldtype": "Int",
+   "label": "Token vào",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "output_tokens",
+   "fieldtype": "Int",
+   "label": "Token ra",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cache_read_tokens",
+   "fieldtype": "Int",
+   "label": "Token đọc từ cache",
+   "read_only": 1
+  },
+  {
+   "fieldname": "latency_ms",
+   "fieldtype": "Int",
+   "label": "Độ trễ (ms)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_body",
+   "fieldtype": "Section Break",
+   "label": "Nội dung",
+   "read_only": 1
+  },
+  {
+   "fieldname": "request_digest",
+   "fieldtype": "Small Text",
+   "label": "Tóm tắt đầu vào",
+   "read_only": 1,
+   "description": "Chỉ mã lượt, số lượt, số ký tự; không lưu toàn văn"
+  },
+  {
+   "fieldname": "output_json",
+   "fieldtype": "JSON",
+   "label": "Kết quả có cấu trúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Lỗi",
+   "read_only": 1
+  }
+ ],
+ "in_create": 0,
+ "modified": "2026-10-30 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Bot Run",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1,
+   "delete": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "description": "Nhật ký mỗi lần gọi AI"
+}

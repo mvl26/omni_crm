@@ -125,6 +125,10 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		[ERASED, *params],
 	)
 	outbound_n = frappe.db.sql("select row_count()")[0][0]
+	# Bot Run không lưu hội thoại nhưng output_json có thể chứa trích dẫn lời khách
+	frappe.db.sql(
+		f"update `tabOmni Bot Run` set output_json = null, request_digest = null where {where}", params
+	)
 	frappe.get_doc(
 		{
 			"doctype": "Comment",

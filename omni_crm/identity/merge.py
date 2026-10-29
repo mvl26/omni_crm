@@ -23,6 +23,7 @@ OMNI_LEAD_LINKS: list[tuple[str, str]] = [
 	("Omni Inbound Message", "lead"),
 	("Omni Outbound Message", "lead"),
 	("Omni Call", "lead"),
+	("Omni Bot Run", "lead"),  # D2-04
 	("Omni Bot Draft", "lead"),
 ]
 

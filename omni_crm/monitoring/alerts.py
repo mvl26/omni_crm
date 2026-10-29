@@ -30,6 +30,9 @@ SILENT_CHANNEL_SECONDS = 4 * 3600
 TOKEN_MIN_SECONDS = 3600
 MONITOR_ROUTE = "/app/omni-monitor"
 CRM_TASKS_ROUTE = "/crm/tasks"  # người được giao việc (Sales User) không mở được màn hình giám sát
+BOT_USAGE_WARN_PCT = 80
+BOT_ERROR_MAX_PCT = 5
+BOT_MIN_RUNS = 20  # ít lần gọi hơn thì tỉ lệ lỗi không có ý nghĩa
 ZALO_REFRESH_ALERT_KIND = "làm mới token thất bại"  # khớp token._alert
 
 
@@ -103,6 +106,30 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				_("Nhiều cặp nghi trùng chưa xử lý"),
 				_("Có {0} cặp nghi trùng đang Open (ngưỡng {1}).").format(
 					snap["duplicates"]["open"], DUPLICATES_OPEN_MAX
+				),
+			)
+		)
+	bot = snap.get("bot") or {}
+	if bot.get("usage_pct") is not None and bot["usage_pct"] > BOT_USAGE_WARN_PCT:
+		out.append(
+			Alert(
+				"ai_gan_han_muc",
+				"",
+				_("Bot AI sắp hết hạn mức token"),
+				_("Đã dùng {0} / {1} token hôm nay ({2}%, ngưỡng {3}%).").format(
+					bot["tokens_today"], bot["daily_token_budget"], bot["usage_pct"], BOT_USAGE_WARN_PCT
+				),
+			)
+		)
+	runs = cint(bot.get("runs_24h"))
+	if runs >= BOT_MIN_RUNS and cint(bot.get("errors_24h")) * 100 > BOT_ERROR_MAX_PCT * runs:
+		out.append(
+			Alert(
+				"ai_loi_nhieu",
+				"",
+				_("Bot AI lỗi nhiều"),
+				_("{0}/{1} lần gọi AI trong 24 giờ bị lỗi hoặc sai định dạng (ngưỡng {2}%).").format(
+					bot["errors_24h"], runs, BOT_ERROR_MAX_PCT
 				),
 			)
 		)

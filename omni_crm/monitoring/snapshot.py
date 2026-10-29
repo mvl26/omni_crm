@@ -154,6 +154,28 @@ def _telephony(now) -> dict[str, Any]:
 	}
 
 
+def _bot(now) -> dict[str, Any]:
+	"""Khối Bot (docs/11): token hôm nay / hạn mức, số lần gọi AI và số lần lỗi trong 24 giờ. Không có nội dung tin."""
+	from omni_crm.bot.ai_client import tokens_today
+
+	since = add_to_date(now, hours=-24)
+	counts = dict(
+		frappe.db.sql(
+			"select status, count(*) from `tabOmni Bot Run` where creation >= %s group by status", since
+		)
+	)
+	budget = cint(frappe.db.get_single_value("Omni Settings", "daily_token_budget"))
+	used = tokens_today()
+	return {
+		"tokens_today": used,
+		"daily_token_budget": budget,
+		"usage_pct": round(used * 100 / budget, 1) if budget > 0 else None,
+		"runs_24h": sum(cint(v) for v in counts.values()),
+		"errors_24h": cint(counts.get("Error")) + cint(counts.get("Invalid Output")),
+		"skipped_budget_24h": cint(counts.get("Skipped Budget")),
+	}
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -190,6 +212,8 @@ def build_snapshot() -> dict[str, Any]:
 			"developer_mode": cint(frappe.conf.get("developer_mode")),
 			"alert_recipients_set": bool((settings.alert_recipients or "").strip()),
 			"raw_payload_retention_days": cint(settings.raw_payload_retention_days),
+			"bot_analyze_enabled": cint(settings.get("bot_analyze_enabled")),
+			"bot_reply_mode": settings.get("bot_reply_mode") or "Off",
 		},
 		"channels": _channel_rows(now),
 		"queue": {
@@ -205,6 +229,7 @@ def build_snapshot() -> dict[str, Any]:
 		},
 		"duplicates": {"open": cint(frappe.db.count(CANDIDATE, {"status": "Open"}))},
 		"telephony": _telephony(now),
+		"bot": _bot(now),
 		"sweeper": {
 			"last_run_age_seconds": sweep_age,
 			"stale": sweep_age is None or sweep_age > SWEEP_STALE_MINUTES * 60,
