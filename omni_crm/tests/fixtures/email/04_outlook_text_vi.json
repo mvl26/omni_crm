@@ -1,0 +1,19 @@
+{
+ "client": "Outlook (văn bản, tiếng Việt)",
+ "format": "text",
+ "subject": "RE: Hỏi giá phụ tùng",
+ "sender": "mua.hang@example.vn",
+ "sender_name": "Lê Hoàng Nam",
+ "body": "Anh gửi giúp em giá bộ lọc dầu mã FL-200.\n\nThân mến,\nLê Hoàng Nam\n\n________________________________\nTừ: Miyano Sales <sales@example.org>\nĐã gửi: Thứ Năm, 29 Tháng Mười 2026 9:15 SA\nĐến: Lê Hoàng Nam\nChủ đề: Hỏi giá phụ tùng\n\nChào anh, anh cần loại nào ạ?",
+ "keep": [
+  "gửi giúp em giá bộ lọc dầu mã FL-200."
+ ],
+ "cut": [
+  "Thân mến",
+  "Đã gửi:",
+  "anh cần loại nào"
+ ],
+ "ignored": null,
+ "signature_phones": [],
+ "signature_emails": []
+}

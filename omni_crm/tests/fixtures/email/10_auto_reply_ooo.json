@@ -1,0 +1,13 @@
+{
+ "client": "Tự động trả lời vắng mặt",
+ "format": "text",
+ "subject": "Automatic reply: Báo giá xe nâng",
+ "sender": "nguoi.vang@example.com",
+ "sender_name": "Phan Văn Sơn",
+ "body": "Tôi đang đi công tác đến hết ngày 2/11 và sẽ trả lời sau.",
+ "ignored": "auto_reply",
+ "keep": [],
+ "cut": [],
+ "signature_phones": [],
+ "signature_emails": []
+}

@@ -1,0 +1,22 @@
+{
+ "client": "Outlook web (chữ ký bảng)",
+ "format": "html",
+ "subject": "Yêu cầu báo giá kệ pallet",
+ "sender": "purchasing@example.com",
+ "sender_name": "Công ty ABC - Bùi Thu Hà",
+ "body": "<div>Kính gửi Miyano,</div><div>Chúng tôi cần báo giá 20 kệ pallet tải trọng 1,5 tấn.</div><br><div>Thanks &amp; Regards,</div><table><tr><td><b>Bùi Thu Hà</b></td></tr><tr><td>Mobile: 0976 222 333</td></tr><tr><td>ha.bui@example.com</td></tr></table>",
+ "keep": [
+  "Chúng tôi cần báo giá 20 kệ pallet tải trọng 1,5 tấn."
+ ],
+ "cut": [
+  "Thanks & Regards",
+  "0976 222 333"
+ ],
+ "signature_phones": [
+  "+84976222333"
+ ],
+ "signature_emails": [
+  "ha.bui@example.com"
+ ],
+ "ignored": null
+}

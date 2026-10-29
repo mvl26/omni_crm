@@ -1,0 +1,18 @@
+{
+ "client": "Android Gmail (tiếng Việt)",
+ "format": "text",
+ "subject": "Hỏi mua xe nâng tay",
+ "sender": "anh.hung@example.com",
+ "sender_name": "Đỗ Mạnh Hùng",
+ "body": "Cho mình hỏi giá xe nâng tay 3 tấn, giao tại Bình Dương.\nLiên hệ mình qua số 0903 111 222 nhé.\n\nGửi từ điện thoại Samsung của tôi",
+ "keep": [
+  "Cho mình hỏi giá xe nâng tay 3 tấn, giao tại Bình Dương.",
+  "0903 111 222"
+ ],
+ "cut": [
+  "Gửi từ điện thoại Samsung"
+ ],
+ "ignored": null,
+ "signature_phones": [],
+ "signature_emails": []
+}

@@ -1,0 +1,13 @@
+{
+ "client": "Thư báo lỗi gửi (Gmail)",
+ "format": "text",
+ "subject": "Delivery Status Notification (Failure)",
+ "sender": "mailer-daemon@googlemail.com",
+ "sender_name": "Mail Delivery Subsystem",
+ "body": "Địa chỉ không tìm thấy: khong.ton.tai@example.com. Thư của bạn không gửi được.",
+ "ignored": "bounce",
+ "keep": [],
+ "cut": [],
+ "signature_phones": [],
+ "signature_emails": []
+}

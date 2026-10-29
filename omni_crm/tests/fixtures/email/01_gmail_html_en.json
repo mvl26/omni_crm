@@ -1,0 +1,23 @@
+{
+ "client": "Gmail web",
+ "format": "html",
+ "subject": "Quotation request for 2 forklifts",
+ "sender": "buyer.one@example.com",
+ "sender_name": "Tran Van Minh",
+ "body": "<div dir=\"ltr\">Hello Miyano,<div>Please send us a quotation for 2 electric forklifts, 2.5 ton.</div><div><br></div><div>-- <br><div dir=\"ltr\" data-smartmail=\"gmail_signature\">Tran Van Minh<br>Mobile: 0912 345 678<br>minh.tran@example.com</div></div></div><br><div class=\"gmail_quote\"><div dir=\"ltr\" class=\"gmail_attr\">On Thu, Oct 29, 2026 at 9:15 AM Miyano Sales &lt;sales@example.org&gt; wrote:<br></div><blockquote class=\"gmail_quote\" style=\"margin:0px 0px 0px 0.8ex\">Thank you for contacting Miyano. How can we help?</blockquote></div>",
+ "keep": [
+  "Please send us a quotation for 2 electric forklifts, 2.5 ton."
+ ],
+ "cut": [
+  "Mobile: 0912 345 678",
+  "Thank you for contacting Miyano",
+  "wrote:"
+ ],
+ "signature_phones": [
+  "+84912345678"
+ ],
+ "signature_emails": [
+  "minh.tran@example.com"
+ ],
+ "ignored": null
+}

@@ -1,0 +1,18 @@
+{
+ "client": "iPhone Mail",
+ "format": "text",
+ "subject": "Re: Lịch hẹn xem hàng",
+ "sender": "khach.iphone@example.com",
+ "sender_name": "Võ Thanh Tùng",
+ "body": "Thứ sáu này tôi ghé kho xem hàng được không?\n\nSent from my iPhone\n\nOn Oct 29, 2026, at 9:15 AM, Miyano Sales <sales@example.org>\nwrote:\n\n> Kho mở cửa từ 8h đến 17h.",
+ "keep": [
+  "Thứ sáu này tôi ghé kho xem hàng được không?"
+ ],
+ "cut": [
+  "Sent from my iPhone",
+  "Kho mở cửa từ 8h"
+ ],
+ "ignored": null,
+ "signature_phones": [],
+ "signature_emails": []
+}

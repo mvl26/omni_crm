@@ -66,7 +66,7 @@ class Resolution:
 	identity: str
 	lead: str | None
 	created_lead: bool = False
-	matched_by: str = "new"  # identity | strong | medium | new
+	matched_by: str = "new"  # identity | thread | strong | medium | new
 	deal: str | None = None  # CRM Deal nếu Lead đã chuyển (docs/04 mục 3.2)
 	candidates: list[str] = field(default_factory=list)
 
@@ -110,6 +110,13 @@ def collect_signals(msgs: list[Any]) -> Signals:
 		if name:
 			sig.display_name = name
 		found = extract_contacts(m.text)
+		# Chữ ký email (adapter email tách riêng, không để trong text): cũng là tín hiệu trung bình.
+		found["phones"] = found["phones"] + [
+			p for p in (normalize_phone(x) for x in profile.get("signature_phones") or []) if p
+		]
+		found["emails"] = found["emails"] + [
+			e for e in (normalize_email(x) for x in profile.get("signature_emails") or []) if e
+		]
 		for p in found["phones"]:
 			_add(medium_phones, p)
 		for e in found["emails"]:
@@ -119,6 +126,62 @@ def collect_signals(msgs: list[Any]) -> Signals:
 	sig.medium_phones = [p for p in medium_phones if p not in sig.strong_phones][:MAX_MEDIUM_SIGNALS]
 	sig.medium_emails = [e for e in medium_emails if e not in sig.strong_emails][:MAX_MEDIUM_SIGNALS]
 	return sig
+
+
+MAX_THREAD_HOPS = 5
+
+
+def thread_lead(msgs: list[Any]) -> str | None:
+	"""Lead (chính) của chuỗi thư mà các thư Email trong lô trả lời; None nếu không có.
+
+	Đi từ `Communication.in_reply_to` (tên Communication cha, do Frappe đặt khi nhận thư) lên các thư cha:
+	cha trỏ Lead/Deal, hoặc cha là thư đã được gắn Lead trong Omni Inbound Message -> tín hiệu chắc chắn.
+	"""
+	for m in msgs:
+		if m.channel_type != "Email":
+			continue
+		comm = getattr(m, "communication", None) or frappe.db.get_value(
+			"Omni Inbound Message", m.name, "communication"
+		)
+		seen: set[str] = set()
+		for _hop in range(MAX_THREAD_HOPS):
+			row = (
+				frappe.db.get_value(
+					"Communication",
+					comm,
+					["in_reply_to", "reference_doctype", "reference_name"],
+					as_dict=True,
+				)
+				if comm
+				else None
+			)
+			if not row or not row.in_reply_to or row.in_reply_to in seen:
+				break
+			seen.add(row.in_reply_to)
+			parent = frappe.db.get_value(
+				"Communication",
+				row.in_reply_to,
+				["reference_doctype", "reference_name"],
+				as_dict=True,
+			)
+			found = _lead_of_reference(parent.reference_doctype, parent.reference_name) if parent else None
+			if not found:
+				found = frappe.db.get_value(
+					"Omni Inbound Message", {"communication": row.in_reply_to, "lead": ["is", "set"]}, "lead"
+				)
+				found = lead_bridge.follow_merged(found) if found else None
+			if found:
+				return found
+			comm = row.in_reply_to
+	return None
+
+
+def _lead_of_reference(doctype: str | None, name: str | None) -> str | None:
+	if doctype == "CRM Deal" and name:
+		return lead_bridge.follow_merged(frappe.db.get_value("CRM Deal", name, "lead"))
+	if doctype == LEAD and name:
+		return lead_bridge.follow_merged(name)
+	return None
 
 
 def _get_or_create_identity(first: Any, sig: Signals) -> Any:
@@ -240,6 +303,7 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 	identity = _get_or_create_identity(first, sig)
 	res = Resolution(identity=identity.name, lead=None)
 	identity_name = sig.display_name or identity.display_name
+	thread = thread_lead(msgs)
 
 	# Bước 2: đã gắn Lead (đi theo Lead đã gộp)
 	lead = lead_bridge.follow_merged(identity.lead) if identity.lead else None
@@ -253,6 +317,14 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 			SCORE_STRONG_SHARED,
 			res.candidates,
 		)
+		if thread and thread != lead:
+			_flag_shared(
+				lead,
+				[thread],
+				_("Thư trả lời trong chuỗi thư của Lead khác"),
+				SCORE_STRONG_SHARED,
+				res.candidates,
+			)
 		lead_bridge.fill_blank_contact(
 			lead,
 			sig.strong_phones[0] if sig.strong_phones else None,
@@ -261,7 +333,21 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 	else:
 		# Bước 3-5
 		strong = find_leads(sig.strong_phones, sig.strong_emails, identity.name)
-		if strong:
+		if thread:  # thư trả lời trong chuỗi đã gắn Lead: tín hiệu chắc chắn, đứng trước SĐT/email
+			lead, res.matched_by = thread, "thread"
+			_flag_shared(
+				lead,
+				[x for x in strong if x != lead],
+				_("Cùng SĐT/email do kênh cung cấp, nhưng thuộc Lead khác"),
+				SCORE_STRONG_SHARED,
+				res.candidates,
+			)
+			lead_bridge.fill_blank_contact(
+				lead,
+				sig.strong_phones[0] if sig.strong_phones else None,
+				sig.strong_emails[0] if sig.strong_emails else None,
+			)
+		elif strong:
 			lead, res.matched_by = strong[0], "strong"  # gần nhất; Lead còn lại chỉ thành nghi trùng
 			_flag_shared(
 				lead,

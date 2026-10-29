@@ -20,6 +20,7 @@ def compute_identity_key(channel_type: str, external_sender_id: str) -> str:
 def save_inbound(event: InboundEvent) -> str | None:
 	"""Lưu một sự kiện vào; trả tên bản ghi, hoặc None nếu đã nhận trước đó (trùng)."""
 	unparsed = event.event_type == "unparsed"
+	ignored = event.event_type == "ignored"  # thư tự động/hệ thống: lưu để tra cứu, không xử lý
 	identity_key = compute_identity_key(event.channel_type, event.external_sender_id)
 	doc = frappe.get_doc(
 		{
@@ -31,12 +32,13 @@ def save_inbound(event: InboundEvent) -> str | None:
 			"external_message_id": event.external_message_id,
 			"external_sender_id": event.external_sender_id,
 			"identity_key": identity_key,
+			"communication": event.communication,
 			"received_at": event.received_at,
 			"text": event.text,
 			"attachments": frappe.as_json(event.attachments or []),
 			"sender_profile": frappe.as_json(event.sender_profile or {}),
 			"raw_payload": frappe.as_json(event.raw or {}),
-			"status": "Manual" if unparsed else "New",
+			"status": "Manual" if unparsed else "Ignored" if ignored else "New",
 		}
 	)
 	try:
@@ -44,7 +46,7 @@ def save_inbound(event: InboundEvent) -> str | None:
 	except frappe.UniqueValidationError:
 		return None  # đã nhận rồi: bỏ qua, không enqueue
 
-	if unparsed or not flags.channel_enabled(event.channel):
+	if unparsed or ignored or not flags.channel_enabled(event.channel):
 		return doc.name  # chỉ lưu, không xử lý
 	enqueue_identity(identity_key)
 	return doc.name

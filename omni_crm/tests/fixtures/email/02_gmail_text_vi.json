@@ -1,0 +1,23 @@
+{
+ "client": "Gmail web (tiếng Việt)",
+ "format": "text",
+ "subject": "Re: Báo giá xe nâng",
+ "sender": "chi.lan@example.com",
+ "sender_name": "Nguyễn Thị Lan",
+ "body": "Chào Miyano,\nEm đồng ý với mức giá đã báo, xin gửi hợp đồng giúp em.\nCảm ơn anh chị rất nhiều.\n\nTrân trọng,\nNguyễn Thị Lan\nĐiện thoại: 0987 654 321\n\nVào Th 5, 29 thg 10, 2026 vào lúc 09:15 Miyano Sales <sales@example.org> đã viết:\n> Báo giá xe nâng điện 2,5 tấn là 450 triệu.\n> Anh chị xem giúp ạ.",
+ "keep": [
+  "Em đồng ý với mức giá đã báo",
+  "Cảm ơn anh chị rất nhiều."
+ ],
+ "cut": [
+  "Trân trọng",
+  "0987 654 321",
+  "Báo giá xe nâng điện 2,5 tấn",
+  "đã viết"
+ ],
+ "signature_phones": [
+  "+84987654321"
+ ],
+ "ignored": null,
+ "signature_emails": []
+}

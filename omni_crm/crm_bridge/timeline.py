@@ -14,6 +14,8 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, now_datetime
 
+from omni_crm.crm_bridge import lead as lead_bridge
+
 LEAD = "CRM Lead"
 DEAL = "CRM Deal"
 INBOUND = "Omni Inbound Message"
@@ -81,10 +83,48 @@ def _insert_communication(values: dict) -> str:
 	return doc.name
 
 
+def _can_repoint(current: tuple[str | None, str | None], target: tuple[str, str]) -> bool:
+	"""Có được trỏ Communication về `target` không: chưa có tham chiếu, đã đúng đích, hoặc đang trỏ Lead/Deal
+	"cũ" của cùng khách (Lead đã gộp, hoặc Lead đã chuyển thành đúng Deal đích). Tham chiếu sang tài liệu
+	khác (Issue, Lead khác chưa gộp...) thì không ghi đè."""
+	ref_dt, ref_name = current
+	if not ref_name:
+		return True
+	if (ref_dt, ref_name) == target:
+		return True
+	if ref_dt == LEAD:
+		primary = lead_bridge.follow_merged(ref_name)
+		if primary and primary != ref_name:
+			return True  # Lead phụ đã gộp
+		if primary:
+			deal = lead_bridge.get_deal_for_lead(primary)
+			return (DEAL, deal) == target if deal else False
+	return False
+
+
+def _crm_communication_hook(name: str) -> None:
+	"""Chạy hook cập nhật của CRM (communication_status, modified của Lead); db.set_value không tự chạy nó."""
+	try:
+		from crm.utils import on_communication_update
+
+		on_communication_update(frappe.get_doc(COMMUNICATION, name))
+	except Exception:
+		frappe.log_error(
+			title="Omni: không cập nhật được trạng thái liên lạc của Lead",
+			message=f"communication={name}",
+		)
+
+
 def _link_email(target: tuple[str, str], row: Any) -> bool:
-	"""Email đã là Communication: chỉ trỏ tham chiếu về Lead/Deal và ghi khóa, không tạo bản sao."""
-	if not row.communication or not frappe.db.exists(COMMUNICATION, row.communication):
+	"""Email đã là Communication: trỏ tham chiếu về Lead/Deal (nếu được phép) và ghi khóa, không tạo bản sao."""
+	if not row.communication:
 		return False
+	cur = frappe.db.get_value(
+		COMMUNICATION, row.communication, ["reference_doctype", "reference_name"], as_dict=True
+	)
+	if not cur or not _can_repoint((cur.reference_doctype, cur.reference_name), target):
+		return False
+	changed = (cur.reference_doctype, cur.reference_name) != target
 	frappe.db.set_value(
 		COMMUNICATION,
 		row.communication,
@@ -95,6 +135,8 @@ def _link_email(target: tuple[str, str], row: Any) -> bool:
 		},
 		update_modified=False,
 	)
+	if changed:
+		_crm_communication_hook(row.communication)
 	return True
 
 
