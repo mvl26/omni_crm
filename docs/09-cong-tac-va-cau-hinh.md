@@ -54,4 +54,4 @@ Mọi lần bật/tắt công tắc (trừ `bot_paused_until`) ghi Version (bậ
 | `sandbox_mode` | Bật | Bật (tắt khi chạy thử với người nhận chỉ định) | **Tắt** |
 | `zalo_skip_signature` | Có thể bật | Tắt | Tắt (bật = cổng từ chối) |
 | `daily_token_budget` | Thấp | Thấp | Theo quyết định chi phí |
-| Worker `omni` | 1 | 2 | ≥ 2, tăng khi chạy chiến dịch |
+| Worker `omni` | 1 | 2 | ≥ 2; công suất ≈ số worker / 6 khách mỗi giây (docs/11 mục D1-11), tính theo tin/giây giờ cao điểm |
