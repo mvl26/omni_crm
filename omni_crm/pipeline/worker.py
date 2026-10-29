@@ -7,6 +7,8 @@ import uuid
 from typing import Any
 
 import frappe
+from redis.exceptions import LockError
+from redis.lock import Lock
 from frappe.utils import now_datetime
 
 from omni_crm import flags
@@ -44,8 +46,8 @@ def process_identity(
 	if debounce_seconds:
 		time.sleep(debounce_seconds)  # gom tin khách gõ liên tiếp
 	try:
-		with identity_lock(identity_key, timeout=LOCK_TIMEOUT, wait=lock_wait):
-			processed = _run_rounds(identity_key)
+		with identity_lock(identity_key, timeout=LOCK_TIMEOUT, wait=lock_wait) as lock:
+			processed = _run_rounds(identity_key, lock)
 	except LockBusy:
 		# Hẹn lại: tin giữ nguyên New, lượt đang giữ khóa kiểm tra lại trước khi thoát và tác vụ
 		# quét (New > 2 phút) là chốt chặn (ADR 0001: Frappe v15 không có enqueue trì hoãn).
@@ -79,9 +81,13 @@ def _has_pending(identity_key: str) -> bool:
 	return bool(_fetch_pending(identity_key, limit=1))
 
 
-def _run_rounds(identity_key: str) -> int:
+def _run_rounds(identity_key: str, lock: Lock) -> int:
 	processed = 0
 	for _round in range(MAX_ROUNDS):
+		try:
+			lock.extend(LOCK_TIMEOUT, replace_ttl=True)  # mỗi vòng có đủ thời hạn khóa
+		except LockError:
+			break  # khóa đã mất: dừng, tin còn lại do job tiếp nối xử lý
 		frappe.db.rollback()  # snapshot mới cho mỗi vòng
 		msgs = _fetch_pending(identity_key)
 		if not msgs:

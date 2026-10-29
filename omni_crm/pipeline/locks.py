@@ -7,6 +7,7 @@ from contextlib import contextmanager
 
 import frappe
 from redis.exceptions import LockError
+from redis.lock import Lock
 
 
 class LockBusy(Exception):
@@ -19,13 +20,13 @@ def lock_key(identity_key: str) -> bytes:
 
 
 @contextmanager
-def identity_lock(identity_key: str, timeout: int = 120, wait: int = 30) -> Iterator[None]:
-	"""Giữ khóa Redis của định danh tối đa `timeout` giây; chờ `wait` giây, không được thì ném LockBusy."""
+def identity_lock(identity_key: str, timeout: int = 120, wait: int = 30) -> Iterator[Lock]:
+	"""Giữ khóa Redis (trả về đối tượng Lock để gia hạn bằng extend) của định danh tối đa `timeout` giây; chờ `wait` giây, không được thì ném LockBusy."""
 	lock = frappe.cache().lock(lock_key(identity_key), timeout=timeout, blocking_timeout=wait)
 	if not lock.acquire():
 		raise LockBusy(identity_key)
 	try:
-		yield
+		yield lock
 	finally:
 		try:
 			lock.release()

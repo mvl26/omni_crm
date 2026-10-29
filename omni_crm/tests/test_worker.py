@@ -151,6 +151,57 @@ class TestWorker(PipelineTestCase):
 		self.assertEqual(self._row(name).status, "Done")
 		self.assertEqual(frappe.db.count("Omni Identity", {"identity_key": KEY}), 1)
 
+	def test_lock_is_extended_each_round(self):
+		"""Khóa 4 giây, mỗi lô tốn 1,5 giây: không gia hạn thì khóa hết hạn giữa các vòng."""
+		import time
+
+		from omni_crm.pipeline.locks import lock_key
+
+		self.add_msg("e0")
+		real = worker._process_batch
+		ttls: list[int] = []
+		extra = [1, 2]
+
+		def wrapper(identity_key, msgs, batch_id):
+			ttls.append(frappe.cache().pttl(lock_key(identity_key)))
+			if extra:
+				extra.pop()
+				self.add_msg(f"e-{len(extra)}")
+			time.sleep(1.5)
+			return real(identity_key, msgs, batch_id)
+
+		with (
+			mock.patch.object(worker, "LOCK_TIMEOUT", 4),
+			mock.patch.object(worker, "_process_batch", side_effect=wrapper),
+		):
+			process_identity(KEY, 0)
+		self.assertEqual(len(ttls), 3)
+		self.assertTrue(all(t > 3000 for t in ttls), ttls)
+
+	def test_lock_lost_between_rounds_stops_and_enqueues_continuation(self):
+		from omni_crm.pipeline.locks import lock_key
+
+		first = self.add_msg("g0")
+		real = worker._process_batch
+		later: list[str] = []
+
+		def wrapper(identity_key, msgs, batch_id):
+			if not later:
+				later.append(self.add_msg("g1"))
+			result = real(identity_key, msgs, batch_id)
+			frappe.cache().delete(lock_key(identity_key))  # khóa mất (hết hạn/Redis mất)
+			return result
+
+		with (
+			mock.patch.object(worker, "_process_batch", side_effect=wrapper) as pb,
+			mock.patch.object(worker, "enqueue_identity") as enq,
+		):
+			process_identity(KEY, 0)
+		self.assertEqual(pb.call_count, 1)  # không chạy tiếp khi mất khóa
+		self.assertEqual(self.status_of(first, later[0]), ["Done", "New"])
+		enq.assert_called_once()
+		self.assertIs(enq.call_args.kwargs["after_commit"], False)
+
 	def test_error_log_message_is_redacted(self):
 		self.add_msg("x1")
 		ch = frappe.get_doc("Omni Channel", self.channel.name)
