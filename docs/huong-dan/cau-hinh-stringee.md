@@ -28,7 +28,9 @@ Lưu ý:
 
 ## 3. Chữ ký webhook
 
-Stringee ký sự kiện (header `X-Stringee-Signature`, HMAC-SHA1 base64 của body). CRM dùng API key secret của kênh để kiểm: có header mà sai thì trả 401. Yêu cầu không có header vẫn được nhận nếu token đúng. Nếu mọi sự kiện thật bị 401 (Error Log "Omni webhook: xac_thuc_that_bai"), nghĩa là bí mật ký của dự án khác API key secret (docs/12, S1): báo người phụ trách dự án.
+Stringee ký sự kiện (header `X-Stringee-Signature`, HMAC-SHA1 base64 của body) bằng "project's signing secret key" (theo tài liệu). CRM hiện kiểm bằng API key secret của kênh, nhiều khả năng KHÁC khóa ký của dự án: có header mà sai thì trả 401. Yêu cầu không có header vẫn được nhận nếu token đúng (giảm nhẹ tạm thời).
+
+**ĐIỀU KIỆN CHẶN: không bật Stringee production cho đến khi staging xác nhận khóa ký (docs/12, S1)** hoặc có ADR thêm trường khóa ký riêng. Nếu mọi sự kiện thật bị 401 (Error Log "Omni webhook: xac_thuc_that_bai") thì khóa khác nhau. Để trống API key secret chỉ là cách tạm và có hệ quả: bỏ kiểm chữ ký nhưng mất JWT, nên không gọi được Call log, ghi âm, xác minh cuộc gọi.
 
 ## 4. Ghi âm (Đợt 3, chưa bật)
 
@@ -51,6 +53,6 @@ Khi cần: thêm hành động `record` (`format` mp3 hoặc wav, `eventUrl` tr�
 ## 7. Chưa xác nhận (xem docs/12 mục B3)
 
 - Định dạng JSON phản hồi tra cứu do ta tự định (`found`, `customer_name`, `lead`, `owner_name`, `lead_url`); Stringee chuyển nguyên vào `customDataFromYourServer`.
-- Bí mật ký webhook có đúng là API key secret không.
+- Bí mật ký webhook có đúng là API key secret không (điều kiện chặn production).
 - `id` trong Call log có trùng `call_id` của sự kiện không.
 - Chưa thử với tài khoản Stringee thật.

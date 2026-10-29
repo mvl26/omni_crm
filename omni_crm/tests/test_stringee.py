@@ -331,6 +331,34 @@ class TestCallLog(StringeeCase):
 		self.assertEqual(g.call_count, 1 + stringee.GET_RETRIES)
 		self.assertNotIn(SECRET, str(cm.exception))
 
+	def test_stuck_cursor_stops_without_looping(self):
+		page = load("call_log_page1")  # trang trả lại y nguyên: cursor không tiến
+		with (
+			mock.patch.object(stringee.requests, "get", return_value=FakeResp(200, page)) as g,
+			mock.patch.object(stringee.flags, "sandbox", return_value=False),
+		):
+			calls = self.p.list_calls(datetime(2026, 1, 1), datetime(2026, 1, 2), self.channel)
+		self.assertEqual(g.call_count, 2)
+		self.assertEqual(len(calls), 2)
+
+	def test_max_pages_raises_instead_of_truncating(self):
+		counter = iter(range(10**6))
+
+		def page(*a, **k):
+			n = next(counter)
+			p = load("call_log_page1")
+			p["data"]["calls"] = [dict(c, id=f"call-vn-1-N{n}-{i}") for i, c in enumerate(p["data"]["calls"])]
+			p["data"]["search_after"] = [n, "c"]
+			return FakeResp(200, p)
+
+		with (
+			mock.patch.object(stringee, "MAX_PAGES", 3),
+			mock.patch.object(stringee.requests, "get", side_effect=page),
+			mock.patch.object(stringee.flags, "sandbox", return_value=False),
+		):
+			with self.assertRaises(StringeeError):
+				self.p.list_calls(datetime(2026, 1, 1), datetime(2026, 1, 2), self.channel)
+
 	def test_sandbox_blocks_http(self):
 		with (
 			mock.patch.object(stringee.requests, "get") as g,
@@ -385,6 +413,12 @@ class TestRecording(StringeeCase):
 				with self.assertRaises(StringeeError):
 					self.p.fetch_recording(ref, self.channel)
 			g.assert_not_called()
+
+	def test_total_deadline(self):
+		resp = FakeResp(200, chunks=[b"x", b"y"])
+		with mock.patch.object(stringee, "RECORDING_TOTAL_SECONDS", -1):
+			with self.assertRaises(StringeeError):
+				self.fetch(resp)
 
 	def test_non_audio_and_empty_rejected(self):
 		with self.assertRaises(StringeeError):

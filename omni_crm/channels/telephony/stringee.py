@@ -38,6 +38,7 @@ JWT_TTL_SECONDS = 3600
 JWT_REFRESH_MARGIN = 60
 HTTP_TIMEOUT = 10  # giây (CLAUDE.md mục 3)
 RECORDING_TIMEOUT = 60
+RECORDING_TOTAL_SECONDS = 120  # hạn tổng cho cả lần tải, không chỉ từng lần đọc
 MAX_RECORDING_BYTES = 100 * 1024 * 1024
 GET_RETRIES = 2
 LIST_PAGE_SIZE = 100
@@ -265,6 +266,9 @@ class StringeeProvider:
 	def verify_request(self, raw_body: bytes, headers: dict, query: dict, channel_doc) -> bool:
 		"""Có header X-STRINGEE-SIGNATURE thì phải đúng HMAC-SHA1(body) base64; không có thì dựa vào token `t`.
 
+		TẠM THỜI (docs/12 mục D): bỏ header là qua được, nên chữ ký mới chỉ là giảm nhẹ. Sau khi S1 được xác nhận
+		trên staging phải thêm công tắc "bắt buộc chữ ký", mặc định bật.
+
 		Bí mật ký là API key secret của kênh: CHƯA xác nhận (tài liệu ghi "project's signing secret key").
 		"""
 		lowered = {str(k).lower(): v for k, v in (headers or {}).items()}
@@ -344,7 +348,10 @@ class StringeeProvider:
 			if ctype and not (ctype.startswith("audio/") or ctype == "application/octet-stream"):
 				raise StringeeError(_("Ghi âm không phải tệp âm thanh"))
 			chunks, size = [], 0
+			deadline = time.monotonic() + RECORDING_TOTAL_SECONDS
 			for chunk in resp.iter_content(64 * 1024):
+				if time.monotonic() > deadline:
+					raise StringeeError(_("Tải ghi âm quá thời hạn"))
 				size += len(chunk)
 				if size > MAX_RECORDING_BYTES:
 					raise StringeeError(_("Ghi âm quá lớn"))
@@ -381,25 +388,25 @@ class StringeeProvider:
 			"to_start_time": _to_ms(until) - 1,
 		}
 		out: list[CallEvent] = []
-		seen: set[str] = set()
+		seen: set[str] = set()  # mọi id đã thấy (kể cả cuộc gọi chưa kết thúc bị bỏ qua)
 		cursor: list | None = None
 		for _page in range(MAX_PAGES):
 			page_params = dict(params)
 			if cursor:
 				page_params["search_after[]"] = [str(c) for c in cursor]
 			data = self._log_page(channel_doc, page_params)
-			calls = data.get("calls") or []
-			for item in calls:
-				if not isinstance(item, dict) or not item.get("id") or not cint(item.get("stop_time")):
-					continue  # chưa kết thúc hoặc thiếu mã
-				if str(item["id"]) in seen:
-					continue
+			calls = [c for c in (data.get("calls") or []) if isinstance(c, dict) and c.get("id")]
+			fresh = [c for c in calls if str(c["id"]) not in seen]
+			if not fresh:
+				return out  # hết dữ liệu hoặc con trỏ không tiến: dừng, không lặp vô hạn
+			for item in fresh:
 				seen.add(str(item["id"]))
-				out.append(event_from_log(item))
+				if cint(item.get("stop_time")):  # chưa kết thúc thì bỏ qua
+					out.append(event_from_log(item))
 			cursor = data.get("search_after")
-			if not calls or not cursor:
-				break
-		return out
+			if not cursor:
+				return out
+		raise StringeeError(_("Call log quá nhiều trang, dừng để tránh cắt cụt kết quả"))
 
 	def call_exists(self, call_id: str, around: datetime, channel_doc) -> bool:
 		"""Cuộc gọi `call_id` có trong Call log (cửa sổ ±12 giờ quanh `around`) không; lỗi API -> StringeeError.
