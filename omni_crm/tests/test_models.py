@@ -86,8 +86,9 @@ class TestOmniModels(FrappeTestCase):
 		):
 			self.assertFalse(frappe.db.exists("DocType", dt), dt)
 		settings_fields = {f.fieldname for f in frappe.get_meta("Omni Settings").fields}
-		for fn in ("score_rules", "hot_lead_threshold", "kb_version", "bot_active_hours", "holidays"):
+		for fn in ("score_rules", "hot_lead_threshold", "kb_version", "bot_active_hours"):
 			self.assertNotIn(fn, settings_fields)
+		self.assertIn("holidays", settings_fields)  # D2-03
 		for fn in ("assignment_fallback_users", "raw_payload_retention_days", "recording_retention_days"):
 			self.assertIn(fn, settings_fields)
 		# D2-01 đã tạo Omni Call, Omni Agent Map và trường agent_map

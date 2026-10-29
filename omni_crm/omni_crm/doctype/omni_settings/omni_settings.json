@@ -22,6 +22,7 @@
   "sec_mapping",
   "default_lead_source_map",
   "business_hours",
+  "holidays",
   "sec_alert",
   "alert_recipients",
   "assignment_fallback_users",
@@ -112,6 +113,13 @@
    "fieldtype": "JSON",
    "label": "Giờ làm việc",
    "default": "{\"mon-fri\":\"08:00-17:30\",\"sat\":\"08:00-12:00\"}"
+  },
+  {
+   "fieldname": "holidays",
+   "fieldtype": "JSON",
+   "label": "Ngày nghỉ lễ",
+   "default": "[]",
+   "description": "Danh sách ngày dạng [\"2027-01-01\", ...]; ngày nghỉ không tính vào giờ làm việc."
   },
   {
    "fieldname": "sec_alert",
