@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 import frappe
 
@@ -53,22 +53,101 @@ def _hours() -> dict[int, tuple[time, time]]:
 	return parse_hours(raw)
 
 
-def is_business_time(dt: datetime | None = None, hours: dict | None = None) -> bool:
-	"""`dt` (mặc định bây giờ) có nằm trong giờ làm việc không."""
+def parse_holidays(raw: str | list | None) -> frozenset[date]:
+	"""Đổi JSON `["2027-01-01", ...]` thành tập ngày nghỉ; phần tử sai định dạng bị bỏ qua, JSON hỏng -> rỗng."""
+	try:
+		data = json.loads(raw) if isinstance(raw, str) and raw.strip() else raw
+	except ValueError:
+		return frozenset()
+	out: set[date] = set()
+	for item in data if isinstance(data, list) else []:
+		try:
+			out.add(date.fromisoformat(str(item).strip()[:10]))
+		except ValueError:
+			continue
+	return frozenset(out)
+
+
+def _holidays() -> frozenset[date]:
+	try:
+		raw = frappe.get_cached_doc("Omni Settings").get("holidays")
+	except Exception:
+		raw = None
+	return parse_holidays(raw)
+
+
+def _window(day: date, hours: dict, holidays: frozenset[date]) -> tuple[time, time] | None:
+	return None if day in holidays else hours.get(day.weekday())
+
+
+def is_business_time(
+	dt: datetime | None = None, hours: dict | None = None, holidays: frozenset[date] | None = None
+) -> bool:
+	"""`dt` (mặc định bây giờ) có nằm trong giờ làm việc không (ngày nghỉ lễ không tính)."""
 	dt = dt or frappe.utils.now_datetime()
-	window = (hours if hours is not None else _hours()).get(dt.weekday())
+	hours = hours if hours is not None else _hours()
+	holidays = holidays if holidays is not None else _holidays()
+	window = _window(dt.date(), hours, holidays)
 	return bool(window and window[0] <= dt.time() <= window[1])
 
 
-def business_seconds_between(start: datetime, end: datetime, hours: dict | None = None) -> float:
+MAX_SCAN_DAYS = 400  # chặn vòng lặp nếu cấu hình không có ngày làm việc nào
+
+
+def next_business_start(
+	dt: datetime, hours: dict | None = None, holidays: frozenset[date] | None = None
+) -> datetime:
+	"""`dt` nếu đang trong giờ làm việc, ngược lại thời điểm mở cửa kế tiếp (qua đêm, cuối tuần, ngày lễ)."""
+	hours = hours if hours is not None else _hours()
+	holidays = holidays if holidays is not None else _holidays()
+	if is_business_time(dt, hours, holidays):
+		return dt
+	day = dt.date()
+	for offset in range(MAX_SCAN_DAYS):
+		d = day + timedelta(days=offset)
+		window = _window(d, hours, holidays)
+		if not window:
+			continue
+		opening = datetime.combine(d, window[0])
+		if opening >= dt:
+			return opening
+	return dt
+
+
+def add_business_minutes(
+	dt: datetime, minutes: int, hours: dict | None = None, holidays: frozenset[date] | None = None
+) -> datetime:
+	"""Cộng `minutes` phút làm việc vào `dt`; thời gian ngoài giờ/cuối tuần/ngày lễ không được tính."""
+	hours = hours if hours is not None else _hours()
+	holidays = holidays if holidays is not None else _holidays()
+	cur = next_business_start(dt, hours, holidays)
+	remaining = timedelta(minutes=max(0, int(minutes)))
+	for _i in range(MAX_SCAN_DAYS):
+		window = _window(cur.date(), hours, holidays)
+		close = datetime.combine(cur.date(), window[1]) if window else cur
+		available = close - cur
+		if window and available >= remaining:
+			return cur + remaining
+		if window and available > timedelta(0):
+			remaining -= available
+		cur = next_business_start(
+			datetime.combine(cur.date() + timedelta(days=1), time(0, 0)), hours, holidays
+		)
+	return cur
+
+
+def business_seconds_between(
+	start: datetime, end: datetime, hours: dict | None = None, holidays: frozenset[date] | None = None
+) -> float:
 	"""Số giây nằm trong giờ làm việc giữa `start` và `end` (0 nếu end <= start)."""
 	hours = hours if hours is not None else _hours()
+	holidays = holidays if holidays is not None else _holidays()
 	if end <= start:
 		return 0.0
 	total = 0.0
 	day = start.date()
 	while day <= end.date():
-		window = hours.get(day.weekday())
+		window = _window(day, hours, holidays)
 		if window:
 			lo = max(datetime.combine(day, window[0]), start)
 			hi = min(datetime.combine(day, window[1]), end)

@@ -7,6 +7,8 @@ from typing import Any
 import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime, today
 
+from omni_crm.channels.telephony.registry import reconcile_key
+from omni_crm.channels.telephony.worker_hooks import UNVERIFIED_COUNTER_KEY
 from omni_crm.pipeline.retry import redact
 from omni_crm.pipeline.sweeper import COUNTS_CACHE_KEY
 
@@ -113,7 +115,28 @@ def _telephony(now) -> dict[str, Any]:
 		fields=["name", "enabled", "telephony_provider", "last_success_at"],
 		order_by="creation asc",
 	)
+	overdue = frappe.db.sql(
+		"""select t.name, t.assigned_to from `tabCRM Task` t
+		where t.status in ('Backlog', 'Todo', 'In Progress') and t.due_date < %s
+		and t.name in (select callback_task from `tabOmni Call` where callback_task is not null)""",
+		now,
+		as_dict=True,
+	)
+	cache = frappe.cache()
+	reconcile, unverified = {}, {}
+	for c in channels:
+		reconcile[c.name] = cache.get_value(reconcile_key(c.name))  # None nếu chưa chạy / đã hết hạn
+		try:
+			unverified[c.name] = cint(
+				cache.get(cache.make_key(UNVERIFIED_COUNTER_KEY.format(channel=c.name)))
+			)
+		except Exception:
+			unverified[c.name] = None  # Redis lỗi: không biết
 	return {
+		"callbacks_overdue": len(overdue),
+		"callbacks_overdue_users": sorted({r.assigned_to for r in overdue if r.assigned_to}),
+		"reconcile": reconcile,
+		"unverified_calls": unverified,
 		"calls_today": sum(cint(v) for v in by_status.values()),
 		"answered_today": cint(by_status["Answered"]),
 		"missed_today": cint(missed_in),

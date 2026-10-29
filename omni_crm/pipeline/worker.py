@@ -208,5 +208,7 @@ def _post_batch(batch_id: str, lead: str | None) -> None:
 
 
 def post_batch_hooks(batch_id: str, lead: str | None) -> None:
-	"""Điểm nối Đợt 2: enqueue analyze_batch / reply_batch theo công tắc bot (hiện trống)."""
-	return None
+	"""Điểm nối Đợt 2: việc gọi lại cho cuộc gọi nhỡ (D2-03); enqueue analyze_batch / reply_batch ở prompt sau."""
+	from omni_crm.channels.telephony import callbacks
+
+	callbacks.after_batch(batch_id)

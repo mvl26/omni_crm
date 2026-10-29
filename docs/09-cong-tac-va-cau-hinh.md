@@ -10,6 +10,9 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `enabled` | Omni Channel | Webhook vẫn trả 200 và **lưu** tin, không xử lý | 1 |
 | `enabled` (kênh Telephony) | Omni Channel | Sự kiện cuộc gọi vẫn được lưu (200) nhưng không xử lý; `telephony_lookup` trả phản hồi "khách mới" rỗng, không tra DB | 2 |
 | `outbound_enabled` | Omni Channel | Tin ra bị `Blocked` | 1 |
+| `enabled` (kênh Telephony) — đối soát và việc gọi lại | Omni Channel | Đối soát đêm bỏ qua kênh; không tạo việc gọi lại (job dừng, bật lại thì tác vụ quét tạo bù) | 2 |
+| `sandbox_mode` — tổng đài | Omni Settings | (Bật) đối soát đêm bỏ qua, không xác minh cuộc gọi nhỡ qua API nhà cung cấp | 2 |
+| `missed_call_callback_minutes`, `callback_fallback_user`, `business_hours`, `holidays` | Omni Settings | Hạn gọi lại (phút làm việc), người nhận dự phòng, giờ làm việc, ngày nghỉ lễ (JSON `["2027-01-01", …]`, mặc định rỗng — việc cần người phụ trách điền) | 2 |
 | `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
 | `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời | 2 |
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |

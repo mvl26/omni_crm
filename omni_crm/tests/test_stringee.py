@@ -442,7 +442,10 @@ class TestVerifyMissedCall(StringeeCase):
 
 	def check(self, exists):
 		c = self.make_call()
-		with mock.patch.object(StringeeProvider, "call_exists", **exists):
+		with (
+			mock.patch.object(StringeeProvider, "call_exists", **exists),
+			mock.patch("omni_crm.flags.sandbox", return_value=False),  # D2-03: sandbox bật thì không xác minh
+		):
 			result = worker_hooks.verify_missed_call(c.name, self.channel)
 		return result, frappe.db.get_value(CALL, c.name, "unverified")
 
