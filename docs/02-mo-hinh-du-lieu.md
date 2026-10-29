@@ -58,6 +58,7 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | `kb_version` | Int | (chỉ đọc) | Tăng mỗi khi kho tri thức thay đổi |
 | `score_rules` | Table | Omni Score Rule | Bảng điểm |
 | `hot_lead_threshold` | Int | 60 | Từ ngưỡng này là Lead nóng, báo sale ngay |
+| `lead_scoring_enabled` | Check | 0 | Công tắc chấm điểm Lead (D2-06); tắt thì giữ điểm cũ |
 | `handoff_pause_hours` | Int | 24 | Sau khi chuyển người, bot im với khách đó trong bao lâu |
 | `handoff_message_in_hours`, `handoff_message_after_hours`, `handoff_notify_channels` | Small Text | xem `docs/09` mục 4 | Đợt 3 |
 

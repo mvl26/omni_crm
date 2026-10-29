@@ -14,6 +14,7 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `sandbox_mode` — tổng đài | Omni Settings | (Bật) đối soát đêm bỏ qua, không xác minh cuộc gọi nhỡ qua API nhà cung cấp | 2 |
 | `missed_call_callback_minutes`, `callback_fallback_user`, `business_hours`, `holidays` | Omni Settings | Hạn gọi lại (phút làm việc), người nhận dự phòng, giờ làm việc, ngày nghỉ lễ (JSON `["2027-01-01", …]`, mặc định rỗng — việc cần người phụ trách điền) | 2 |
 | `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
+| `lead_scoring_enabled` | Omni Settings | Không tính điểm mới, không báo Lead nóng; `omni_score` và breakdown cũ giữ nguyên. Bảng điểm `score_rules` rỗng cũng coi như không chấm (không có điểm mặc định bịa). `hot_lead_threshold` (mặc định 60; <= 0 dùng 60) | 2 |
 | `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời | 2 |
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
