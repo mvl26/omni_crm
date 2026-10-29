@@ -5,14 +5,20 @@ Bảng ánh xạ I-01...I-13 -> tên test nằm ở docs/nghiem-thu/dot-1.md. C�
 khớp đúng cột "Kỳ vọng" ở các tệp khác nên không lặp lại ở đây.
 """
 
+import json
 from types import SimpleNamespace
 from unittest import mock
 
 import frappe
 from crm.api.activities import get_activities
+from frappe.app import make_form_dict
+from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
+from werkzeug.test import EnvironBuilder
+from werkzeug.wrappers import Request
 
 from omni_crm.api import webhooks
+from omni_crm.channels.registry import register_adapter, unregister_adapter
 from omni_crm.channels.zalo.adapter import parse_event
 from omni_crm.ingest.gateway import save_inbound
 from omni_crm.monitoring import alerts
@@ -22,6 +28,7 @@ from omni_crm.pipeline.retry import TransientError
 from omni_crm.pipeline.worker import process_identity
 from omni_crm.tests import zalo_helpers
 from omni_crm.tests.email_helpers import EmailTestCase
+from omni_crm.tests.fake_adapter import FakeAdapter, make_channel
 from omni_crm.tests.zalo_helpers import PREFIX, USER, ZaloTestCase, body_of, load, now_ms, sign
 
 INBOUND = "Omni Inbound Message"
@@ -203,3 +210,48 @@ class TestI05toI07(SignedZaloCase):
 		rows = self.rows()
 		self.assertEqual({r.status for r in rows}, {"Done"})
 		self.assertEqual(len({r.lead for r in rows}), 3)
+
+
+class TestRealRequestParsing(FrappeTestCase):
+	"""Lỗi D1-11: Frappe bỏ tham số query `?ch=` khi thân là JSON (Zalo luôn gửi JSON), nên webhook thật trả 404.
+
+	Các test webhook cũ gán `frappe.local.form_dict` bằng tay nên không bắt được; test này dựng Request thật
+	của werkzeug và chạy `make_form_dict` của Frappe như tiến trình web.
+	"""
+
+	def setUp(self):
+		self.addCleanup(frappe.db.rollback)
+		self.channel = make_channel("WH kenh JSON", enabled=1)
+		register_adapter("Zalo OA", FakeAdapter())
+		self.addCleanup(unregister_adapter, "Zalo OA")
+		old = getattr(frappe.local, "request", None)
+		self.addCleanup(setattr, frappe.local, "request", old)
+		for target in ("frappe.enqueue", "frappe.db.commit"):
+			p = mock.patch(target)
+			p.start()
+			self.addCleanup(p.stop)
+
+	def _call(self, content_type: str) -> int:
+		body = json.dumps({"events": [{"id": "json-1", "from": "U9", "text": "hi"}]}).encode()
+		env = EnvironBuilder(
+			method="POST",
+			path="/api/method/omni_crm.api.webhooks.zalo",
+			query_string={"ch": self.channel.name},
+			data=body,
+			content_type=content_type,
+			headers={"X-Fake-Signature": FakeAdapter.GOOD_SIGNATURE},
+		).get_environ()
+		request = Request(env)
+		frappe.local.request = request
+		frappe.local.response = frappe._dict()
+		make_form_dict(request)  # đúng như frappe.app.application làm trước khi gọi hàm whitelisted
+		webhooks.zalo()
+		return frappe.local.response.get("http_status_code", 200)
+
+	def test_json_body_with_channel_in_query_string_is_accepted(self):
+		before = frappe.db.count(INBOUND, {"channel": self.channel.name})
+		self.assertEqual(self._call("application/json"), 200)
+		self.assertEqual(frappe.db.count(INBOUND, {"channel": self.channel.name}), before + 1)
+
+	def test_form_encoded_body_still_works(self):
+		self.assertEqual(self._call("text/plain"), 200)

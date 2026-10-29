@@ -90,7 +90,9 @@ def _handle_webhook(channel_type: str) -> dict:
 		return _respond(413, _("Nội dung quá lớn"))
 
 	# 3. tải kênh theo ch
-	channel_name = frappe.form_dict.get("ch")
+	# Frappe bỏ tham số query khi thân là JSON (Zalo luôn gửi JSON), nên đọc `ch` từ query string trước
+	query = getattr(request, "args", None)
+	channel_name = (query.get("ch") if query is not None else None) or frappe.form_dict.get("ch")
 	channel_doc = None
 	if channel_name and frappe.db.exists("Omni Channel", channel_name):
 		channel_doc = frappe.get_cached_doc("Omni Channel", channel_name)
