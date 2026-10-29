@@ -96,6 +96,40 @@ class TestWebhooks(FrappeTestCase):
 		self.assertEqual(status, 413)
 		self.assertEqual(self.count(), before)
 
+	def test_chunked_body_read_is_bounded(self):
+		"""Không Content-Length (chunked): chỉ đọc tối đa MAX+1 byte rồi trả 413."""
+		reads = []
+
+		class Stream:
+			def read(self, n=-1):
+				reads.append(n)
+				return b"x" * n
+
+		req = fake_request(b"", length=0)
+		req.content_length = None
+		req.stream = Stream()
+		req.get_data = lambda: self.fail("không được gọi get_data (đọc hết body)")
+		status, _ = self.call(req)
+		self.assertEqual(status, 413)
+		self.assertEqual(reads, [webhooks.MAX_BODY_BYTES + 1])
+
+	def test_last_success_only_for_real_saved_events(self):
+		key = ("Omni Channel", self.channel.name, "last_success_at")
+
+		def touched(req):
+			frappe.cache().delete_keys("omni:")
+			with mock.patch("frappe.db.set_value") as sv:
+				self.call(req)
+			return any(c.args[:3] == key for c in sv.call_args_list)
+
+		self.assertTrue(touched(fake_request(body_of("ok1"))))
+		# trùng hoàn toàn: không lưu gì mới
+		self.assertFalse(touched(fake_request(body_of("ok1"))))
+		# parse lỗi: chỉ có bản ghi unparsed
+		self.assertFalse(touched(fake_request(b"khong phai json")))
+		# không có sự kiện nào
+		self.assertFalse(touched(fake_request(body_of())))
+
 	def test_get_405(self):
 		status, _ = self.call(fake_request(b"", method="GET"))
 		self.assertEqual(status, 405)
