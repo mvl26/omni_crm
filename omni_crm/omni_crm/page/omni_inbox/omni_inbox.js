@@ -250,7 +250,7 @@ class OmniInbox {
 					return;
 				}
 				if (res.status === "Blocked") {
-					frappe.show_alert({ message: res.reason, indicator: "red" }, 8);
+					frappe.show_alert({ message: frappe.utils.escape_html(res.reason), indicator: "red" }, 8);
 				}
 				this.load_thread(lead);
 			})
