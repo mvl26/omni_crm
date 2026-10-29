@@ -140,3 +140,38 @@ def zalo() -> dict:
 	"""Webhook Zalo OA: POST /api/method/omni_crm.api.webhooks.zalo?ch=<tên kênh>."""
 	# Không dùng methods=["POST"] của decorator vì nó trả 403; đặc tả yêu cầu 405 (kiểm trong khung chung).
 	return _handle_webhook("Zalo OA")
+
+
+def _require_omni_admin() -> None:
+	if "Omni Admin" not in frappe.get_roles():
+		frappe.throw(_("Chỉ Omni Admin được kết nối Zalo OA"), frappe.PermissionError)
+
+
+def _redirect(location: str) -> None:
+	frappe.local.response["type"] = "redirect"
+	frappe.local.response["location"] = location
+
+
+@frappe.whitelist()
+def zalo_oauth_start(channel: str) -> None:
+	"""Bắt đầu cấp quyền OA (chỉ Omni Admin): sinh state + PKCE rồi chuyển hướng tới trang cấp quyền của Zalo."""
+	from omni_crm.channels.zalo import token
+
+	_require_omni_admin()
+	_redirect(token.start_authorization(channel))
+
+
+@frappe.whitelist()
+def zalo_oauth_callback(code: str | None = None, state: str | None = None, **_kwargs) -> None:
+	"""Zalo gọi về sau khi OA cấp quyền: kiểm state, đổi code lấy token, lưu và quay về form kênh."""
+	from omni_crm.channels.zalo import token
+	from omni_crm.channels.zalo.errors import ZaloError
+
+	_require_omni_admin()
+	if not code or not state:
+		frappe.throw(_("Thiếu mã cấp quyền hoặc state"), frappe.PermissionError)
+	try:
+		channel = token.complete_authorization(code, state)
+	except ZaloError as e:
+		frappe.throw(e.message_vi)
+	_redirect(frappe.utils.get_url(f"/app/omni-channel/{channel}"))
