@@ -96,6 +96,27 @@ class TestRedactAndClassify(PipelineTestCase):
 		self.assertNotIn("mat-khau-ngan", out)
 		self.assertIn("Zalo trả về", out)
 
+	def test_redact_phone_and_email(self):
+		text = "Lỗi với 0912345678, +84 912 345 678, 0084912345678, 024.3123.4567 và an.nguyen+x@Abc.vn"
+		out = redact(text)
+		for leak in (
+			"0912345678",
+			"912 345 678",
+			"0084912345678",
+			"3123.4567",
+			"an.nguyen",
+			"abc.vn",
+			"Abc.vn",
+		):
+			self.assertNotIn(leak, out)
+		self.assertIn("Lỗi với", out)
+
+	def test_redact_keeps_short_numbers_and_ids(self):
+		self.assertEqual(
+			redact("batch 20240312 thử 3 lần, mã CRM-LEAD-2026-00012"),
+			"batch 20240312 thử 3 lần, mã CRM-LEAD-2026-00012",
+		)
+
 	def test_redact_empty(self):
 		self.assertEqual(redact(None), "")
 

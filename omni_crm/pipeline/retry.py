@@ -13,6 +13,9 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_BACKOFF = "1,5"
 MIN_PASSWORD_LEN = 6
 LONG_TOKEN = re.compile(r"[A-Za-z0-9_\-+/=.]{32,}")
+# SĐT Việt Nam (0xxxxxxxxx, +84..., 0084...) và email: dữ liệu cá nhân của khách, không được vào log.
+EMAIL_PII = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
+PHONE_PII = re.compile(r"(?<!\d)(?:(?:\+|00)[ ]?)?(?:84|0)(?:[ .\-]?\d){8,10}(?!\d)")
 LAST_ERROR_MAX = 500
 INBOUND = "Omni Inbound Message"
 
@@ -65,12 +68,14 @@ def _password_values() -> list[str]:
 
 
 def redact(text: str | None) -> str:
-	"""Che các giá trị Password đang lưu và chuỗi dài giống token/khóa (>= 32 ký tự)."""
+	"""Che các giá trị Password đang lưu, chuỗi dài giống token/khóa (>= 32 ký tự), email và SĐT."""
 	if not text:
 		return ""
 	out = str(text)
 	for val in _password_values():
 		out = out.replace(val, "[đã che]")
+	out = EMAIL_PII.sub("[đã che email]", out)
+	out = PHONE_PII.sub("[đã che SĐT]", out)
 	return LONG_TOKEN.sub("[đã che]", out)
 
 

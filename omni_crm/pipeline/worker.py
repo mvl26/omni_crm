@@ -32,6 +32,7 @@ FIELDS = [
 	"identity_key",
 	"received_at",
 	"text",
+	"sender_profile",
 	"attempts",
 	"status",
 ]

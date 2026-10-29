@@ -136,12 +136,15 @@ class TestWorker(PipelineTestCase):
 			mock.patch("frappe.log_error") as log,
 		):
 			process_identity(KEY, 0)
-		# Identity vừa tạo trong lô bị rollback, không có bản ghi nửa vời
-		self.assertFalse(frappe.db.exists("Omni Identity", {"identity_key": KEY}))
+		# D1-05: resolver commit sau khi gắn Lead (khóa tín hiệu), nên Identity + Lead còn lại sau lỗi ở
+		# bước ghi dòng thời gian; lô bị rollback phần còn lại và thử lại sẽ dùng lại đúng chúng.
+		self.assertEqual(frappe.db.count("Omni Identity", {"identity_key": KEY}), 1)
+		first_lead = frappe.db.get_value("Omni Identity", {"identity_key": KEY}, "lead")
+		self.assertTrue(first_lead)
 		r = self._row(name)
 		self.assertEqual((r.status, r.attempts), ("Retry", 1))
 		self.assertIn("loi du lieu", r.last_error)
-		self.assertIsNone(r.identity)
+		self.assertIsNone(r.identity)  # tin chưa được đánh dấu Done/identity (rollback phần của worker)
 		log.assert_called_once()
 		self.assertNotIn("0912345678", str(log.call_args))
 
@@ -283,6 +286,9 @@ class TestWorker(PipelineTestCase):
 		with (
 			mock.patch("omni_crm.pipeline.worker.time.sleep") as sl,
 			mock.patch.object(frappe.db, "get_single_value", side_effect=fake),
+			mock.patch.object(
+				worker, "_process_batch", return_value=None
+			),  # cô lập khỏi tạo Lead (CRM có thể sleep khi Redis hỏng)
 		):
 			process_identity(KEY)
 		sl.assert_called_once_with(7)
@@ -296,14 +302,29 @@ class TestWorker(PipelineTestCase):
 			process_identity(KEY, 0)
 		self.assertEqual(self.status_of(name), ["Done"])
 
-	def test_resolver_tmp_returns_none_lead_and_reuses_identity(self):
+	def test_resolver_reuses_identity_and_lead_across_batches(self):
 		self.add_msg("i1")
 		process_identity(KEY, 0)
 		self.add_msg("i2")
 		process_identity(KEY, 0)
 		self.assertEqual(frappe.db.count("Omni Identity", {"identity_key": KEY}), 1)
-		self.assertIsNone(
+		lead = frappe.db.get_value("Omni Identity", {"identity_key": KEY}, "lead")
+		self.assertTrue(lead)
+		rows = frappe.get_all(
+			"Omni Inbound Message", filters={"identity_key": KEY}, fields=["status", "lead"]
+		)
+		self.assertEqual({(r.status, r.lead) for r in rows}, {("Done", lead)})
+		self.assertEqual(
 			resolver.resolve(
-				[frappe._dict(identity_key=KEY, channel_type="Zalo OA", external_sender_id="x")]
-			)[1]
+				[
+					frappe._dict(
+						identity_key=KEY,
+						channel_type="Zalo OA",
+						external_sender_id="x",
+						text=None,
+						received_at=None,
+					)
+				]
+			)[1],
+			lead,
 		)

@@ -14,8 +14,21 @@ PREFIX = "PLT"
 def cleanup_pipeline_data() -> None:
 	"""Xóa dữ liệu test (tin, định danh, kênh) có tiền tố PLT và commit."""
 	frappe.db.rollback()
+	# Lead do resolver tạo cho định danh test (D1-05) cũng phải dọn
+	leads = [
+		x
+		for x in frappe.get_all(
+			"Omni Identity", filters={"identity_key": ["like", f"%:{PREFIX}%"]}, pluck="lead"
+		)
+		if x
+	]
 	frappe.db.delete("Omni Inbound Message", {"channel": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("Omni Identity", {"identity_key": ["like", f"%:{PREFIX}%"]})
+	if leads:
+		frappe.db.delete("Omni Duplicate Candidate", {"lead_a": ["in", leads]})
+		frappe.db.delete("Omni Duplicate Candidate", {"lead_b": ["in", leads]})
+	for lead in leads:
+		frappe.delete_doc("CRM Lead", lead, force=True, ignore_permissions=True, delete_permanently=True)
 	frappe.db.delete("Omni Channel", {"channel_name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("__Auth", {"doctype": "Omni Channel", "name": ["like", f"{PREFIX}%"]})
 	frappe.db.commit()

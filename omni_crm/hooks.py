@@ -164,6 +164,9 @@ scheduler_events = {
 
 # Fixtures
 # --------
+doc_events = {
+	"CRM Lead": {"validate": "omni_crm.crm_bridge.lead.compute_normalized_fields"},
+}
 fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},
 	{"dt": "Custom Field", "filters": [["module", "=", "Omni CRM"]]},

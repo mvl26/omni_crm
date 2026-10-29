@@ -108,3 +108,14 @@ Có thể đánh giá `frappe.rename_doc(..., merge=True)` như một cách thay
 - Khách gửi "liên hệ anh Nam 0912…" trong khi Lead của anh Nam đã có SĐT đó và tên khác hẳn → tạo Lead mới + Candidate, **không gộp**.
 - Gửi lại cùng tin hai lần → 1 Lead, 1 dòng thời gian.
 - Gộp rồi kiểm tra mọi bản ghi liên quan đã chuyển; chạy gộp lần hai không lỗi.
+
+## 7. Ghi chú triển khai (D1-05)
+
+- `resolver.resolve_full(msgs)` trả `Resolution` (identity, lead, `created_lead`, `matched_by`, `deal`, `candidates`); `resolve(msgs)` bọc lại và trả `(identity, lead)` cho worker.
+- Chống chạy song song: mọi SĐT/email liên quan tới lô tin bị khóa Redis (theo thứ tự sắp xếp) trong lúc tìm + tạo Lead + commit (ADR 0003).
+- Bước 6 chỉ so tên khi cả hai tên có ít nhất 2 từ riêng (bỏ "anh", "chị", "khách", "Zalo user", số...), đúng tinh thần mục 3.1; tên một từ/chung chung không sinh nghi trùng.
+- Tín hiệu trung bình: tối đa 5 SĐT và 5 email mỗi lô; SĐT/email đã là tín hiệu mạnh không tính lại là trung bình.
+- Điền SĐT/email vào Lead chỉ khi Lead chưa có (không ghi đè) và chỉ khi Lead được xác định bằng định danh hoặc tín hiệu mạnh; Lead gắn bằng tín hiệu trung bình không bị ghi thêm thông tin.
+- Điểm Candidate: tín hiệu mạnh dùng chung 100; trung bình tên mâu thuẫn 60; trung bình mơ hồ 50; tên giống = độ giống × 100.
+- Gộp: xem ADR 0002. Nút "Gộp vào …" / "Không trùng" nằm trên form Omni Duplicate Candidate.
+

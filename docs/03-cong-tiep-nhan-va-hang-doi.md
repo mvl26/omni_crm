@@ -128,3 +128,8 @@ stateDiagram-v2
 5. Ghi tin ra vào dòng thời gian Lead.
 
 `job_id = f"omni-out::{outbound_name}"` để không gửi trùng khi enqueue hai lần.
+
+## Ghi chú D1-05: worker không còn rollback toàn lô
+
+`resolver.resolve` commit khi còn giữ khóa tín hiệu SĐT/email (ADR 0003). Vì vậy `Omni Identity` và `CRM Lead` vừa tạo được giữ lại dù bước sau của lô (ghi dòng thời gian, đánh dấu Done) lỗi; lô thử lại sẽ dùng lại chúng (không tạo trùng). Chỉ phần còn lại của lô được rollback.
+
