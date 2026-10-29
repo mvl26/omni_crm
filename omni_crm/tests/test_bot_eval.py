@@ -162,6 +162,15 @@ class TestGrading(FrappeTestCase):
 		self.assertFalse(grading.gate_check("nhap", self.metrics(answer_pass_rate=None))["passed"])
 		self.assertFalse(grading.gate_check("phan_tich", self.metrics(field_accuracy=None))["passed"])
 
+	def test_review_missing_blocks_gate(self):
+		review = {"required": ["a", "b", "c"], "missing": ["c"]}
+		check = grading.gate_check("nhap", self.metrics(), review=review)
+		self.assertFalse(check["passed"])
+		self.assertIn("chưa chấm lại tay", " ".join(check["reasons"]))
+		self.assertTrue(
+			grading.gate_check("nhap", self.metrics(), review={"required": ["a"], "missing": []})["passed"]
+		)
+
 	def test_regression_gate(self):
 		base = self.metrics()
 		self.assertFalse(grading.gate_check("doi_cau_lenh", base)["passed"])  # chưa có mốc
@@ -359,6 +368,34 @@ class TestImporter(FrappeTestCase):
 			importer.export_jsonl(str(out), only_active=True), frappe.db.count(CASE, {"active": 1})
 		)
 
+	def test_synthetic_must_not_contain_real_looking_pii(self):
+		for text in (
+			"Gọi em số 0903 123 456",
+			"Số em +84 912 345 678",
+			"mail a@gmail.com nhé",
+			"xem https://facebook.com/abc",
+			"vào www.cty.vn",
+			"trang miyano.vn",
+		):
+			row = case_row("T08-001", text=text)
+			self.assertTrue(importer.validate_case(row), text)
+		for text in (
+			"Số em 0900 000 123",
+			"Hotline 1900 0000",
+			"mail lienhe@example.com",
+			"Cần 200 bộ trong 2026",
+		):
+			self.assertEqual(importer.validate_case(case_row("T08-001", text=text)), [], text)
+		row = case_row("T08-002", reference_answer="Liên hệ 0903123456")
+		self.assertTrue(importer.validate_case(row))
+		self.assertEqual(
+			importer.validate_case(case_row("T08-003", text="gọi 0903 123 456", source="Real")), []
+		)
+		path = self.write([case_row("T08-004", text="gọi 0903 123 456")])
+		out = importer.import_jsonl(path)
+		self.assertEqual(out["created"], 0)
+		self.assertIn("số điện thoại", out["errors"][0]["error"])
+
 	def test_unreviewed_allowed_only_explicitly(self):
 		path = self.write([case_row("T08-001", reviewed=False)])
 		self.assertEqual(importer.import_jsonl(path)["created"], 0)
@@ -366,10 +403,19 @@ class TestImporter(FrappeTestCase):
 
 	def test_import_synthetic_file(self):
 		knowledge.import_groups()
+		ids0 = [
+			json.loads(x)["case_id"] for x in SYNTHETIC.read_text(encoding="utf-8").splitlines() if x.strip()
+		]
+		existing = set(frappe.get_all(CASE, filters={"name": ["in", ids0]}, pluck="name"))
 		out = importer.import_jsonl(str(SYNTHETIC.relative_to(APP_DIR)))
 		self.assertEqual(out["errors"], [])
-		self.assertEqual(frappe.db.count(CASE, {"source": "Synthetic"}) >= 220, True)
-		frappe.db.delete(CASE, {"source": "Synthetic"})
+		ids = [
+			json.loads(x)["case_id"] for x in SYNTHETIC.read_text(encoding="utf-8").splitlines() if x.strip()
+		]
+		self.assertGreaterEqual(len(frappe.get_all(CASE, filters={"name": ["in", ids]})), 220)
+		frappe.db.delete(
+			CASE, {"name": ["in", [i for i in ids if i not in existing]]}
+		)  # chỉ xóa ca do test tạo
 		frappe.db.commit()
 
 
@@ -477,6 +523,14 @@ class TestBuilder(InboxTestCase):
 		self.assertEqual(out["cases"], 0)
 		self.assertEqual(out["dropped"], {"con_du_lieu_nguon": 1})
 
+	def test_org_prefix_case_insensitive_and_obfuscated_email_dropped(self):
+		m = builder.Masker([], [], [], [])
+		self.assertNotIn("Hoa Sen", m.mask("bệnh viện Hoa Sen cần hàng"))
+		self.assertNotIn("Hoa Sen", m.mask("BỆNH VIỆN Hoa Sen cần hàng"))
+		self.assertTrue(builder.OBFUSCATED.search("mail a (at) b (dot) com"))
+		self.assertTrue(builder.OBFUSCATED.search("a[at]b.com"))
+		self.assertIsNone(builder.OBFUSCATED.search("bình thường"))
+
 	def test_price_in_sale_text_suggests_handoff(self):
 		self.assertEqual(builder.suggest_action("Giá 500.000đ một hộp ạ", ["Miyano làm việc"]), "Handoff")
 		self.assertEqual(
@@ -528,7 +582,7 @@ class RunTestCase(FrappeTestCase):
 		frappe.db.rollback()
 		frappe.db.delete(CASE, {"name": ["like", "T08-%"]})
 		frappe.db.delete(RUN, {"name": ["in", getattr(self, "runs", [])]})
-		frappe.db.delete("Omni Bot Run", {"batch_id": ["like", "eval::%"]})
+		frappe.db.delete("Omni Bot Run", {"batch_id": ["like", "eval::%::T08-%"]})
 		frappe.db.delete(GROUP, {"name": ["like", "T08 %"]})
 		frappe.db.commit()
 
@@ -564,8 +618,12 @@ class TestRun(RunTestCase):
 		before = (frappe.db.count("CRM Lead"), frappe.db.count("Omni Bot Draft"))
 		name, data = self.go()
 		doc = frappe.get_doc(RUN, name)
-		self.assertEqual((doc.total_cases, doc.critical_failures, doc.passed_gate), (20, 0, 1))
+		self.assertEqual(
+			(doc.total_cases, doc.critical_failures, doc.passed_gate), (20, 0, 0)
+		)  # Fake: không bao giờ qua cổng
 		self.assertEqual(data["meta"]["mode"], "Fake")
+		self.assertIs(data["gate"]["applicable"], False)
+		self.assertFalse(data["gate"]["passed"])
 		self.assertFalse(data["meta"]["reviewed"])
 		self.assertEqual(data["metrics"]["field_accuracy"], 1.0)
 		self.assertEqual(
@@ -573,7 +631,11 @@ class TestRun(RunTestCase):
 		)  # không ghi CRM
 		reports = list(self.tmp.glob("*.md"))
 		self.assertEqual(len(reports), 1)
+		self.assertTrue(reports[0].name.endswith("-fake.md"), reports[0].name)
 		text = reports[0].read_text(encoding="utf-8")
+		self.assertIn("KHÔNG ÁP DỤNG (giả lập)", text)
+		self.assertNotIn("**QUA**", text)
+		self.assertNotIn("100.0%", text)
 		self.assertIn("KHÔNG PHẢI điểm của bot", text)
 		self.assertIn("CHƯA được người duyệt", text)
 
@@ -713,7 +775,8 @@ class TestRun(RunTestCase):
 		_, data = self.go("phan_tich", judge=True)
 		self.assertEqual({c["kind"] for c in self.fake.calls}, {"Analyze"})
 		self.assertIsNone(data["metrics"]["action_accuracy"])
-		self.assertTrue(data["gate"]["passed"])
+		self.assertEqual(data["metrics"]["field_accuracy"], 1.0)
+		self.assertFalse(data["gate"]["passed"])  # Fake không áp dụng cổng
 
 	def test_judge_off_means_answer_not_measured(self):
 		self.add_cases(self.good_set(5))
@@ -794,18 +857,101 @@ class TestRun(RunTestCase):
 		with self.assertRaises(frappe.ValidationError):  # Fake/bộ đề chưa duyệt không được làm mốc
 			run.accept_run(name)
 
-	def test_accept_run_and_regression_baseline(self):
-		self.add_cases(self.good_set(5))
-		name, data = self.go(reviewed=True)
-		data["meta"]["mode"] = "AI thật"  # giả lập một lần chạy thật đã duyệt
-		frappe.db.set_value(RUN, name, "result_json", json.dumps(data))
-		run.accept_run(name)
-		self.assertEqual(run._baseline()["field_accuracy"], 1.0)
-		_, again = self.go("doi_cau_lenh")
-		self.assertTrue(again["gate"]["passed"], again["gate"])
+	def mark_real(self, name, data, reviewed_all=True):
+		"""Giả lập lần chạy AI thật đã duyệt, đã qua cổng (và chấm lại đủ mẫu nếu reviewed_all)."""
+		meta = data["meta"]
+		meta["mode"] = "AI thật"
+		meta["reviewed"] = True
+		if reviewed_all:
+			for cid in run.review_status(data["cases"], meta, name)["required"]:
+				meta["human_reviews"][cid] = {"pass": True, "critical": False, "note": ""}
+		frappe.db.set_value(RUN, name, {"result_json": json.dumps(data), "passed_gate": 1})
+		return data
+
+	def test_accept_run_requires_full_regrade_sample(self):
+		self.add_cases(self.good_set(10))
+		name, data = self.go()
+		self.assertGreater(len(run.review_status(data["cases"], data["meta"], name)["required"]), 0)
+		self.mark_real(name, data, reviewed_all=False)
+		with self.assertRaises(frappe.ValidationError) as cm:
+			run.accept_run(name)
+		self.assertIn("chấm lại tay", str(cm.exception))
+		self.mark_real(name, data)
+		run.accept_run(name)  # đủ mẫu thì được chấp nhận
 		frappe.db.set_value(
 			RUN, name, "result_json", json.dumps({**data, "meta": {**data["meta"], "accepted": False}})
 		)
+
+	def test_gate_blocked_until_human_regrade_covers_sample(self):
+		self.add_cases(self.good_set(10))
+		name, data = self.go()
+		check = data["gate"]
+		self.assertTrue(check["review"]["missing"])
+		self.assertIn("chưa chấm lại tay", " ".join(check["reasons"]))
+		self.mark_real(name, data, reviewed_all=False)
+		path = self.tmp / "cl.csv"
+		run.export_regrade_csv(name, str(path))
+		rows = list(csv.DictReader(open(path, encoding="utf-8-sig")))
+		rows[0].update(ket_luan_nguoi="Dat")
+		with open(path, "w", encoding="utf-8-sig", newline="") as f:
+			w = csv.DictWriter(f, fieldnames=list(rows[0]))
+			w.writeheader()
+			w.writerows(rows)
+		out = run.import_regrade(name, str(path))  # mới chấm một dòng: cổng ghi chưa đủ (không báo lỗi)
+		self.assertTrue(out["gate"]["review"]["missing"] or len(rows) == 1)
+		if len(rows) > 1:
+			self.assertFalse(out["gate"]["passed"])
+			self.assertIn("chưa chấm lại tay", " ".join(out["gate"]["reasons"]))
+		for r in rows:
+			r.update(ket_luan_nguoi="Dat")
+		with open(path, "w", encoding="utf-8-sig", newline="") as f:
+			w = csv.DictWriter(f, fieldnames=list(rows[0]))
+			w.writeheader()
+			w.writerows(rows)
+		out = run.import_regrade(name, str(path))
+		self.assertEqual(out["gate"]["review"]["missing"], [])
+		self.assertEqual(out["gate"]["reasons"], [])  # mode AI thật + đủ mẫu + chỉ số đạt
+		self.assertTrue(out["gate"]["passed"])
+
+	def test_regression_baseline_after_accept(self):
+		self.add_cases(self.good_set(5))
+		name, data = self.go()
+		self.mark_real(name, data)
+		run.accept_run(name)
+		self.assertEqual(run._baseline()["field_accuracy"], 1.0)
+		_, again = self.go("doi_cau_lenh")
+		joined = " ".join(again["gate"]["reasons"])
+		self.assertNotIn("mốc", joined)
+		self.assertNotIn("giảm", joined)
+		frappe.db.set_value(
+			RUN, name, "result_json", json.dumps({**data, "meta": {**data["meta"], "accepted": False}})
+		)
+
+	def test_no_client_report_says_not_measured_not_zero(self):
+		self.add_cases(self.good_set(5))
+		ai_client.set_client(None)
+		with mock.patch.object(ai_client, "get_client", return_value=None):
+			self.go()
+		text = next(p for p in self.tmp.glob("*.md")).read_text(encoding="utf-8")
+		self.assertIn("| Lỗi nghiêm trọng | chưa đo |", text)
+		overview = text.split("## Tổng quan theo loại")[1]
+		self.assertIn("chưa đo", overview)
+		self.assertNotRegex(overview, r"\| 0 \|\s*$")
+		self.assertNotIn("| 0 |", overview.replace("| 5 | 5 |", ""))
+
+	def test_report_name_real_cases_suffix(self):
+		self.add_cases([case_row("T08-001", source="Real")])
+		with mock.patch.dict(frappe.conf, {ai_client.ALLOW_DATA_CONF: 1}):
+			self.go()
+		names = [p.name for p in self.tmp.glob("*.md")]
+		self.assertEqual(len(names), 1)
+		self.assertTrue(names[0].endswith("-fake-real.md") or names[0].endswith("-real.md"), names[0])
+
+	def test_prefix_does_not_override_case_ids(self):
+		self.add_cases([case_row("T08-001"), case_row("T08-002")])
+		got = run.load_cases({"case_ids": ["T08-001", "T08-002"], "prefix": "T08-002"})
+		self.assertEqual([c["case_id"] for c in got], ["T08-002"])
+		self.assertEqual(run.load_cases({"case_ids": ["T08-001"], "prefix": "XX-"}), [])
 
 	def test_case_filter(self):
 		self.add_cases([case_row("T08-001"), case_row("T08-002", expected_action="Handoff", critical=True)])
@@ -865,6 +1011,19 @@ class TestRegrade(RunTestCase):
 		self.assertTrue(set(rows[0]) >= {"ket_luan_nguoi", "truot_r3_hoac_r5", "ghi_chu"})
 		again = run.export_regrade_csv(self.name, str(self.tmp / "cl2.csv"))
 		self.assertEqual(open(path, encoding="utf-8-sig").read(), open(again, encoding="utf-8-sig").read())
+
+	def test_csv_cells_cannot_inject_formulas(self):
+		cases = self.data["cases"]
+		for r in cases[:2]:
+			r["question"] = '=HYPERLINK("http://x")'
+			r["reply_text"] = "+cmd|' /C calc'!A0"
+			r["judge"] = {**r["judge"], "pass": False, "reason": "@SUM(1)"}
+		frappe.db.set_value(RUN, self.name, "result_json", json.dumps({**self.data, "cases": cases}))
+		path = run.export_regrade_csv(self.name, str(self.tmp / "cl.csv"))
+		for row in csv.DictReader(open(path, encoding="utf-8-sig")):
+			for value in row.values():
+				self.assertNotIn(value[:1], ("=", "+", "@"), value)
+		self.assertIn("'=HYPERLINK", open(path, encoding="utf-8-sig").read())
 
 	def test_judge_failures_always_included(self):
 		cases = self.data["cases"]
