@@ -66,3 +66,7 @@ Khóa Redis `omni:lock:sig:{SĐT/email}` (ADR 0003) có timeout 60 giây và KH�
 ## Lưu ý D1-08: developer_mode
 
 `zalo_skip_signature` (bỏ qua xác thực chữ ký webhook Zalo) chỉ có tác dụng khi `developer_mode` của site bật (đọc bằng `cint`, chuỗi "0" là tắt). **Cấm bật `developer_mode` ở production**: nó mở luôn đường bỏ qua chữ ký. Kiểm tra `bench --site <site> console` -> `frappe.conf.developer_mode` trước mỗi lần phát hành.
+
+## Lưu ý D1-09: tắt chiều ra của kênh
+
+Tắt `outbound_enabled` của một kênh thì mọi tin ra đang `Queued` của kênh đó chuyển `Blocked` với lý do "Kênh đã tắt chiều ra" khi worker/tác vụ quét chạm tới. Bật lại KHÔNG tự gửi lại những tin đã `Blocked`: sale phải gửi lại thủ công từ Hộp thư.
