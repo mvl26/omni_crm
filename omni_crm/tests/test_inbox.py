@@ -257,3 +257,49 @@ class TestDocPermissions(InboxTestCase):
 		self.assertFalse(rows[0].get("raw_payload"))  # Frappe bỏ trường permlevel 1 khỏi truy vấn
 		frappe.set_user("Administrator")
 		self.assertTrue(frappe.get_doc("Omni Inbound Message", self.zalo1).raw_payload)
+
+
+class TestCandidatePermissions(InboxTestCase):
+	def setUp(self):
+		super().setUp()
+		from omni_crm.identity import duplicates
+
+		self.duplicates = duplicates
+		self.lead3 = self.make_lead("TD106 Mai hai", SALE1)
+		frappe.db.commit()
+		with mock.patch("frappe.enqueue"):
+			self.both = duplicates.create_candidate(self.lead1, self.lead3, "SĐT 0903106999 trùng", 80)
+			self.cross = duplicates.create_candidate(self.lead1, self.lead2, "SĐT 0903106888 trùng", 80)
+		frappe.db.commit()
+
+	def listed(self):
+		rows = frappe.get_list(
+			"Omni Duplicate Candidate",
+			filters={"name": ["in", [self.both, self.cross]]},
+			fields=["name", "lead_a", "lead_b", "reason"],
+		)
+		return [r.name for r in rows]
+
+	def test_only_pairs_where_both_leads_readable(self):
+		self.as_user(SALE1)
+		self.assertEqual(self.listed(), [self.both])  # cặp chéo ẩn: reason có thể lộ Lead của người khác
+		self.assertTrue(frappe.has_permission("Omni Duplicate Candidate", "read", doc=self.both))
+		self.assertFalse(frappe.has_permission("Omni Duplicate Candidate", "read", doc=self.cross))
+		frappe.set_user(SALE2)
+		self.assertEqual(self.listed(), [])
+		frappe.set_user(SALE3)
+		self.assertEqual(self.listed(), [])
+
+	def test_admin_sees_all(self):
+		self.assertCountEqual(self.listed(), [self.both, self.cross])
+
+	def test_dismiss_api_still_works_for_owner_and_denies_others(self):
+		self.as_user(SALE2)
+		with self.assertRaises(frappe.PermissionError):
+			self.duplicates.dismiss(self.both)
+		frappe.set_user(SALE1)
+		with mock.patch("frappe.enqueue"):
+			self.duplicates.dismiss(self.both)
+		self.assertEqual(frappe.db.get_value("Omni Duplicate Candidate", self.both, "status"), "Dismissed")
+		with self.assertRaises(frappe.PermissionError):
+			self.duplicates.dismiss(self.cross)

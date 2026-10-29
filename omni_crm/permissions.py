@@ -63,3 +63,30 @@ def has_lead_scoped_permission(doc: Any, ptype: str | None = None, user: str | N
 	if not lead:
 		return False
 	return bool(frappe.has_permission(LEAD, "read", doc=lead, user=user))
+
+
+def candidate_conditions(user: str | None = None) -> str:
+	"""permission_query_conditions của Omni Duplicate Candidate: chỉ cặp mà người dùng đọc được CẢ hai Lead.
+
+	Nếu chỉ đọc được một Lead thì ẩn cặp, vì `reason` có thể lộ SĐT/tên của Lead kia.
+	"""
+	user = user or frappe.session.user
+	if _full_access(user):
+		return ""
+	cond = _lead_condition(user)
+	if not cond:
+		return ""
+	sub = f"select `name` from `tabCRM Lead` where {cond}"
+	t = "`tabOmni Duplicate Candidate`"
+	return f"({t}.`lead_a` in ({sub}) and {t}.`lead_b` in ({sub}))"
+
+
+def has_candidate_permission(doc: Any, ptype: str | None = None, user: str | None = None) -> bool | None:
+	"""has_permission của Omni Duplicate Candidate: phải đọc được cả lead_a và lead_b."""
+	user = user or frappe.session.user
+	if _full_access(user):
+		return None
+	leads = [doc.get("lead_a"), doc.get("lead_b")]
+	if not all(leads):
+		return False
+	return all(frappe.has_permission(LEAD, "read", doc=x, user=user) for x in leads)

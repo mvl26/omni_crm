@@ -121,12 +121,14 @@ permission_query_conditions = {
 	"Omni Inbound Message": "omni_crm.permissions.inbound_conditions",
 	"Omni Outbound Message": "omni_crm.permissions.outbound_conditions",
 	"Omni Identity": "omni_crm.permissions.identity_conditions",
+	"Omni Duplicate Candidate": "omni_crm.permissions.candidate_conditions",
 }
 
 has_permission = {
 	"Omni Inbound Message": "omni_crm.permissions.has_lead_scoped_permission",
 	"Omni Outbound Message": "omni_crm.permissions.has_lead_scoped_permission",
 	"Omni Identity": "omni_crm.permissions.has_lead_scoped_permission",
+	"Omni Duplicate Candidate": "omni_crm.permissions.has_candidate_permission",
 }
 
 # DocType Class
