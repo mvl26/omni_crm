@@ -210,13 +210,35 @@ def tokens_today() -> int:
 
 
 def _add_tokens(n: int) -> None:
-	if n <= 0:
+	"""Cộng (hoặc trừ, khi hiệu chỉnh giữ chỗ) n token vào bộ đếm hôm nay."""
+	if n == 0:
 		return
 	try:
 		tokens_today()  # bảo đảm khóa đã khởi tạo từ DB trước khi cộng
 		frappe.cache().incrby(_counter_key(), n)
 	except Exception:
 		pass
+
+
+def estimate_tokens(
+	system: str, messages: list[dict], cache_blocks: list[str] | None, max_tokens: int
+) -> int:
+	"""Ước lượng thô số token một lần gọi có thể tốn (đầu vào ~ ký tự/3 + max_tokens), để giữ chỗ trước khi gọi."""
+	chars = (
+		len(system)
+		+ sum(len(x) for x in cache_blocks or [])
+		+ sum(_content_chars(m.get("content")) for m in messages)
+	)
+	return chars // 3 + 1 + max_tokens
+
+
+def _reserve(n: int) -> int:
+	"""Giữ chỗ n token; trả số đã dùng ngay trước khi giữ (gồm phần giữ chỗ của các lần gọi đang chạy)."""
+	tokens_today()
+	try:
+		return cint(frappe.cache().incrby(_counter_key(), n)) - n
+	except Exception:
+		return tokens_today()
 
 
 def _alert_budget_once(used: int, budget: int) -> None:
@@ -385,9 +407,25 @@ def call_tool(
 		"digest": _digest(batch_id, system, messages, cache_blocks),
 	}
 
+	reserved = 0  # token đã giữ chỗ trong bộ đếm; finish hiệu chỉnh về số thật
+
 	def finish(status: str, error: str = "", output: dict | None = None) -> dict | None:
+		nonlocal reserved
 		outcome.status, outcome.error, outcome.output = status, error, output
-		_record(kind, model, outcome, **meta)
+		_add_tokens(outcome.input_tokens + outcome.output_tokens - reserved)
+		reserved = 0
+		try:
+			_record(kind, model, outcome, **meta)
+		except Exception as e:  # lỗi ghi nhật ký không được làm mất kết quả AI đã trả
+			try:
+				frappe.db.rollback()
+				frappe.log_error(
+					title="Omni: không ghi được Omni Bot Run",
+					message=redact(f"{type(e).__name__}: {e}")[:ERROR_MAX_CHARS],
+				)
+				frappe.db.commit()
+			except Exception:
+				pass
 		return output
 
 	if not switch_on(kind):
@@ -406,6 +444,15 @@ def call_tool(
 
 	if breaker_open():
 		return finish("Skipped Switch", _("Ngắt mạch: AI lỗi liên tiếp, tạm ngừng gọi"))
+	# Giữ chỗ token ước lượng để các lần gọi song song thấy nhau; hạn mức vẫn là mềm (có thể vượt chút ít)
+	estimate = estimate_tokens(system, messages, cache_blocks, max_tokens)
+	before = _reserve(estimate)
+	reserved = estimate
+	if before >= budget:
+		_add_tokens(-reserved)
+		reserved = 0
+		_alert_budget_once(before, budget)
+		return finish("Skipped Budget", _("Đã dùng {0} / hạn mức {1} token").format(before, budget))
 	frappe.db.commit()  # nhả khóa DB trước khi gọi API ngoài
 	transient_left, schema_left = TRANSIENT_RETRIES, SCHEMA_RETRIES
 	attempt_transient = 0
@@ -439,7 +486,6 @@ def call_tool(
 		outcome.input_tokens += resp.input_tokens
 		outcome.output_tokens += resp.output_tokens
 		outcome.cache_read_tokens += resp.cache_read_tokens
-		_add_tokens(resp.input_tokens + resp.output_tokens)
 		problem = validate_output(resp.tool_input, tool.get("input_schema") or {"type": "object"})
 		if problem is None:
 			return finish("Success", output=resp.tool_input)

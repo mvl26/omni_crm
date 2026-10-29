@@ -193,6 +193,52 @@ class TestCallTool(AITestCase):
 		self.assertEqual(self.run_of("2").status, "Skipped Budget")
 		self.assertEqual(len(self.fake.calls), 1)
 
+	def test_reservation_visible_in_flight_and_settled_after(self):
+		before = ai_client.tokens_today()
+		seen = []
+		real_create = self.fake.create
+
+		def spy(**kw):
+			seen.append(ai_client.tokens_today() - before)
+			return real_create(**kw)
+
+		with mock.patch.object(self.fake, "create", side_effect=spy):
+			self.call()
+		run = self.run_of()
+		self.assertGreaterEqual(seen[0], ai_client.DEFAULT_MAX_TOKENS)  # đã giữ chỗ trước khi gọi
+		self.assertEqual(ai_client.tokens_today() - before, run.input_tokens + run.output_tokens)
+
+	def test_reservation_released_on_failure(self):
+		before = ai_client.tokens_today()
+		self.fake.faults = ["fatal"]
+		self.call()
+		self.assertEqual(ai_client.tokens_today(), before)
+
+	def test_parallel_in_flight_reservation_blocks_next_call(self):
+		set_settings(daily_token_budget=ai_client.tokens_today() + ai_client.DEFAULT_MAX_TOKENS)
+		inner = []
+
+		def spy(**kw):
+			inner.append(self.call(batch="inner"))  # lần gọi thứ hai chạy khi lần đầu còn giữ chỗ
+			return ai_client.AIResponse(tool_input=GOOD, input_tokens=5, output_tokens=5)
+
+		with mock.patch.object(self.fake, "create", side_effect=spy):
+			self.call(batch="outer")
+		self.assertEqual(inner, [None])
+		self.assertEqual(self.run_of("inner").status, "Skipped Budget")
+
+	def test_bot_run_insert_failure_still_returns_result(self):
+		self.fake.add_rule(GOOD)
+		with (
+			mock.patch.object(ai_client, "_record", side_effect=ValueError(f"hỏng {FAKE_KEY} 0912345678")),
+			mock.patch("frappe.log_error") as log_error,
+		):
+			self.assertEqual(self.call(), GOOD)
+		log_error.assert_called_once()
+		message = log_error.call_args.kwargs["message"]
+		self.assertNotIn(FAKE_KEY, message)
+		self.assertNotIn("0912345678", message)
+
 	def test_zero_budget_stops_everything_without_alert(self):
 		set_settings(daily_token_budget=0)
 		self.assertIsNone(self.call())
