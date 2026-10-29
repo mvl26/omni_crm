@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import frappe
 from frappe.utils import add_to_date, cint, now_datetime
 
@@ -16,6 +18,9 @@ NEW_ORPHAN_MINUTES = 2
 OUTBOUND_ORPHAN_MINUTES = 5
 COUNTS_CACHE_KEY = "omni:sweeper:counts"
 COUNTS_TTL = 3600
+CLEANUP_BATCH = 500
+CLEANUP_BUDGET_SECONDS = 240  # dưới thời gian tối đa mặc định 300 giây của job nền dài
+CLEANUP_KEEP_STATUSES = ("New", "Processing", "Retry")  # chưa xử lý xong thì còn cần payload
 
 
 def requeue_stuck() -> dict[str, int]:
@@ -100,3 +105,31 @@ def requeue_stuck_outbound() -> int:
 	for name in names:
 		enqueue_outbound(name, after_commit=False)
 	return len(names)
+
+
+def cleanup_raw_payloads(batch: int = CLEANUP_BATCH, budget_seconds: float = CLEANUP_BUDGET_SECONDS) -> int:
+	"""Tác vụ đêm: xóa raw_payload của tin vào cũ hơn raw_payload_retention_days (theo lô, có giới hạn thời gian).
+
+	Chỉ tin đã xử lý xong (khác New/Processing/Retry). retention <= 0 nghĩa là tắt. Mỗi lô commit riêng.
+	"""
+	days = cint(frappe.db.get_single_value("Omni Settings", "raw_payload_retention_days"))
+	if days <= 0:
+		return 0
+	cutoff = add_to_date(now_datetime(), days=-days)
+	deadline = time.monotonic() + budget_seconds
+	total = 0
+	while time.monotonic() < deadline:
+		frappe.db.sql(
+			"""update `tabOmni Inbound Message` set raw_payload = null
+			where creation < %s and raw_payload is not null and raw_payload != ''
+			and status not in %s limit %s""",
+			(cutoff, CLEANUP_KEEP_STATUSES, batch),
+		)
+		n = frappe.db.sql("select row_count()")[0][0]
+		frappe.db.commit()
+		total += n
+		if n < batch:
+			break
+	if total:
+		frappe.logger("omni").info("omni: đã xóa raw_payload của %s tin quá hạn", total)
+	return total
