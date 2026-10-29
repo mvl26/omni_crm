@@ -152,7 +152,7 @@ def replay(since: Any, until: Any, limit: int | None = None) -> dict[str, Any]:
 	cache = frappe.cache()
 	cache.delete_value(STOP_KEY)
 	cursor_key = _cursor_key(since, until)
-	cursor = cache.get_value(cursor_key)
+	cursor = cache.get_value(cursor_key, expires=True)
 	items = collect(since, until, limit)
 	result: dict[str, Any] = {"total": len(items), "drafted": 0, "skipped": 0, "failed": 0, "stopped": None}
 	ran = 0
@@ -161,7 +161,7 @@ def replay(since: Any, until: Any, limit: int | None = None) -> dict[str, Any]:
 		if cursor and mark <= cursor:
 			result["skipped"] += 1
 			continue
-		if ran % BATCH_SIZE == 0 and cache.get_value(STOP_KEY):
+		if ran % BATCH_SIZE == 0 and cache.get_value(STOP_KEY, expires=True):
 			result["stopped"] = "requested"
 			break
 		try:

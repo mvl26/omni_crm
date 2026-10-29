@@ -9,6 +9,7 @@ from typing import Any
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 ROLES = ("Omni Admin", "Omni Knowledge Editor")
 BUCKETS = ((0.0, 0.2, "0-0.2"), (0.2, 0.5, "0.2-0.5"), (0.5, 1.0001, "0.5-1"))
@@ -77,7 +78,7 @@ def execute(filters: dict | None = None) -> tuple[list[dict], list[dict]]:
 		"guard_flags",
 	]
 	if filters.get("view") == VIEW_FAR:
-		limit = min(max(int(filters.get("limit") or DEFAULT_LIMIT), 1), MAX_LIMIT)
+		limit = min(max(cint(filters.get("limit")) or DEFAULT_LIMIT, 1), MAX_LIMIT)
 		cond = _filters(filters)
 		cond.update(decision="Shadow Compared", action="Reply")
 		rows = frappe.get_all(

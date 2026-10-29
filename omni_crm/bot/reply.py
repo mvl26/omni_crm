@@ -46,6 +46,8 @@ COMPARE_WINDOW_HOURS = 24  # docs/08 mục 5.5
 COMPARE_BATCH = 200
 CHANNEL_MAX_CHARS = {"Zalo OA": 2000, "Email": 1200}
 REPLAY_PREFIX = "replay::"
+KB_LOG_KEY = "omni:reply:kb_too_large_logged"
+KB_LOG_TTL = 3600
 TEXT_MAX = 1200
 REASON_MAX = 300
 
@@ -260,6 +262,7 @@ def evaluate(raw: dict, ctx: dict) -> dict:
 		customer_text=ctx.get("customer_text"),
 		confidence=confidence,
 		max_chars=channel_max_chars(ctx.get("channel_type")),
+		allowed_phrases=ctx.get("allowed_phrases") or (),
 	)
 	if flags_:
 		out.update(action="Handoff", flags=flags_, reason=_("Chốt chặn: ") + "; ".join(flags_)[:REASON_MAX])
@@ -272,6 +275,25 @@ def _insert_draft(values: dict) -> str:
 	doc = frappe.get_doc({"doctype": DRAFT, "mode": "Shadow", "decision": "Pending", **values})
 	doc.insert(ignore_permissions=True)
 	return doc.name
+
+
+def _log_kb_too_large(count: int) -> None:
+	"""Ghi Error Log khi kho vượt ngưỡng truy hồi, tối đa một lần mỗi giờ (không ghi theo từng tin)."""
+	cache = frappe.cache()
+	if cache.get_value(KB_LOG_KEY, expires=True):
+		return
+	cache.set_value(KB_LOG_KEY, 1, expires_in_sec=KB_LOG_TTL)
+	frappe.log_error(
+		title="Omni: kho tri thức vượt ngưỡng truy hồi",
+		message=f"so_muc={count} nguong={KB_MAX_ITEMS}; cần ADR chuyển sang truy hồi (docs/08 mục 5.2)",
+	)
+
+
+def _valid_confidence(value: Any) -> float | None:
+	"""Độ tự tin hợp lệ (số thực/nguyên hữu hạn trong [0, 1], không phải bool) để lưu vào cột Float; còn lại None."""
+	if isinstance(value, bool) or not isinstance(value, int | float) or not 0 <= value <= 1:
+		return None
+	return float(value)
 
 
 def make_draft(
@@ -288,6 +310,7 @@ def make_draft(
 	at: datetime | None = None,
 	include_summary: bool = True,
 	check_channel: bool = True,
+	notes: list[str] | None = None,
 	extra: dict | None = None,
 ) -> str | None:
 	"""Gọi bot một lần và lưu Omni Bot Draft (Shadow); trả tên nháp, hoặc None nếu AI không trả được kết quả.
@@ -298,10 +321,7 @@ def make_draft(
 	settings = frappe.get_cached_doc("Omni Settings")
 	items = knowledge.kb_items()
 	if len(items) > KB_MAX_ITEMS:
-		frappe.log_error(
-			title="Omni: kho tri thức vượt ngưỡng truy hồi",
-			message=f"so_muc={len(items)} nguong={KB_MAX_ITEMS}; cần ADR chuyển sang truy hồi (docs/08 mục 5.2)",
-		)
+		_log_kb_too_large(len(items))
 		return None
 	base = {
 		"lead": lead,
@@ -313,6 +333,7 @@ def make_draft(
 	info = [n for n in (_send_note(identity, channel) if check_channel else None,) if n]
 	if not business_hours.is_business_time(at or now_datetime()):
 		info.append("info:ngoai_gio")
+	info.extend(notes or [])
 	if not items:
 		name = _insert_draft(
 			{
@@ -326,7 +347,8 @@ def make_draft(
 		return name
 	prompt = load_prompt("reply")
 	mask = not cint(frappe.conf.get(UNMASK_CONF))
-	system = render(prompt, kenh=channel_type or "kênh nhắn tin", **hours_context(at))
+	hours = hours_context(at)
+	system = render(prompt, kenh=channel_type or "kênh nhắn tin", **hours)
 	raw = ai_client.call_tool(
 		"Reply",
 		settings.get("reply_model") or "claude-sonnet-5-5",
@@ -360,6 +382,8 @@ def make_draft(
 				"intent": intent,
 				"wants_human": wants_human,
 				"channel_type": channel_type,
+				# chuỗi mốc giờ do hệ thống sinh (prompt quy tắc 7) được miễn chốt chặn 3, chỉ đúng chuỗi này
+				"allowed_phrases": [hours["gio_lam_viec_ke_tiep"]],
 			},
 		)
 		run = _run_name(batch_id)
@@ -369,7 +393,7 @@ def make_draft(
 				"action": decision["action"],
 				"question_group": decision["group"],
 				"kb_item_ids": decision["kb_ids"],
-				"confidence": decision["confidence"],
+				"confidence": _valid_confidence(decision["confidence"]),
 				"guard_flags": decision["flags"],
 			},
 		)
@@ -381,9 +405,7 @@ def make_draft(
 				"question_group": decision["group"],
 				"draft_text": decision["text"],
 				"kb_items": ", ".join(decision["kb_ids"]),
-				"confidence": decision["confidence"]
-				if isinstance(decision["confidence"], int | float)
-				else None,
+				"confidence": _valid_confidence(decision["confidence"]),
 				"guard_flags": "\n".join([*decision["flags"], *info]),
 				"handoff_reason": decision["reason"],
 			}
@@ -441,6 +463,7 @@ def reply_batch(batch_id: str) -> str:
 		if _recent_drafts(identity) >= MAX_DRAFTS_PER_HOUR:
 			return "rate_limited"
 		analysis = analysis_of(batch_id)
+		notes = ["info:khong_co_phan_tich"] if flags.bot_analyze_enabled() and not analysis else []
 		customer_text = "\n".join(
 			r.text for r in rows if r.event_type == "message" and (r.text or "").strip()
 		)
@@ -454,6 +477,7 @@ def reply_batch(batch_id: str) -> str:
 			intent=analysis.get("intent"),
 			wants_human=bool(analysis.get("wants_human")),
 			at=get_datetime(last.received_at),
+			notes=notes,
 		)
 		return "drafted" if name else "no_result"
 	except Exception as e:
