@@ -5,3 +5,5 @@
 tags
 node_modules
 __pycache__
+# Ca đề lấy từ dữ liệu thật (đã che) chỉ ở staging/máy phụ trách, không đưa vào repo
+eval/cases/real-*
