@@ -165,6 +165,24 @@ class TestSendOutbound(OutboundTestCase):
 		send.assert_not_called()
 		self.assertEqual(self.row(name).status, "Queued")
 
+	def test_leased_row_is_not_blocked_or_failed_by_other_job(self):
+		"""Job khác đang gửi (lease còn hạn): các nhánh Blocked/Failed bỏ qua, không ghi đè kết quả."""
+		self.sandbox(False)
+		self.set_last_inbound(hours_ago=24 * 9)  # nếu không có lease thì sẽ bị Blocked
+		name = self.queue()
+		frappe.db.set_value(
+			OUT,
+			name,
+			{"last_error": outbound.SENDING_MARK, "next_attempt_at": add_to_date(now_datetime(), minutes=3)},
+		)
+		frappe.db.commit()
+		outbound.send_outbound(name)
+		self.assertEqual(self.row(name).status, "Queued")
+		frappe.db.set_value("Omni Channel", self.channel.name, "outbound_enabled", 0)
+		frappe.db.commit()
+		outbound.send_outbound(name)
+		self.assertEqual(self.row(name).status, "Queued")
+
 	def test_crashed_midflight_is_failed_not_resent(self):
 		self.sandbox(False)
 		name = self.queue()

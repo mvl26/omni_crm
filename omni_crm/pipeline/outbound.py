@@ -347,13 +347,26 @@ def _lock_queued(name: str) -> Any | None:
 	return row
 
 
+def _leased(row: Any) -> bool:
+	"""Job khác đang gửi tin này (dấu "đang gửi" và hạn thuê còn hiệu lực)."""
+	return (
+		row.last_error == SENDING_MARK and bool(row.next_attempt_at) and row.next_attempt_at > now_datetime()
+	)
+
+
 def _block_locked(name: str, reason: str) -> str:
 	row = _lock_queued(name)
+	if row and _leased(row):
+		frappe.db.rollback()
+		return "Queued"
 	return _block(row, reason) if row else (frappe.db.get_value(OUTBOUND, name, "status") or "Missing")
 
 
 def _fail_locked(name: str, reason: str) -> str:
 	row = _lock_queued(name)
+	if row and _leased(row):
+		frappe.db.rollback()
+		return "Queued"
 	return _fail(row, reason) if row else (frappe.db.get_value(OUTBOUND, name, "status") or "Missing")
 
 
