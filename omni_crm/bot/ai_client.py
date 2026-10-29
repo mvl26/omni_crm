@@ -397,8 +397,9 @@ def call_tool(
 
 	Bỏ qua (Skipped Switch) khi công tắc tắt, thiếu khóa, hoặc dữ liệu khách chưa được cho phép gửi sang AI (Q11;
 	`synthetic=True` cho hội thoại tổng hợp). `eval_mode=True` (chỉ `bot/eval/run.py`): bộ đề chạy tay trước khi bật
-	bot nên không đòi công tắc Analyze/Reply; cổng Q11, hạn mức token và ngắt mạch vẫn áp dụng. Bỏ qua (Skipped Budget) khi vượt `daily_token_budget`. Thử lại tối đa
-	2 lần khi lỗi tạm thời và 1 lần khi sai schema.
+	bot nên không đòi công tắc Analyze/Reply; cổng Q11, hạn mức token và ngắt mạch vẫn áp dụng.
+	Bỏ qua (Skipped Budget) khi vượt `daily_token_budget`. Thử lại tối đa 2 lần khi lỗi tạm thời và 1 lần khi sai
+	schema.
 	"""
 	outcome = _Outcome()
 	meta = {

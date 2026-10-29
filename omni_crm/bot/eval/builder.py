@@ -50,8 +50,9 @@ CAP = rf"[{UPPER}]\w*"
 INTRO = re.compile(
 	rf"(?i:\b(?:em|mình|tôi|anh|chị)\s+(?:tên\s+)?là|\btên(?:\s+(?:em|mình|tôi))?\s+là)\s+((?:{CAP}\s?){{1,4}})"
 )
+OBFUSCATED = re.compile(r"\(\s*at\s*\)|\[\s*at\s*\]|\(\s*dot\s*\)|\[\s*dot\s*\]", re.IGNORECASE)
 ORG = re.compile(
-	rf"\b(?:Bệnh viện|BV|Công ty|Cty|Phòng khám|Nhà thuốc|Trung tâm|Viện|Trường|Tập đoàn)\s+(?:{CAP}\s?){{1,5}}"
+	rf"\b(?i:Bệnh viện|BV|Công ty|Cty|Phòng khám|Nhà thuốc|Trung tâm|Viện|Trường|Tập đoàn)\s+(?:{CAP}\s?){{1,5}}"
 )
 
 
@@ -224,6 +225,10 @@ def build_case(item: dict, index: int, day: str, all_kb_texts: list[str]) -> tup
 	texts = [t["text"] for t in conv] + [reference]
 	if any(masker.leaks(t) for t in texts):
 		return None, "con_du_lieu_nguon"
+	if any(
+		OBFUSCATED.search(t) for t in texts
+	):  # email viết giấu (a (at) b (dot) com) mà bộ che không nhận ra
+		return None, "email_viet_giau"
 	case = {
 		"case_id": f"REAL-{day.replace('-', '')}-{index:03d}",
 		"source": "Real",
