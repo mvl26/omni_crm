@@ -92,6 +92,10 @@ class TelephonyAdapter:
 		return False, _("Kênh tổng đài không gửi tin nhắn")
 
 	# Điểm nối với worker (không thuộc Protocol bắt buộc)
+	def prepare_batch(self, msgs: list[Any], channel_doc) -> list[Any]:
+		"""Xem worker_hooks.prepare_batch (cuộc gọi ẩn số không đi qua định danh)."""
+		return worker_hooks.prepare_batch(msgs, channel_doc)
+
 	def after_resolve(self, res: Any, msgs: list[Any], channel_doc) -> None:
 		"""Xem worker_hooks.after_resolve."""
 		worker_hooks.after_resolve(res, msgs, channel_doc)
