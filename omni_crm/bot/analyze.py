@@ -427,11 +427,12 @@ def analyze_batch(batch_id: str) -> None:
 def after_analyze(batch_id: str, lead: str | None) -> None:
 	"""Điểm nối sau phân tích (kể cả khi AI lỗi): chấm điểm Lead (D2-06, tự bắt lỗi, tắt thì không làm gì).
 
-	D2-07 thêm vào đây việc enqueue bot trả lời (docs/08 mục 5.1); chấm điểm chạy trước để bản nháp thấy điểm mới.
+	Rồi đẩy bot trả lời ngầm (D2-07, docs/08 mục 5.1); chấm điểm chạy trước để bản nháp thấy điểm mới.
 	"""
-	from omni_crm.bot import scoring
+	from omni_crm.bot import reply, scoring
 
 	scoring.run_scoring(lead)
+	reply.enqueue_reply(batch_id, lead)
 
 
 def should_analyze(batch_id: str) -> bool:

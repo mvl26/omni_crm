@@ -164,6 +164,7 @@ scheduler_events = {
 			"omni_crm.pipeline.sweeper.requeue_stuck",
 			"omni_crm.monitoring.alerts.run_checks",  # D1-10
 			"omni_crm.channels.telephony.callbacks.sweep_pending",  # D2-03
+			"omni_crm.bot.reply.compare_pending",  # D2-07: so nháp Shadow với câu sale, hết hạn sau 24 giờ
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
