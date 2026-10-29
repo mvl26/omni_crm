@@ -63,3 +63,6 @@ Quy tắc deploy: mỗi đợt gắn tag `dot-N-rcX`; migration chỉ **thêm** 
 
 Khóa Redis `omni:lock:sig:{SĐT/email}` (ADR 0003) có timeout 60 giây và KHÔNG được gia hạn; chờ tối đa 20 giây rồi ném `TransientError` (tin thử lại theo backoff). Nếu bước tìm + tạo Lead một lô kéo dài hơn 60 giây (ví dụ gọi mạng chậm, DB nghẽn) khóa hết hạn và lượt khác có thể chen vào, mất bảo đảm chống trùng. Triệu chứng: nhiều tin `Retry` với lỗi "Khóa tín hiệu định danh đang bận", hoặc Candidate cùng SĐT tăng bất thường. Khi gặp, kiểm tra độ trễ DB trước.
 
+## Lưu ý D1-08: developer_mode
+
+`zalo_skip_signature` (bỏ qua xác thực chữ ký webhook Zalo) chỉ có tác dụng khi `developer_mode` của site bật (đọc bằng `cint`, chuỗi "0" là tắt). **Cấm bật `developer_mode` ở production**: nó mở luôn đường bỏ qua chữ ký. Kiểm tra `bench --site <site> console` -> `frappe.conf.developer_mode` trước mỗi lần phát hành.

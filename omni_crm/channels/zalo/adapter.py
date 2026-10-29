@@ -11,7 +11,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import convert_utc_to_system_timezone, now_datetime
+from frappe.utils import cint, convert_utc_to_system_timezone, now_datetime
 
 from omni_crm.channels.registry import register_adapter
 from omni_crm.channels.zalo import signature, worker_hooks
@@ -29,7 +29,7 @@ LABELS = {"image": "Ảnh", "file": "Tệp", "sticker": "Sticker", "location": "
 
 def _env_allows_skip() -> bool:
 	"""Chỉ site dev (developer_mode) mới được bỏ qua chữ ký."""
-	return bool(frappe.conf.get("developer_mode"))
+	return bool(cint(frappe.conf.get("developer_mode")))
 
 
 def _record_rejection(channel: str, reason: str) -> None:
