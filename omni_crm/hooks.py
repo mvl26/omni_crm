@@ -83,7 +83,7 @@ required_apps = ["crm"]
 # ------------
 
 # before_install = "omni_crm.install.before_install"
-# after_install = "omni_crm.install.after_install"
+after_install = "omni_crm.install.after_install"
 
 # Uninstallation
 # ------------
@@ -166,8 +166,8 @@ required_apps = ["crm"]
 # --------
 fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},
-	# Bật từ D1-02:
-	# {"dt": "Custom Field", "filters": [["module", "=", "Omni CRM"]]},
+	{"dt": "Custom Field", "filters": [["module", "=", "Omni CRM"]]},
+	# Bật khi có Property Setter của module Omni CRM:
 	# {"dt": "Property Setter", "filters": [["module", "=", "Omni CRM"]]},
 ]
 

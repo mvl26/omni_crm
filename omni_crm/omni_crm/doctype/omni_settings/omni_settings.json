@@ -1,0 +1,147 @@
+{
+ "issingle": 1,
+ "track_changes": 1,
+ "description": "Công tắc và tham số chung của Omni CRM",
+ "index_web_pages_for_search": 0,
+ "name": "Omni Settings",
+ "doctype": "DocType",
+ "module": "Omni CRM",
+ "engine": "InnoDB",
+ "field_order": [
+  "sec_general",
+  "sandbox_mode",
+  "debounce_seconds",
+  "sec_retry",
+  "max_attempts",
+  "retry_backoff_minutes",
+  "stuck_after_minutes",
+  "sec_retention",
+  "raw_payload_retention_days",
+  "col_ret",
+  "recording_retention_days",
+  "sec_mapping",
+  "default_lead_source_map",
+  "business_hours",
+  "sec_alert",
+  "alert_recipients",
+  "assignment_fallback_users"
+ ],
+ "fields": [
+  {
+   "fieldname": "sec_general",
+   "fieldtype": "Section Break",
+   "label": "Chung"
+  },
+  {
+   "fieldname": "sandbox_mode",
+   "fieldtype": "Check",
+   "label": "Chế độ thử (sandbox)",
+   "default": "1",
+   "description": "Bật: chiều ra không gọi API thật, chỉ ghi log. Production phải tắt có chủ đích."
+  },
+  {
+   "fieldname": "debounce_seconds",
+   "fieldtype": "Int",
+   "label": "Giây chờ gộp tin liên tiếp",
+   "default": "5"
+  },
+  {
+   "fieldname": "sec_retry",
+   "fieldtype": "Section Break",
+   "label": "Xử lý và thử lại"
+  },
+  {
+   "fieldname": "max_attempts",
+   "fieldtype": "Int",
+   "label": "Số lần thử tối đa",
+   "default": "3",
+   "description": "Quá số lần này tin chuyển sang Manual."
+  },
+  {
+   "fieldname": "retry_backoff_minutes",
+   "fieldtype": "Data",
+   "label": "Chờ giữa các lần thử (phút)",
+   "default": "1,5",
+   "description": "Danh sách số nguyên dương, phần tử thứ n là thời gian chờ sau lần lỗi thứ n. Có (số lần thử tối đa - 1) phần tử."
+  },
+  {
+   "fieldname": "stuck_after_minutes",
+   "fieldtype": "Int",
+   "label": "Tin kẹt ở Processing quá (phút)",
+   "default": "10"
+  },
+  {
+   "fieldname": "sec_retention",
+   "fieldtype": "Section Break",
+   "label": "Thời hạn lưu"
+  },
+  {
+   "fieldname": "raw_payload_retention_days",
+   "fieldtype": "Int",
+   "label": "Giữ payload gốc (ngày)",
+   "default": "180"
+  },
+  {
+   "fieldname": "col_ret",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "recording_retention_days",
+   "fieldtype": "Int",
+   "label": "Giữ ghi âm (ngày)",
+   "default": "365"
+  },
+  {
+   "fieldname": "sec_mapping",
+   "fieldtype": "Section Break",
+   "label": "Ánh xạ và giờ làm việc"
+  },
+  {
+   "fieldname": "default_lead_source_map",
+   "fieldtype": "JSON",
+   "label": "Ánh xạ kênh sang nguồn Lead",
+   "default": "{\"Email\":\"Email\",\"Zalo OA\":\"Zalo OA\",\"Telephony\":\"Điện thoại\"}"
+  },
+  {
+   "fieldname": "business_hours",
+   "fieldtype": "JSON",
+   "label": "Giờ làm việc",
+   "default": "{\"mon-fri\":\"08:00-17:30\",\"sat\":\"08:00-12:00\"}"
+  },
+  {
+   "fieldname": "sec_alert",
+   "fieldtype": "Section Break",
+   "label": "Cảnh báo và gán Lead"
+  },
+  {
+   "fieldname": "alert_recipients",
+   "fieldtype": "Small Text",
+   "label": "Email nhận cảnh báo",
+   "description": "Mỗi dòng một địa chỉ."
+  },
+  {
+   "fieldname": "assignment_fallback_users",
+   "fieldtype": "Small Text",
+   "label": "Người nhận Lead dự phòng",
+   "description": "Chỉ dùng nếu Assignment Rule của CRM không áp dụng được. Mỗi dòng một user, chia vòng tròn."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "email": 0,
+   "print": 0,
+   "share": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

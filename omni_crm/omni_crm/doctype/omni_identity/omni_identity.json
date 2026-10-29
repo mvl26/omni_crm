@@ -1,0 +1,119 @@
+{
+ "autoname": "hash",
+ "title_field": "identity_key",
+ "search_fields": "identity_key,display_name",
+ "naming_rule": "Random",
+ "name": "Omni Identity",
+ "doctype": "DocType",
+ "module": "Omni CRM",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_key",
+  "channel_type",
+  "external_id",
+  "display_name",
+  "col_id",
+  "phone_e164",
+  "email_norm",
+  "lead",
+  "sec_activity",
+  "last_inbound_at",
+  "is_follower",
+  "phone_requested_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_key",
+   "fieldtype": "Data",
+   "label": "Khóa định danh",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "\"{channel_type}:{external_id}\" ví dụ Zalo OA:2973..., Email:an@abc.vn, Telephony:+84912345678"
+  },
+  {
+   "fieldname": "channel_type",
+   "fieldtype": "Select",
+   "label": "Loại kênh",
+   "options": "Email\nZalo OA\nTelephony",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "external_id",
+   "fieldtype": "Data",
+   "label": "Mã bên ngoài"
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "label": "Tên hiển thị",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_id",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "phone_e164",
+   "fieldtype": "Data",
+   "label": "SĐT (E.164)",
+   "search_index": 1
+  },
+  {
+   "fieldname": "email_norm",
+   "fieldtype": "Data",
+   "label": "Email chuẩn hóa",
+   "search_index": 1
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sec_activity",
+   "fieldtype": "Section Break",
+   "label": "Tương tác"
+  },
+  {
+   "fieldname": "last_inbound_at",
+   "fieldtype": "Datetime",
+   "label": "Khách liên hệ gần nhất"
+  },
+  {
+   "fieldname": "is_follower",
+   "fieldtype": "Check",
+   "label": "Đang quan tâm OA"
+  },
+  {
+   "fieldname": "phone_requested_at",
+   "fieldtype": "Datetime",
+   "label": "Lần gần nhất yêu cầu SĐT"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "email": 0,
+   "print": 0,
+   "share": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

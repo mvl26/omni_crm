@@ -1,0 +1,141 @@
+{
+ "autoname": "OOUT-.YYYY.-.########",
+ "naming_rule": "Expression (old style)",
+ "sort_field": "creation",
+ "name": "Omni Outbound Message",
+ "doctype": "DocType",
+ "module": "Omni CRM",
+ "engine": "InnoDB",
+ "field_order": [
+  "channel",
+  "identity",
+  "lead",
+  "text",
+  "col_out",
+  "source",
+  "sent_by",
+  "status",
+  "is_sandbox",
+  "sec_send",
+  "attempts",
+  "next_attempt_at",
+  "external_message_id",
+  "sent_at",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "channel",
+   "fieldtype": "Link",
+   "label": "Kênh",
+   "options": "Omni Channel",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Người nhận",
+   "options": "Omni Identity"
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "in_standard_filter": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "text",
+   "fieldtype": "Long Text",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "col_out",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Nguồn",
+   "options": "Sale\nBot\nSystem",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "sent_by",
+   "fieldtype": "Link",
+   "label": "Người gửi (Sale)",
+   "options": "User"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Queued\nSent\nFailed\nBlocked",
+   "default": "Queued",
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Blocked = quá khung gửi hoặc kênh tắt."
+  },
+  {
+   "fieldname": "is_sandbox",
+   "fieldtype": "Check",
+   "label": "Tạo ở chế độ sandbox"
+  },
+  {
+   "fieldname": "sec_send",
+   "fieldtype": "Section Break",
+   "label": "Gửi"
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Số lần thử",
+   "default": "0"
+  },
+  {
+   "fieldname": "next_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Thử lại lúc",
+   "description": "Thử lại khi lỗi tạm thời; tác vụ quét đẩy lại."
+  },
+  {
+   "fieldname": "external_message_id",
+   "fieldtype": "Data",
+   "label": "Mã tin bên ngoài"
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "label": "Gửi lúc"
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Lỗi gần nhất"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "email": 0,
+   "print": 0,
+   "share": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ],
+ "sort_order": "DESC",
+ "states": []
+}
