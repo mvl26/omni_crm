@@ -38,6 +38,13 @@ KNOWN_KEYS = {
 	"note",
 }
 REQUIRED_KEYS = ("case_id", "source", "conversation", "expected_action")
+FAKE_PHONE_PREFIXES = ("0900000", "84900000", "19000000")  # 0900 000 xxx, +84 900 000 xxx, 1900 0000
+PHONE_RUN = re.compile(r"(?<!\d)\+?\d(?:[\s.\-]?\d){7,}(?!\d)")
+EMAIL_RE = re.compile(r"[\w.%+\-]+@[\w\-]+(?:\.[\w\-]+)*\.[A-Za-z]{2,}")
+URL_RE = re.compile(
+	r"(?:https?://|www\.)\S+|(?<![@\w.])[a-z0-9\-]+(?:\.[a-z0-9\-]+)*\.(?:vn|com|net|org|io|info|biz|me)\b",
+	re.I,
+)
 MAX_TURNS = 40
 MAX_TEXT = 4000
 
@@ -86,7 +93,33 @@ def validate_case(row: Any) -> list[str]:
 	for key in ("reference_answer", "expected_group", "note"):
 		if key in row and row[key] is not None and not isinstance(row[key], str):
 			errors.append(f"{key} phải là chuỗi")
+	if row.get("source") == "Synthetic":
+		errors += synthetic_pii_problems(row)
 	return errors
+
+
+def synthetic_pii_problems(row: dict) -> list[str]:
+	"""Ca Synthetic chỉ được chứa dữ liệu bịa: SĐT 0900 000 xxx / 1900 0000, email @example.com, không URL.
+
+	Lớp bảo vệ Q11 thứ nhất: ca mang nhãn Synthetic được gửi sang AI thật nên không được lẫn thông tin thật.
+	"""
+	texts = [t.get("text", "") for t in row["conversation"] if isinstance(t, dict)]
+	texts.append(row.get("reference_answer") or "")
+	problems = []
+	for text in texts:
+		if not isinstance(text, str):
+			continue
+		for m in PHONE_RUN.finditer(text):
+			digits = re.sub(r"\D", "", m.group(0))
+			if not digits.startswith(FAKE_PHONE_PREFIXES):
+				problems.append("Synthetic chứa số điện thoại không phải số bịa 0900 000 xxx / 1900 0000")
+		emails = EMAIL_RE.findall(text)
+		if any(not e.lower().endswith("@example.com") for e in emails):
+			problems.append("Synthetic chứa email không thuộc @example.com")
+		stripped = EMAIL_RE.sub(" ", text)
+		if URL_RE.search(stripped):
+			problems.append("Synthetic chứa URL/tên miền")
+	return list(dict.fromkeys(problems))
 
 
 def import_jsonl(path: str, allow_unreviewed: bool = False) -> dict[str, Any]:
