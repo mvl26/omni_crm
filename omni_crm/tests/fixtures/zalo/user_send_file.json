@@ -1,0 +1,27 @@
+{
+ "app_id": "1111111111111111111",
+ "event_name": "user_send_file",
+ "timestamp": "1761700000000",
+ "user_id_by_app": "9999",
+ "sender": {
+  "id": "3333333333333333333"
+ },
+ "recipient": {
+  "id": "2222222222222222222"
+ },
+ "message": {
+  "msg_id": "msg-file-001",
+  "attachments": [
+   {
+    "type": "file",
+    "payload": {
+     "url": "https://example.invalid/bao-gia.pdf",
+     "name": "bao-gia.pdf",
+     "size": "1024",
+     "checksum": "x",
+     "type": "pdf"
+    }
+   }
+  ]
+ }
+}

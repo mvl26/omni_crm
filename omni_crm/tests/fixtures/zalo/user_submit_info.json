@@ -1,0 +1,19 @@
+{
+ "app_id": "1111111111111111111",
+ "event_name": "user_submit_info",
+ "timestamp": "1761700000000",
+ "sender": {
+  "id": "3333333333333333333"
+ },
+ "recipient": {
+  "id": "2222222222222222222"
+ },
+ "info": {
+  "name": "Nguyễn Văn An",
+  "phone": "0912345678",
+  "address": "1 Phố Huế",
+  "city": "Hà Nội",
+  "district": "Hai Bà Trưng",
+  "ward": "Phố Huế"
+ }
+}
