@@ -50,19 +50,24 @@ def save_inbound(event: InboundEvent) -> str | None:
 	return doc.name
 
 
-def enqueue_identity(identity_key: str, *, after_commit: bool = True) -> None:
+def enqueue_identity(identity_key: str, *, after_commit: bool = True, job_suffix: str = "") -> None:
 	"""Đẩy job process_identity cho một định danh; không bao giờ ném lỗi ra ngoài.
 
-	Mặc định hoãn đến sau commit (để worker thấy bản ghi). Lỗi enqueue (Redis chết) được bắt và
-	ghi log; bản ghi New vẫn còn để tác vụ quét đẩy lại.
+	after_commit=True (mặc định, dùng trong request webhook): hoãn tới sau commit để worker thấy bản
+	ghi. Callback chỉ chạy khi có commit; nếu không commit hoặc rollback thì job MẤT ÂM THẦM.
+	Vì vậy worker và tác vụ quét (chạy trong job nền, không có commit tiếp theo) PHẢI gọi với
+	after_commit=False. job_suffix tạo job_id khác để đẩy tiếp từ chính job đang chạy (job cùng id
+	đang STARTED sẽ bị deduplicate bỏ qua). Lỗi enqueue (Redis chết) được bắt và ghi log; bản ghi
+	New vẫn còn để tác vụ quét đẩy lại.
 	"""
+	job_id = f"omni-identity::{identity_key}" + (f"::{job_suffix}" if job_suffix else "")
 
 	def _enqueue() -> None:
 		try:
 			frappe.enqueue(
 				WORKER_METHOD,
 				queue=QUEUE,
-				job_id=f"omni-identity::{identity_key}",
+				job_id=job_id,
 				deduplicate=True,
 				identity_key=identity_key,
 			)
