@@ -424,3 +424,134 @@ class TestWiring(AnalyzeTestCase):
 		with mock.patch("omni_crm.bot.analyze.enqueue_analyze", side_effect=RuntimeError("hỏng")):
 			msg = self.send("T05-EXT-2", sender="TD106T05B", text="Em cần găng tay")
 		self.assertEqual(frappe.db.get_value(INBOUND, msg, "status"), "Done")
+
+
+class TestValueMatchesEvidence(AnalyzeTestCase):
+	TEXT = "Chào shop, em là Hoa ở phòng khám Ánh Dương, cần 100 hộp găng tay nitrile tuần sau"
+
+	def check(self, **over):
+		return analyze.postprocess(signals(**over), self.TEXT)
+
+	def test_real_quote_but_invented_value_is_dropped_per_field(self):
+		cases = {
+			"customer_name": "Nguyễn Văn B",
+			"organization": "Bệnh viện Chợ Rẫy",
+			"quantity": "500 thùng",
+			"timeframe": "ngày mai",
+		}
+		for key, fake_value in cases.items():
+			out = self.check(**{key: fake_value, "evidence": {key: "Chào shop, em là Hoa"}})
+			self.assertNotIn(key, out["accepted"], key)
+			self.assertIn(key, out["dropped"], key)
+		out = self.check(products=["máy thở"], evidence={"products": "cần 100 hộp găng tay"})
+		self.assertNotIn("products", out["accepted"])
+		self.assertIn("products", out["dropped"])
+
+	def test_correct_values_still_pass(self):
+		out = self.check(
+			customer_name="Hoa",
+			organization="phòng khám Ánh Dương",
+			quantity="100 hộp",
+			timeframe="tuần sau",
+			products=["găng tay nitrile"],
+			evidence={
+				"customer_name": "em là Hoa",
+				"organization": "phòng khám Ánh Dương",
+				"quantity": "cần 100 hộp",
+				"timeframe": "tuần sau",
+				"products": "100 hộp găng tay nitrile",
+			},
+		)
+		self.assertEqual(out["dropped"], [])
+		self.assertEqual(out["accepted"]["customer_name"], "Hoa")
+		self.assertEqual(out["accepted"]["products"], "găng tay nitrile")
+
+	def test_one_invented_product_among_real_ones_is_dropped(self):
+		out = self.check(
+			products=["găng tay nitrile", "máy thở"], evidence={"products": "100 hộp găng tay nitrile"}
+		)
+		self.assertEqual(out["accepted"]["products"], "găng tay nitrile")
+		self.assertIn("products:1", out["dropped"])
+
+	def test_number_in_value_must_be_in_quote(self):
+		out = self.check(quantity="1000 hộp", evidence={"quantity": "cần 100 hộp"})
+		self.assertNotIn("quantity", out["accepted"])
+
+	def test_short_quote_rejected(self):
+		self.assertFalse(analyze.evidence_supported("Hoa", self.TEXT))
+
+	def test_contacts_truncated_to_three(self):
+		text = "SĐT: 0912345671 0912345672 0912345673 0912345674 0912345675"
+		phones = [f"091234567{i}" for i in range(1, 6)]
+		out = analyze.postprocess(signals(phones=phones, evidence={"phones": text}), text)
+		self.assertEqual(len(out["accepted"]["phones"]), 3)
+		self.assertIn("phones_truncated:2", out["dropped"])
+
+
+class TestHardening(AnalyzeTestCase):
+	def test_raw_output_scrubbed_when_postprocess_raises(self):
+		batch = self.say("Em là Hoa, cần găng tay")
+		self.fake.add_rule(
+			signals(customer_name="Hoa", evidence={"customer_name": "Em là Hoa, cần găng tay"}),
+			kind="Analyze",
+		)
+		with mock.patch.object(analyze, "apply_to_lead", side_effect=RuntimeError("hỏng")):
+			analyze.analyze_batch(batch)
+		out = self.run_row(batch).output_json
+		self.assertFalse(out and "Em là Hoa" in out)
+		self.assertFalse(out and "evidence" in out)
+
+	def test_raw_scrubbed_right_after_receive_even_if_postprocess_fails(self):
+		batch = self.say("Em là Hoa")
+		self.fake.add_rule(signals(evidence={"customer_name": "Em là Hoa"}), kind="Analyze")
+		with mock.patch.object(analyze, "postprocess", side_effect=RuntimeError("hỏng")):
+			analyze.analyze_batch(batch)
+		self.assertNotIn("evidence", self.run_row(batch).output_json or "")
+
+	def test_scrub_without_run_row_is_harmless(self):
+		analyze.scrub_raw("T05-khong-co-dong-nao", {"evidence": {"a": "b"}})
+		analyze.scrub_raw("T05-khong-co-dong-nao")
+
+	def test_candidates_capped_at_three(self):
+		e164 = normalize_phone(PHONE)
+		others = [self.make_lead(f"TD106 Dup{i}", "Administrator") for i in range(5)]
+		for lead in others:
+			frappe.db.set_value("CRM Lead", lead, "omni_phone_e164", e164)
+		frappe.db.commit()
+		batch = self.say(f"Số em là {PHONE}")
+		self.analyze(batch, signals(phones=[PHONE], evidence={"phones": f"Số em là {PHONE}"}))
+		stored = json.loads(self.run_row(batch).output_json)
+		self.assertEqual(len(stored["candidates"]), 3)
+		self.assertIn("candidates_truncated:2", stored["dropped"])
+
+	def test_apply_locks_row_and_reads_manual_fields_fresh(self):
+		frappe.db.set_value("CRM Lead", self.lead1, "omni_manual_fields", json.dumps(["omni_need"]))
+		with mock.patch.object(frappe.db, "get_value", wraps=frappe.db.get_value) as spy:
+			analyze.apply_to_lead(self.lead1, {"need": "bot muốn ghi", "quantity": "5 hộp"})
+		self.assertTrue(any(c.kwargs.get("for_update") for c in spy.call_args_list))
+		self.assertNotEqual(frappe.db.get_value("CRM Lead", self.lead1, "omni_need"), "bot muốn ghi")
+
+	def test_update_note_lists_field_names_only(self):
+		res = analyze.apply_to_lead(self.lead1, {"quantity": "5 hộp", "summary": "tóm tắt"})
+		self.assertEqual(res["applied"], ["omni_bot_summary", "omni_quantity"])
+		note = frappe.get_all(
+			"Comment",
+			filters={"reference_doctype": "CRM Lead", "reference_name": self.lead1, "comment_type": "Info"},
+			pluck="content",
+		)
+		self.assertTrue(any("omni_quantity" in c and "5 hộp" not in c for c in note))
+
+	def test_skipped_manual_only_for_fields_bot_wanted(self):
+		frappe.db.set_value(
+			"CRM Lead", self.lead1, "omni_manual_fields", json.dumps(["omni_need", "omni_urgency"])
+		)
+		res = analyze.apply_to_lead(self.lead1, {"need": "x y z"})
+		self.assertEqual(res["skipped_manual"], ["omni_need"])
+
+	def test_customer_text_respects_char_window(self):
+		for i in range(6):
+			self.make_inbound(self.lead2, self.ident2, "Zalo OA", f"{i}" + "x" * 80, 20 - i * 3)
+		frappe.db.commit()
+		text = analyze.customer_text(self.lead2, max_chars=300)
+		self.assertIn("5" + "x" * 80, text)
+		self.assertNotIn("0" + "x" * 80, text)

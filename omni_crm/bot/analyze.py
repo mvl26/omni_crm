@@ -17,7 +17,7 @@ from frappe.utils import cint
 
 from omni_crm import flags
 from omni_crm.bot import ai_client
-from omni_crm.bot.context import build_conversation, normalize_text
+from omni_crm.bot.context import _line, build_conversation, escape_tags, mask_pii, normalize_text
 from omni_crm.bot.prompts.loader import load_prompt, render
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
@@ -33,7 +33,11 @@ QUEUE = "omni"
 JOB = "omni_crm.bot.analyze.analyze_batch"
 JOB_TIMEOUT = 600  # 1 lần gọi AI có thể tới 3 x 60 giây + chờ thử lại
 EVIDENCE_THRESHOLD = 0.85  # docs/08 mục 3 bước 1
-MIN_EVIDENCE_CHARS = 3
+MIN_EVIDENCE_CHARS = 6
+MAX_CONTACTS = 3  # SĐT/email chấp nhận tối đa mỗi loại trong một lượt
+MAX_CANDIDATES = 3  # Duplicate Candidate tạo tối đa trong một lượt
+VALUE_MATCH_RATIO = 0.8  # tỉ lệ từ khóa của giá trị phải có trong trích dẫn
+MAX_CHARS = 6000  # như build_conversation
 MAX_TURNS = 20
 UNMASK_CONF = "omni_ai_unmask_pii"  # site_config: chỉ bật sau khi chủ dự án chốt Q11 cho phép gửi SĐT/email
 ANALYZE_EVENTS = ("message", "user_info")  # cuộc gọi có transcript: Đợt 3 (D3-03), chưa có dữ liệu
@@ -122,10 +126,36 @@ def evidence_supported(evidence: str | None, customer_text: str | None) -> bool:
 	return False
 
 
-def customer_text(lead: str, max_turns: int = MAX_TURNS) -> str:
-	"""Gộp lời KHÁCH (không có lời Miyano/sale) trong cùng cửa sổ lượt mà bot nhìn thấy, chưa che SĐT/email."""
+def customer_text(
+	lead: str, max_turns: int = MAX_TURNS, max_chars: int = MAX_CHARS, mask: bool = True
+) -> str:
+	"""Gộp lời KHÁCH (không có lời Miyano/sale) trong đúng cửa sổ lượt mà bot nhìn thấy, chưa che SĐT/email.
+
+	Cửa sổ cắt như `build_conversation`: `max_turns` lượt gần nhất rồi bỏ lượt cũ nhất khi vượt `max_chars`.
+	"""
 	turns = [t for t in timeline.conversation_turns(lead) if (t.get("text") or "").strip()]
-	return "\n".join(t["text"] for t in turns[-max(max_turns, 0) :] if t.get("actor") == "customer")
+	turns = turns[-max(max_turns, 0) :]
+	sizes = []
+	for t in turns:
+		text = escape_tags(normalize_text(t["text"]).strip())
+		sizes.append(len(_line(t, mask_pii(text) if mask else text)) + 1)
+	while len(turns) > 1 and sum(sizes) > max_chars:
+		turns.pop(0)
+		sizes.pop(0)
+	return "\n".join(t["text"] for t in turns if t.get("actor") == "customer")
+
+
+def value_supported(value: str, evidence: str | None) -> bool:
+	"""Giá trị bot điền có khớp trích dẫn không: mọi số của giá trị có trong trích dẫn, và >= 80% từ của giá trị
+	(sau bỏ dấu, chữ thường) nằm trong các từ của trích dẫn. Chặn ca "trích dẫn có thật nhưng giá trị bịa".
+	"""
+	words = _fold(value).split()
+	if not words:
+		return False
+	have = set(_fold(evidence).split())
+	if any(w.isdigit() and w not in have for w in words):
+		return False
+	return sum(w in have for w in words) / len(words) >= VALUE_MATCH_RATIO
 
 
 # --- Hậu xử lý bằng code (docs/08 mục 3, bước 1-6) ---------------------------------------------------------
@@ -147,21 +177,36 @@ def postprocess(signals: dict, text_of_customer: str) -> dict:
 	accepted: dict[str, Any] = {}
 	dropped: list[str] = []
 
-	def decide(key: str, value: Any) -> None:
-		if evidence_supported(evidence.get(key), text_of_customer):
+	def decide(key: str, value: Any, check_value: bool = True) -> bool:
+		"""Nhận khi trích dẫn có trong lời khách và (nếu check_value) giá trị khớp trích dẫn."""
+		ev = evidence.get(key)
+		ok = evidence_supported(ev, text_of_customer) and (not check_value or value_supported(value, ev))
+		if ok:
 			accepted[key] = value
 		else:
 			dropped.append(key)
+		return ok
 
-	for key in ("customer_name", "organization", "need", "quantity", "timeframe"):
+	for key in ("customer_name", "organization", "quantity", "timeframe"):
 		value = _clean(signals.get(key), FIELD_LIMITS.get(key, 140))
 		if value:
 			decide(key, value)
+	need = _clean(signals.get("need"), FIELD_LIMITS["need"])
+	if need:
+		decide("need", need, check_value=False)  # nhu cầu là diễn đạt lại, chỉ cần có căn cứ
 	products = [p for p in (_clean(x, 140) for x in signals.get("products") or []) if p]
 	if products:
-		decide("products", ", ".join(products)[: FIELD_LIMITS["products"]])
+		ev = evidence.get("products")
+		if evidence_supported(ev, text_of_customer):
+			kept = [p for p in products if value_supported(p, ev)]
+			if kept:
+				accepted["products"] = ", ".join(kept)[: FIELD_LIMITS["products"]]
+			if len(kept) < len(products):
+				dropped.append("products" if not kept else f"products:{len(products) - len(kept)}")
+		else:
+			dropped.append("products")
 	if signals.get("urgency") in URGENCIES:
-		decide("urgency", signals["urgency"])
+		decide("urgency", signals["urgency"], check_value=False)  # giá trị là nhãn chuẩn, chỉ cần có căn cứ
 	if "timeframe" in accepted and isinstance(signals.get("timeframe_within_30d"), bool):
 		accepted["timeframe_within_30d"] = signals["timeframe_within_30d"]
 
@@ -175,7 +220,9 @@ def postprocess(signals: dict, text_of_customer: str) -> dict:
 			continue
 		ok = [n for n in dict.fromkeys(wanted) if n in known]
 		if ok and evidence_supported(evidence.get(key), text_of_customer):
-			accepted[key] = ok
+			accepted[key] = ok[:MAX_CONTACTS]
+			if len(ok) > MAX_CONTACTS:
+				dropped.append(f"{key}_truncated:{len(ok) - MAX_CONTACTS}")
 		else:
 			dropped.append(key)
 
@@ -202,6 +249,7 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 		lead,
 		["first_name", "last_name", "lead_name", "organization", "omni_manual_fields", *LEAD_FIELDS.values()],
 		as_dict=True,
+		for_update=True,  # khóa dòng tới commit: sale lưu cùng lúc phải chờ, không đọc `omni_manual_fields` cũ
 	)
 	if not row:
 		return {"applied": [], "skipped_manual": []}
@@ -210,16 +258,18 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 	skipped: list[str] = []
 
 	def put(fieldname: str, value: Any) -> None:
+		if value in (None, ""):
+			return
 		if fieldname in manual:
 			skipped.append(fieldname)
-		elif value not in (None, "") and value != row.get(fieldname):
+		elif value != row.get(fieldname):
 			values[fieldname] = value
 
 	for key, fieldname in LEAD_FIELDS.items():
 		put(fieldname, accepted.get(key))
 	name = accepted.get("customer_name")
 	if name and is_placeholder_name(" ".join(filter(None, [row.first_name, row.last_name]))):
-		if {"first_name", "last_name"} & manual:
+		if {"first_name", "last_name", "lead_name"} & manual:
 			skipped.append("first_name")
 		else:
 			values.update(first_name=name[:140], last_name=None, lead_name=name[:140])
@@ -227,23 +277,47 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 		put("organization", accepted["organization"][:140])
 	if accepted.get("summary"):
 		values["omni_bot_summary"] = accepted["summary"]  # cập nhật mỗi lượt; trường chỉ đọc, sale không sửa
+	applied = sorted(values)  # trước set_value (nó thêm modified/modified_by vào dict)
 	if values:
 		# db.set_value: không chạy validate của CRM (has_gravatar qua mạng), như crm_bridge.lead.fill_blank_contact.
 		with flags.omni_bot():
 			frappe.db.set_value(LEAD, lead, values)
-	return {"applied": sorted(values), "skipped_manual": sorted(set(skipped))}
+			_note_update(lead, sorted(set(values) - {"omni_bot_summary", "lead_name"}))
+	return {"applied": applied, "skipped_manual": sorted(set(skipped))}
 
 
-def flag_duplicates(lead: str, accepted: dict) -> list[str]:
-	"""SĐT/email bot trích (tín hiệu trung bình) trùng Lead khác thì tạo Omni Duplicate Candidate; không tự gộp."""
+def _note_update(lead: str, fieldnames: list[str]) -> None:
+	"""Comment ngắn "Bot đã cập nhật: <tên trường>" (set_value không tạo Version); chỉ tên trường, không có giá trị."""
+	if not fieldnames:
+		return
+	try:
+		frappe.get_doc(
+			{
+				"doctype": "Comment",
+				"comment_type": "Info",
+				"reference_doctype": LEAD,
+				"reference_name": lead,
+				"content": _("Bot đã cập nhật: {0}").format(", ".join(fieldnames)),
+			}
+		).insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(title="Omni: không ghi được ghi chú bot cập nhật Lead", message=f"lead={lead}")
+
+
+def flag_duplicates(lead: str, accepted: dict) -> tuple[list[str], int]:
+	"""SĐT/email bot trích (tín hiệu trung bình) trùng Lead khác thì tạo Omni Duplicate Candidate; không tự gộp.
+
+	Trả (tên các Candidate đã tạo, số Lead bị cắt vì vượt MAX_CANDIDATES).
+	"""
 	phones, emails = accepted.get("phones") or [], accepted.get("emails") or []
 	others = [x for x in resolver.find_leads(phones, emails) if x != lead]
 	if not others:
-		return []
+		return [], 0
+	cut = max(len(others) - MAX_CANDIDATES, 0)
 	reason = _("Bot trích SĐT/email từ lời khách, trùng Lead khác")
 	score = SCORE_MEDIUM_ONE if len(others) == 1 else SCORE_MEDIUM_MANY
-	made = [duplicates.create_candidate(lead, other, reason, score) for other in others]
-	return [c for c in made if c]
+	made = [duplicates.create_candidate(lead, other, reason, score) for other in others[:MAX_CANDIDATES]]
+	return [c for c in made if c], cut
 
 
 # --- Điểm vào -------------------------------------------------------------------------------------------------
@@ -254,8 +328,21 @@ def _lead_of_batch(batch_id: str) -> str | None:
 	return lead_bridge.follow_merged(leads[0]) if leads else None
 
 
-def _store_result(batch_id: str, result: dict) -> None:
-	"""Thay output_json của Bot Run bằng kết quả đã duyệt (không có trích dẫn nguyên văn); D2-06 đọc từ đây."""
+def scrub_raw(batch_id: str, raw: dict | None = None) -> None:
+	"""Bỏ `evidence` (lời khách) khỏi output_json thô mà call_tool đã commit; không có `raw` thì xóa hẳn output_json.
+
+	Không ném lỗi: gọi được cả ở nhánh lỗi. Không tìm thấy dòng Bot Run thì không có gì để làm.
+	"""
+	try:
+		kept = None if raw is None else {k: v for k, v in raw.items() if k != "evidence"}
+		_store_result(batch_id, kept)
+		frappe.db.commit()
+	except Exception:
+		frappe.log_error(title="Omni: không scrub được output_json Bot Run", message=f"batch_id={batch_id}")
+
+
+def _store_result(batch_id: str, result: dict | None) -> None:
+	"""Thay output_json của Bot Run bằng `result` (kết quả đã duyệt, không có trích dẫn nguyên văn); D2-06 đọc từ đây."""
 	run = frappe.get_all(
 		BOT_RUN,
 		filters={"batch_id": batch_id, "kind": "Analyze", "status": "Success"},
@@ -264,7 +351,9 @@ def _store_result(batch_id: str, result: dict) -> None:
 		pluck="name",
 	)
 	if run:
-		frappe.db.set_value(BOT_RUN, run[0], "output_json", json.dumps(result, ensure_ascii=False))
+		frappe.db.set_value(
+			BOT_RUN, run[0], "output_json", json.dumps(result, ensure_ascii=False) if result else None
+		)
 
 
 def run_analysis(batch_id: str, lead: str) -> dict | None:
@@ -285,13 +374,16 @@ def run_analysis(batch_id: str, lead: str) -> dict | None:
 	)  # KHÔNG truyền synthetic: hội thoại khách luôn qua cổng Q11
 	if raw is None:
 		return None
-	checked = postprocess(raw, customer_text(lead))
+	scrub_raw(
+		batch_id, raw
+	)  # call_tool đã commit bản thô (có lời khách trong evidence): bỏ ngay, trước mọi bước dễ lỗi
+	checked = postprocess(raw, customer_text(lead, mask=mask))
 	accepted = checked["accepted"]
 	written = apply_to_lead(lead, accepted)
-	candidates = flag_duplicates(lead, accepted)
+	candidates, cut = flag_duplicates(lead, accepted)
 	result = {
 		"accepted": accepted,
-		"dropped": checked["dropped"],
+		"dropped": checked["dropped"] + ([f"candidates_truncated:{cut}"] if cut else []),
 		"applied": written["applied"],
 		"skipped_manual": written["skipped_manual"],
 		"candidates": candidates,
@@ -324,6 +416,7 @@ def analyze_batch(batch_id: str) -> None:
 			frappe.db.commit()
 		except Exception:
 			pass
+		scrub_raw(batch_id)  # lỗi giữa chừng: không để lại output_json thô
 	try:
 		after_analyze(batch_id, lead)
 	except Exception:
