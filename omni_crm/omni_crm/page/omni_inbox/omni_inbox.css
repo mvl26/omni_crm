@@ -28,3 +28,6 @@
 .omni-inbox .oi-status.Sent { color: var(--green-600, #1e8449); }
 .omni-inbox .oi-status.Failed, .omni-inbox .oi-status.Blocked { color: var(--red-600, #c0392b); font-weight: 600; }
 .oi-system-status { margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--yellow-300, #f5d66a); border-radius: 8px; background: var(--yellow-50, #fff8e1); color: var(--text-color); font-size: 12px; }
+.omni-inbox .oi-bot { padding: 8px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; background: var(--control-bg); }
+.omni-inbox .oi-bot .oi-meta { display: block; }
+.omni-inbox .oi-intent { background: var(--blue-100, #dbeafe); }
