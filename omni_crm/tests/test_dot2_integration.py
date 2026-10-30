@@ -102,6 +102,22 @@ class TestC01C02Telephony(CallbackCase):
 		self.assertEqual(frappe.db.count(TASK, {"name": task}), 1)
 
 
+class TestCallbackJobRunsAsGuest(CallbackCase):
+	"""Job việc gọi lại do worker xử lý tin đẩy ra thừa hưởng người dùng Guest của webhook. Việc tạo CRM Task kèm giao
+	việc (assign_to) kiểm quyền nên PermissionError: đo ở tải 10 cuộc/giây, gần như mọi cuộc nhỡ không có việc từ job mà
+	phải chờ tác vụ quét (5-10 phút). Test cũ chạy bằng Administrator nên không bắt được."""
+
+	def test_missed_call_task_is_created_when_job_runs_as_guest(self):
+		name = self.missed("guest1", ended="2026-10-30 09:30:00")
+		self.addCleanup(frappe.set_user, "Administrator")
+		frappe.set_user("Guest")
+		task = callbacks.process_missed_call(name, self.channel.name)
+		frappe.set_user("Administrator")
+		self.assertTrue(task, "job chạy bằng Guest vẫn phải tạo được việc gọi lại")
+		self.assertEqual(self.task_of(name), task)
+		self.assertEqual(frappe.db.get_value(TASK, task, "assigned_to"), "Administrator")
+
+
 class TestC04CallThenZalo(TelephonyTestCase):
 	"""Khách gọi trước (số 0912345678), sau đó nhắn Zalo gửi form có đúng số đó: cùng một Lead."""
 

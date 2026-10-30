@@ -35,6 +35,30 @@ def _install_fake_ai(control: str) -> None:
 	ai_client.set_client(Controlled())
 
 
+def _install_trace(path: str) -> None:
+	"""Ghi kết quả của job việc gọi lại ra tệp (chỉ để chẩn đoán khi đo tải)."""
+	from omni_crm.channels.telephony import callbacks
+
+	real = callbacks.process_missed_call
+
+	def traced(call_name, channel=None):
+		import json as _json
+
+		row = frappe.db.get_value(
+			"Omni Call", call_name, ["status", "direction", "lead", "callback_task"], as_dict=True
+		)
+		try:
+			result = real(call_name, channel)
+			err = None
+		except BaseException as e:  # noqa: BLE001
+			result, err = None, type(e).__name__
+		with open(path, "a", encoding="utf-8") as f:
+			f.write(_json.dumps({"call": call_name, "before": row, "result": result, "err": err}, default=str) + "\n")
+		return result
+
+	callbacks.process_missed_call = traced
+
+
 def main() -> None:
 	"""Khởi động một worker trên các hàng đợi chỉ định."""
 	site, queues = sys.argv[1], sys.argv[2]
@@ -45,6 +69,11 @@ def main() -> None:
 	qs = get_queue_list([q.strip() for q in queues.split(",")], build_queue_name=True)
 	if fake:
 		_install_fake_ai(fake)  # biến toàn cục của module, các tiến trình con của RQ kế thừa khi fork
+	if os.environ.get("OMNI_LOAD_TRACE"):
+		frappe.connect()
+		_install_trace(os.environ["OMNI_LOAD_TRACE"])
+		frappe.destroy()
+		frappe.init(site, sites_path=".")
 	Worker(qs, connection=conn).work(logging_level="WARNING", date_format="%H:%M:%S")
 
 
