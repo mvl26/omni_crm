@@ -203,8 +203,8 @@ Ràng buộc duy nhất trên (`lead_a`, `lead_b`).
 | --- | --- | --- |
 | `group_name` | Data, duy nhất | Ví dụ: Giờ làm việc, Địa chỉ, Thông tin sản phẩm, Hỏi giá, Khiếu nại |
 | `always_handoff` | Check | Nhóm luôn chuyển người (Hỏi giá, Khiếu nại) |
-| `auto_send_enabled` | Check | Đợt 3: bot tự gửi cho nhóm này |
-| `auto_send_enabled_at`, `auto_send_enabled_by` | Datetime, Link User | Dấu vết ai bật, khi nào |
+| `auto_send_enabled` | Check, **chỉ đọc**, mặc định 0 | Đợt 3 (D3-05): bot tự gửi cho nhóm này. KHÔNG sửa tay được: `validate` từ chối 0->1 trừ khi do `bot.auto_send.enable_group` (Omni Admin, đạt điều kiện, khóa hạ tầng mở); tắt (1->0) thì ai có quyền ghi cũng tắt được. Nhóm `always_handoff` không bao giờ có cờ này (đặt `always_handoff` cho nhóm đang bật thì cờ tự tắt) |
+| `auto_send_enabled_at`, `auto_send_enabled_by` | Datetime, Link User (chỉ đọc) | Dấu vết ai bật, khi nào (xóa khi tắt; lịch sử bật/tắt nằm ở Version vì DocType bật `track_changes`, và ở Comment dấu `omni:auto_send:enable|disable|breaker:<mã>` trên nhóm) |
 | `description` | Small Text | Mô tả để bot phân loại |
 
 ## 10. Omni Knowledge Item (Đợt 2)

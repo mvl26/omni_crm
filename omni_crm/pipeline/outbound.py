@@ -101,7 +101,23 @@ def _window_confirmation(req: OutboundRequest, confirmed_paid: bool) -> str | No
 
 
 def _check_bot_draft(req: OutboundRequest) -> None:
-	"""Tin có `bot_draft` chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (bot không tự gửi; Handoff không gửi được)."""
+	"""Kiểm nguồn Bot và liên kết nháp.
+
+	- `source="Bot"`: chỉ đi qua `bot.auto_send` (D3-05): cần nháp hợp lệ và `auto_send.assert_can_queue` kiểm lại MỌI điều
+	  kiện (khóa hạ tầng, nhóm bật, nháp Draft/Reply/Pending, khung miễn phí, giờ bot...). Mọi tin Bot khác bị từ chối.
+	- Tin có `bot_draft` mà không phải Bot: chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (Handoff
+	  không gửi được).
+	"""
+	if req.source == "Bot":
+		from omni_crm.bot import auto_send  # import trễ: auto_send import module này
+
+		auto_send.assert_can_queue(req)
+		return
+	if req.source == "System" and req.bot_draft:  # câu giữ chân (D3-05), chỉ từ auto_send.try_holding
+		from omni_crm.bot import auto_send
+
+		auto_send.assert_can_queue_holding(req)
+		return
 	if not req.bot_draft:
 		return
 	row = frappe.db.get_value(
@@ -172,6 +188,7 @@ def _row(name: str, lock: bool = False) -> Any:
 			"next_attempt_at",
 			"last_error",
 			"is_sandbox",
+			"bot_draft",
 		],
 		as_dict=True,
 		for_update=lock,
@@ -209,7 +226,16 @@ def _fail(row: Any, reason: str, **extra: Any) -> str:
 	_set(row, status="Failed", last_error=redact(reason), **extra)
 	frappe.db.commit()
 	_notify(row)
+	_notify_bot_failure(row)
 	return "Failed"
+
+
+def _notify_bot_failure(row: Any) -> None:
+	"""Tin Bot gửi lỗi thì báo sale (D3-05)."""
+	if row.source == "Bot":
+		from omni_crm.bot import auto_send
+
+		auto_send.notify_bot_failure(row)
 
 
 def drop_echo_duplicate(row: Any, external_id: str) -> None:
@@ -268,6 +294,7 @@ def _retry_or_fail(row: Any, exc: BaseException, message: str) -> str:
 	if status == "Manual":  # mark_retry dùng chung với tin vào: tin ra hết lượt = Failed
 		frappe.db.set_value(OUTBOUND, row.name, "status", "Failed", update_modified=False)
 		result = "Failed"
+		_notify_bot_failure(row)
 	else:
 		frappe.db.set_value(OUTBOUND, row.name, "status", "Queued", update_modified=False)
 		result = "Queued"
@@ -309,9 +336,25 @@ def send_outbound(outbound_name: str) -> str:
 	row = _row(outbound_name)
 	if not row or row.status != "Queued":
 		return row.status if row else "Missing"
+	if (
+		row.source == "Bot"
+	):  # tin bot: kiểm lại công tắc NGAY trước khi gửi (nhóm có thể vừa bị tắt/ngắt mạch)
+		from omni_crm.bot import auto_send
+
+		allowed_now, why_not = auto_send.send_time_check(row)
+		if not allowed_now:
+			return _block_bot(row, outbound_name, why_not)
+	if (
+		row.source == "System" and row.bot_draft
+	):  # câu giữ chân: kiểm lại khóa hạ tầng và nhóm ngay trước khi gửi
+		from omni_crm.bot import auto_send
+
+		holding_ok, holding_why = auto_send.holding_send_check(row)
+		if not holding_ok:
+			return _block_locked(outbound_name, holding_why)
 	channel_doc = frappe.get_doc(CHANNEL, row.channel) if frappe.db.exists(CHANNEL, row.channel) else None
 	if not channel_doc or not cint(channel_doc.outbound_enabled):
-		return _block_locked(outbound_name, _("Kênh đã tắt chiều ra"))
+		return _block_bot(row, outbound_name, _("Kênh đã tắt chiều ra"))
 	identity = frappe.db.get_value(IDENTITY, row.identity, "name") if row.identity else None
 	if not identity:
 		return _fail_locked(outbound_name, _("Không tìm thấy người nhận (định danh)"))
@@ -322,7 +365,7 @@ def send_outbound(outbound_name: str) -> str:
 	identity_doc = frappe.get_doc(IDENTITY, identity)
 	allowed, reason = adapter.can_send_now(identity_doc, channel_doc, source=row.source)
 	if not allowed:
-		return _block_locked(outbound_name, reason)
+		return _block_bot(row, outbound_name, reason)
 	if reason and row.source == "Sale" and frappe.cache().get_value(paid_ok_key(outbound_name)) != "paid":
 		return _block_locked(
 			outbound_name,
@@ -378,6 +421,16 @@ def _block_locked(name: str, reason: str) -> str:
 		frappe.db.rollback()
 		return "Queued"
 	return _block(row, reason) if row else (frappe.db.get_value(OUTBOUND, name, "status") or "Missing")
+
+
+def _block_bot(row: Any, name: str, reason: str) -> str:
+	"""Như `_block_locked`; tin Bot bị chặn thì nháp của nó quay về Draft/Pending cho sale xử lý (D3-05)."""
+	result = _block_locked(name, reason)
+	if result == "Blocked" and row.source == "Bot":
+		from omni_crm.bot import auto_send
+
+		auto_send.revert_to_draft(row)
+	return result
 
 
 def _fail_locked(name: str, reason: str) -> str:

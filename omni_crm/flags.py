@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import frappe
+from frappe.utils import cint
 
 
 def sandbox() -> bool:
@@ -81,3 +82,32 @@ def _settings_flag(fieldname: str) -> bool:
 		return bool(frappe.get_cached_doc("Omni Settings").get(fieldname))
 	except Exception:
 		return False
+
+
+AUTO_SEND_CONF = (
+	"omni_auto_send_allowed"  # site_config: khóa hạ tầng, vắng = chặn; chỉ người vận hành đặt sau khi Q1 chốt
+)
+
+
+def auto_send_infra_allowed() -> bool:
+	"""Khóa hạ tầng NGOÀI DB cho bot tự gửi (site_config `omni_auto_send_allowed`); vắng, sai kiểu hay lỗi thì chặn."""
+	try:
+		return bool(cint(frappe.conf.get(AUTO_SEND_CONF)))
+	except Exception:
+		return False
+
+
+def group_auto_send(group: str | None) -> bool:
+	"""Nhóm câu hỏi đang được tự gửi: khóa hạ tầng mở VÀ `auto_send_enabled` VÀ không phải nhóm luôn chuyển người.
+
+	Đọc thẳng DB (không cache) vì đây là công tắc an toàn; lỗi thì coi là tắt.
+	"""
+	if not group or not auto_send_infra_allowed():
+		return False
+	try:
+		row = frappe.db.get_value(
+			"Omni Question Group", group, ["auto_send_enabled", "always_handoff"], as_dict=True
+		)
+	except Exception:
+		return False
+	return bool(row and cint(row.auto_send_enabled) and not cint(row.always_handoff))

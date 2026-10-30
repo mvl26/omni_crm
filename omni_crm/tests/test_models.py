@@ -78,11 +78,14 @@ class TestOmniModels(FrappeTestCase):
 			settings.validate()
 
 	def test_doctypes_of_later_phases_absent(self):
-		# D2-07 đã tạo ba DocType này; Đợt 3 chưa có cờ tự gửi theo nhóm
+		# D2-07 đã tạo ba DocType này; D3-05 thêm đúng ba trường tự gửi (chỉ đọc) vào Omni Question Group
 		for dt in ("Omni Bot Draft", "Omni Knowledge Item", "Omni Question Group"):
 			self.assertTrue(frappe.db.exists("DocType", dt), dt)
 		group_fields = {f.fieldname for f in frappe.get_meta("Omni Question Group").fields}
-		self.assertFalse({f for f in group_fields if f.startswith("auto_send")})
+		self.assertEqual(
+			{f for f in group_fields if f.startswith("auto_send")},
+			{"auto_send_enabled", "auto_send_enabled_at", "auto_send_enabled_by"},
+		)
 		settings_fields = {f.fieldname for f in frappe.get_meta("Omni Settings").fields}
 		# D3-02 đã thêm cấu hình chuyển người
 		for fn in ("handoff_pause_hours", "handoff_notify_channels", "bot_active_hours"):

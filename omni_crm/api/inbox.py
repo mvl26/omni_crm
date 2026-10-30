@@ -253,10 +253,14 @@ def get_thread(lead: str) -> dict:
 			"is_sandbox",
 			"external_message_id",
 			"last_error",
+			"bot_draft",
 		],
 		order_by="creation desc",
 		limit_page_length=THREAD_LIMIT,
 	)
+	bot_meta = drafts_mod.bot_sent_meta(
+		lead, [o.bot_draft for o in outbound if o.source == "Bot" and o.bot_draft]
+	)  # nhãn "Bot đã gửi", chấm điểm, nút tắt nhóm (D3-05)
 	names = {
 		r.name: r.display_name
 		for r in frappe.get_all(IDENTITY, filters={"lead": lead}, fields=["name", "display_name"])
@@ -328,6 +332,8 @@ def get_thread(lead: str) -> dict:
 				"is_sandbox": cint(o.is_sandbox),
 				"error": o.last_error if o.status in ("Failed", "Blocked") else None,
 				"queued": o.status == "Queued",
+				"bot_sent": o.source == "Bot",
+				"bot": bot_meta.get(o.bot_draft) if o.source == "Bot" else None,
 			}
 		)
 	items.sort(key=lambda i: (_ts(i["at"]), i["name"]))

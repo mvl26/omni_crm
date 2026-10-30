@@ -323,9 +323,25 @@ class TestSendOutbound(OutboundTestCase):
 	def test_bot_blocked_in_paid_window_but_sale_allowed(self):
 		self.sandbox(True)
 		self.set_last_inbound(hours_ago=72)
-		bot = self.queue(source="Bot")
+		# D3-05: queue_outbound không còn nhận source=Bot ngoài bot/auto_send, nên dựng dòng Bot trực tiếp để thử
+		# riêng việc adapter chặn khung có phí; send_time_check của auto_send được giả để test này chỉ thử khung gửi.
+		bot_row = frappe.get_doc(
+			{
+				"doctype": OUT,
+				"channel": self.channel.name,
+				"identity": self.ident1,
+				"lead": self.lead1,
+				"text": "Dạ em chào anh",
+				"source": "Bot",
+				"status": "Queued",
+				"is_sandbox": 1,
+			}
+		).insert(ignore_permissions=True)
+		bot = bot_row.name
 		sale = self.queue(source="Sale", confirmed_paid=True)
-		self.assertEqual(outbound.send_outbound(bot), "Blocked")
+		with mock.patch("omni_crm.bot.auto_send.send_time_check", return_value=(True, "")):
+			self.assertEqual(outbound.send_outbound(bot), "Blocked")
+		self.assertIn("bot không gửi", self.row(bot).last_error)
 		self.assertEqual(outbound.send_outbound(sale), "Sent")
 
 	def test_free_at_queue_then_paid_at_send_is_blocked(self):

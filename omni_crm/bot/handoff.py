@@ -5,7 +5,7 @@ Một lần chuyển người = một thông báo cho mỗi người phụ trác
 thông báo/email KHÔNG chứa văn bản của khách hay lý do do AI viết (có thể trích lời khách): chỉ tên Lead, kênh và
 một nhãn lý do cố định. Lý do đầy đủ chỉ nằm trong nháp và dòng thời gian Lead (cần quyền đọc Lead).
 
-`holding_message` chỉ dựng câu; việc gửi (chế độ tự động theo nhóm) là của D3-05. Module này không tạo tin ra.
+`holding_message` chỉ dựng câu; việc gửi (nhóm đang tự động) do `auto_send.py` (D3-05) làm. Module này không tạo tin ra.
 """
 
 from __future__ import annotations

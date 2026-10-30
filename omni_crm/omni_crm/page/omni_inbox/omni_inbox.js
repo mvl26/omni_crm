@@ -199,9 +199,10 @@ class OmniInbox {
 				const flag = m.status ? ` · <span class="oi-status ${e(m.status)}">${e(labels[m.status] || m.status)}</span>` : "";
 				const why = m.error ? `<div class="oi-error">${e(m.error)}</div>` : "";
 				const sandbox = m.is_sandbox ? ` · ${e(__("thử nghiệm"))}` : "";
+				const botchip = m.bot_sent ? ` · <span class="oi-chan oi-botsent-chip">${e(__("Bot đã gửi"))}</span>` : "";
 				return `<div class="oi-msg ${m.direction}">
-					<div class="oi-meta"><b>${e(m.channel_type || "")}</b> · ${e(m.sender || "")} · ${e(frappe.datetime.str_to_user(m.at))}${flag}${sandbox}</div>${why}
-					<div>${e(m.text).replace(/\n/g, "<br>")}</div>${atts}</div>`;
+					<div class="oi-meta"><b>${e(m.channel_type || "")}</b> · ${e(m.sender || "")} · ${e(frappe.datetime.str_to_user(m.at))}${flag}${sandbox}${botchip}</div>${why}
+					<div>${e(m.text).replace(/\n/g, "<br>")}</div>${atts}${this.botsent_html(m)}</div>`;
 			})
 			.join("");
 		this.$right.html(`
@@ -218,6 +219,7 @@ class OmniInbox {
 			${this.compose_html(data)}`);
 		this.bind_compose(data);
 		this.bind_drafts(data);
+		this.bind_botsent();
 		this.bind_pause();
 		if (draft) this.$right.find(".oi-text").val(draft);
 		if (data.truncated) {
@@ -317,6 +319,55 @@ class OmniInbox {
 				<a href="#" class="oi-rate-skip oi-meta">${e(__("Bỏ qua"))}</a></div>`;
 		}
 		return cards.join("") + rate;
+	}
+
+	// Tin bot đã tự gửi (D3-05): chấm Đúng/Sai/Thiếu và nút "Tắt tự động nhóm này" (Omni Admin). Mọi chuỗi thoát HTML.
+	botsent_html(m) {
+		const b = m.bot_sent ? m.bot : null;
+		if (!b) return "";
+		const e = frappe.utils.escape_html;
+		let rate = "";
+		if (b.rating) {
+			rate = `<span class="oi-meta">${e(__("Đã chấm"))}: ${e(b.rating)}</span>`;
+		} else if (b.can_rate) {
+			rate = ["Đúng", "Sai", "Thiếu"]
+				.map((r) => `<button class="btn btn-default btn-xs oi-botrate" data-rating="${e(r)}">${e(__(r))}</button>`)
+				.join(" ");
+		}
+		const off = b.can_disable
+			? ` <button class="btn btn-danger btn-xs oi-botoff" data-group="${e(b.question_group || "")}">${e(__("Tắt tự động nhóm này"))}</button>`
+			: "";
+		return `<div class="oi-botsent" data-draft="${e(b.draft)}">${e(b.question_group || "")} ${rate}${off}</div>`;
+	}
+
+	bind_botsent() {
+		const $r = this.$right;
+		$r.find(".oi-botrate").on("click", (ev) => {
+			const $b = $(ev.currentTarget);
+			const draft = $b.closest(".oi-botsent").data("draft");
+			const rating = $b.data("rating");
+			$b.closest(".oi-botsent").find("button").prop("disabled", true); // chống bấm hai lần
+			frappe
+				.call({ method: "omni_crm.api.drafts.rate_draft", args: { draft, rating }, freeze: false })
+				.then((r) => {
+					const off = r.message && r.message.auto_disabled;
+					frappe.show_alert(
+						{ message: off ? __("Đã ghi nhận. Nhóm này đã tự tắt tự động gửi.") : __("Đã ghi nhận, cảm ơn"), indicator: off ? "orange" : "green" },
+						6
+					);
+				})
+				.finally(() => this.load_thread(this.current, true));
+		});
+		$r.find(".oi-botoff").on("click", (ev) => {
+			const group = $(ev.currentTarget).data("group");
+			const e = frappe.utils.escape_html;
+			frappe.confirm(e(__("Tắt tự động gửi của nhóm {0}? Từ giờ bot chỉ soạn nháp cho sale duyệt.", [group])), () => {
+				frappe
+					.call({ method: "omni_crm.api.auto.disable_auto", args: { group }, freeze: true })
+					.then(() => frappe.show_alert({ message: __("Đã tắt tự động gửi"), indicator: "green" }))
+					.finally(() => this.load_thread(this.current, true));
+			});
+		});
 	}
 
 	bind_drafts(data) {

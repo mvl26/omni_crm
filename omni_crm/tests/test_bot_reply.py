@@ -548,20 +548,31 @@ class TestNoBotOutbound(ReplyTestCase):
 		self.assertEqual(len(self.drafts(mode="Draft")), 1)
 
 	def test_no_code_path_creates_bot_outbound(self):
-		"""Quét mã: không đường nào gọi queue_outbound / dựng OutboundRequest với source Bot; bot/ không import outbound."""
+		"""Quét mã: chỉ `bot/auto_send.py` (D3-05) được dựng OutboundRequest source Bot / gọi queue_outbound trong bot/.
+
+		Có chủ đích (D3-05): trước đây KHÔNG file nào được phép; nay đúng MỘT file (auto_send.py), và ngoài nó mọi
+		kiểm tra giữ nguyên. Có thêm kiểm khẳng định: tập file khớp mẫu Bot chính xác bằng {auto_send.py}.
+		"""
 		synthetic = re.compile(r"synthetic\s*=\s*True")
 		forbidden = re.compile(r"""OutboundRequest\([^)]*source\s*=\s*["']Bot["']""", re.DOTALL)
 		doc_bot = re.compile(r"""["']source["']\s*:\s*["']Bot["']""")
+		allowed = BOT_DIR / "auto_send.py"
+		matched = set()
 		for path in APP_DIR.rglob("*.py"):
 			if "tests" in path.parts or path.name == "test_bot_reply.py":
 				continue
 			text = path.read_text(encoding="utf-8")
-			self.assertIsNone(forbidden.search(text), path)
-			self.assertIsNone(doc_bot.search(text), path)
+			if forbidden.search(text) or doc_bot.search(text):
+				matched.add(path)
+			if path != allowed:
+				self.assertIsNone(forbidden.search(text), path)
+				self.assertIsNone(doc_bot.search(text), path)
+		self.assertEqual(matched, {allowed})
 		for path in BOT_DIR.glob("*.py"):
 			text = path.read_text(encoding="utf-8")
-			for token in ("queue_outbound", "pipeline.outbound", "OutboundRequest", "send_outbound"):
-				self.assertNotIn(token, text, f"{path.name}: {token}")
+			if path != allowed:
+				for token in ("queue_outbound", "pipeline.outbound", "OutboundRequest", "send_outbound"):
+					self.assertNotIn(token, text, f"{path.name}: {token}")
 			if path.name not in ("smoke.py", "ai_client.py"):
 				self.assertIsNone(
 					synthetic.search(text), path.name
@@ -845,9 +856,11 @@ class TestKnowledge(ReplyTestCase):
 			).insert(ignore_permissions=True)
 		frappe.delete_doc(ITEM, doc.name, force=True)
 
-	def test_no_auto_send_fields_on_group(self):
-		fields = {f.fieldname for f in frappe.get_meta(GROUP).fields}
-		self.assertFalse({f for f in fields if f.startswith("auto_send")})
+	def test_auto_send_fields_on_group_are_exactly_three_and_read_only(self):
+		"""D3-05 (trước đó test này khẳng định KHÔNG có trường auto_send*): nay đúng ba trường, đều chỉ đọc trên biểu mẫu."""
+		metas = {f.fieldname: f for f in frappe.get_meta(GROUP).fields if f.fieldname.startswith("auto_send")}
+		self.assertEqual(set(metas), {"auto_send_enabled", "auto_send_enabled_at", "auto_send_enabled_by"})
+		self.assertTrue(all(f.read_only for f in metas.values()))
 
 
 class TestPermissionsAndReport(ReplyTestCase):

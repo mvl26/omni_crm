@@ -29,7 +29,7 @@ Nút thao tác: "Xử lý lại" tin Manual (đưa về New), "Quét ngay", "Là
 | Nhiều tin Manual | Xem `last_error` nhóm theo lỗi | Sửa nguyên nhân, chọn tin, "Xử lý lại" |
 | Zalo không gửi được | Hạn token, lỗi làm mới, quyền OA | "Làm mới token"; không được → cấp quyền lại qua luồng OAuth |
 | Không nhận được tin Zalo | Cấu hình webhook phía Zalo, xác thực tên miền, chứng chỉ HTTPS, log 401 | Sửa cấu hình; nếu lỗi chữ ký hàng loạt → kiểm tra secret |
-| Bot trả lời sai với khách | Tìm Bot Draft, Bot Run, nhóm câu hỏi | **Tắt `auto_send_enabled` của nhóm** ngay; sale gửi đính chính; sửa kho tri thức; chạy lại bộ đề |
+| Bot trả lời sai với khách | Tìm Bot Draft (`mode=Auto`), Bot Run, nhóm câu hỏi | **Tắt `auto_send_enabled` của nhóm** ngay (nút "Tắt tự động nhóm này" trong Hộp thư, hoặc chấm "Sai" tin bot: nhóm tự tắt); tắt tất cả: bỏ `omni_auto_send_allowed` khỏi site_config (tin Bot đang chờ sẽ `Blocked` và nháp quay về Draft; câu giữ chân `System` liên kết nháp Handoff cũng bị `Blocked` lúc gửi khi khóa hạ tầng hoặc nhóm đã đóng); sale gửi đính chính; sửa kho tri thức; chạy lại bộ đề |
 | Sale báo nháp bot sai/bất thường (chế độ Draft) | Báo cáo "Bot nháp" (tỉ lệ bỏ, chấm Sai, nghiêm trọng theo nhóm/tuần); Bot Draft có `rating`/`critical` | Đặt `bot_reply_mode = Shadow` hoặc Off (sale không còn nhận nháp mới); sửa kho tri thức; chạy lại bộ đề. Nháp đã gửi là tin của sale (`source=Sale`, `bot_draft` truy ngược được) |
 | Chi phí AI tăng vọt | Bot Run theo giờ, kind | Giảm hạn mức; kiểm tra vòng lặp gọi lại |
 | Lộ `webhook_token` tổng đài | — | Đổi token trên Omni Channel và phía nhà cung cấp (Stringee: `docs/huong-dan/cau-hinh-stringee.md` mục 6) |
@@ -123,3 +123,12 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
 - Khách không nhận được nháp mới: xem `Omni Identity.bot_paused_until` (còn ở tương lai thì bot đang im; `reply_batch` trả `paused`). Sale bấm "Cho bot tiếp tục" trong Hộp thư, hoặc đợi hết `handoff_pause_hours`. Ai bấm, lúc nào nằm ở dòng thời gian Lead.
 - Quay lui: đặt `bot_reply_mode` về Shadow/Off. Các Omni Identity đã bị im vẫn giữ `bot_paused_until` đến hết hạn.
 
+## Lưu ý D3-05: bot tự gửi theo nhóm
+
+- **Mặc định TẮT.** Chỉ người vận hành đặt `omni_auto_send_allowed: 1` trong `sites/<site>/site_config.json`, và chỉ sau khi chủ dự án chốt Q1 (cho phép tự gửi), cổng `nhap` đạt trên AI thật, Q11 chốt. Không đặt cờ này trên dev/test/staging chưa được phép. Kể cả khi đã đặt, không nhóm nào tự gửi cho tới khi Omni Admin bật từng nhóm (biểu mẫu Nhóm câu hỏi -> "Bật tự động gửi", có hộp xác nhận nêu số liệu 14 ngày).
+- Bật thử đầu tiên nên là nhóm an toàn (ví dụ "Giờ làm việc") và `sandbox_mode` bật: tin bot sinh ra `is_sandbox = 1`, không gửi gì. Chỉ tắt sandbox để gửi thật tới đúng tài khoản thử do người phụ trách chỉ định.
+- Nhóm tự tắt: Notification Log "Bot tự gửi nhóm X đã tự tắt: <lý do>" tới Omni Admin và Sales Manager; Comment `omni:auto_send:breaker:<rated_wrong|complaint|handoff_doubled>` trên nhóm. Xem tất cả bằng báo cáo "Bot tự gửi" (cột "Số lần tự tắt"). Muốn bật lại: sửa nguyên nhân (kho tri thức) rồi bật bằng nút. **Hiện không có thời gian chờ (cooldown) sau khi tự tắt**: nếu số liệu 14 ngày vẫn đạt (ví dụ ngắt mạch do khiếu nại hay Handoff, không có nháp nghiêm trọng) Omni Admin có thể bật lại ngay; chỉ tin chấm Sai kèm ghi chú hoặc đánh dấu nghiêm trọng mới làm nhóm chưa đủ điều kiện trong 14 ngày. Có cần cooldown hay không là quyết định mở (docs/12 mục D).
+- **Không đặt `omni_auto_send_allowed` trong `common_site_config.json`** (áp cho MỌI site của bench, kể cả site dev/staging). Chỉ đặt trong `sites/<site>/site_config.json` của đúng site production được phép.
+- Tin Bot gửi lỗi hoặc hết lượt thử (`Failed`): sale phụ trách Lead nhận Notification Log "Tin bot tự gửi bị lỗi, hãy kiểm tra trên Zalo"; nháp KHÔNG tự về Draft vì khách có thể đã nhận.
+- Nếu không thấy bot tự gửi dù nhóm bật: xem `guard_flags` của nháp (`info:auto_khong_gui:<mã>`: `khung_gui`, `ngoai_gio_bot`, `bot_tam_dung`, `sale_da_tra_loi`, `phan_tich`, `khong_phan_tich`, `gioi_han_tan_suat`, `dinh_danh_khong_khop`, `kenh`, `che_do_bot`, `chot_chan`...), và `omni_auto_send_allowed`.
+- Cảnh báo không có người nhận (không Omni Admin/Sales Manager nào hoạt động): Error Log "nhóm tự tắt tự gửi nhưng không có người nhận cảnh báo".

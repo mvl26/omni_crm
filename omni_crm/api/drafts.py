@@ -1,6 +1,7 @@
 """Duyệt nháp của bot trong Hộp thư (D3-01, docs/08 mục 5.5): Gửi, Sửa rồi gửi, Bỏ, chấm Đúng/Sai/Thiếu.
 
-Bot KHÔNG tự gửi: tin ra luôn do Sale bấm, đi qua `queue_outbound` với `source=Sale` và `bot_draft` liên kết.
+Nháp ở chế độ Draft không tự gửi: tin ra do Sale bấm, đi qua `queue_outbound` với `source=Sale` và `bot_draft` liên kết.
+(Nhóm đang Auto thì `bot/auto_send.py` gửi, D3-05; ở đây chỉ chấm điểm tin bot đã gửi.)
 Nháp `Handoff` không có nội dung để gửi và bị từ chối ở cả API này lẫn `queue_outbound`. Mọi thao tác kiểm quyền
 theo Lead (không chỉ theo DocType); trạng thái nháp đổi dưới khóa dòng nên bấm hai lần không gửi hai tin.
 """
@@ -103,6 +104,42 @@ def thread_drafts(lead: str) -> list[dict]:
 			}
 		)
 	return out
+
+
+def bot_sent_meta(lead: str, drafts: list[str]) -> dict[str, dict]:
+	"""Cho tin bot đã tự gửi trong Hộp thư: nhóm câu hỏi, điểm đã chấm, có chấm được không, có tắt nhóm được không.
+
+	Không kèm nội dung nháp. `can_rate`: người dùng ghi được Lead; `can_disable`: Omni Admin và nhóm đang bật.
+	"""
+	if not drafts:
+		return {}
+	from omni_crm.api import inbox
+
+	can_write = bool(frappe.has_permission(inbox.LEAD, "write", doc=lead))
+	is_admin = "Omni Admin" in frappe.get_roles()
+	rows = frappe.get_all(
+		DRAFT,
+		filters={"name": ["in", list(dict.fromkeys(drafts))], "lead": lead},
+		fields=["name", "mode", "question_group", "rating"],
+	)
+	enabled = {
+		g.name: bool(g.auto_send_enabled)
+		for g in frappe.get_all(
+			"Omni Question Group",
+			filters={"name": ["in", [r.question_group for r in rows if r.question_group]]},
+			fields=["name", "auto_send_enabled"],
+		)
+	}
+	return {
+		r.name: {
+			"draft": r.name,
+			"question_group": r.question_group,
+			"rating": r.rating or None,
+			"can_rate": can_write and r.mode == "Auto",
+			"can_disable": is_admin and bool(enabled.get(r.question_group)),
+		}
+		for r in rows
+	}
 
 
 def leads_with_pending(leads: list[str]) -> set[str]:
@@ -231,12 +268,16 @@ def discard_draft(draft: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def rate_draft(draft: str, rating: str, note: str | None = None, critical: int | str = 0) -> dict:
-	"""Chấm nháp đã gửi/bỏ: Đúng / Sai / Thiếu (+ ghi chú, đánh dấu nghiêm trọng); không bắt buộc."""
+	"""Chấm nháp đã gửi/bỏ hoặc tin bot tự gửi (mode Auto): Đúng / Sai / Thiếu (+ ghi chú, đánh dấu nghiêm trọng).
+
+	Chấm "Sai" một tin bot đã tự gửi thì nhóm của nó tự tắt tự động gửi (ngắt mạch, D3-05).
+	"""
 	from omni_crm.api import inbox
+	from omni_crm.bot import auto_send
 
 	inbox.check_lead_write(_get(draft).lead)
 	row = _get(draft, lock=True)
-	if row.mode != "Draft" or row.decision not in DECIDED:
+	if row.mode not in ("Draft", "Auto") or row.decision not in DECIDED:
 		frappe.throw(_("Chỉ chấm được nháp đã gửi hoặc đã bỏ"), frappe.ValidationError)
 	if rating not in RATINGS:
 		frappe.throw(_("Điểm chấm phải là Đúng, Sai hoặc Thiếu"), frappe.ValidationError)
@@ -249,4 +290,5 @@ def rate_draft(draft: str, rating: str, note: str | None = None, critical: int |
 			"critical": 1 if cint(critical) else 0,
 		},
 	)
-	return {"status": "Rated", "draft": draft, "rating": rating}
+	tripped = auto_send.on_rated(draft, rating, bool(cint(critical)))
+	return {"status": "Rated", "draft": draft, "rating": rating, "auto_disabled": tripped}

@@ -17,7 +17,8 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `lead_scoring_enabled` | Omni Settings | Không tính điểm mới, không báo Lead nóng; `omni_score` và breakdown cũ giữ nguyên. Bảng điểm `score_rules` rỗng cũng coi như không chấm (không có điểm mặc định bịa). `hot_lead_threshold` (mặc định 60; <= 0 dùng 60) | 2 |
 | `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời (không enqueue `reply_batch`, `call_tool` ghi `Skipped Switch`). Shadow chỉ ghi `Omni Bot Draft` ngầm (sale không thấy). **Draft (D3-01)**: nháp hiện trong Hộp thư để sale Gửi/Sửa rồi gửi/Bỏ; bot vẫn không tự gửi, tin đi là `source=Sale`. Chuyển Draft -> Shadow/Off: nháp Pending cũ hết hạn sau 24 giờ hoặc khi khách nhắn tiếp, sale không còn thấy nút Gửi mới. Mặc định Off; **bật Draft ở môi trường thật chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt** (docs/08 mục 10) | 2 |
 | `bot_paused_until` (kiểm tra) | Omni Identity | Bot ngầm không soạn nháp cho khách này đến thời điểm đó | 2 |
-| `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
+| `omni_auto_send_allowed` | **site_config.json** (ngoài DB) | Khóa hạ tầng: vắng/0 = KHÔNG ai bật được tự gửi và mọi đường gửi Bot bị chặn (kể cả nhóm đã bật, kể cả tin Bot đang chờ). Chỉ người vận hành đặt sau khi chủ dự án chốt Q1; không đặt trên dev/test | 3 |
+| `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft (tin Bot đang chờ bị `Blocked`). Chỉ Omni Admin bật được, chỉ khi đạt điều kiện (docs/08 mục 5.5.2); tự tắt khi ngắt mạch | 3 |
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
 | `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI); lần gọi ghi `Skipped Budget`. Site đã migrate bắt đầu ở 0 cho đến khi đặt hạn mức | 2 |
 | `daily_token_budget` — tính chất | Omni Settings | **Hạn mức mềm**: `call_tool` giữ chỗ token ước lượng (~ký tự/3 + max_tokens) trước khi gọi rồi hiệu chỉnh theo số thật, nhưng các worker chạy song song vẫn có thể vượt khoảng (số worker × max_tokens) | 2 |
@@ -38,7 +39,8 @@ def outbound_enabled(channel: str) -> bool: ...
 def sandbox() -> bool: ...
 def bot_analyze_enabled() -> bool: ...
 def bot_reply_mode() -> str: ...            # "Off" | "Shadow" | "Draft"
-def group_auto_send(group: str) -> bool: ...
+def group_auto_send(group: str) -> bool: ...   # khóa hạ tầng mở VÀ cờ nhóm VÀ không always_handoff; đọc DB không cache
+def auto_send_infra_allowed() -> bool: ...  # site_config omni_auto_send_allowed, mặc định chặn
 def recording_enabled() -> bool: ...
 # Kind → công tắc của call_tool: Analyze → bot_analyze_enabled; Reply → bot_reply_mode != Off; Summarize → recording_enabled; Judge → không có (chỉ chịu hạn mức)
 ```
