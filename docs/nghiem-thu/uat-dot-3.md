@@ -81,3 +81,23 @@ Chưa có nhà cung cấp, khóa dùng thử, ghi âm thật, bản chuẩn gõ 
 | 3 | Chuẩn bị 20 ghi âm được phép dùng nội bộ, ít nhất 5 bản chuẩn gõ tay, bảng giá | |
 | 4 | Chạy `run_trial` trên máy có khóa, người duyệt điền cột `correct` trong `bang-danh-dau.csv`, chạy `--summarize-review` | |
 | 5 | Ghi nhánh theo ngưỡng: có nhà cung cấp ĐẠT thì làm D3-04, nếu không thì D3-04 hoãn (Đợt 3 chỉ gồm bot nháp và mở tự động) | |
+
+## 7. Mở bot tự gửi theo nhóm (D3-05) — CHƯA CHẠY, mặc định TẮT
+
+Trạng thái: tính năng đã xây và có test tự động (sandbox, không HTTP, khóa hạ tầng chỉ bật trong phạm vi test). **Chưa kiểm trên trình duyệt** (nút "Bật tự động gửi" trên biểu mẫu Nhóm câu hỏi, nhãn "Bot đã gửi" / chấm / nút "Tắt tự động nhóm này" trong Hộp thư, báo cáo "Bot tự gửi"); chưa có staging, AI thật hay phép gửi thật. Tuyệt đối KHÔNG đặt `omni_auto_send_allowed` và KHÔNG tắt `sandbox_mode` cho tới khi người phụ trách cho phép rõ ràng.
+
+Điều kiện trước: Q1 chốt; cổng `nhap` đạt trên AI thật; Q11 chốt; ít nhất 2 tuần nháp thật (nhóm cần >= 30 nháp đã quyết định trong 14 ngày, >= 95% gửi nguyên văn hoặc sửa nhẹ, 0 nghiêm trọng).
+
+| # | Việc trên staging (làm theo thứ tự, `sandbox_mode` BẬT) | Kỳ vọng | Kết quả (điền sau) |
+| --- | --- | --- | --- |
+| 1 | Người vận hành đặt `omni_auto_send_allowed: 1` trong site_config staging, khởi động lại | Chưa nhóm nào tự gửi (mọi nhóm vẫn tắt) | |
+| 2 | Omni Admin mở nhóm an toàn (ví dụ "Giờ làm việc") -> "Bật tự động gửi" | Hộp xác nhận nêu số mẫu / tỉ lệ / nghiêm trọng; nhóm chưa đủ điều kiện thì không bật được (chỉ "bật cưỡng bức" kèm lý do) | |
+| 3 | Thử bật nhóm "Hỏi giá" hoặc "Khiếu nại" (`always_handoff`) | Bị từ chối, kể cả cưỡng bức | |
+| 4 | Khách thử nhắn câu thuộc nhóm đã bật, trong giờ bot, khung miễn phí Zalo | Có tin ra `source=Bot`, `is_sandbox = 1`, Hộp thư hiện nhãn "Bot đã gửi"; không gọi Zalo | |
+| 5 | Nhắn lúc ngoài `bot_active_hours`, hoặc khách quá 48 giờ, hoặc câu có giá | Rơi về nháp cho sale (hoặc Handoff + một câu giữ chân khi nhóm đang Auto) | |
+| 6 | Sale chấm "Sai" một tin bot | Nhóm tự tắt; Omni Admin và Sales Manager nhận thông báo; báo cáo "Bot tự gửi" đếm 1 lần tự tắt | |
+| 7 | Khách nhắn khiếu nại trong 24 giờ sau tin bot (bật lại nhóm trước) | Nhóm tự tắt + cảnh báo | |
+| 8 | Chỉ khi được cho phép rõ ràng: tắt sandbox, chỉ định MỘT tài khoản Zalo thử, gửi MỘT tin thật | Tin tới đúng tài khoản đó; bật lại sandbox ngay | |
+| 9 | Xóa `omni_auto_send_allowed` khỏi site_config | Tin Bot đang chờ `Blocked`, không nhóm nào tự gửi | |
+
+Chưa kiểm được ở môi trường phát triển: mọi bước trên (cần staging, AI thật, phép gửi thật, trình duyệt).
