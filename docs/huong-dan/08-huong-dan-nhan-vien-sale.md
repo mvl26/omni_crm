@@ -8,7 +8,7 @@ Mục lục: [1. Mở Hộp thư](#1-mở-hộp-thư-omni) · [2. Danh sách h�
 
 ## 1. Mở Hộp thư Omni
 
-Vào địa chỉ `https://<tên-miền-CRM>/app/omni-inbox`, hoặc gõ "Hộp thư Omni" vào ô tìm kiếm trên cùng của hệ thống (Desk; cách này chưa kiểm). Trang có tên **Hộp thư Omni**. Bạn cần vai trò Sales User, Sales Manager, Omni Admin hoặc System Manager. Nếu có lời nhắn "Không có quyền xem hoặc không tìm thấy hội thoại", hãy hỏi quản trị.
+Vào địa chỉ `https://<tên-miền-CRM>/app/omni-inbox`. Trang có tên **Hộp thư Omni** nhưng **chưa được đặt vào menu hay Workspace nào** (ghi nhận ở `docs/12` mục D), nên hãy lưu địa chỉ này vào dấu trang (bookmark) hoặc nhờ quản trị thêm lối tắt. Mỗi Lead do Omni tạo còn có một Comment chứa liên kết mở Hộp thư đúng khách đó (đường dẫn `/app/omni-inbox?lead=<mã Lead>`); trang Lead của CRM không hiện nút Hộp thư riêng. Bạn cần vai trò Sales User, Sales Manager, Omni Admin hoặc System Manager. Nếu có lời nhắn "Không có quyền xem hoặc không tìm thấy hội thoại", hãy hỏi quản trị.
 
 Từ thông báo (chuông) "Có nháp bot chờ duyệt", "Bot chuyển người, mời xem" hoặc "Lead nóng", bấm vào cũng mở thẳng Hộp thư/hội thoại đúng khách.
 
