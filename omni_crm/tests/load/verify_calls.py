@@ -410,12 +410,12 @@ def alerts_now() -> None:
 D3_GROUPS = {"LOAD Gio lam viec": 0, "LOAD Hoi gia": 1}  # tên nhóm -> always_handoff
 D3_ITEMS = (
 	(
-		"KB-LOAD-1",
+		"KB-93001",
 		"LOAD Gio lam viec",
 		"Mấy giờ làm việc?",
 		"Miyano làm việc từ 8 giờ đến 17 giờ 30 các ngày trong tuần.",
 	),
-	("KB-LOAD-2", "LOAD Hoi gia", "Giá bao nhiêu?", "Vui lòng liên hệ nhân viên để được báo giá."),
+	("KB-93002", "LOAD Hoi gia", "Giá bao nhiêu?", "Vui lòng liên hệ nhân viên để được báo giá."),
 )
 
 
@@ -465,7 +465,7 @@ def auto_group(on: int | str = 1, group: str = "LOAD Gio lam viec") -> None:
 
 def d3_report(channel: str = "LOAD kenh", since: str | None = None) -> None:
 	"""Báo cáo Đợt 3 sau tải: nháp theo chế độ/hành động/quyết định, tin ra theo nguồn/trạng thái, thông báo, Error Log,
-	và các bất biến (mỗi lượt <= 1 nháp, mỗi khách <= 1 tin Bot, Bot Run Reply theo trạng thái)."""
+	và các bất biến (mỗi lượt <= 1 nháp; mỗi nháp Auto đúng 1 tin Bot; không tin Bot nào từ nháp Handoff; mọi tin ra là sandbox)."""
 	frappe.db.rollback()
 	batches = frappe.db.sql_list(
 		f"select distinct batch_id from `tab{INBOUND}` where channel=%s and batch_id is not null", channel
@@ -487,10 +487,24 @@ def d3_report(channel: str = "LOAD kenh", since: str | None = None) -> None:
 		"select concat(source,':',status,':',is_sandbox), count(*) from `tabOmni Outbound Message` where lead in %s group by 1",
 		(ld,),
 	)
-	bot_multi = frappe.db.sql(
-		"select count(*) from (select identity from `tabOmni Outbound Message` where lead in %s and source='Bot' group by identity having count(*)>1) t",
+	auto_mismatch = frappe.db.sql(
+		"select count(*) from `tabOmni Bot Draft` d where d.batch_id in %s and d.mode='Auto' and "
+		"(select count(*) from `tabOmni Outbound Message` o where o.bot_draft = d.name and o.source='Bot') != 1",
+		(b,),
+	)[0][0]
+	bot_out_not_auto = frappe.db.sql(
+		"select count(*) from `tabOmni Outbound Message` o where o.lead in %s and o.source='Bot' and "
+		"not exists (select 1 from `tabOmni Bot Draft` d where d.name = o.bot_draft and d.mode='Auto')",
 		(ld,),
 	)[0][0]
+	bot_out_on_handoff = frappe.db.sql(
+		"select count(*) from `tabOmni Outbound Message` o join `tabOmni Bot Draft` d on d.name = o.bot_draft "
+		"where o.lead in %s and o.source='Bot' and d.action != 'Reply'",
+		(ld,),
+	)[0][0]
+	non_sandbox_out = frappe.db.count(
+		"Omni Outbound Message", {"lead": ["in", leads or [""]], "is_sandbox": 0}
+	)
 	runs = by(
 		"select concat(kind,':',status), count(*) from `tabOmni Bot Run` where batch_id in %s group by 1",
 		(b,),
@@ -519,7 +533,10 @@ def d3_report(channel: str = "LOAD kenh", since: str | None = None) -> None:
 				"drafts_mode_action_decision": drafts,
 				"batches_with_more_than_one_draft": multi,
 				"outbound_source_status_sandbox": outs,
-				"identities_with_more_than_one_bot_message": bot_multi,
+				"auto_drafts_without_exactly_one_bot_outbound": auto_mismatch,
+				"bot_outbound_not_from_an_auto_draft": bot_out_not_auto,
+				"bot_outbound_on_handoff_drafts": bot_out_on_handoff,
+				"outbound_rows_not_sandbox": non_sandbox_out,
 				"notification_logs": {
 					"total": notif[0],
 					"leads": notif[1],

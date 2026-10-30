@@ -170,6 +170,36 @@ def first_response_times(start, end, prefixes: tuple[str, ...], include_sandbox:
 	return out
 
 
+def handoff_gaps(start, end, prefixes: tuple[str, ...]) -> dict[str, Any]:
+	"""Nháp Handoff (mode Draft) theo nhóm câu hỏi và theo lý do chốt chặn; gom riêng các ca "ngoài kho tri thức" để biết kho
+	cần bổ sung gì. Chỉ đếm, không có nội dung khách hay nháp."""
+	rows = _draft_rows(start, end, prefixes, ("Draft",))
+	handoff = [r for r in rows if r.action == "Handoff"]
+	flag_rows = frappe.db.sql(
+		"select name, guard_flags from `tabOmni Bot Draft` where name in %s",
+		(tuple(r.name for r in handoff) or ("",),),
+	)
+	by_group: dict[str, int] = {}
+	by_flag: dict[str, int] = {}
+	outside_kb_by_group: dict[str, int] = {}
+	names_by_group = {r.name: (r.question_group or "(không nhóm)") for r in handoff}
+	for name, raw in flag_rows:
+		group = names_by_group[name]
+		by_group[group] = by_group.get(group, 0) + 1
+		codes = {f.split(":", 1)[0] for f in (raw or "").splitlines() if f and not f.startswith("info:")}
+		for code in codes:
+			by_flag[code] = by_flag.get(code, 0) + 1
+		if any(c.endswith("_ngoai_kho") or c.startswith("kb_") for c in codes):
+			outside_kb_by_group[group] = outside_kb_by_group.get(group, 0) + 1
+	return {
+		"handoff_drafts": len(handoff),
+		"by_question_group": dict(sorted(by_group.items(), key=lambda kv: -kv[1])),
+		"by_guard_code": dict(sorted(by_flag.items(), key=lambda kv: -kv[1])),
+		"outside_knowledge_base_by_group": dict(sorted(outside_kb_by_group.items(), key=lambda kv: -kv[1])),
+		"note": "Nhóm có nhiều ca ngoài kho tri thức là chỗ cần bổ sung kho; nhóm luôn chuyển người (Hỏi giá, Khiếu nại) là Handoff theo thiết kế, không phải lỗ hổng",
+	}
+
+
 def nhap_gate() -> dict[str, Any]:
 	"""Lần chạy bộ đề cổng `nhap` gần nhất: chỉ là số đo khi là AI thật trên bộ đề đã duyệt."""
 	runs = frappe.get_all(
@@ -235,6 +265,7 @@ def run(
 		"bot_self_handled": bot_self_handled(s, e, prefixes),
 		"first_response_after_draft": first_response_times(s, e, prefixes, bool(cint(include_sandbox))),
 		"first_response_dot1": measure_dot1.first_response(s, e, excl_channels, bool(cint(include_sandbox))),
+		"handoff_gaps": handoff_gaps(s, e, prefixes),
 		"nhap_gate": nhap_gate(),
 	}
 	print(json.dumps(res, ensure_ascii=False, indent=1, default=str))

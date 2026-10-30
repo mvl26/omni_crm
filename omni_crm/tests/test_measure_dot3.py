@@ -118,6 +118,24 @@ class TestMeasureDot3(FrappeTestCase):
 		self.draft("Sent As Is", mode="Auto")
 		self.assertEqual(m.bot_self_handled(self.start, self.end, ())["groups"][G]["auto_sent"], 1)
 
+	def test_handoff_gaps_counts_outside_kb_cases_by_group(self):
+		before = m.handoff_gaps(self.start, self.end, ())
+		self.draft("Pending", action="Handoff", guard_flags="kb_rong\ninfo:ngoai_gio")
+		self.draft("Pending", action="Handoff", guard_flags="tien_ngoai_kho\nnghi_chen_lenh")
+		self.draft("Pending", action="Handoff", guard_flags="handoff_topic:nhom_luon_chuyen_nguoi")
+		self.draft("Pending")  # nháp Reply không tính
+		after = m.handoff_gaps(self.start, self.end, ())
+		self.assertEqual(after["handoff_drafts"] - before["handoff_drafts"], 3)
+		self.assertEqual(after["by_question_group"][G] - before["by_question_group"].get(G, 0), 3)
+		self.assertEqual(
+			after["outside_knowledge_base_by_group"][G] - before["outside_knowledge_base_by_group"].get(G, 0),
+			2,
+		)
+		self.assertNotIn("info", after["by_guard_code"])
+		self.assertEqual(
+			after["by_guard_code"]["handoff_topic"] - before["by_guard_code"].get("handoff_topic", 0), 1
+		)
+
 	def test_nhap_gate_only_real_reviewed_run_counts(self):
 		def row(mode, reviewed, gate="nhap"):
 			meta = {"meta": {"mode": mode, "reviewed": reviewed, "gate": gate}}

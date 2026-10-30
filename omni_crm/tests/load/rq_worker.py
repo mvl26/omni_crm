@@ -7,7 +7,7 @@
 `--fake-ai <tệp>`: cài FakeAIClient; nội dung tệp điều khiển: `ok` (trả kết quả tối thiểu), `fail` (mọi lần gọi lỗi
 HTTP 400 giả), hoặc `slow:<giây>`. Không bao giờ gọi AI thật.
 D3-06: biến môi trường `OMNI_LOAD_D3=1` cho bot trả lời đáp án thật theo kho tri thức tải (nhóm `LOAD Gio lam viec`, mục
-`KB-LOAD-1`; câu hỏi giá thì chuyển người qua nhóm `LOAD Hoi gia`), để đường Draft/Handoff chạy trọn qua worker thật.
+`KB-93001`; câu hỏi giá thì chuyển người qua nhóm `LOAD Hoi gia`), để đường Draft/Handoff chạy trọn qua worker thật.
 `OMNI_LOAD_AUTO_INFRA=1` mở khóa hạ tầng tự gửi CHỈ TRONG TIẾN TRÌNH worker này (vá `flags.auto_send_infra_allowed`);
 KHÔNG đụng site_config.json. Luôn đi cùng sandbox_mode bật (script không gửi gì ra ngoài).
 """
@@ -52,7 +52,7 @@ def _d3_rules() -> list:
 		"action": "reply",
 		"question_group": "LOAD Gio lam viec",
 		"reply_text": "Dạ Miyano làm việc từ 8 giờ đến 17 giờ 30 các ngày trong tuần ạ.",
-		"kb_item_ids": ["KB-LOAD-1"],
+		"kb_item_ids": ["KB-93001"],
 		"ask_contact_info": False,
 		"confidence": 0.9,
 		"handoff_reason": None,
@@ -61,12 +61,29 @@ def _d3_rules() -> list:
 		"action": "handoff",
 		"question_group": "LOAD Hoi gia",
 		"reply_text": "",
-		"kb_item_ids": ["KB-LOAD-2"],
+		"kb_item_ids": ["KB-93002"],
 		"ask_contact_info": False,
 		"confidence": 0.9,
 		"handoff_reason": "Khách hỏi giá",
 	}
+	analysis = {  # tối thiểu hợp lệ nhưng ý định "Tư vấn" (giá trị đầu của enum là "Hỏi giá", sẽ ép chuyển người)
+		"customer_name": None,
+		"organization": None,
+		"phones": [],
+		"emails": [],
+		"need": None,
+		"products": [],
+		"quantity": None,
+		"timeframe": None,
+		"timeframe_within_30d": None,
+		"urgency": None,
+		"intent": "Tư vấn",
+		"wants_human": False,
+		"summary": "Khách hỏi thông tin.",
+		"evidence": {},
+	}
 	return [
+		Rule(analysis, kind="Analyze"),
 		Rule(price, kind="Reply", keyword="hỏi giá máy a"),
 		Rule(price, kind="Reply", keyword="báo giá xe nâng"),
 		Rule(hours, kind="Reply"),
