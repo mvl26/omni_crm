@@ -101,11 +101,18 @@ def _window_confirmation(req: OutboundRequest, confirmed_paid: bool) -> str | No
 
 
 def _check_bot_draft(req: OutboundRequest) -> None:
-	"""Tin có `bot_draft` chỉ do Sale gửi, từ nháp Draft có action Reply (bot không tự gửi; nháp Handoff không gửi được)."""
+	"""Tin có `bot_draft` chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (bot không tự gửi; Handoff không gửi được)."""
 	if not req.bot_draft:
 		return
-	row = frappe.db.get_value("Omni Bot Draft", req.bot_draft, ["mode", "action"], as_dict=True)
-	if req.source != "Sale" or not row or row.mode != "Draft" or row.action != "Reply":
+	row = frappe.db.get_value(
+		"Omni Bot Draft", req.bot_draft, ["mode", "action", "decision", "identity"], as_dict=True
+	)
+	if (
+		req.source != "Sale"
+		or not row
+		or (row.mode, row.action, row.decision) != ("Draft", "Reply", "Pending")
+		or row.identity != req.identity
+	):
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
 
 

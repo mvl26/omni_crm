@@ -13,6 +13,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
+from omni_crm import flags
 from omni_crm.bot import knowledge, reply
 
 DRAFT = "Omni Bot Draft"
@@ -153,6 +154,22 @@ def _must_be_pending(row: Any) -> None:
 		frappe.throw(_("Nháp này đã được xử lý hoặc đã hết hạn"), frappe.ValidationError)
 
 
+def _reject_if_stale(row: Any, lead: str) -> None:
+	"""Dưới khóa dòng nháp: loại nháp lỗi thời (khách vừa nhắn mới dù lượt chưa chạy) hoặc khi chế độ Draft đã tắt.
+
+	Commit trạng thái Expired trước khi từ chối để không bị rollback theo lỗi.
+	"""
+	if row.mode == "Draft" and row.decision == "Pending":
+		reply.expire_stale_for_lead(lead)
+		if frappe.db.get_value(DRAFT, row.name, "decision", for_update=True) == "Expired":
+			frappe.db.commit()
+			frappe.throw(
+				_("Khách vừa nhắn thêm, nháp này đã lỗi thời; hãy xem tin mới nhất"), frappe.ValidationError
+			)
+		if flags.bot_reply_mode() != "Draft":
+			frappe.throw(_("Chế độ nháp của bot đang tắt, không gửi được nháp này"), frappe.ValidationError)
+
+
 @frappe.whitelist(methods=["POST"])
 def send_draft(draft: str, text: str | None = None, confirm_paid: int | str = 0) -> dict:
 	"""Sale gửi nháp (nguyên văn nếu không có `text`, hoặc sau khi sửa) qua đường gửi của Sale; không gửi được nháp Handoff.
@@ -164,6 +181,7 @@ def send_draft(draft: str, text: str | None = None, confirm_paid: int | str = 0)
 
 	lead = inbox.check_lead_write(_get(draft).lead)
 	row = _get(draft, lock=True)
+	_reject_if_stale(row, lead)
 	_must_be_pending(row)
 	if row.action != "Reply" or not (row.draft_text or "").strip():
 		frappe.throw(_("Nháp chuyển người không có nội dung để gửi"), frappe.ValidationError)

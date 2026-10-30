@@ -366,7 +366,7 @@ def notify_pending_draft(lead: str, action: str) -> int:
 	"""
 	from omni_crm.bot import scoring
 
-	name = frappe.db.get_value("CRM Lead", lead, "lead_name") or lead
+	name = lead  # mã Lead, không dùng tên khách tự khai (nội dung từ khách)
 	subject = (
 		_("Bot chuyển người, mời xem: {0}") if action == "Handoff" else _("Có nháp bot chờ duyệt: {0}")
 	).format(name)[:NOTIFY_SUBJECT_MAX]

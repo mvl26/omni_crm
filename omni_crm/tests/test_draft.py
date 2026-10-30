@@ -2,6 +2,8 @@
 """D3-01: nháp của bot cho sale duyệt (chế độ Draft). Mọi lời gọi AI và gửi đều giả; bot vẫn không tự gửi."""
 
 import re
+import threading
+import time
 from datetime import date
 from unittest import mock
 
@@ -309,6 +311,86 @@ class TestSendDraft(DraftTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self.call(drafts.send_draft, name)
 		self.assertEqual(self.out_rows(), [])
+
+
+class TestStaleAndConcurrency(DraftTestCase):
+	def test_send_rejected_when_customer_wrote_again_before_batch_ran(self):
+		name = self.make_draft(minutes_ago=10)
+		self.say("khách nhắn thêm, lượt chưa chạy", minutes_ago=1)
+		with self.assertRaises(frappe.ValidationError) as cm:
+			self.call(drafts.send_draft, name)
+		self.assertIn("lỗi thời", str(cm.exception))
+		self.assertEqual(self.d(name).decision, "Expired")
+		self.assertEqual(self.out_rows(), [])
+
+	def test_send_rejected_when_draft_mode_turned_off(self):
+		name = self.make_draft()
+		set_settings(bot_reply_mode="Off")
+		with self.assertRaises(frappe.ValidationError):
+			self.call(drafts.send_draft, name)
+		self.assertEqual(self.d(name).decision, "Pending")
+		self.assertEqual(self.out_rows(), [])
+
+	def test_queue_outbound_checks_pending_and_identity(self):
+		name = self.make_draft()
+		other = self.make_identity("TD301Z9", "Zalo OA", self.lead1, "Khác")
+		frappe.db.commit()
+		with self.assertRaises(frappe.ValidationError), mock.patch("frappe.enqueue"):
+			outbound.queue_outbound(
+				OutboundRequest(self.channel.name, other, TEXT, None, "Sale", bot_draft=name), user=SALE1
+			)
+		frappe.db.set_value(DRAFT, name, "decision", "Discarded")
+		frappe.db.commit()
+		with self.assertRaises(frappe.ValidationError), mock.patch("frappe.enqueue"):
+			outbound.queue_outbound(
+				OutboundRequest(self.channel.name, self.ident1, TEXT, None, "Sale", bot_draft=name),
+				user=SALE1,
+			)
+		self.assertEqual(self.out_rows(), [])
+		frappe.db.delete("Omni Identity", {"name": other})
+		frappe.db.commit()
+
+	def test_two_concurrent_sends_of_same_draft_send_once(self):
+		name = self.make_draft()
+		site, sites_path = frappe.local.site, frappe.local.sites_path
+		a_in, release = threading.Event(), threading.Event()
+		real = inbox.queue_zalo_reply
+		results: dict[str, object] = {}
+
+		def hooked(*a, **kw):
+			if threading.current_thread().name == "A":
+				a_in.set()  # A đã giữ khóa dòng nháp
+				release.wait(timeout=15)
+			return real(*a, **kw)
+
+		def job(label):
+			frappe.init(site=site, sites_path=sites_path)
+			frappe.connect()
+			try:
+				frappe.set_user(SALE1)
+				results[label] = drafts.send_draft(name)
+				frappe.db.commit()
+			except BaseException as e:
+				results[label] = e
+				frappe.db.rollback()
+			finally:
+				frappe.destroy()
+
+		with mock.patch.object(inbox, "queue_zalo_reply", side_effect=hooked), mock.patch("frappe.enqueue"):
+			a = threading.Thread(target=job, args=("A",), name="A")
+			b = threading.Thread(target=job, args=("B",), name="B")
+			a.start()
+			self.assertTrue(a_in.wait(timeout=15))
+			b.start()
+			time.sleep(1.5)  # B đang chờ khóa dòng nháp của A
+			release.set()
+			a.join(timeout=60)
+			b.join(timeout=60)
+		self.assertEqual(results["A"]["status"], "Queued", results)
+		self.assertIsInstance(results["B"], frappe.ValidationError, results)
+		frappe.db.rollback()
+		self.assertEqual(len(self.out_rows()), 1)
+		self.assertEqual(self.d(name).decision, "Sent As Is")
 
 
 class TestDraftPermissions(DraftTestCase):
