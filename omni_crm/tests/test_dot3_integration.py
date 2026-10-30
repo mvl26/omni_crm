@@ -473,7 +473,9 @@ class TestD04Auto(D3E2E):
 		self.assertEqual((d.action, d.mode), ("Handoff", "Draft"))
 		self.assertEqual(self.bot_outs(lead), [], "không tin Bot nào khi hỏi giá")
 		holding = self.outs(lead, source="System")
-		self.assertLessEqual(len(holding), 1)
+		self.assertEqual(
+			len(holding), 1, "nhóm đang Auto: đúng một câu giữ chân (source=System) trước khi chuyển người"
+		)
 		self.assertEqual(self.notified(lead, SALE1), 1)
 
 	def test_d04_rating_wrong_by_real_sale_trips_breaker_and_alerts(self):
