@@ -699,8 +699,9 @@ class TestConcurrentConnections(D3E2E):
 			c = FakeAIClient()
 			c.rules = [Rule(ok(), kind="Reply"), Rule(signals(), kind="Analyze")]
 			ai_client.set_client(c)
-			with mock.patch("frappe.enqueue"):
-				results[key] = fn()
+			results[key] = (
+				fn()
+			)  # frappe.enqueue đã được mock MỘT lần ở luồng chính (mock lồng nhau giữa các luồng rò rỉ)
 			frappe.db.commit()
 		except Exception as e:
 			frappe.db.rollback()
@@ -718,10 +719,11 @@ class TestConcurrentConnections(D3E2E):
 			)
 			for i, b in enumerate(batches)
 		]
-		for t in threads:
-			t.start()
-		for t in threads:
-			t.join(120)
+		with mock.patch("frappe.enqueue"):
+			for t in threads:
+				t.start()
+			for t in threads:
+				t.join(120)
 		for k, v in results.items():
 			self.assertNotIsInstance(v, Exception, f"{k}: {v!r}")
 		frappe.db.rollback()
