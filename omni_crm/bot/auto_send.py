@@ -69,6 +69,7 @@ HOLDING_MARK = "auto:holding_sent"
 SENDING_FLAG = "omni_auto_sending"
 SAVEPOINT = "omni_auto_send"
 SAVEPOINT_COMPLAINT = "omni_auto_complaint"
+HOLDING_MIN_HOURS = 24  # mỗi khách tối đa một câu giữ chân/tin bot trong ngần này giờ
 ADMIN_ROLE = "Omni Admin"
 LEAD_MANAGER_ROLE = "Sales Manager"  # CRM: vai trò quản lý sale (đã xác nhận ở apps/crm, docs/12 mục C)
 
@@ -262,10 +263,22 @@ def _disable(group: str, mark: str, text: str, user: str | None = None) -> bool:
 	row = _lock_group(group)
 	if not row or not cint(row.auto_send_enabled):
 		return False
-	doc = frappe.get_doc(GROUP, group)
-	doc.auto_send_enabled = 0
-	doc.save(ignore_permissions=True, ignore_version=False)
-	_note_on_group(group, mark, text, user)
+	try:
+		doc = frappe.get_doc(GROUP, group)
+		doc.auto_send_enabled = 0
+		doc.save(ignore_permissions=True, ignore_version=False)
+	except Exception:
+		# Công tắc tắt khẩn không được phụ thuộc doc.save (validate/hook có thể lỗi): ghi thẳng cột
+		frappe.log_error(
+			title="Omni: save nhóm lỗi khi tắt tự gửi, tắt thẳng bằng db", message=f"group={group}"
+		)
+		frappe.db.set_value(
+			GROUP, group, {"auto_send_enabled": 0, "auto_send_enabled_at": None, "auto_send_enabled_by": None}
+		)
+	try:
+		_note_on_group(group, mark, text, user)
+	except Exception:
+		frappe.log_error(title="Omni: không ghi được Comment tắt tự gửi", message=f"group={group}")
 	return True
 
 
@@ -552,9 +565,11 @@ def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = N
 	analysis = reply.analysis_of(row.batch_id)
 	if not analysis or analysis.get("intent") == COMPLAINT_INTENT or analysis.get("wants_human"):
 		return False, "phan_tich"
-	recent = frappe.db.count(
-		OUTBOUND, {"identity": row.identity, "source": "Bot", "creation": [">", add_to_date(now, hours=-24)]}
-	)
+	# đọc có khóa (FOR UPDATE) để thấy tin vừa commit của giao dịch khác, không bị ảnh chụp REPEATABLE READ làm cũ
+	recent = frappe.db.sql(
+		"select count(*) from `tabOmni Outbound Message` where identity=%s and source='Bot' and creation > %s for update",
+		(row.identity, add_to_date(now, hours=-24)),
+	)[0][0]
 	if recent >= MAX_AUTO_PER_IDENTITY_DAY:
 		return False, "gioi_han_tan_suat"
 	return True, ""
@@ -712,8 +727,73 @@ def _mark_skipped(draft: str, row: Any, code: str) -> None:
 	frappe.db.set_value(DRAFT, draft, "guard_flags", text, update_modified=False)
 
 
+def _recent_holding_or_bot(identity: str, now: datetime) -> bool:
+	"""Đã có tin Bot hoặc câu giữ chân (System liên kết nháp) tới định danh này trong HOLDING_MIN_HOURS (đọc có khóa)."""
+	n = frappe.db.sql(
+		"select count(*) from `tabOmni Outbound Message` where identity=%s and creation > %s "
+		"and bot_draft is not null and bot_draft != '' and source in ('Bot','System') for update",
+		(identity, add_to_date(now, hours=-HOLDING_MIN_HOURS)),
+	)[0][0]
+	return bool(n)
+
+
+def assert_can_queue_holding(req: OutboundRequest) -> None:
+	"""Gọi từ `queue_outbound` cho tin System có `bot_draft` (câu giữ chân): chỉ từ `try_holding` (dấu đúng nháp),
+	nháp Handoff/Draft/Pending của nhóm đang Auto, đúng định danh và kênh; ném ValidationError nếu không."""
+	bad = lambda: frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)  # noqa: E731
+	if not req.bot_draft or frappe.flags.get(SENDING_FLAG) != req.bot_draft:
+		bad()
+	group = frappe.db.get_value(DRAFT, req.bot_draft, "question_group")
+	group_row = _lock_group(group) if group else None
+	row = _get_draft(req.bot_draft, lock=True)
+	if (
+		not row
+		or (row.mode, row.action, row.decision) != ("Draft", "Handoff", "Pending")
+		or row.identity != req.identity
+		or row.channel != req.channel
+		or not group_row
+		or not flags.auto_send_infra_allowed()
+		or not _group_on(row, group_row)
+	):
+		bad()
+
+
+def holding_send_check(row: Any) -> tuple[bool, str]:
+	"""Ngay trước khi gửi câu giữ chân (System liên kết nháp Handoff): khóa hạ tầng và nhóm còn bật."""
+	if not flags.auto_send_infra_allowed():
+		return False, _("Khóa hạ tầng tự động gửi đang đóng")
+	draft = frappe.db.get_value(DRAFT, row.get("bot_draft"), ["action", "question_group"], as_dict=True)
+	if not draft or draft.action != "Handoff" or not flags.group_auto_send(draft.question_group):
+		return False, _("Nhóm câu hỏi đã tắt tự động gửi")
+	return True, ""
+
+
+def notify_bot_failure(row: Any) -> None:
+	"""Tin Bot gửi lỗi/hết lượt thử: báo người phụ trách Lead (không đưa nháp về Draft vì có thể khách đã nhận). Không ném lỗi."""
+	try:
+		from omni_crm.bot import scoring
+
+		lead = row.get("lead")
+		subject = _("Tin bot tự gửi bị lỗi, hãy kiểm tra trên Zalo: {0}").format(lead)[:140]
+		for user in scoring._recipients(lead):
+			frappe.get_doc(
+				{
+					"doctype": "Notification Log",
+					"type": "Alert",
+					"for_user": user,
+					"subject": subject,
+					"email_content": escape_html(subject),
+					"document_type": "CRM Lead",
+					"document_name": lead,
+				}
+			).insert(ignore_permissions=True)
+		frappe.db.commit()
+	except Exception:
+		frappe.log_error(title="Omni: không báo được tin bot gửi lỗi", message=f"outbound={row.get('name')}")
+
+
 def try_holding(draft: str) -> bool:
-	"""Nháp Handoff (Draft) của nhóm đang Auto: gửi MỘT câu giữ chân (`holding_message`) bằng source=System, không liên kết nháp.
+	"""Nháp Handoff (Draft) của nhóm đang Auto: gửi MỘT câu giữ chân (`holding_message`) bằng source=System, liên kết nháp Handoff (dấu nhận diện; chỉ đi qua đường này).
 
 	Cùng mọi điều kiện chung của tin tự gửi (khóa hạ tầng, nhóm bật, khung miễn phí, giờ bot, chưa tạm dừng, sale chưa trả
 	lời). Phải gọi TRƯỚC `handoff.handoff` (nó tạm dừng bot). Mỗi nháp một lần (dấu trong cờ nháp). Không commit, không ném lỗi.
@@ -730,6 +810,8 @@ def try_holding(draft: str) -> bool:
 			return False
 		if _common_checks(row, now_datetime(), group_row):
 			return False
+		if _recent_holding_or_bot(row.identity, now_datetime()):  # giới hạn tần suất câu giữ chân
+			return False
 		text = handoff.holding_message().strip()
 		if not text:
 			return False
@@ -742,15 +824,17 @@ def try_holding(draft: str) -> bool:
 		)
 		frappe.db.savepoint(SAVEPOINT)
 		try:
-			outbound.queue_outbound(
-				OutboundRequest(
-					channel=row.channel,
-					identity=row.identity,
-					text=text,
-					reply_to_external_id=None,
-					source="System",
+			with _sending(draft):
+				outbound.queue_outbound(
+					OutboundRequest(
+						channel=row.channel,
+						identity=row.identity,
+						text=text,
+						reply_to_external_id=None,
+						source="System",
+						bot_draft=draft,
+					)
 				)
-			)
 		except Exception:
 			frappe.db.rollback(save_point=SAVEPOINT)
 			raise

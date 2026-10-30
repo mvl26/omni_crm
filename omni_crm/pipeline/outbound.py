@@ -113,6 +113,11 @@ def _check_bot_draft(req: OutboundRequest) -> None:
 
 		auto_send.assert_can_queue(req)
 		return
+	if req.source == "System" and req.bot_draft:  # câu giữ chân (D3-05), chỉ từ auto_send.try_holding
+		from omni_crm.bot import auto_send
+
+		auto_send.assert_can_queue_holding(req)
+		return
 	if not req.bot_draft:
 		return
 	row = frappe.db.get_value(
@@ -221,7 +226,16 @@ def _fail(row: Any, reason: str, **extra: Any) -> str:
 	_set(row, status="Failed", last_error=redact(reason), **extra)
 	frappe.db.commit()
 	_notify(row)
+	_notify_bot_failure(row)
 	return "Failed"
+
+
+def _notify_bot_failure(row: Any) -> None:
+	"""Tin Bot gửi lỗi thì báo sale (D3-05)."""
+	if row.source == "Bot":
+		from omni_crm.bot import auto_send
+
+		auto_send.notify_bot_failure(row)
 
 
 def drop_echo_duplicate(row: Any, external_id: str) -> None:
@@ -280,6 +294,7 @@ def _retry_or_fail(row: Any, exc: BaseException, message: str) -> str:
 	if status == "Manual":  # mark_retry dùng chung với tin vào: tin ra hết lượt = Failed
 		frappe.db.set_value(OUTBOUND, row.name, "status", "Failed", update_modified=False)
 		result = "Failed"
+		_notify_bot_failure(row)
 	else:
 		frappe.db.set_value(OUTBOUND, row.name, "status", "Queued", update_modified=False)
 		result = "Queued"
@@ -329,6 +344,14 @@ def send_outbound(outbound_name: str) -> str:
 		allowed_now, why_not = auto_send.send_time_check(row)
 		if not allowed_now:
 			return _block_bot(row, outbound_name, why_not)
+	if (
+		row.source == "System" and row.bot_draft
+	):  # câu giữ chân: kiểm lại khóa hạ tầng và nhóm ngay trước khi gửi
+		from omni_crm.bot import auto_send
+
+		holding_ok, holding_why = auto_send.holding_send_check(row)
+		if not holding_ok:
+			return _block_locked(outbound_name, holding_why)
 	channel_doc = frappe.get_doc(CHANNEL, row.channel) if frappe.db.exists(CHANNEL, row.channel) else None
 	if not channel_doc or not cint(channel_doc.outbound_enabled):
 		return _block_bot(row, outbound_name, _("Kênh đã tắt chiều ra"))

@@ -524,7 +524,7 @@ class TestAutoSend(AutoTestCase):
 			OUT, filters={"lead": self.lead1}, fields=["source", "text", "is_sandbox", "bot_draft"]
 		)
 		self.assertEqual(len(outs), 1)
-		self.assertEqual((outs[0].source, outs[0].bot_draft, outs[0].is_sandbox), ("System", None, 1))
+		self.assertEqual((outs[0].source, outs[0].bot_draft, outs[0].is_sandbox), ("System", d.name, 1))
 		self.assertEqual(outs[0].text, handoff.holding_message())
 		self.assertIn(auto_send.HOLDING_MARK, d.guard_flags)
 		self.assertTrue(handoff.is_bot_paused(self.ident1))  # vẫn chuyển người và tạm dừng bot
@@ -655,6 +655,92 @@ class TestSendTimeRecheck(AutoTestCase):
 		self.send_blocked(name)
 		(d,) = self.drafts()
 		self.assertEqual((d.mode, d.decision), ("Draft", "Pending"))
+
+
+class TestHoldingMessageHardening(AutoTestCase):
+	def holding(self):
+		self.enable_raw()
+		batch, _s = self.run_batch(result=reply_ok(action="handoff", kb_item_ids=[], handoff_reason="x"))
+		(o,) = frappe.get_all(OUT, filters={"lead": self.lead1}, fields=["name", "source", "bot_draft"])
+		return self.draft_of(batch), o
+
+	def test_holding_blocked_at_send_when_infra_or_group_closed(self):
+		for how in ("infra", "group"):
+			frappe.db.delete(OUT, {"lead": self.lead1})
+			frappe.db.delete(DRAFT, {"lead": self.lead1})
+			frappe.db.set_value("Omni Identity", self.ident1, "bot_paused_until", None)
+			frappe.db.set_value(GROUP, G_HOURS, "auto_send_enabled", 0)
+			_d, o = self.holding()
+			if how == "infra":
+				frappe.conf.pop(flags.AUTO_SEND_CONF, None)
+			else:
+				frappe.db.set_value(GROUP, G_HOURS, "auto_send_enabled", 0)
+			with mock.patch.object(ZaloAdapter, "send") as send:
+				self.assertEqual(outbound.send_outbound(o.name), "Blocked")
+			send.assert_not_called()
+			frappe.conf[flags.AUTO_SEND_CONF] = 1
+
+	def test_holding_link_cannot_be_forged_from_outside(self):
+		d, _o = self.holding()
+		req = OutboundRequest(
+			self.channel.name, self.ident1, handoff.holding_message(), None, "System", bot_draft=d.name
+		)
+		with self.assertRaises(frappe.ValidationError):
+			outbound.queue_outbound(req)
+
+	def test_holding_message_rate_limited_per_identity(self):
+		d, _o = self.holding()
+		frappe.db.set_value("Omni Identity", self.ident1, "bot_paused_until", None)
+		batch, _s = self.run_batch(
+			text="lại hỏi", result=reply_ok(action="handoff", kb_item_ids=[], handoff_reason="y")
+		)
+		self.assertEqual(
+			frappe.db.count(OUT, {"lead": self.lead1}), 1
+		)  # nháp Handoff thứ hai không gửi thêm câu giữ chân
+		# quá N giờ thì được gửi lại
+		frappe.db.set_value(
+			OUT, _o["name"], "creation", add_to_date(now_datetime(), hours=-auto_send.HOLDING_MIN_HOURS - 1)
+		)
+		frappe.db.set_value("Omni Identity", self.ident1, "bot_paused_until", None)  # draft 2 đã tạm dừng bot
+		self.assertTrue(auto_send.try_holding(self.draft_of(batch).name))
+
+
+class TestEmergencySwitchFallback(AutoTestCase):
+	def test_trip_still_disables_when_save_fails(self):
+		from omni_crm.omni_crm.doctype.omni_question_group.omni_question_group import OmniQuestionGroup
+
+		self.enable_raw()
+		with (
+			mock.patch.object(OmniQuestionGroup, "save", side_effect=RuntimeError("hỏng")),
+			mock.patch("frappe.log_error") as log,
+		):
+			self.assertTrue(auto_send.trip(G_HOURS, "complaint"))
+		self.assertFalse(self.group_on())
+		self.assertTrue(log.called)
+
+	def test_rate_wrong_still_disables_when_save_fails(self):
+		from omni_crm.omni_crm.doctype.omni_question_group.omni_question_group import OmniQuestionGroup
+
+		self.enable_raw()
+		batch, _s = self.run_batch()
+		name = self.draft_of(batch).name
+		with mock.patch.object(OmniQuestionGroup, "save", side_effect=RuntimeError("hỏng")):
+			self.call(drafts.rate_draft, name, "Sai")
+		self.assertFalse(self.group_on())
+
+
+class TestBotFailureNotice(AutoTestCase):
+	def test_failed_bot_message_notifies_owner(self):
+		self.enable_raw()
+		self.run_batch()
+		(o,) = self.bot_outs()
+		before = frappe.db.count("Notification Log", {"document_name": self.lead1})
+		with (
+			mock.patch.object(ZaloAdapter, "send", side_effect=ValueError("loi")),
+			mock.patch("omni_crm.flags.sandbox", return_value=False),
+		):
+			self.assertEqual(outbound.send_outbound(o.name), "Failed")
+		self.assertGreater(frappe.db.count("Notification Log", {"document_name": self.lead1}), before)
 
 
 class TestBreakers(AutoTestCase):
