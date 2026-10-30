@@ -22,6 +22,8 @@
 | `{{THU_MUC_GHI_AM}}` | Thư mục ghi âm thử, nằm ngoài repo (D3-03) | `/home/frappe/stt_trial/` |
 | `{{STT_DUOC_CHON}}` | Nhà cung cấp được chọn sau D3-03 (D3-04) | |
 | `{{NGUONG_STT}}` | Ngưỡng quyết định làm tóm tắt cuộc gọi (D3-03) | "WER ≤ 25%, trường đúng ≥ 80%" |
+| `{{KIT_V2}}` | Nơi giải nén kit v2, khác thư mục kit v1 (prompts/v2) | `/home/frappe/kits/crm_omnichannel_kit_v2` |
+| `{{FILE_DANH_SACH}}` | File danh sách nhà thầu đã đổ vào mẫu, nằm ngoài repo (D1-14, V2-03) | `/home/frappe/data/nha_thau_2026-11.xlsx` |
 
 ## 3. Khi agent dừng giữa chừng
 

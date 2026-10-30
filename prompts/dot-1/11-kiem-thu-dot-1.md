@@ -1,6 +1,6 @@
 # D1-11 ★ · Kiểm thử và nghiệm thu Đợt 1
 
-**Phụ thuộc:** D1-10, staging sẵn sàng. **Thời lượng dự kiến:** 2 ngày + 1 tuần chạy thử với sale.
+**Phụ thuộc:** D1-15, staging sẵn sàng. **Thời lượng dự kiến:** 2 ngày + 1 tuần chạy thử với sale.
 
 ```
 Bạn là agent kiểm thử cho app Frappe `omni_crm` tại {{BENCH}}/apps/omni_crm. Đọc trước: CLAUDE.md, docs/10-kiem-thu.md (toàn bộ), docs/00 mục 2, docs/11 mục 3–4.
@@ -8,7 +8,7 @@ Bạn là agent kiểm thử cho app Frappe `omni_crm` tại {{BENCH}}/apps/omni
 Nhiệm vụ: chứng minh Đợt 1 đủ điều kiện phát hành. Bạn được viết test, script kiểm thử và sửa lỗi nhỏ phát hiện được (theo quy trình prompts/chung/sua-loi.md, mỗi lỗi một commit có test tái hiện). Lỗi lớn hoặc cần đổi thiết kế: ghi lại, không sửa.
 
 Việc cần làm:
-1. Đối chiếu bộ test tích hợp với bảng I-01…I-13 ở docs/10 mục 3. Ca nào thiếu thì viết. Ghi bảng ánh xạ ca → tên test.
+1. Đối chiếu bộ test tích hợp với bảng I-01…I-13 ở docs/10 mục 3, cộng các test của D1-12 (phiên chăm sóc, chỉ số dashboard, quyền), D1-13/D1-14 (nhà thầu, điểm phù hợp khớp mẫu Excel, nhập lại không trùng) và D1-15 (Meta, Google, form website, SLA). Kiểm thử tải bổ sung một đợt 200 lead quảng cáo trong 10 phút (mô phỏng lúc chiến dịch chạy mạnh). Ca nào thiếu thì viết. Ghi bảng ánh xạ ca → tên test.
 2. Viết `tests/load/send_burst.py` đúng docs/10 mục 4 (chạy ngoài bench, dùng httpx, ký payload bằng secret kênh staging đọc từ biến môi trường). Chạy trên {{SITE_STAGING}}: 3 lần lưu lượng ngày cao điểm dự kiến (hỏi giá trị ngày cao điểm trong báo cáo nếu chưa có; mặc định 2.000 tin/ngày → thử 6.000 tin dồn trong 1 giờ, cộng một đợt 50 tin/giây trong 2 phút), 300 khách giả, 10% gửi lại. Ghi số đo.
 3. Chạy các kịch bản sự cố ở docs/10 mục 5 trên {{SITE_STAGING}} (cần quyền sudo cho Redis: nếu không có, ghi rõ và hướng dẫn người duyệt tự làm). Ghi kết quả từng kịch bản.
 4. Kiểm tra bảo mật nhanh: webhook không chữ ký, `zalo_skip_signature` trên production, API inbox/admin với Guest và Sales User không có quyền.

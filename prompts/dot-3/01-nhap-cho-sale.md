@@ -19,7 +19,8 @@ Việc cần làm:
 3. Lưu `decision` (Sent As Is / Sent Edited / Discarded), `final_text`, `edit_distance_ratio`, `decided_by`, `decided_at`.
 4. Trên Lead (không sửa app crm): cách báo "Có nháp bot chờ duyệt" theo cơ chế đã chọn ở ADR D1-06 (ví dụ thông báo cho người phụ trách kèm liên kết Hộp thư).
 5. Báo cáo "Bot nháp" (mở rộng báo cáo "Bot ngầm"): theo nhóm — số nháp, tỉ lệ gửi nguyên văn, tỉ lệ sửa, tỉ lệ bỏ, chấm Đúng/Sai/Thiếu, theo tuần.
-6. Quyền: chỉ người xem được Lead mới thấy nháp; Omni Knowledge Editor xem báo cáo, không xem hội thoại nếu không có quyền Lead.
+6. Dashboard CSKH (docs/13): bật ô "Nháp bot chờ duyệt", khối "Bot hôm nay", lý do "Có nháp bot chờ duyệt" trong bảng Cần xử lý ngay, bộ lọc "Có nháp bot" trong Hộp thư, cột "Nháp đã duyệt" theo nhân viên; khối nháp trong dòng thời gian Hộp thư đúng mô tả docs/13 mục 2.
+7. Quyền: chỉ người xem được Lead mới thấy nháp; Omni Knowledge Editor xem báo cáo, không xem hội thoại nếu không có quyền Lead.
 
 Test: Draft tạo nháp, Shadow không hiện; gửi nguyên văn → Outbound source=Sale có bot_draft, decision Sent As Is, ratio 0; sửa → Sent Edited, ratio > 0; bỏ → Discarded; tin khách mới → nháp cũ Expired; nháp Handoff không gửi được qua API (gọi API trực tiếp cũng bị từ chối); vẫn không có Outbound source=Bot.
 

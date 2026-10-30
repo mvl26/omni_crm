@@ -5,6 +5,8 @@ Tệp này dành cho agent (Claude Code) làm việc trong repo app `omni_crm`. 
 ## 1. Bối cảnh
 
 - Công ty: Miyano Việt Nam. Người dùng cuối là đội sale, làm việc trên Frappe CRM.
+- Khách hàng mục tiêu: **nhà thầu (công ty) đã trúng gói cung cấp vật tư y tế, hóa chất cho bệnh viện**; sản phẩm là dịch vụ vận hành hợp đồng SPD. Mỗi khách là một CRM Organization (khóa: mã số thuế) có nhiều người liên hệ và danh sách gói thầu đã trúng. Đọc `docs/14-nha-thau-b2b.md`; khi mâu thuẫn với tài liệu khác, `docs/14` được ưu tiên.
+- Mục tiêu trước mắt: sẵn sàng cho **chiến dịch marketing đầu tiên** — nhận Lead từ dữ liệu mua sắm công, quảng cáo Meta và Google, form website (`docs/15`).
 - Mục tiêu module: gom tin nhắn và cuộc gọi của khách từ **email, Zalo OA, tổng đài điện thoại** về một cổng tiếp nhận, chống trùng khách, cho bot AI phân tích và soạn trả lời, rồi ghi thành **Lead trong Frappe CRM**.
 - Phát hành 3 đợt (xem `docs/00-tong-quan.md`):
   - Đợt 1: email + Zalo OA vào CRM, chống trùng, sale trả lời từ hệ thống.
@@ -85,4 +87,20 @@ Một nhiệm vụ chỉ được coi là xong khi đủ cả:
 | `docs/10-kiem-thu.md` | Chiến lược và kịch bản kiểm thử |
 | `docs/11-van-hanh.md` | Giám sát, cảnh báo, sổ tay sự cố, quay lui |
 | `docs/12-quyet-dinh-mo.md` | Giả định cần xác nhận, điều đã xác nhận, phát hiện |
+| `docs/13-dashboard-cskh.md` | Dashboard CSKH, Hộp thư, Hồ sơ chăm sóc, nhật ký phiên |
+| `docs/15-nguon-lead-quang-cao.md` | Lead từ Meta, Google Ads, form website, dữ liệu mua sắm công; chiến dịch, quy kết, SLA phản hồi |
+| `docs/14-nha-thau-b2b.md` | Mô hình khách nhà thầu B2B, gói thầu, điểm phù hợp, giai đoạn, nguồn Lead, tuân thủ |
+| `mau/Mau_DanhSach_NhaThau_TiemNang.xlsx` | Mẫu danh sách nhà thầu — tên sheet và mã trường dòng 2 là hợp đồng dữ liệu cho importer |
 | `docs/adr/` | Ghi quyết định kiến trúc |
+
+## Ghi chú từ v1
+
+Bản `CLAUDE.md` của repo giống hệt bản kit v1 gốc (V2-00 đã so; agent v1 không thêm gì vào tệp này). Các điều dưới đây là thực tế đã ghi nhận ở `docs/nghiem-thu/` và `docs/12`, chép ở đây để phiên sau không phải đọc lại:
+
+- Bench: `/home/hoangvietyeuem/frappe-bench`; app ở `apps/omni_crm`; site test `omni.test`. Nhánh nền là `develop` (không phải `main`); tag `v1-final` đánh dấu trạng thái cuối của v1.
+- Redis queue của bench (cổng 11000) hỏng; **không đụng vào**. Khi chạy test/tải, đặt `FRAPPE_REDIS_QUEUE=redis://127.0.0.1:<cổng riêng>` trỏ tới một `redis-server` tạm (đặt dữ liệu trong thư mục tạm, `--save "" --appendonly no`) rồi tắt sau khi xong. Không sửa `common_site_config.json`.
+- Chạy toàn bộ test mất khoảng 25 phút (1045 test ở `v1-final`); lệnh: `FRAPPE_REDIS_QUEUE=redis://127.0.0.1:<cổng> bench --site omni.test run-tests --app omni_crm`.
+- ruff: dùng đúng bản 0.8.1 (`ruff --version` trước khi chạy `check` và `format --check`).
+- Job nền do webhook đẩy ra chạy bằng người dùng Guest: mọi job mới phải có test chạy bằng Guest (`docs/12` mục D, E6).
+- Mặc định phát hành phải giữ: `bot_reply_mode = Off`, `bot_analyze_enabled = 0`, mọi `auto_send_enabled = 0`, không đặt `omni_auto_send_allowed` trong `site_config.json`.
+- Kit v2: `README-v2.md`, `docs/v2/`, `prompts/v2/`; báo cáo khoảng cách ở `docs/v2/gap-report.md`. Quyết định của kit v2 mang tiền tố `V2-` (`V2-Q12…V2-Q15`) vì Q12–Q14 của v1 đã dùng cho việc khác (`docs/12` mục A).

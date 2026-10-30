@@ -3,7 +3,7 @@
 **Phụ thuộc:** D2-05 và D2-03 (dùng `utils/business_hours.py`). **Cần anh chốt trước:** Q11 ở `docs/12` nếu muốn chạy lại trên dữ liệu thật. **Cần anh cung cấp:** `mau/nhom-cau-hoi-mau.csv` và `mau/kho-tri-thuc-mau.csv` đã điền nội dung thật, được duyệt. **Thời lượng dự kiến:** 2,5 ngày.
 
 ```
-Bạn là agent phát triển cho app Frappe `omni_crm` tại {{BENCH}}/apps/omni_crm. Đọc trước: CLAUDE.md, docs/08-bot-ai.md mục 5 (toàn bộ), 7, 8.2; docs/02 mục 9, 10, 13; mau/README.md.
+Bạn là agent phát triển cho app Frappe `omni_crm` tại {{BENCH}}/apps/omni_crm. Đọc trước: CLAUDE.md, docs/14-nha-thau-b2b.md mục 7 (nhóm kho tri thức cho nhà thầu; Phí dịch vụ và Đàm phán hợp đồng luôn chuyển người), docs/08-bot-ai.md mục 5 (toàn bộ), 7, 8.2; docs/02 mục 9, 10, 13; mau/README.md.
 
 Nhiệm vụ: bot soạn câu trả lời cho mọi lượt khách hỏi, CHỈ ở chế độ ngầm (Shadow): không hiện cho sale, không gửi cho khách. So câu bot với câu sale thật sự trả lời. Chạy lại toàn bộ dữ liệu từ Đợt 1 để có số liệu ngay.
 

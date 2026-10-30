@@ -1,6 +1,6 @@
 # D2-01 ★ · Interface tổng đài chung
 
-**Phụ thuộc:** Đợt 1 đã phát hành. Có thể song song với D2-04. **Thời lượng dự kiến:** 1,5 ngày.
+**Phụ thuộc:** Đợt 1 đã phát hành — hoặc, trong bản “Sẵn sàng chiến dịch” khi đã chọn nhà cung cấp tổng đài, chạy ngay sau D1-15 (README mục 4b). Có thể song song với D2-04. **Thời lượng dự kiến:** 1,5 ngày.
 
 ```
 Bạn là agent phát triển cho app Frappe `omni_crm` tại {{BENCH}}/apps/omni_crm. Đọc trước: CLAUDE.md, docs/07-kenh-tong-dai.md (toàn bộ), docs/02 mục 2, 3, 8 và dòng Omni Agent Map, docs/03 mục 1–3.

@@ -1,9 +1,12 @@
 group_name,always_handoff,description
-Giờ làm việc,0,"Khách hỏi giờ mở cửa, giờ nhận đơn, ngày nghỉ"
-Địa chỉ và liên hệ,0,"Khách hỏi địa chỉ văn phòng, kho, số hotline, email"
-Thông tin sản phẩm,0,"Khách hỏi sản phẩm có trong danh mục, quy cách, xuất xứ, giấy tờ có trong kho tri thức"
-Thủ tục mua hàng,0,"Khách hỏi cách đặt hàng, hồ sơ cần thiết, hình thức thanh toán đã công bố"
-Hỏi giá,1,"Khách hỏi giá, chiết khấu, báo giá, so sánh giá"
-Đặt hàng,1,"Khách muốn đặt hàng, nêu số lượng cụ thể, cần báo giá chính thức"
-Khiếu nại,1,"Khách phàn nàn: giao sai, giao thiếu, chất lượng, chậm trễ"
+Giờ làm việc,0,"Khách hỏi giờ làm việc, ngày nghỉ"
+Địa chỉ và liên hệ,0,"Khách hỏi địa chỉ văn phòng, kho, hotline, email"
+Cách vận hành dịch vụ,0,"Miyano nhận đơn gọi hàng của bệnh viện, mua hàng, thanh toán nhà cung cấp, quản lý công nợ như thế nào"
+Gói dịch vụ,0,Phạm vi Gói Điều phối và Gói Trọn gói (không bao gồm phí)
+Thanh toán back-to-back,0,Cơ chế thanh toán theo điều khoản hợp đồng giữa nhà thầu và bệnh viện
+Kết quả triển khai,0,"Case study đã ẩn danh, đã duyệt công bố"
+Hồ sơ năng lực,0,"Khách xin hồ sơ năng lực, giới thiệu công ty"
+Phí dịch vụ,1,"Khách hỏi phí, tỷ lệ %, báo giá dịch vụ"
+Đàm phán hợp đồng,1,"Điều khoản, cam kết, hợp đồng, bảo lãnh"
+Khiếu nại,1,Khách phàn nàn về dịch vụ đang dùng
 Khác,1,Không thuộc nhóm nào ở trên

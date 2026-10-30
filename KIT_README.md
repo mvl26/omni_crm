@@ -1,6 +1,8 @@
 # Bộ kit triển khai `omni_crm` bằng Claude Code
 
-Bộ kit này chứa toàn bộ đặc tả và câu lệnh (prompt) để các agent Claude Code xây module tích hợp **email, Zalo OA, tổng đài** với **Frappe CRM**, kèm bot AI chăm sóc và phân tích khách hàng. Anh chỉ cần chạy từng prompt theo thứ tự và duyệt kết quả ở các cổng kiểm tra.
+Bộ kit này chứa toàn bộ đặc tả và câu lệnh (prompt) để các agent Claude Code xây module tích hợp **email, Zalo OA, tổng đài** với **Frappe CRM**, kèm bot AI chăm sóc và phân tích khách hàng. Khách hàng mục tiêu là **nhà thầu trúng thầu cung cấp vật tư cho bệnh viện**; sản phẩm là dịch vụ vận hành hợp đồng SPD (`docs/14`). Anh chỉ cần chạy từng prompt theo thứ tự và duyệt kết quả ở các cổng kiểm tra.
+
+> **Đã chạy xong kit v1?** Đọc `README-v2.md`. Kit v2 kiểm kê code đã có, sửa chỗ lệch, rồi bổ sung nhà thầu B2B, lead quảng cáo, dashboard CSKH (prompts/v2/).
 
 ## 1. Cấu trúc
 
@@ -8,16 +10,19 @@ Bộ kit này chứa toàn bộ đặc tả và câu lệnh (prompt) để các 
 crm_omnichannel_kit/
 ├── CLAUDE.md            # Quy tắc chung cho mọi agent — luôn nằm ở gốc repo app
 ├── README.md            # Tệp này
+├── README-v2.md         # Kit v2: chạy sau khi xong kit v1
 ├── docs/                # Đặc tả kỹ thuật (nguồn sự thật)
-│   ├── 00 … 12          # Tổng quan → vận hành → giả định cần xác nhận
+│   ├── 00 … 15          # Tổng quan → … → dashboard (13), nhà thầu B2B (14), Lead quảng cáo (15)
+│   ├── v2/              # Danh sách thay đổi v1 → v2 (gap-report do V2-00 tạo)
 │   └── adr/             # Ghi quyết định kiến trúc phát sinh
 ├── prompts/
 │   ├── chung/           # Cách chạy prompt, prompt review độc lập, prompt sửa lỗi
-│   ├── dot-1/           # Đợt 1: nền tảng + email + Zalo OA  (D1-01 … D1-11)
+│   ├── dot-1/           # Đợt 1: nền tảng, email, Zalo OA, nhà thầu, Lead quảng cáo, dashboard  (D1-01 … D1-15)
 │   ├── dot-2/           # Đợt 2: tổng đài + bot phân tích + chạy ngầm  (D2-01 … D2-09)
-│   └── dot-3/           # Đợt 3: bot nháp + ghi âm + mở tự động  (D3-01 … D3-06)
+│   ├── dot-3/           # Đợt 3: bot nháp + ghi âm + mở tự động  (D3-01 … D3-06)
+│   └── v2/              # Kit v2: kiểm kê, sửa, bổ sung (V2-00 … V2-08, ORCH)
 ├── eval/                # Bộ đề kiểm thử bot: định dạng, mẫu, tiêu chí chấm
-└── mau/                 # Mẫu kho tri thức, bảng điểm Lead để anh điền
+└── mau/                 # Mẫu danh sách nhà thầu (Excel), kho tri thức, nhóm câu hỏi, bảng điểm
 ```
 
 ## 2. Chuẩn bị trước khi chạy prompt đầu tiên
@@ -25,7 +30,7 @@ crm_omnichannel_kit/
 1. Máy dev có bench Frappe v15, đã cài app `crm` và một **site test riêng** (ví dụ `omni.test`).
 2. Claude Code chạy tại thư mục bench (`frappe-bench/`).
 3. Giải nén bộ kit vào một chỗ cố định, ví dụ `~/kits/crm_omnichannel_kit`. Prompt D1-01 sẽ tạo app và chép tài liệu vào repo.
-4. Điền trước hai tệp trong `mau/` (kho tri thức, bảng điểm Lead) càng sớm càng tốt; bot cần chúng từ Đợt 2.
+4. Giao đội IT đổ danh sách nhà thầu vào `mau/Mau_DanhSach_NhaThau_TiemNang.xlsx` (đã có công thức chấm điểm; dùng được ngay trước khi có CRM). Điền các tệp mẫu còn lại trong `mau/` (kho tri thức, bảng điểm) trước Đợt 2.
 5. Đọc `docs/12-quyet-dinh-mo.md`: đó là các điểm agent sẽ phải xác nhận với API thật, và các quyết định anh cần chốt. Quan trọng nhất là **Q11 — chính sách gửi dữ liệu hội thoại khách sang dịch vụ AI**: chưa chốt thì Đợt 2–3 chỉ chạy được trên dữ liệu tổng hợp.
 
 ## 3. Cách chạy một prompt
@@ -53,7 +58,11 @@ Chi tiết ở `prompts/chung/00-cach-dung-prompt.md`. Tóm tắt:
 | D1-08 ★ | dot-1/08-kenh-zalo.md | Kênh Zalo OA | D1-06 |
 | D1-09 ★ | dot-1/09-chieu-ra.md | Gửi trả lời từ CRM qua email/Zalo | D1-07, D1-08 |
 | D1-10 | dot-1/10-giam-sat.md | Màn hình giám sát, cảnh báo, tác vụ quét | D1-09 |
-| D1-11 ★ | dot-1/11-kiem-thu-dot-1.md | Kiểm thử tải, sự cố, nghiệm thu Đợt 1 | D1-10 |
+| D1-13 ★ | dot-1/13-mo-hinh-nha-thau.md | Mô hình nhà thầu B2B: Organization + mã số thuế, gói thầu đã trúng, điểm phù hợp, giai đoạn bán hàng | D1-06 |
+| D1-14 ★ | dot-1/14-nhap-danh-sach-nha-thau.md | Nhập danh sách nhà thầu từ mẫu Excel | D1-13 |
+| D1-12 ★ | dot-1/12-dashboard-ho-so-cham-soc.md | Dashboard CSKH, chi tiết nhà thầu, nhật ký phiên (chạy trước D1-11) | D1-10, D1-14 |
+| D1-15 ★ | dot-1/15-lead-quang-cao.md | Lead từ Meta, Google Ads, form website; quy kết chiến dịch; báo cáo chiến dịch | D1-12, D1-13 |
+| D1-11 ★ | dot-1/11-kiem-thu-dot-1.md | Kiểm thử tải, sự cố, nghiệm thu Đợt 1 | D1-15 |
 | D2-01 ★ | dot-2/01-adapter-tong-dai.md | Interface tổng đài chung | Đợt 1 phát hành |
 | D2-02 ★ | dot-2/02-stringee.md | Adapter Stringee | D2-01 |
 | D2-03 | dot-2/03-goi-nho-va-doi-soat.md | Gọi nhỡ → việc gọi lại, đối soát đêm | D2-02 |
@@ -71,6 +80,23 @@ Chi tiết ở `prompts/chung/00-cach-dung-prompt.md`. Tóm tắt:
 | D3-06 ★ | dot-3/06-kiem-thu-dot-3.md | Nghiệm thu Đợt 3 | D3-05 (và D3-04 nếu làm) |
 
 Prompt cùng đợt không phụ thuộc nhau (ví dụ D1-07 và D1-08, hoặc D2-01 và D2-04) có thể chạy song song ở hai phiên, mỗi phiên một nhánh git.
+
+## 4b. Bản phát hành "Sẵn sàng chiến dịch" và truy vết yêu cầu
+
+Mục tiêu chiến dịch marketing đầu tiên: **sẵn sàng tiếp nhận, phân loại, chăm sóc Lead; mọi tương tác quản lý tập trung trên ERP**. Bản phát hành này gồm Đợt 1 đầy đủ, chạy theo thứ tự: D1-01 → D1-10 → D1-13 → D1-14 → D1-12 → D1-15 → D1-11.
+
+| # | Yêu cầu | Đáp ứng bởi | Có trong bản sẵn sàng chiến dịch? |
+| --- | --- | --- | --- |
+| 1a | Lead từ dữ liệu mua sắm công | Mẫu Excel + nhập danh sách (D1-13, D1-14; `docs/14`, `docs/15` mục 8) | Có — nhập file; thu thập tự động chờ V2-Q13 |
+| 1b | Lead từ quảng cáo Meta | D1-15 (`docs/15` mục 2) | Có |
+| 1c | Lead từ quảng cáo Google | D1-15 (`docs/15` mục 3) | Có |
+| 1d | Phân loại, giao sale, đo thời gian phản hồi | D1-05, D1-13, D1-15 (`docs/15` mục 7) | Có |
+| 2a | Zalo OA vào CRM | D1-08, D1-09 | Có |
+| 2b | Email công ty vào CRM | D1-07 | Có |
+| 2c | Số điện thoại công ty vào CRM | D2-01 → D2-03 (tổng đài) | **Chỉ khi đã chọn nhà cung cấp tổng đài** — nếu có, chạy D2-01 → D2-03 ngay sau D1-15. Nếu chưa: sale ghi cuộc gọi bằng "Ghi nhật ký chăm sóc" (kênh Điện thoại) để vẫn tập trung trên ERP; nối tổng đài sau |
+| 3 | Mọi cuộc gọi, tin nhắn, email ghi nhận theo từng Lead | D1-06 (dòng thời gian), D1-09, D1-12 (Chi tiết nhà thầu, nhật ký chăm sóc), D2-01 (cuộc gọi tự động) | Có (cuộc gọi tự động theo 2c) |
+
+Đường găng: quyền Meta/Google và tài khoản Zalo OA đã xác thực (bắt đầu ngay ngày đầu), nhà cung cấp tổng đài (Q2), và hai quyết định pháp lý V2-Q12 (liên hệ chủ động), V2-Q13 (nguồn dữ liệu đấu thầu).
 
 ## 5. Ba cổng anh phải tự duyệt
 

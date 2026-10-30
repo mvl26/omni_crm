@@ -1,8 +1,13 @@
 item_id,question_group,question,answer,source,owner_email
-KB-00001,Giờ làm việc,"Bên mình làm việc mấy giờ?
-Mấy giờ thì nhận đơn?","[Điền giờ làm việc thực tế của Miyano, ví dụ: Miyano làm việc từ … đến … các ngày …]",[Tài liệu nguồn],[email người phụ trách]
+KB-00001,Giờ làm việc,Bên mình làm việc mấy giờ?,[Điền giờ làm việc thực tế của Miyano],[Tài liệu nguồn],[email người phụ trách]
 KB-00002,Địa chỉ và liên hệ,"Văn phòng Miyano ở đâu?
-Cho xin địa chỉ công ty",[Điền địa chỉ văn phòng và kho đang công bố],[Tài liệu nguồn],[email người phụ trách]
-KB-00003,Địa chỉ và liên hệ,Số hotline là gì?,[Điền số hotline chính thức],[Tài liệu nguồn],[email người phụ trách]
-KB-00004,Thủ tục mua hàng,Muốn đặt hàng thì làm thế nào?,"[Điền quy trình đặt hàng chính thức: kênh đặt, thông tin cần cung cấp]",[Tài liệu nguồn],[email người phụ trách]
-KB-00005,Thông tin sản phẩm,[Câu khách hay hỏi về một sản phẩm cụ thể],"[Thông tin đã được duyệt để công bố: quy cách, xuất xứ, giấy phép lưu hành… KHÔNG ghi giá]",[Catalogue / hồ sơ sản phẩm],[email người phụ trách]
+Cho xin số hotline","[Điền địa chỉ văn phòng, kho, hotline đang công bố]",[Tài liệu nguồn],[email người phụ trách]
+KB-00003,Cách vận hành dịch vụ,"Dịch vụ vận hành hợp đồng làm những việc gì?
+Bên mình nhận đơn của bệnh viện thế nào?","[Mô tả đã duyệt: nhận đơn gọi hàng của bệnh viện, mua hàng, thanh toán nhà cung cấp, quản lý công nợ]",[Tài liệu dịch vụ],[email người phụ trách]
+KB-00004,Gói dịch vụ,"Có những gói nào?
+Gói Trọn gói khác Gói Điều phối thế nào?",[Phạm vi từng gói đã duyệt công bố — KHÔNG ghi tỷ lệ phí],[Tài liệu dịch vụ],[email người phụ trách]
+KB-00005,Thanh toán back-to-back,"Thanh toán back-to-back nghĩa là gì?
+Bao giờ bên em phải trả tiền cho Miyano?","[Mô tả cơ chế đã duyệt, không cam kết thời hạn cụ thể ngoài nội dung đã công bố]",[Tài liệu dịch vụ],[email người phụ trách]
+KB-00006,Kết quả triển khai,"Bên mình đã làm cho ai chưa?
+Có kết quả cụ thể không?",[Case study đã ẩn danh và được duyệt công bố],[Tài liệu marketing đã duyệt],[email người phụ trách]
+KB-00007,Hồ sơ năng lực,Gửi giúp hồ sơ năng lực,"[Cách nhận hồ sơ năng lực: kênh gửi, người gửi]",[Tài liệu nguồn],[email người phụ trách]

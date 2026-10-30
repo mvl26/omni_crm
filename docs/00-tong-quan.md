@@ -1,5 +1,9 @@
 # 00 · Tổng quan
 
+## 0. Khách hàng mục tiêu
+
+Khách hàng chính là **nhà thầu (tổng thầu) đã trúng gói cung cấp vật tư y tế, hóa chất cho bệnh viện** qua mua sắm công. Miyano bán **dịch vụ vận hành hợp đồng SPD** cho họ (Gói Điều phối, Gói Trọn gói). Đây là bán hàng doanh nghiệp: mỗi khách là một công ty có nhiều người liên hệ, nguồn Lead chủ yếu là danh sách chủ động từ dữ liệu đấu thầu, chu kỳ bán dài. Mô hình chi tiết: `docs/14-nha-thau-b2b.md` — khi mâu thuẫn với tài liệu khác, `docs/14` được ưu tiên.
+
 ## 1. Vấn đề cần giải
 
 Khách của Miyano liên hệ qua email, Zalo OA và điện thoại. Hiện thông tin nằm rải rác ở hộp thư, điện thoại và Zalo cá nhân của từng sale: dễ sót khách, trùng người chăm sóc, không đo được kênh nào hiệu quả.
