@@ -124,6 +124,7 @@ permission_query_conditions = {
 	"Omni Identity": "omni_crm.permissions.identity_conditions",
 	"Omni Duplicate Candidate": "omni_crm.permissions.candidate_conditions",
 	"Omni Call": "omni_crm.permissions.call_conditions",  # D2-01
+	"Omni Bot Draft": "omni_crm.permissions.bot_draft_conditions",  # D3-01
 }
 
 has_permission = {
@@ -132,6 +133,7 @@ has_permission = {
 	"Omni Identity": "omni_crm.permissions.has_lead_scoped_permission",
 	"Omni Duplicate Candidate": "omni_crm.permissions.has_candidate_permission",
 	"Omni Call": "omni_crm.permissions.has_lead_scoped_permission",  # D2-01
+	"Omni Bot Draft": "omni_crm.permissions.has_lead_scoped_permission",  # D3-01
 }
 
 # DocType Class
@@ -165,6 +167,7 @@ scheduler_events = {
 			"omni_crm.monitoring.alerts.run_checks",  # D1-10
 			"omni_crm.channels.telephony.callbacks.sweep_pending",  # D2-03
 			"omni_crm.bot.reply.compare_pending",  # D2-07: so nháp Shadow với câu sale, hết hạn sau 24 giờ
+			"omni_crm.bot.reply.expire_pending_drafts",  # D3-01: nháp Draft chờ duyệt quá 24 giờ -> Expired
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03

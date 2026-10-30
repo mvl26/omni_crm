@@ -1,7 +1,8 @@
-"""Bot soạn trả lời (docs/08 mục 5) — D2-07: CHỈ chế độ ngầm (Shadow).
+"""Bot soạn trả lời (docs/08 mục 5): chế độ ngầm (Shadow, D2-07) và Nháp cho sale duyệt (Draft, D3-01).
 
-Bản nháp chỉ để đo: không hiện cho sale, không gửi cho khách. Module này (và cả thư mục `bot/`) KHÔNG tạo
-Omni Outbound Message và không có đường gửi nào; test quét mã nguồn để giữ điều đó. Chế độ Draft/Auto thuộc Đợt 3.
+Shadow: bản nháp chỉ để đo, không hiện cho sale. Draft: nháp hiện trong Hộp thư, sale bấm Gửi/Sửa/Bỏ (api/drafts.py).
+Module này (và cả thư mục `bot/`) KHÔNG tạo Omni Outbound Message và không có đường gửi nào; test quét mã nguồn để
+giữ điều đó. Chế độ Auto (tự gửi) thuộc D3-05.
 
 Nội dung khách là dữ liệu: nằm trong thẻ, bị chốt chặn bằng code kiểm đầu ra trước khi lưu (guards.py). Mọi lỗi
 của bot chỉ ghi log không chứa nội dung khách, không làm hỏng pipeline.
@@ -201,13 +202,18 @@ def _recent_drafts(identity: str) -> int:
 	)
 
 
-def _send_note(identity: str, channel: str) -> str | None:
-	"""Ghi chú (không chặn) nếu kênh không cho gửi lúc này; Shadow vẫn chạy để chấm (docs/08 mục 5.1)."""
+def _send_note(identity: str, channel: str, mode: str = "Shadow") -> str | None:
+	"""Ghi chú (không chặn) nếu kênh không cho gửi lúc này; Shadow vẫn chạy để chấm (docs/08 mục 5.1).
+
+	Draft: người gửi là Sale (được gửi cả khung có phí, sale xác nhận), nên kiểm theo nguồn Sale.
+	"""
 	try:
 		channel_doc = frappe.get_doc("Omni Channel", channel)
 		adapter = get_adapter(channel_doc.channel_type)
 		ok, reason = adapter.can_send_now(
-			frappe.get_doc("Omni Identity", identity), channel_doc, source="Bot"
+			frappe.get_doc("Omni Identity", identity),
+			channel_doc,
+			source="Sale" if mode == "Draft" else "Bot",
 		)
 	except (AdapterNotFoundError, frappe.DoesNotExistError, AttributeError):
 		return None
@@ -293,6 +299,100 @@ def _insert_draft(values: dict) -> str:
 	return doc.name
 
 
+# --- Nháp cho sale (chế độ Draft, D3-01) ---------------------------------------------------------------------
+
+DRAFT_TTL_HOURS = 24  # docs/08 mục 5.5: nháp quá 24 giờ -> Expired
+NOTIFY_SUBJECT_MAX = 140
+
+
+def expire_stale_for_lead(lead: str) -> int:
+	"""Nháp Draft còn Pending của Lead mà tin khách cuối của lượt của nó cũ hơn tin khách mới nhất của Lead -> Expired.
+
+	So theo mốc tin khách của từng lượt (không theo giờ tạo nháp) nên nháp đến muộn do AI chậm vẫn bị loại đúng.
+	Trả số nháp đã hết hạn. Không commit.
+	"""
+	pending = frappe.get_all(
+		DRAFT,
+		filters={"lead": lead, "mode": "Draft", "decision": "Pending"},
+		fields=["name", "batch_id", "creation"],
+	)
+	if not pending:
+		return 0
+	rows = frappe.get_all(
+		INBOUND,
+		filters={"lead": lead, "event_type": "message", "status": ["!=", "Ignored"]},
+		fields=["received_at"],
+		order_by="received_at desc",
+		limit_page_length=1,
+	)
+	if not rows or not rows[0].received_at:
+		return 0
+	latest = get_datetime(rows[0].received_at)
+	done = 0
+	for d in pending:
+		if get_datetime(_customer_anchor(d)) < latest:
+			frappe.db.set_value(
+				DRAFT,
+				{"name": d.name, "decision": "Pending"},
+				{"decision": "Expired", "decided_at": now_datetime()},
+			)
+			done += 1
+	return done
+
+
+def expire_pending_drafts() -> int:
+	"""Tác vụ định kỳ: nháp Draft còn Pending quá 24 giờ -> Expired; trả số nháp đã hết hạn."""
+	cutoff = add_to_date(now_datetime(), hours=-DRAFT_TTL_HOURS)
+	names = frappe.get_all(
+		DRAFT,
+		filters={"mode": "Draft", "decision": "Pending", "creation": ["<", cutoff]},
+		pluck="name",
+		limit_page_length=COMPARE_BATCH,
+	)
+	for name in names:
+		frappe.db.set_value(
+			DRAFT,
+			{"name": name, "decision": "Pending"},
+			{"decision": "Expired", "decided_at": now_datetime()},
+		)
+	frappe.db.commit()
+	return len(names)
+
+
+def notify_pending_draft(lead: str, action: str) -> int:
+	"""Báo người phụ trách Lead "có nháp bot chờ duyệt" (Notification Log + realtime Hộp thư); trả số người đã báo.
+
+	Chỉ tên Lead và liên kết Hộp thư, KHÔNG kèm nội dung khách hay nháp. Không commit. Lỗi chỉ ghi log.
+	"""
+	from omni_crm.bot import scoring
+
+	name = frappe.db.get_value("CRM Lead", lead, "lead_name") or lead
+	subject = (
+		_("Bot chuyển người, mời xem: {0}") if action == "Handoff" else _("Có nháp bot chờ duyệt: {0}")
+	).format(name)[:NOTIFY_SUBJECT_MAX]
+	link = f"/app/omni-inbox?lead={lead}"
+	done = 0
+	for user in scoring._recipients(lead):
+		try:
+			frappe.get_doc(
+				{
+					"doctype": "Notification Log",
+					"type": "Alert",
+					"for_user": user,
+					"subject": subject,
+					"email_content": f"{frappe.utils.escape_html(subject)}. "
+					f'<a href="{frappe.utils.escape_html(link)}">{frappe.utils.escape_html(_("Mở Hộp thư"))}</a>',
+					"document_type": "CRM Lead",
+					"document_name": lead,
+				}
+			).insert(ignore_permissions=True)
+			done += 1
+		except Exception:
+			frappe.log_error(title="Omni: không báo được nháp bot", message=f"lead={lead}")
+	timeline.notify(lead, [])
+	return done
+
+
 def _log_kb_too_large(count: int) -> None:
 	"""Ghi Error Log khi kho vượt ngưỡng truy hồi, tối đa một lần mỗi giờ (không ghi theo từng tin)."""
 	cache = frappe.cache()
@@ -328,8 +428,9 @@ def make_draft(
 	check_channel: bool = True,
 	notes: list[str] | None = None,
 	extra: dict | None = None,
+	mode: str = "Shadow",
 ) -> str | None:
-	"""Gọi bot một lần và lưu Omni Bot Draft (Shadow); trả tên nháp, hoặc None nếu AI không trả được kết quả.
+	"""Gọi bot một lần và lưu Omni Bot Draft (`mode` Shadow hoặc Draft); trả tên nháp, hoặc None nếu AI không trả được kết quả.
 
 	Không có đường gửi nào ở đây. `until`: dựng ngữ cảnh chỉ gồm lượt đến thời điểm này (replay). Kho tri thức
 	trống thì ghi nháp Handoff mà không gọi AI.
@@ -344,9 +445,10 @@ def make_draft(
 		"identity": identity,
 		"channel": channel,
 		"batch_id": batch_id,
+		"mode": mode,
 		**(extra or {}),
 	}
-	info = [n for n in (_send_note(identity, channel) if check_channel else None,) if n]
+	info = [n for n in (_send_note(identity, channel, mode) if check_channel else None,) if n]
 	if not business_hours.is_business_time(at or now_datetime()):
 		info.append("info:ngoai_gio")
 	info.extend(notes or [])
@@ -359,6 +461,7 @@ def make_draft(
 				"handoff_reason": _("Kho tri thức đang trống"),
 			}
 		)
+		_after_insert(name, base, "Handoff")
 		frappe.db.commit()
 		return name
 	prompt = load_prompt("reply")
@@ -426,12 +529,22 @@ def make_draft(
 				"handoff_reason": decision["reason"],
 			}
 		)
+		_after_insert(name, base, decision["action"])
 		frappe.db.commit()
 		return name
 	except Exception:
 		_scrub_run(batch_id, None)  # lỗi giữa chừng: không để lại output_json thô
 		frappe.db.commit()
 		raise
+
+
+def _after_insert(name: str, base: dict, action: str) -> None:
+	"""Chế độ Draft: loại nháp cũ của Lead rồi báo người phụ trách nếu nháp mới còn chờ duyệt. Không commit."""
+	if base.get("mode") != "Draft":
+		return
+	expire_stale_for_lead(base["lead"])
+	if frappe.db.get_value(DRAFT, name, "decision") == "Pending":
+		notify_pending_draft(base["lead"], action)
 
 
 # --- Điểm vào -------------------------------------------------------------------------------------------------
@@ -454,7 +567,7 @@ def _log_failure(batch_id: str, error: Exception) -> None:
 
 
 def reply_batch(batch_id: str) -> str:
-	"""Job nền: soạn nháp Shadow cho lượt `batch_id`; trả "drafted" hoặc lý do bỏ qua. Không ném lỗi, không gửi gì.
+	"""Job nền: soạn nháp (Shadow hoặc Draft theo công tắc) cho lượt `batch_id`; trả "drafted" hoặc lý do bỏ qua. Không ném lỗi, không gửi gì.
 
 	Điều kiện (docs/08 mục 5.1): chế độ khác Off; tin cuối của lượt là tin khách; bot chưa bị tạm dừng với khách;
 	sale chưa trả lời sau tin đó (ngắt mạch); chưa quá giới hạn tần suất.
@@ -470,6 +583,11 @@ def reply_batch(batch_id: str) -> str:
 		identity = last.identity
 		if not lead or not identity or not last.channel:
 			return "no_lead"
+		if (
+			last.event_type == "message"
+		):  # tin khách mới: nháp Draft cũ của Lead hết hạn dù lượt này có soạn nháp hay không
+			expire_stale_for_lead(lead)
+			frappe.db.commit()
 		if frappe.db.exists(DRAFT, {"batch_id": batch_id}):
 			return "exists"
 		if handoff.is_bot_paused(identity):
@@ -494,6 +612,7 @@ def reply_batch(batch_id: str) -> str:
 			wants_human=bool(analysis.get("wants_human")),
 			at=get_datetime(last.received_at),
 			notes=notes,
+			mode=flags.bot_reply_mode(),
 		)
 		return "drafted" if name else "no_result"
 	except Exception as e:
