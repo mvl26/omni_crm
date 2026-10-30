@@ -5,7 +5,11 @@
  "field_order": [
   "group_name",
   "always_handoff",
-  "description"
+  "description",
+  "sec_auto",
+  "auto_send_enabled",
+  "auto_send_enabled_at",
+  "auto_send_enabled_by"
  ],
  "fields": [
   {
@@ -28,6 +32,35 @@
    "fieldtype": "Small Text",
    "label": "Mô tả",
    "description": "Mô tả để bot phân loại"
+  },
+  {
+   "fieldname": "sec_auto",
+   "fieldtype": "Section Break",
+   "label": "Tự động gửi (Đợt 3)"
+  },
+  {
+   "fieldname": "auto_send_enabled",
+   "fieldtype": "Check",
+   "label": "Bot tự gửi cho nhóm này",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "description": "Chỉ đổi được qua nút trong Hộp thư/API (Omni Admin, sau khi đạt điều kiện và khóa hạ tầng omni_auto_send_allowed). Không sửa tay trên biểu mẫu."
+  },
+  {
+   "fieldname": "auto_send_enabled_at",
+   "fieldtype": "Datetime",
+   "label": "Bật lúc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "auto_send_enabled_by",
+   "fieldtype": "Link",
+   "label": "Bật bởi",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "permissions": [
@@ -57,7 +90,7 @@
  "sort_order": "DESC",
  "actions": [],
  "creation": "2026-10-30 12:00:00.000000",
- "modified": "2026-10-30 12:00:00.000000",
+ "modified": "2026-10-30 18:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "module": "Omni CRM",
