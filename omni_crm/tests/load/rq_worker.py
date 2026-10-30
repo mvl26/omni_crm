@@ -68,7 +68,6 @@ def main() -> None:
 	fake = sys.argv[sys.argv.index("--fake-ai") + 1] if "--fake-ai" in sys.argv else None
 	os.chdir(os.path.join(os.path.dirname(frappe.__file__), "..", "..", "..", "sites"))
 	frappe.init(site, sites_path=".")
-	conn = get_redis_conn()
 	qs = get_queue_list([q.strip() for q in queues.split(",")], build_queue_name=True)
 	if fake:
 		_install_fake_ai(fake)  # biến toàn cục của module, các tiến trình con của RQ kế thừa khi fork
