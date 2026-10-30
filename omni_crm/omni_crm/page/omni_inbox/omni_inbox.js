@@ -356,7 +356,8 @@ class OmniInbox {
 		frappe
 			.call({
 				method: "omni_crm.api.drafts.send_draft",
-				args: { draft, text, confirm_paid },
+				// text=null (gửi nguyên văn) không được đưa vào args: jQuery gửi null thành chuỗi rỗng và máy chủ sẽ báo "trống".
+				args: Object.assign({ draft, confirm_paid }, typeof text === "string" ? { text } : {}),
 				freeze: false,
 			})
 			.then((r) => {
