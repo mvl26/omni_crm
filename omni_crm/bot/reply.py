@@ -270,6 +270,10 @@ def evaluate(raw: dict, ctx: dict) -> dict:
 			action="Handoff",
 			reason=_clean(raw.get("handoff_reason"), REASON_MAX) or _("Bot đề xuất chuyển người"),
 		)
+		if ctx.get(
+			"wants_human"
+		):  # khách đòi gặp người: nhãn lý do cố định cho thông báo (handoff.reason_label)
+			out["flags"] = [handoff.FLAG_WANTS_HUMAN]
 		return out
 	text = _clean(raw.get("reply_text"), TEXT_MAX, keep_newlines=True)
 	flags_ = guards.run_guards(
@@ -489,6 +493,8 @@ def make_draft(
 		max_tokens=800,
 	)  # KHÔNG truyền synthetic: hội thoại khách luôn qua cổng Q11
 	if raw is None:
+		if mode == "Draft" and wants_human:  # khách đòi gặp người thì vẫn phải qua chuyển người dù AI lỗi
+			return _handoff_without_ai(base, info)
 		return None
 	try:
 		group_rows = {r.name: r for r in frappe.get_all(GROUP, fields=["name", "always_handoff"])}
@@ -538,13 +544,32 @@ def make_draft(
 		raise
 
 
+def _handoff_without_ai(base: dict, info: list[str]) -> str:
+	"""AI không trả được kết quả nhưng khách đòi gặp người: ghi nháp Handoff (không văn bản) và chuyển người."""
+	name = _insert_draft(
+		{
+			**base,
+			"action": "Handoff",
+			"guard_flags": "\n".join([handoff.FLAG_WANTS_HUMAN, "ai_khong_tra_ket_qua", *info]),
+			"handoff_reason": _("Khách muốn gặp nhân viên"),
+		}
+	)
+	_after_insert(name, base, "Handoff")
+	frappe.db.commit()
+	return name
+
+
 def _after_insert(name: str, base: dict, action: str) -> None:
-	"""Chế độ Draft: loại nháp cũ của Lead rồi báo người phụ trách nếu nháp mới còn chờ duyệt. Không commit."""
+	"""Chế độ Draft: loại nháp cũ của Lead; nháp mới còn chờ duyệt thì báo người phụ trách. Nháp Handoff đi qua
+	`handoff.handoff` (im bot + một thông báo duy nhất); nháp Reply báo "có nháp chờ duyệt". Không commit."""
 	if base.get("mode") != "Draft":
 		return
 	expire_stale_for_lead(base["lead"])
 	if frappe.db.get_value(DRAFT, name, "decision") == "Pending":
-		notify_pending_draft(base["lead"], action)
+		if action == "Handoff":
+			handoff.handoff(name)
+		else:
+			notify_pending_draft(base["lead"], action)
 
 
 # --- Điểm vào -------------------------------------------------------------------------------------------------

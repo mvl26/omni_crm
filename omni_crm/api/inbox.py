@@ -217,7 +217,8 @@ def check_lead_access(lead: str) -> None:
 @frappe.whitelist()
 def get_thread(lead: str) -> dict:
 	"""Toàn bộ hội thoại của Lead trên mọi kênh, theo thời gian tăng dần (không kèm payload gốc)."""
-	from omni_crm.api import drafts as drafts_mod  # import trễ: drafts.py dùng lại các hàm của module này
+	from omni_crm.api import bot_control  # import trễ: drafts.py dùng lại các hàm của module này
+	from omni_crm.api import drafts as drafts_mod
 
 	check_lead_access(lead)
 	inbound = frappe.get_all(
@@ -362,6 +363,7 @@ def get_thread(lead: str) -> dict:
 		),
 		"messages": items,
 		"drafts": drafts_mod.thread_drafts(lead),  # nháp của bot chờ duyệt (D3-01)
+		"bot": bot_control.state(lead, bool(frappe.has_permission(LEAD, "write", doc=lead))),  # D3-02
 		"truncated": max(len(inbound), len(outbound), len(call_rows)) >= THREAD_LIMIT,
 		"compose": compose_state(lead),
 	}
