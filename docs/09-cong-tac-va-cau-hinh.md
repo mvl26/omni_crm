@@ -15,7 +15,7 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `missed_call_callback_minutes`, `callback_fallback_user`, `business_hours`, `holidays` | Omni Settings | Hạn gọi lại (phút làm việc), người nhận dự phòng, giờ làm việc, ngày nghỉ lễ (JSON `["2027-01-01", …]`, mặc định rỗng — việc cần người phụ trách điền) | 2 |
 | `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
 | `lead_scoring_enabled` | Omni Settings | Không tính điểm mới, không báo Lead nóng; `omni_score` và breakdown cũ giữ nguyên. Bảng điểm `score_rules` rỗng cũng coi như không chấm (không có điểm mặc định bịa). `hot_lead_threshold` (mặc định 60; <= 0 dùng 60) | 2 |
-| `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời (không enqueue `reply_batch`, `call_tool` ghi `Skipped Switch`). Shadow (và Draft, tạm xử lý như Shadow ở Đợt 2) chỉ ghi `Omni Bot Draft`, không bao giờ tạo tin gửi; mặc định Off | 2 |
+| `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời (không enqueue `reply_batch`, `call_tool` ghi `Skipped Switch`). Shadow chỉ ghi `Omni Bot Draft` ngầm (sale không thấy). **Draft (D3-01)**: nháp hiện trong Hộp thư để sale Gửi/Sửa rồi gửi/Bỏ; bot vẫn không tự gửi, tin đi là `source=Sale`. Chuyển Draft -> Shadow/Off: nháp Pending cũ hết hạn sau 24 giờ hoặc khi khách nhắn tiếp, sale không còn thấy nút Gửi mới. Mặc định Off; **bật Draft ở môi trường thật chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt** (docs/08 mục 10) | 2 |
 | `bot_paused_until` (kiểm tra) | Omni Identity | Bot ngầm không soạn nháp cho khách này đến thời điểm đó | 2 |
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft | 3 |
 | `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |

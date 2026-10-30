@@ -33,3 +33,11 @@
 .omni-inbox .oi-intent { background: var(--blue-100, #dbeafe); }
 .omni-inbox .oi-score { background: var(--gray-100, #f3f4f6); cursor: help; }
 .omni-inbox .oi-score.oi-hot { background: var(--orange-100, #ffedd5); font-weight: 600; }
+
+.omni-inbox .oi-draft { align-self: flex-start; max-width: 85%; padding: 8px 12px; border: 1px dashed var(--orange-500, #e08a1e); border-radius: 10px; background: var(--orange-50, #fff7ed); word-break: break-word; }
+.omni-inbox .oi-draft-handoff { border-color: var(--red-400, #e57373); background: var(--red-50, #fdecea); }
+.omni-inbox .oi-draft .oi-draft-text { margin: 4px 0; }
+.omni-inbox .oi-draft-body { margin: 4px 0; }
+.omni-inbox .oi-draft .oi-kb { font-size: 11px; margin-right: 4px; }
+.omni-inbox .oi-rate { align-self: flex-start; display: flex; gap: 6px; align-items: center; border-style: solid; }
+.omni-inbox .oi-draftchip { background: var(--orange-100, #ffedd5); font-weight: 600; }

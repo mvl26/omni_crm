@@ -196,7 +196,7 @@
    "label": "Chế độ bot trả lời",
    "options": "Off\nShadow\nDraft",
    "default": "Off",
-   "description": "Off: không soạn trả lời. Tự động bật theo nhóm ở Omni Question Group"
+   "description": "Off: không soạn trả lời. Shadow: soạn ngầm để đo, sale không thấy. Draft: nháp hiện trong Hộp thư cho sale duyệt (chỉ bật ở môi trường thật sau khi cổng nhap đo bằng AI thật trên bộ đề đã duyệt). Tự động bật theo nhóm ở Omni Question Group"
   },
   {
    "fieldname": "ai_api_key",

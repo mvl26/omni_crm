@@ -1,4 +1,4 @@
-"""API hộp thư cho sale: danh sách hội thoại, đọc hội thoại (gửi trả lời và duyệt nháp thêm ở D1-09)."""
+"""API hộp thư cho sale: danh sách hội thoại, đọc hội thoại, gửi trả lời (D1-09); duyệt nháp bot ở api/drafts.py (D3-01)."""
 
 from __future__ import annotations
 
@@ -159,6 +159,9 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 	names = [r.name for r in leads]
 	last = _last_events(names)
 	channels = _channels_by_lead(names)
+	from omni_crm.api import drafts as drafts_mod
+
+	pending = drafts_mod.leads_with_pending(names)
 	rows = []
 	for r in leads:
 		ev = last.get(r.name)
@@ -177,6 +180,7 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 				"converted": cint(r.converted),
 				"channels": chans,
 				"unanswered": unanswered,
+				"draft_pending": r.name in pending,
 				"last_at": ev["at"] if ev else r.omni_last_inbound_at,
 				"last_direction": ev["direction"] if ev else None,
 				"last_channel": ev["channel_type"] if ev else None,
@@ -213,6 +217,8 @@ def check_lead_access(lead: str) -> None:
 @frappe.whitelist()
 def get_thread(lead: str) -> dict:
 	"""Toàn bộ hội thoại của Lead trên mọi kênh, theo thời gian tăng dần (không kèm payload gốc)."""
+	from omni_crm.api import drafts as drafts_mod  # import trễ: drafts.py dùng lại các hàm của module này
+
 	check_lead_access(lead)
 	inbound = frappe.get_all(
 		INBOUND,
@@ -355,6 +361,7 @@ def get_thread(lead: str) -> dict:
 			IDENTITY, filters={"lead": lead}, fields=["name", "channel_type", "display_name", "is_follower"]
 		),
 		"messages": items,
+		"drafts": drafts_mod.thread_drafts(lead),  # nháp của bot chờ duyệt (D3-01)
 		"truncated": max(len(inbound), len(outbound), len(call_rows)) >= THREAD_LIMIT,
 		"compose": compose_state(lead),
 	}
@@ -496,6 +503,21 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 	if not target:
 		frappe.throw(_("Khách này chưa có tài khoản Zalo liên kết với Lead"))
 	identity_doc, channel_doc = target
+	return queue_zalo_reply(lead, identity_doc, channel_doc, text, confirm_paid)
+
+
+def queue_zalo_reply(
+	lead: str,
+	identity_doc: Any,
+	channel_doc: Any,
+	text: str,
+	confirm_paid: int | str = 0,
+	bot_draft: str | None = None,
+) -> dict:
+	"""Kiểm khung gửi Zalo rồi xếp hàng tin của Sale (dùng chung cho trả lời tay và gửi nháp của bot).
+
+	Trả {"status": "Queued"|"Blocked"|"confirm_required", ...}; `bot_draft` gắn vào tin ra khi gửi từ nháp.
+	"""
 	adapter = get_adapter("Zalo OA")
 	ok, reason = adapter.can_send_now(identity_doc, channel_doc, source="Sale")
 	if not ok:
@@ -510,6 +532,7 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 			text=text,
 			reply_to_external_id=None,
 			source="Sale",
+			bot_draft=bot_draft,
 		),
 		user=frappe.session.user,
 		confirmed_paid=bool(cint(confirm_paid)),
