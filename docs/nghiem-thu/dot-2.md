@@ -30,14 +30,14 @@ Tách làm hai phần vì chúng có điều kiện khác nhau.
 Lệnh: `cd /home/hoangvietyeuem/frappe-bench && bench --site omni.test run-tests --app omni_crm` (ruff 0.8.1: `check` và `format --check` sạch).
 
 ```
-Ran 836 tests in 944.688s
+Ran 837 tests in 677.680s
 
 OK (skipped=4)
 ```
 
-836 test = 816 nền + 13 (`test_dot2_integration`) + 7 (`test_measure_dot2`). 4 test bị skip vì Redis queue của bench (cổng 11000) hỏng, như trước D2-09. Đây là lần chạy đầy đủ CUỐI, sau mọi thay đổi mã và test (lần chạy đầy đủ trước đó cũng 836 OK skipped=4).
+837 test = 816 nền + 14 (`test_dot2_integration`) + 7 (`test_measure_dot2`). 4 test bị skip vì Redis queue của bench (cổng 11000) hỏng, như trước D2-09. Đây là lần chạy đầy đủ CUỐI, sau mọi thay đổi mã và test (lần chạy đầy đủ trước đó cũng 836 OK skipped=4).
 
-Test mới của D2-09: `test_dot2_integration` 13 test (C-01, C-02, C-04, B-01...B-05, cảnh báo ngắt mạch và 4 test đồng thời/quyền ở mục 6), `test_measure_dot2` 7 test. Các test đồng thời/quyền (`TestConcurrentCallCreate`, `TestConcurrentCallbackJobs`, `TestCallbackJobRunsAsGuest`) và `TestBreakerAlertRule` **đỏ trước khi sửa** (ghi ở mục 6). `bench --site omni.test migrate` thoát mã 0 (chỉ có dòng cảnh báo Redis 11000 không kết nối được, đã biết). Dữ liệu tải đã dọn sạch (0 Lead/Cuộc gọi/Việc/Định danh/kênh `LOAD*` còn lại; không có Notification Log hay Email Queue nào sinh ra trong thời gian đo). `sites/omni.test/site_config.json` khôi phục nguyên trạng (`cmp` giống hệt bản sao lưu), không có `developer_mode`. Đã **xóa các dòng Error Log có tiêu đề `Omni…` tạo sau 05:20 giờ site** (lỗi sinh ra do chính các lượt đo, kể cả lỗi chưa sửa) để site test sạch; Error Log cũ hơn giữ nguyên. Omni Settings: 6 khóa công cụ lưu (`sandbox_mode`, `callback_fallback_user`, `bot_analyze_enabled`, `bot_reply_mode`, `lead_scoring_enabled`, `daily_token_budget`) đã khôi phục đúng giá trị trước đo; `assignment_fallback_users`, `hot_lead_threshold`, bảng điểm do công cụ bot đặt thêm không được lưu trước nên được đặt lại về `''` / 60 / rỗng (bằng mặc định; giá trị gốc không biết).
+Test mới của D2-09: `test_dot2_integration` 14 test (C-01, C-02, C-04, B-01...B-05, cảnh báo ngắt mạch và 4 test đồng thời/quyền ở mục 6), `test_measure_dot2` 7 test. Các test đồng thời/quyền (`TestConcurrentCallCreate`, `TestConcurrentCallbackJobs`, `TestCallbackJobRunsAsGuest`) và `TestBreakerAlertRule` **đỏ trước khi sửa** (ghi ở mục 6). `bench --site omni.test migrate` thoát mã 0 (chỉ có dòng cảnh báo Redis 11000 không kết nối được, đã biết). Dữ liệu tải đã dọn sạch (0 Lead/Cuộc gọi/Việc/Định danh/kênh `LOAD*` còn lại; không có Notification Log hay Email Queue nào sinh ra trong thời gian đo). `sites/omni.test/site_config.json` khôi phục nguyên trạng (`cmp` giống hệt bản sao lưu), không có `developer_mode`. Đã **xóa các dòng Error Log có tiêu đề `Omni…` tạo sau 05:20 giờ site** (lỗi sinh ra do chính các lượt đo, kể cả lỗi chưa sửa) để site test sạch; Error Log cũ hơn giữ nguyên. Omni Settings: 6 khóa công cụ lưu (`sandbox_mode`, `callback_fallback_user`, `bot_analyze_enabled`, `bot_reply_mode`, `lead_scoring_enabled`, `daily_token_budget`) đã khôi phục đúng giá trị trước đo; `assignment_fallback_users`, `hot_lead_threshold`, bảng điểm do công cụ bot đặt thêm không được lưu trước nên được đặt lại về `''` / 60 / rỗng (bằng mặc định; giá trị gốc không biết).
 
 ## 2. Bảng ánh xạ kịch bản Đợt 2
 
