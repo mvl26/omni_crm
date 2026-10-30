@@ -149,12 +149,16 @@ Mọi bộ lọc có test riêng, gồm cả ca phải chặn và ca không đư
 
 ## 6. Chuyển người — `bot/handoff.py`
 
-Khi `action = handoff` (do bot hoặc chốt chặn):
+Khi `action = handoff` (do bot hoặc chốt chặn), ở chế độ Draft, `handoff.handoff(draft)`:
 
-1. `Omni Identity.bot_paused_until = now + handoff_pause_hours` (sale có nút "Cho bot tiếp tục").
-2. Thông báo người phụ trách Lead (Notification Log + realtime trong Desk; email nếu chưa mở thông báo sau 10 phút — kênh cụ thể theo Q8 ở `docs/12`).
-3. Ở chế độ Auto: gửi câu giữ chân theo mẫu cấu hình (trong giờ: "Cảm ơn anh/chị, nhân viên Miyano sẽ phản hồi trong ít phút."; ngoài giờ: nêu giờ làm việc kế tiếp). Ở Shadow/Draft: không gửi gì.
-4. Ghi lý do vào nháp và vào dòng thời gian Lead.
+1. `Omni Identity.bot_paused_until = now + handoff_pause_hours` (mặc định 24 giờ) cho **mọi định danh của Lead**, không rút ngắn hạn đang có. `reply_batch` bỏ qua khách đang tạm dừng; hết hạn thì soạn lại. Sale có nút "Cho bot tiếp tục" và "Tạm dừng bot với khách này" trong Hộp thư (`api/bot_control.py`, kiểm quyền ghi Lead, ghi người bấm vào dòng thời gian Lead).
+2. Thông báo người phụ trách Lead (chủ + người được giao; không có thì `callback_fallback_user`, rồi `assignment_fallback_users`): Notification Log + realtime `omni_handoff` nếu `handoff_notify_channels` có `system`. **Một lần chuyển người = một thông báo cho mỗi người** (nháp Handoff không còn đi qua thông báo "có nháp chờ duyệt"). Email chỉ khi cấu hình có `email`: gửi nếu thông báo hệ thống còn chưa mở sau 10 phút (`handoff.email_unread_handoffs`, chạy mỗi 5 phút, mỗi nháp một lần, bỏ qua nếu nháp không còn Pending); nếu chỉ có `email` thì xếp thư ngay. Sandbox: không xếp thư, chỉ ghi log. Thông báo và email chỉ có mã Lead, tên khách (tối đa 60 ký tự, thoát HTML), kênh, **nhãn lý do cố định** và liên kết Hộp thư; không có lời khách và không có lý do do AI viết.
+3. Câu giữ chân: `handoff.holding_message(now)` chỉ dựng câu (mẫu trong/ngoài giờ, `{gio_lam_viec_ke_tiep}` thay bằng mốc mở cửa kế tiếp). **Chưa có đường nào gửi**; chế độ Auto theo nhóm (D3-05) sẽ gọi. Ở Shadow/Draft không gửi gì.
+4. Ghi lý do (nhãn cố định + lý do bot ghi, thoát HTML) và mốc tạm dừng vào dòng thời gian Lead (Comment) và vào nháp.
+
+Khách đòi gặp người (`wants_human`) hoặc nhóm `always_handoff` luôn thành Handoff, kể cả khi bot đề xuất reply; nếu AI lỗi mà khách đã đòi gặp người, hệ thống vẫn ghi nháp Handoff (không văn bản) và chuyển người. Shadow chỉ đo, không im bot và không báo ai.
+
+`bot_active_hours` (Q6): `handoff.bot_active_now(at)`, để trống thì theo giờ làm việc; chỉ chế độ tự gửi (D3-05) dùng, chế độ Nháp không bị chặn bởi giờ này.
 
 ## 7. An toàn
 

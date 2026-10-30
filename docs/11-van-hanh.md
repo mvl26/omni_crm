@@ -115,3 +115,11 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
 - **Tra cứu khi chuông reo.** Khi DB khóa đọc 25 giây, `telephony_lookup` vẫn trả HTTP 200 "khách mới" trong ~0,3-0,5 giây.
 - **Công cụ đo.** `tests/load/send_calls.py`, `send_lookups.py`, `hold_read_lock.py`, `rq_worker.py` (worker RQ trên Redis của site, `--fake-ai`), `verify_calls.py` (chuẩn bị/đối chiếu/dọn); kênh tải dùng nhà cung cấp Stringee với khóa giả và `sandbox_mode` bật (không cần `developer_mode`). Đo chỉ số tuần chạy thử: `bench --site <site> execute omni_crm.tests.acceptance.measure_dot2.run --kwargs '{"start": "...", "end": "..."}'`.
 - **Quy ước thứ tự khóa (D2-09).** Khi một đơn vị việc cần nhiều hàng: khóa **Omni Call trước, Lead sau**, và khóa **trước mọi lần đọc thường** trong giao dịch (đọc khóa/`for_update` không mở ảnh chụp REPEATABLE READ; một lần đọc thường mở ảnh chụp và sau khi chờ khóa sẽ không thấy dữ liệu bên kia vừa commit). Sau khi khóa hàng đã có, đọc lại dữ liệu cần ghi bằng đọc khóa. Không `SELECT ... FOR UPDATE` trên khóa duy nhất chưa có (khóa khoảng gây deadlock): tạo hàng bằng INSERT, đụng khóa duy nhất mới quay lại khóa hàng đã có. Tuân theo thứ tự này ở mọi mã mới để tránh deadlock chéo.
+
+## Lưu ý D3-02: chuyển người, tạm dừng bot, thông báo
+
+- Khi bot chuyển người (chế độ Draft), người phụ trách nhận một Notification Log + realtime. Nếu `handoff_notify_channels` có `email`, job `omni_crm.bot.handoff.email_unread_handoffs` (cron mỗi 5 phút) xếp email nhắc cho ai chưa mở thông báo sau 10 phút. Nếu không thấy email: kiểm `sandbox_mode` (sandbox không xếp thư), `Email Queue`, và người nhận có `email` trong User.
+- "Đã mở" nghĩa là `Notification Log.read = 1` (sale bấm vào thông báo). Sale chỉ mở Hộp thư mà không bấm thông báo vẫn có thể nhận email nhắc; nháp đã Gửi/Bỏ thì không nhắc.
+- Khách không nhận được nháp mới: xem `Omni Identity.bot_paused_until` (còn ở tương lai thì bot đang im; `reply_batch` trả `paused`). Sale bấm "Cho bot tiếp tục" trong Hộp thư, hoặc đợi hết `handoff_pause_hours`. Ai bấm, lúc nào nằm ở dòng thời gian Lead.
+- Quay lui: đặt `bot_reply_mode` về Shadow/Off. Các Omni Identity đã bị im vẫn giữ `bot_paused_until` đến hết hạn.
+

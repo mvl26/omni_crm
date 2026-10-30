@@ -54,9 +54,13 @@ Mọi lần bật/tắt công tắc (trừ `bot_paused_until`) ghi Version (bậ
 
 | Trường (Omni Settings) | Kiểu | Mặc định |
 | --- | --- | --- |
-| `handoff_message_in_hours` | Small Text | "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị trong ít phút." |
+| `handoff_pause_hours` | Int | 24 (giờ bot im sau khi chuyển người; 0 = không im) |
+| `handoff_message_in_hours` | Small Text | "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị sớm nhất có thể." (khác đặc tả gốc "trong ít phút", xem `docs/12` Q6) |
 | `handoff_message_after_hours` | Small Text | "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị vào {gio_lam_viec_ke_tiep}." |
-| `handoff_notify_channels` | Small Text | "system,email" |
+| `handoff_notify_channels` | Small Text | "system" (mặc định tạm, Q8). Giá trị hợp lệ: `system`, `email`, hoặc `system,email` (email chỉ khi chưa mở thông báo sau 10 phút) |
+| `bot_active_hours` | Small Text (JSON như Giờ làm việc) | trống = theo Giờ làm việc (mặc định tạm, Q6); chỉ chế độ tự gửi D3-05 dùng |
+
+Tắt tính năng: đặt `bot_reply_mode` về Off hoặc Shadow (không chuyển người, không im bot); đặt `handoff_pause_hours = 0` để chuyển người nhưng không im bot.
 
 ## 5. Bảng cấu hình theo môi trường
 
