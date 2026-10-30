@@ -83,7 +83,9 @@ async def run(args: argparse.Namespace) -> dict:
 	calls: list[dict] = []
 	client = httpx.AsyncClient(
 		timeout=args.timeout,
-		limits=httpx.Limits(max_connections=args.max_connections, max_keepalive_connections=args.max_connections),
+		limits=httpx.Limits(
+			max_connections=args.max_connections, max_keepalive_connections=args.max_connections
+		),
 	)
 
 	async def fire(raw: bytes, kind: str, bad_token: bool = False) -> None:

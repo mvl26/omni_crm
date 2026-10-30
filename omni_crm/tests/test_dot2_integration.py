@@ -8,6 +8,7 @@ khác (C-03, đa số sự cố tổng đài) không lặp lại ở đây.
 
 import json
 import threading
+import time
 from unittest import mock
 
 import frappe
@@ -21,6 +22,7 @@ from omni_crm.bot.fake_client import FakeAIClient
 from omni_crm.channels.telephony import callbacks, calls
 from omni_crm.channels.telephony.base import CallEvent
 from omni_crm.channels.zalo.adapter import parse_event
+from omni_crm.crm_bridge import task as task_bridge
 from omni_crm.ingest.gateway import save_inbound
 from omni_crm.monitoring import alerts
 from omni_crm.monitoring.snapshot import build_snapshot
@@ -116,6 +118,59 @@ class TestCallbackJobRunsAsGuest(CallbackCase):
 		self.assertTrue(task, "job chạy bằng Guest vẫn phải tạo được việc gọi lại")
 		self.assertEqual(self.task_of(name), task)
 		self.assertEqual(frappe.db.get_value(TASK, task, "assigned_to"), "Administrator")
+
+
+class TestConcurrentCallbackJobs(CallbackCase):
+	"""Hai job việc gọi lại của CÙNG một khách chạy song song (hai cuộc nhỡ liên tiếp) phải ra đúng 1 việc.
+
+	Job thứ hai chờ khóa dòng Lead; nếu ảnh chụp (REPEATABLE READ) của nó đã mở TRƯỚC khi chờ thì sau khi job thứ nhất
+	commit, nó không thấy việc vừa tạo: tạo việc thứ hai hoặc TimestampMismatchError khi gộp (đo được: 53/141 khách có
+	hơn 1 việc mở và ~20% job lỗi ở tải 10 cuộc/giây)."""
+
+	def test_two_jobs_for_same_customer_make_one_task(self):
+		first = self.missed("cc1", ended="2026-10-30 09:30:00")
+		second = self.missed("cc2", ended="2026-10-30 09:31:00")
+		site, sites_path = frappe.local.site, frappe.local.sites_path
+		a_locked, release = threading.Event(), threading.Event()
+		real_deal = task_bridge.lead_bridge.get_deal_for_lead
+		results: dict[str, object] = {}
+
+		def hooked(lead):
+			if threading.current_thread().name == "A":
+				a_locked.set()  # A đã giữ khóa Lead
+				release.wait(timeout=15)
+			return real_deal(lead)
+
+		def job(name: str, call_name: str):
+			frappe.init(site=site, sites_path=sites_path)
+			frappe.connect()
+			try:
+				frappe.set_user("Administrator")
+				results[name] = task_bridge.create_callback_task(call_name)
+				frappe.db.commit()
+			except BaseException as e:
+				results[name] = e
+				frappe.db.rollback()
+			finally:
+				frappe.destroy()
+
+		with mock.patch.object(task_bridge.lead_bridge, "get_deal_for_lead", side_effect=hooked):
+			a = threading.Thread(target=job, args=("A", first), name="A")
+			b = threading.Thread(target=job, args=("B", second), name="B")
+			a.start()
+			self.assertTrue(a_locked.wait(timeout=15))
+			b.start()
+			time.sleep(1.5)  # B đã tới chỗ chờ khóa Lead của A
+			release.set()
+			a.join(timeout=60)
+			b.join(timeout=60)
+		self.assertFalse(isinstance(results.get("A"), BaseException), results)
+		self.assertFalse(isinstance(results.get("B"), BaseException), results)
+		self.assertTrue(results["A"])
+		self.assertEqual(results["A"], results["B"], "hai cuộc nhỡ của một khách phải dùng chung 1 việc")
+		frappe.db.rollback()  # ảnh chụp mới của luồng chính
+		self.assertEqual(frappe.db.count(TASK, {"name": results["A"]}), 1)
+		self.assertIn("2 lần", frappe.db.get_value(TASK, results["A"], "description"))
 
 
 class TestC04CallThenZalo(TelephonyTestCase):

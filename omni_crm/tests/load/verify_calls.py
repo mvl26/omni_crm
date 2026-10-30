@@ -55,7 +55,9 @@ def setup(state: str, channel: str = "LOAD tong dai") -> None:
 	saved = {k: frappe.db.get_single_value("Omni Settings", k) for k in SETTINGS_KEYS}
 	with open(state, "w", encoding="utf-8") as f:
 		json.dump(saved, f)
-	set_settings(sandbox_mode=1, callback_fallback_user="Administrator", bot_analyze_enabled=0, bot_reply_mode="Off")
+	set_settings(
+		sandbox_mode=1, callback_fallback_user="Administrator", bot_analyze_enabled=0, bot_reply_mode="Off"
+	)
 	token, sec = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
 	frappe.db.delete("Omni Channel", {"channel_name": channel})
 	frappe.get_doc(
@@ -79,38 +81,55 @@ def setup(state: str, channel: str = "LOAD tong dai") -> None:
 	print(json.dumps({"OMNI_LOAD_TEL_TOKEN": token, "OMNI_LOAD_TEL_SECRET": sec}))
 
 
-def _counts(channel: str) -> dict:
-	return dict(frappe.db.sql(f"select status, count(*) from `tab{INBOUND}` where channel=%s group by status", channel))
+def _counts(channel: str, like: str = "%") -> dict:
+	return dict(
+		frappe.db.sql(
+			f"select status, count(*) from `tab{INBOUND}` where channel=%s and external_message_id like %s group by status",
+			(channel, like),
+		)
+	)
 
 
-def run(channel: str, expected_calls: int, expected_customers: int, wait_minutes: int = 10, sweep: int = 1) -> None:
-	"""Chờ hàng đợi cạn, bù việc gọi lại còn thiếu bằng sweep (nếu `sweep`), rồi in báo cáo JSON."""
+def run(
+	channel: str,
+	expected_calls: int,
+	expected_customers: int,
+	wait_minutes: int = 10,
+	sweep: int = 0,
+	run_id: str = "",
+) -> None:
+	"""Chờ hàng đợi cạn, rồi in báo cáo JSON cho các cuộc gọi `LOADCALL-<run_id>-*` (rỗng = mọi lượt).
+
+	Cuộc nhỡ chưa có việc được đếm TRƯỚC khi bù (`missed_without_task_before_sweep`); `sweep=1` mới bù bằng job thủ công."""
 	from omni_crm.channels.telephony import callbacks
 
 	t0 = time.time()
-	counts = _counts(channel)
+	like = f"LOADCALL-{run_id}-%" if run_id else "LOADCALL-%"
+	counts = _counts(channel, like)
 	while sum(counts.get(s, 0) for s in OPEN) and time.time() - t0 < int(wait_minutes) * 60:
 		time.sleep(5)
 		frappe.db.rollback()
-		counts = _counts(channel)
+		counts = _counts(channel, like)
 	drain_s = round(time.time() - t0, 1)
-	pending_before_sweep = frappe.db.count(
-		CALL, {"direction": "Inbound", "status": "Missed", "lead": ["is", "set"], "callback_task": ["is", "not set"]}
-	)
+	pending_filters = {
+		"direction": "Inbound",
+		"status": "Missed",
+		"lead": ["is", "set"],
+		"callback_task": ["is", "not set"],
+		"call_id": ["like", like],
+	}
+	pending_before_sweep = frappe.db.count(CALL, pending_filters)
 	swept = 0
 	if int(sweep):
 		# sweep_pending bỏ qua cuộc nhỡ < 5 phút: gọi thẳng job cho từng cuộc còn thiếu việc
-		for name in frappe.get_all(
-			CALL,
-			filters={"direction": "Inbound", "status": "Missed", "lead": ["is", "set"], "callback_task": ["is", "not set"]},
-			pluck="name",
-		):
+		for name in frappe.get_all(CALL, filters=pending_filters, pluck="name"):
 			if callbacks.process_missed_call(name):
 				swept += 1
 		frappe.db.rollback()
-	del pending_before_sweep
 	rows = frappe.db.sql(
-		f"select external_message_id, lead from `tab{INBOUND}` where channel=%s", channel, as_dict=True
+		f"select external_message_id, lead from `tab{INBOUND}` where channel=%s and external_message_id like %s",
+		(channel, like),
+		as_dict=True,
 	)
 	call_ids = [r.external_message_id for r in rows]
 	calls = frappe.db.sql(
@@ -135,7 +154,8 @@ def run(channel: str, expected_calls: int, expected_customers: int, wait_minutes
 	secs = [
 		float(r[0])
 		for r in frappe.db.sql(
-			f"select timestampdiff(second, creation, modified) from `tab{INBOUND}` where channel=%s and status='Done'", channel
+			f"select timestampdiff(second, creation, modified) from `tab{INBOUND}` where channel=%s and status='Done' and external_message_id like %s",
+			(channel, like),
 		)
 		if r[0] is not None
 	]
@@ -158,7 +178,8 @@ def run(channel: str, expected_calls: int, expected_customers: int, wait_minutes
 				"expected_customers": expected_customers,
 				"phones_with_more_than_one_lead": by_number,
 				"missed_calls": len(missed),
-				"missed_without_task_before_sweep_swept": swept,
+				"missed_without_task_before_sweep": pending_before_sweep,
+				"missed_bu_bang_sweep_thu_cong": swept,
 				"missed_without_task_after": sum(1 for c in missed if not c.callback_task),
 				"customers_with_missed": len(cust_with_missed),
 				"callback_tasks_distinct": len(task_names),
@@ -180,10 +201,21 @@ def cleanup(channel: str, state: str | None = None, call_prefix: str = "LOADCALL
 	"""Xóa dữ liệu tải cuộc gọi (tin, Omni Call, Call Log, việc, định danh, Lead), kênh; khôi phục Omni Settings."""
 	frappe.db.rollback()
 	call_ids = frappe.db.sql_list(f"select name from `tab{CALL}` where call_id like %s", f"{call_prefix}%")
-	leads = set(frappe.db.sql_list(f"select distinct lead from `tab{CALL}` where call_id like %s and lead is not null", f"{call_prefix}%"))
+	leads = set(
+		frappe.db.sql_list(
+			f"select distinct lead from `tab{CALL}` where call_id like %s and lead is not null",
+			f"{call_prefix}%",
+		)
+	)
 	leads |= set(frappe.get_all("CRM Lead", filters={"omni_phone_e164": ["like", PHONE_LIKE]}, pluck="name"))
-	tasks = frappe.db.sql_list(f"select callback_task from `tab{CALL}` where call_id like %s and callback_task is not null", f"{call_prefix}%")
-	logs = frappe.db.sql_list(f"select crm_call_log from `tab{CALL}` where call_id like %s and crm_call_log is not null", f"{call_prefix}%")
+	tasks = frappe.db.sql_list(
+		f"select callback_task from `tab{CALL}` where call_id like %s and callback_task is not null",
+		f"{call_prefix}%",
+	)
+	logs = frappe.db.sql_list(
+		f"select crm_call_log from `tab{CALL}` where call_id like %s and crm_call_log is not null",
+		f"{call_prefix}%",
+	)
 	lead_list = sorted(leads)
 	if tasks:
 		frappe.db.delete("ToDo", {"reference_type": TASK, "reference_name": ["in", tasks]})
@@ -193,7 +225,9 @@ def cleanup(channel: str, state: str | None = None, call_prefix: str = "LOADCALL
 	frappe.db.delete("Dynamic Link", {"parenttype": "CRM Call Log", "parent": ["in", logs or [""]]})
 	frappe.db.delete("CRM Call Log", {"name": ["in", logs or [""]]})
 	frappe.db.delete(INBOUND, {"channel": channel})
-	idents = frappe.get_all("Omni Identity", filters={"identity_key": ["like", "Telephony:+84907%"]}, pluck="name")
+	idents = frappe.get_all(
+		"Omni Identity", filters={"identity_key": ["like", "Telephony:+84907%"]}, pluck="name"
+	)
 	frappe.db.delete("Omni Identity", {"name": ["in", idents or [""]]})
 	if lead_list:
 		for f in ("lead_a", "lead_b"):

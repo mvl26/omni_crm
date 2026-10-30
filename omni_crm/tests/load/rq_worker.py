@@ -53,7 +53,10 @@ def _install_trace(path: str) -> None:
 		except BaseException as e:  # noqa: BLE001
 			result, err = None, type(e).__name__
 		with open(path, "a", encoding="utf-8") as f:
-			f.write(_json.dumps({"call": call_name, "before": row, "result": result, "err": err}, default=str) + "\n")
+			f.write(
+				_json.dumps({"call": call_name, "before": row, "result": result, "err": err}, default=str)
+				+ "\n"
+			)
 		return result
 
 	callbacks.process_missed_call = traced
