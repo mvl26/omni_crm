@@ -69,14 +69,21 @@ def create_callback_task(call) -> str | None:
 	Trả tên CRM Task, hoặc None nếu không phải gọi nhỡ đến / chưa có Lead (ẩn số: không biết gọi lại ai).
 	Idempotent: cuộc gọi đã có `callback_task` thì trả lại việc đó, không đếm thêm.
 	"""
-	doc = frappe.get_doc(CALL, call) if isinstance(call, str) else call
+	# Khóa dòng Lead TRƯỚC mọi lần đọc thường: hai cuộc nhỡ của cùng khách xử lý song song không tạo hai việc. Đọc khóa
+	# không mở ảnh chụp (REPEATABLE READ), nên sau khi chờ xong các lần đọc bên dưới thấy việc job kia vừa commit; nếu
+	# đọc thường trước, ảnh chụp cũ làm job thứ hai tạo việc trùng hoặc TimestampMismatchError khi gộp (D2-09).
+	call_name = call if isinstance(call, str) else call.name
+	first_lead = frappe.db.get_value(CALL, call_name, "lead", for_update=True)
+	if first_lead:
+		frappe.db.get_value(LEAD, first_lead, "name", for_update=True)
+	doc = frappe.get_doc(CALL, call_name)
 	if doc.direction != "Inbound" or doc.status != "Missed" or not doc.lead:
 		return None
 	if doc.callback_task and frappe.db.exists(TASK, doc.callback_task):
 		return doc.callback_task
 	lead = lead_bridge.follow_merged(doc.lead) or doc.lead
-	# Khóa dòng Lead: hai cuộc gọi nhỡ của cùng khách xử lý song song không tạo hai việc.
-	frappe.db.get_value(LEAD, lead, "name", for_update=True)
+	if lead != doc.lead:
+		frappe.db.get_value(LEAD, lead, "name", for_update=True)  # Lead đã gộp: khóa cả Lead còn sống
 	deal = lead_bridge.get_deal_for_lead(lead)
 	at = _call_time(doc)
 	existing = _open_task_for_lead(lead)

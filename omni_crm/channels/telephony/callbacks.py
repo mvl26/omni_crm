@@ -13,6 +13,7 @@ from frappe.utils import add_to_date, now_datetime
 from omni_crm import flags
 from omni_crm.channels.telephony import worker_hooks
 from omni_crm.crm_bridge import task as task_bridge
+from omni_crm.pipeline.retry import redact
 
 CALL = "Omni Call"
 INBOUND = "Omni Inbound Message"
@@ -70,7 +71,22 @@ def _channel_of(call_name: str, channel: str | None) -> str | None:
 
 
 def process_missed_call(call_name: str, channel: str | None = None) -> str | None:
-	"""Job nền: xác minh cuộc gọi nhỡ (HTTP, ngoài khóa DB) rồi tạo/gộp việc gọi lại; trả tên CRM Task hoặc None."""
+	"""Job nền: xác minh cuộc gọi nhỡ (HTTP, ngoài khóa DB) rồi tạo/gộp việc gọi lại; trả tên CRM Task hoặc None.
+
+	Chạy bằng Administrator (job do worker xử lý tin đẩy ra thừa hưởng Guest của webhook, mà giao việc kiểm quyền);
+	trả lại người dùng cũ khi xong.
+	"""
+	previous = frappe.session.user
+	if previous != "Administrator":
+		frappe.set_user("Administrator")
+	try:
+		return _process_missed_call(call_name, channel)
+	finally:
+		if previous != "Administrator":
+			frappe.set_user(previous)
+
+
+def _process_missed_call(call_name: str, channel: str | None) -> str | None:
 	channel = _channel_of(call_name, channel)
 	if not channel or not flags.channel_enabled(channel):
 		return None  # kênh đã tắt: bật lại thì sweep_pending xử lý bù
@@ -89,9 +105,14 @@ def process_missed_call(call_name: str, channel: str | None = None) -> str | Non
 		task = task_bridge.create_callback_task(call_name)
 		frappe.db.commit()
 		return task
-	except Exception:
+	except Exception as e:
 		frappe.db.rollback()
-		frappe.log_error(title="Omni: lỗi tạo việc gọi lại", message=f"call={call_name}")
+		frappe.log_error(
+			title="Omni: lỗi tạo việc gọi lại",
+			message=redact(
+				f"call={call_name}\nloai_loi={type(e).__name__}\n{frappe.get_traceback(with_context=False)[-1500:]}"
+			),
+		)
 		frappe.db.commit()
 		return None
 
