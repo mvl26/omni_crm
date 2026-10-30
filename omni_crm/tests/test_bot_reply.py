@@ -543,7 +543,9 @@ class TestNoBotOutbound(ReplyTestCase):
 			reply.reply_batch(self.say(f"Cho hỏi giờ làm việc {mode}"))
 		set_settings(bot_reply_mode="Shadow")
 		self.assertEqual(self.bot_outbound(), before)
-		self.assertEqual({d.mode for d in self.drafts()}, {"Shadow"})
+		# D3-01 (docs/08 mục 5.5): Draft ghi nháp mode=Draft (trước D3-01 xử lý như Shadow); Off không ghi nháp
+		self.assertEqual({d.mode for d in self.drafts()}, {"Shadow", "Draft"})
+		self.assertEqual(len(self.drafts(mode="Draft")), 1)
 
 	def test_no_code_path_creates_bot_outbound(self):
 		"""Quét mã: không đường nào gọi queue_outbound / dựng OutboundRequest với source Bot; bot/ không import outbound."""
