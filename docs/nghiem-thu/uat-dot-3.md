@@ -47,7 +47,23 @@ Quyết định đã chốt: làm đủ tính năng nhưng giữ `bot_reply_mode
 
 Đối chiếu sau khi chạy: báo cáo "Bot nháp" (Desk > Báo cáo) theo nhóm và theo tuần phải khớp bảng trên.
 
-## 4. Chưa kiểm được ở môi trường phát triển
+## 4. Chuyển người và tạm dừng bot (D3-02), việc còn lại cho người dùng
+
+Chưa chạy được ở môi trường phát triển (không staging, không AI thật, không trình duyệt). Người phụ trách làm trên staging sau khi cổng `nhap` đạt và bật `bot_reply_mode = Draft`, `sandbox_mode` bật hoặc có người nhận thử chỉ định.
+
+| # | Việc | Kỳ vọng | Kết quả (điền sau) |
+| --- | --- | --- | --- |
+| 1 | Khách hỏi giá qua Zalo | Sale phụ trách nhận thông báo trong vài giây; chỉ MỘT thông báo | |
+| 2 | Khách nhắn "cho tôi gặp nhân viên" | Như trên; bot không soạn nháp cho các tin tiếp theo trong thời gian tạm dừng | |
+| 3 | Mở Hộp thư của khách đó | Hiện nhãn "Bot đang tạm dừng đến …" và nút "Cho bot tiếp tục" | |
+| 4 | Bấm "Cho bot tiếp tục", khách nhắn tiếp | Tin tiếp theo lại có nháp; dòng thời gian Lead ghi ai bấm | |
+| 5 | Bấm "Tạm dừng bot với khách này" | Nhãn hiện; tin tiếp theo không có nháp | |
+| 6 | Bật `handoff_notify_channels = system,email`, không mở thông báo 10 phút | Nhận email nhắc có tên khách, kênh, lý do, liên kết; không có lời khách | |
+| 7 | Tài khoản không có quyền ghi Lead thử bấm hai nút | Bị từ chối | |
+
+Cần chủ dự án chốt Q6 (giờ bot, câu ngoài giờ) và Q8 (kênh báo) trước khi xem các mặc định tạm là chính thức.
+
+## 5. Chưa kiểm được ở môi trường phát triển
 
 - Giao diện Hộp thư trên trình duyệt (chỉ kiểm cú pháp JS và API bằng test).
 - Hiển thị Notification Log thực tế, email thông báo.

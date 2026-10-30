@@ -4,7 +4,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-JSON_FIELDS = ("default_lead_source_map", "business_hours")
+JSON_FIELDS = ("default_lead_source_map", "business_hours", "bot_active_hours")
+NOTIFY_CHANNELS = ("system", "email")
 
 
 def parse_backoff_minutes(value: str | None) -> list[int]:
@@ -24,6 +25,7 @@ class OmniSettings(Document):
 		self.validate_json_fields()
 		self.validate_positive_numbers()
 		self.validate_score_rules()
+		self.validate_handoff()
 
 	def validate_backoff(self) -> None:
 		try:
@@ -57,3 +59,15 @@ class OmniSettings(Document):
 			if row.signal in seen:
 				frappe.throw(_("Dòng {0}: tín hiệu {1} bị trùng trong bảng điểm").format(row.idx, row.signal))
 			seen.add(row.signal)
+
+	def validate_handoff(self) -> None:
+		"""Số giờ im không âm; kênh báo chỉ gồm system, email."""
+		if (self.get("handoff_pause_hours") or 0) < 0:
+			frappe.throw(_("{0} không được âm").format(_(self.meta.get_label("handoff_pause_hours"))))
+		raw = [
+			x.strip().lower()
+			for x in (self.get("handoff_notify_channels") or "").replace("\n", ",").split(",")
+		]
+		bad = [x for x in raw if x and x not in NOTIFY_CHANNELS]
+		if bad:
+			frappe.throw(_("Kênh báo không hợp lệ: {0}. Chỉ dùng system hoặc email").format(", ".join(bad)))

@@ -84,7 +84,9 @@ class TestOmniModels(FrappeTestCase):
 		group_fields = {f.fieldname for f in frappe.get_meta("Omni Question Group").fields}
 		self.assertFalse({f for f in group_fields if f.startswith("auto_send")})
 		settings_fields = {f.fieldname for f in frappe.get_meta("Omni Settings").fields}
-		self.assertNotIn("bot_active_hours", settings_fields)
+		# D3-02 đã thêm cấu hình chuyển người
+		for fn in ("handoff_pause_hours", "handoff_notify_channels", "bot_active_hours"):
+			self.assertIn(fn, settings_fields)
 		# D2-06 đã thêm bảng điểm, ngưỡng Lead nóng và công tắc chấm điểm
 		for fn in ("score_rules", "hot_lead_threshold", "lead_scoring_enabled"):
 			self.assertIn(fn, settings_fields)

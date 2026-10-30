@@ -212,11 +212,13 @@ class OmniInbox {
 					${this.score_html(data.score)}</div></div>
 				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a>
 			</div>
+			${this.pause_html(data.bot)}
 			${this.bot_html(lead)}
 			<div class="oi-thread">${msgs || `<div class="oi-empty">${e(__("Chưa có tin nhắn."))}</div>`}${this.drafts_html(data)}</div>
 			${this.compose_html(data)}`);
 		this.bind_compose(data);
 		this.bind_drafts(data);
+		this.bind_pause();
 		if (draft) this.$right.find(".oi-text").val(draft);
 		if (data.truncated) {
 			this.$right.find(".oi-thread").prepend(`<div class="oi-empty">${e(__("Chỉ hiện các tin gần nhất."))}</div>`);
@@ -225,6 +227,34 @@ class OmniInbox {
 			const t = this.$right.find(".oi-thread");
 			t.scrollTop(t[0].scrollHeight);
 		}
+	}
+
+	// Tạm dừng bot (D3-02): nhãn khi bot đang im với khách này, nút Cho bot tiếp tục / Tạm dừng. Mọi chuỗi thoát HTML.
+	pause_html(bot) {
+		if (!bot) return "";
+		const e = frappe.utils.escape_html;
+		if (bot.paused_until) {
+			const btn = bot.can_control
+				? ` <button class="btn btn-default btn-xs oi-bot-resume">${e(__("Cho bot tiếp tục"))}</button>`
+				: "";
+			return `<div class="oi-bot oi-botpause"><b>${e(__("Bot đang tạm dừng đến"))} ${e(frappe.datetime.str_to_user(bot.paused_until))}</b>${btn}</div>`;
+		}
+		if (bot.can_control && bot.mode && bot.mode !== "Off") {
+			return `<div class="oi-bot oi-botpause"><button class="btn btn-default btn-xs oi-bot-pause">${e(__("Tạm dừng bot với khách này"))}</button></div>`;
+		}
+		return "";
+	}
+
+	bind_pause() {
+		const lead = this.current;
+		const call = (method) => {
+			this.$right.find(".oi-botpause button").prop("disabled", true); // chống bấm hai lần
+			frappe
+				.call({ method, args: { lead }, freeze: false })
+				.finally(() => this.load_thread(lead, true));
+		};
+		this.$right.find(".oi-bot-resume").on("click", () => call("omni_crm.api.bot_control.resume_bot"));
+		this.$right.find(".oi-bot-pause").on("click", () => call("omni_crm.api.bot_control.pause_bot"));
 	}
 
 	score_html(score) {

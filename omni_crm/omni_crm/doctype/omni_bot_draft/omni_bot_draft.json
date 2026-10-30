@@ -28,7 +28,11 @@
   "decided_at",
   "rating",
   "rating_note",
-  "critical"
+  "critical",
+  "sec_handoff",
+  "handoff_notified_at",
+  "handoff_logs",
+  "handoff_email_done"
  ],
  "fields": [
   {
@@ -192,6 +196,32 @@
    "fieldtype": "Check",
    "label": "Lỗi nghiêm trọng",
    "description": "Sai về giá, cam kết, y khoa"
+  },
+  {
+   "fieldname": "sec_handoff",
+   "fieldtype": "Section Break",
+   "label": "Chuyển người (D3-02)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "handoff_notified_at",
+   "fieldtype": "Datetime",
+   "label": "Đã báo người phụ trách lúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "handoff_logs",
+   "fieldtype": "Small Text",
+   "label": "Thông báo đã tạo",
+   "read_only": 1,
+   "description": "Mã Notification Log, dùng để kiểm 'đã mở chưa' sau 10 phút"
+  },
+  {
+   "fieldname": "handoff_email_done",
+   "fieldtype": "Check",
+   "label": "Đã xử lý email nhắc",
+   "read_only": 1,
+   "default": "0"
   }
  ],
  "permissions": [
