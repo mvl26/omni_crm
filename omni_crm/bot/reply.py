@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any
@@ -595,8 +597,41 @@ def _log_failure(batch_id: str, error: Exception) -> None:
 		pass
 
 
+@contextmanager
+def _batch_lock(batch_id: str) -> Iterator[bool]:
+	"""Khóa Redis theo lượt (E12, D3-06): hai job `reply_batch` cùng lượt (job chạy lặp, thử lại sau khi mất kết nối) phải chạy
+	lần lượt để job sau thấy nháp của job trước, nếu không cả hai ghi nháp (ở nhóm Auto là gửi khách hai tin). Là khóa Redis
+	chứ không phải khóa DB nên giữ được suốt lúc gọi AI. Trả False nếu chờ quá lâu; Redis lỗi thì chạy không khóa (fail-open)."""
+	lock = None
+	try:
+		lock = frappe.cache().lock(
+			frappe.cache().make_key(f"omni:lock:reply:{batch_id}"),
+			timeout=JOB_TIMEOUT,
+			blocking_timeout=JOB_TIMEOUT,
+		)
+		held = bool(lock.acquire())
+	except Exception:
+		lock, held = None, True
+	try:
+		if held:
+			frappe.db.commit()  # đọc lại từ ảnh chụp mới: thấy nháp mà job trước vừa commit trong lúc ta chờ khóa
+		yield held
+	finally:
+		if lock is not None and held:
+			try:
+				lock.release()
+			except Exception:
+				pass  # khóa đã hết hạn: không làm hỏng luồng chính
+
+
 def reply_batch(batch_id: str) -> str:
-	"""Job nền: soạn nháp (Shadow hoặc Draft theo công tắc) cho lượt `batch_id`; trả "drafted" hoặc lý do bỏ qua. Không ném lỗi, không gửi gì.
+	"""Job nền: như `_reply_batch` nhưng tuần tự hóa các job cùng lượt (khóa Redis); trả "locked" nếu không lấy được khóa."""
+	with _batch_lock(batch_id) as held:
+		return _reply_batch(batch_id) if held else "locked"
+
+
+def _reply_batch(batch_id: str) -> str:
+	"""Soạn nháp (Shadow hoặc Draft theo công tắc) cho lượt `batch_id`; trả "drafted" hoặc lý do bỏ qua. Không ném lỗi, không gửi gì.
 
 	Điều kiện (docs/08 mục 5.1): chế độ khác Off; tin cuối của lượt là tin khách; bot chưa bị tạm dừng với khách;
 	sale chưa trả lời sau tin đó (ngắt mạch); chưa quá giới hạn tần suất.
