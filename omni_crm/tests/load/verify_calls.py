@@ -118,7 +118,14 @@ def run(
 		"callback_task": ["is", "not set"],
 		"call_id": ["like", like],
 	}
+	# Job việc gọi lại chạy SAU khi tin Done: đợi tối đa 90 giây cho chúng xong rồi mới đếm cuộc nhỡ còn thiếu việc
+	t1 = time.time()
 	pending_before_sweep = frappe.db.count(CALL, pending_filters)
+	while pending_before_sweep and time.time() - t1 < 90:
+		time.sleep(5)
+		frappe.db.rollback()
+		pending_before_sweep = frappe.db.count(CALL, pending_filters)
+	callback_wait_s = round(time.time() - t1, 1)
 	swept = 0
 	if int(sweep):
 		# sweep_pending bỏ qua cuộc nhỡ < 5 phút: gọi thẳng job cho từng cuộc còn thiếu việc
@@ -178,6 +185,7 @@ def run(
 				"expected_customers": expected_customers,
 				"phones_with_more_than_one_lead": by_number,
 				"missed_calls": len(missed),
+				"callback_jobs_extra_wait_s": callback_wait_s,
 				"missed_without_task_before_sweep": pending_before_sweep,
 				"missed_bu_bang_sweep_thu_cong": swept,
 				"missed_without_task_after": sum(1 for c in missed if not c.callback_task),

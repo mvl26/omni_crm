@@ -50,7 +50,7 @@ def _install_trace(path: str) -> None:
 		try:
 			result = real(call_name, channel)
 			err = None
-		except BaseException as e:  # noqa: BLE001
+		except BaseException as e:
 			result, err = None, type(e).__name__
 		with open(path, "a", encoding="utf-8") as f:
 			f.write(
