@@ -114,7 +114,9 @@ def get_or_create(channel_doc, ev: CallEvent) -> str:
 def record_event(channel_doc, ev: CallEvent) -> str:
 	"""Nối sự kiện vào `Omni Call.raw_events` (tạo bản tạm nếu chưa có); không đụng trường trạng thái."""
 	name = get_or_create(channel_doc, ev)
-	current = frappe.db.get_value(CALL, name, "raw_events")
+	# Đọc KHÓA (đọc hiện hành): lần đọc thường trước đó đã mở ảnh chụp REPEATABLE READ nên có thể không thấy
+	# raw_events mà worker kia vừa commit, rồi ghi đè mất sự kiện của nó
+	current = frappe.db.get_value(CALL, name, "raw_events", for_update=True)
 	merged = _merge_raw(current, serialize_event(ev))
 	if merged != (current or ""):
 		frappe.db.set_value(CALL, name, "raw_events", merged, update_modified=False)

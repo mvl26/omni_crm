@@ -71,10 +71,22 @@ def _channel_of(call_name: str, channel: str | None) -> str | None:
 
 
 def process_missed_call(call_name: str, channel: str | None = None) -> str | None:
-	"""Job nền: xác minh cuộc gọi nhỡ (HTTP, ngoài khóa DB) rồi tạo/gộp việc gọi lại; trả tên CRM Task hoặc None."""
-	if frappe.session.user != "Administrator":
-		# Job do worker xử lý tin (chạy bằng Guest của webhook) đẩy ra: giao việc (assign_to) kiểm quyền nên cần người dùng hệ thống
+	"""Job nền: xác minh cuộc gọi nhỡ (HTTP, ngoài khóa DB) rồi tạo/gộp việc gọi lại; trả tên CRM Task hoặc None.
+
+	Chạy bằng Administrator (job do worker xử lý tin đẩy ra thừa hưởng Guest của webhook, mà giao việc kiểm quyền);
+	trả lại người dùng cũ khi xong.
+	"""
+	previous = frappe.session.user
+	if previous != "Administrator":
 		frappe.set_user("Administrator")
+	try:
+		return _process_missed_call(call_name, channel)
+	finally:
+		if previous != "Administrator":
+			frappe.set_user(previous)
+
+
+def _process_missed_call(call_name: str, channel: str | None) -> str | None:
 	channel = _channel_of(call_name, channel)
 	if not channel or not flags.channel_enabled(channel):
 		return None  # kênh đã tắt: bật lại thì sweep_pending xử lý bù

@@ -6,6 +6,7 @@ C-01...C-04, B-01...B-05 -> tên test nằm ở docs/nghiem-thu/dot-2.md. Kịch
 khác (C-03, đa số sự cố tổng đài) không lặp lại ở đây.
 """
 
+import dataclasses
 import json
 import threading
 import time
@@ -13,6 +14,7 @@ from unittest import mock
 
 import frappe
 from crm.api.activities import get_activities
+from frappe.model.document import Document
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import get_datetime
 
@@ -585,16 +587,18 @@ class TestConcurrentCallCreate(TelephonyTestCase):
 		site, sites_path = frappe.local.site, frappe.local.sites_path
 		channel_name = self.channel.name
 		barrier = threading.Barrier(2)
-		real = calls._locked_name
+		real_insert = Document.insert
 		errors: list[BaseException] = []
 
-		def hooked(call_id: str):
-			result = real(call_id)  # đã giữ khóa khoảng nếu hàng chưa có
-			try:
-				barrier.wait(timeout=5)  # đảm bảo cả hai đã tra xong trước khi INSERT
-			except threading.BrokenBarrierError:
-				pass
-			return result
+		def hooked_insert(doc, *args, **kwargs):
+			if doc.doctype == CALL:
+				try:
+					barrier.wait(
+						timeout=5
+					)  # cả hai đã tra xong (và giữ khóa nếu mã có khóa) trước khi INSERT
+				except threading.BrokenBarrierError:
+					pass
+			return real_insert(doc, *args, **kwargs)
 
 		def other_worker():
 			frappe.init(site=site, sites_path=sites_path)
@@ -609,7 +613,7 @@ class TestConcurrentCallCreate(TelephonyTestCase):
 			finally:
 				frappe.destroy()
 
-		with mock.patch.object(calls, "_locked_name", side_effect=hooked):
+		with mock.patch.object(Document, "insert", hooked_insert):
 			thread = threading.Thread(target=other_worker)
 			thread.start()
 			try:
@@ -621,6 +625,52 @@ class TestConcurrentCallCreate(TelephonyTestCase):
 			thread.join(timeout=60)
 		self.assertEqual(errors, [], f"bế tắc khi tạo Omni Call song song: {errors}")
 		self.assertEqual(frappe.db.count(CALL, {"call_id": ["in", ["td201-dl1", "td201-dl2"]]}), 2)
+
+	def test_two_workers_recording_events_of_same_existing_call_lose_nothing(self):
+		"""Hàng đã có: worker thứ hai chờ khóa rồi phải đọc lại raw_events MỚI, không ghi đè sự kiện của worker thứ nhất."""
+		site, sites_path = frappe.local.site, frappe.local.sites_path
+		channel_name = self.channel.name
+		base = self._event("dl4")
+		calls.record_event(self.channel, base)
+		frappe.db.commit()
+		a_locked, release = threading.Event(), threading.Event()
+		real_merge = calls._merge_raw
+		errors: list[BaseException] = []
+
+		def hooked_merge(current, entry):
+			if threading.current_thread().name == "A":
+				a_locked.set()  # A đã khóa hàng và đọc raw_events
+				release.wait(timeout=15)
+			return real_merge(current, entry)
+
+		def worker(label: str, status: str):
+			frappe.init(site=site, sites_path=sites_path)
+			frappe.connect()
+			try:
+				frappe.set_user("Administrator")
+				ev = dataclasses.replace(self._event("dl4"), status=status)
+				calls.record_event(frappe.get_doc("Omni Channel", channel_name), ev)
+				frappe.db.commit()
+			except BaseException as e:
+				errors.append(e)
+				frappe.db.rollback()
+			finally:
+				frappe.destroy()
+
+		with mock.patch.object(calls, "_merge_raw", side_effect=hooked_merge):
+			a = threading.Thread(target=worker, args=("A", "Ringing"), name="A")
+			b = threading.Thread(target=worker, args=("B", "Answered"), name="B")
+			a.start()
+			self.assertTrue(a_locked.wait(timeout=15), errors)
+			b.start()
+			time.sleep(1.5)  # B đã tới chỗ chờ khóa của A
+			release.set()
+			a.join(timeout=60)
+			b.join(timeout=60)
+		self.assertEqual(errors, [])
+		frappe.db.rollback()
+		events = json.loads(frappe.db.get_value(CALL, {"call_id": "td201-dl4"}, "raw_events"))
+		self.assertEqual(sorted(e["status"] for e in events), ["Answered", "Ended", "Ringing"], events)
 
 	def test_existing_call_is_locked_and_returned_and_race_on_insert_is_handled(self):
 		ev = self._event("dl3")
