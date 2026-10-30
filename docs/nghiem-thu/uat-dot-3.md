@@ -1,6 +1,6 @@
 # UAT Đợt 3: nháp của bot cho sale duyệt (D3-01)
 
-Trạng thái: **CHƯA CHẠY.** Tệp này ghi điều kiện và mẫu bảng cho người phụ trách; không có số liệu nào ở đây được đo.
+Trạng thái: **CHƯA CHẠY.** Tệp này ghi điều kiện và mẫu bảng cho người phụ trách; không có số liệu nào ở đây được đo. Mục 8 (D3-06) là bước cuối: tuần chạy thử và cách đo bằng `measure_dot3.py`. Kết quả kiểm thử tự động và tải của Đợt 3 ở `dot-3.md`.
 
 ## 0. Bước 0: cổng `nhap` (CHƯA ĐO)
 
@@ -101,3 +101,44 @@ Trạng thái: tính năng đã xây và có test tự động (sandbox, không 
 | 9 | Xóa `omni_auto_send_allowed` khỏi site_config | Tin Bot đang chờ `Blocked`, không nhóm nào tự gửi | |
 
 Chưa kiểm được ở môi trường phát triển: mọi bước trên (cần staging, AI thật, phép gửi thật, trình duyệt).
+
+## 8. Tuần chạy thử Đợt 3 và cách đo (D3-06) — CHƯA CHẠY
+
+D3-04 (ghi âm và tóm tắt cuộc gọi) **bị bỏ qua**: cổng chuyển giọng nói chưa đo (mục 6), nên kịch bản D-06 không có. Mục 1-5 ở trên (nháp, chuyển người) là phần phải chạy trước; mục 7 (Auto) chỉ khi Q1 được chốt.
+
+Điều kiện bắt đầu tuần (tất cả phải đúng, không có ngoại lệ):
+
+- [ ] Cổng `nhap` đạt bằng AI thật trên bộ đề đã duyệt (mục 0), ghi mã `Omni Eval Run`; Q11, Q12 đã chốt; khóa Claude API đã đặt.
+- [ ] `bot_reply_mode = Draft`; `omni_auto_send_allowed` **không** đặt trong site_config; mọi `auto_send_enabled` của nhóm = 0.
+- [ ] `sandbox_mode` tắt CÓ CHỦ ĐÍCH (sale gửi nháp thật cho khách thật) hoặc vẫn bật và chỉ định người nhận thử.
+- [ ] Kho tri thức đã duyệt; nhóm "Hỏi giá" và "Khiếu nại" có `always_handoff`; Q6 (giờ bot) và Q8 (kênh báo) đã chốt.
+- [ ] Mỗi sale tham gia biết: bấm Gửi/Sửa/Bỏ, chấm Đúng/Sai/Thiếu, đánh dấu nghiêm trọng khi bot nói sai nội dung quan trọng.
+
+Cuối tuần, người phụ trách chạy (chỉ đọc, không ghi gì):
+
+```bash
+bench --site <site> execute omni_crm.tests.acceptance.measure_dot3.run \
+  --kwargs '{"start": "2026-11-23 00:00:00", "end": "2026-11-30 00:00:00"}'
+```
+
+| Chỉ số (docs/00 mục 2, docs/08 mục 10) | Ngưỡng | Kết quả (điền sau) |
+| --- | --- | --- |
+| Nháp đúng = gửi nguyên văn hoặc sửa nhẹ (tỉ lệ sửa <= 0,1) / mọi nháp Draft đã quyết định (kể cả bị bỏ) | >= 85% nghiệm thu; >= 95% mới đủ điều kiện mở Auto cho một nhóm (>= 30 nháp trong 14 ngày) | |
+| Lỗi nghiêm trọng (nháp `critical`, Sai kèm ghi chú, tin bot tự gửi bị chấm Sai, ngắt mạch) | 0 | |
+| Bot tự xử lý theo nhóm (chỉ khi nhóm đã mở Auto) | tham khảo | |
+| Thời gian từ tin khách đến tin ra gắn với nháp (trung vị, p90) | tham khảo; mục tiêu chung "phản hồi lần đầu < 15 phút" | |
+| Cổng `nhap` (AI thật, bộ đề đã duyệt) | hành động >= 90%, trả lời >= 85%, nghiêm trọng 0 | |
+
+Script in "chưa đủ dữ liệu" thay vì một tỉ lệ khi mẫu nhỏ hơn 30 hoặc dữ liệu không phải khách thật (tin sandbox, Lead giả, bộ đề Fake). Đừng đọc một dòng "chưa đủ dữ liệu" như là "đạt".
+
+**Điều kiện dừng ngay (tắt `bot_reply_mode = Off`, báo người phụ trách):**
+
+1. Một tin bot gửi sai cho khách thật (chỉ có thể xảy ra nếu Auto bị bật ngoài ý muốn: kiểm `omni_auto_send_allowed` và các nhóm).
+2. Một khách nhận hai tin giống nhau từ bot hoặc từ bot và sale cho cùng một câu hỏi.
+3. Nháp chứa giá, khuyến mãi, thời hạn giao hay liên hệ mà kho tri thức không có (chốt chặn lọt).
+4. Một nháp Handoff không báo ai (kiểm Notification Log của chủ Lead).
+5. Chi phí AI trong ngày vượt hạn mức mà bot vẫn gọi.
+
+## 9. Việc chưa kiểm được ở môi trường phát triển (tổng hợp D3-06)
+
+Giao diện Hộp thư và biểu mẫu Nhóm câu hỏi trên trình duyệt; Notification Log, email, realtime hiển thị thật; gửi thật qua Zalo (mọi test dùng sandbox và mock HTTP); chất lượng nháp của AI thật; hiệu năng trên staging; quyền theo cây Sales Manager; hành vi của mô hình thật với chèn lệnh (test chỉ chứng minh chốt chặn bằng mã).

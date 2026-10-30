@@ -565,6 +565,14 @@ def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = N
 	analysis = reply.analysis_of(row.batch_id)
 	if not analysis or analysis.get("intent") == COMPLAINT_INTENT or analysis.get("wants_human"):
 		return False, "phan_tich"
+	# Chốt thứ hai chống gửi lặp (E12) khi khóa Redis theo lượt không dùng được: đã có tin Bot gắn với nháp KHÁC của cùng lượt
+	# thì không gửi nữa. Đọc có khóa; chạy dưới khóa dòng nhóm nên các đường gửi Auto của cùng nhóm đã tuần tự.
+	if row.batch_id and frappe.db.sql(
+		"select 1 from `tabOmni Bot Draft` d join `tabOmni Outbound Message` o on o.bot_draft = d.name "
+		"where d.batch_id=%s and d.name != %s and o.source='Bot' limit 1 for update",
+		(row.batch_id, row.name),
+	):
+		return False, "da_gui_cung_luot"
 	# đọc có khóa (FOR UPDATE) để thấy tin vừa commit của giao dịch khác, không bị ảnh chụp REPEATABLE READ làm cũ
 	recent = frappe.db.sql(
 		"select count(*) from `tabOmni Outbound Message` where identity=%s and source='Bot' and creation > %s for update",

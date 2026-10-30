@@ -40,6 +40,21 @@
 | I-12 | Hai Lead cùng SĐT, tin mới | Gắn Lead gần nhất + 1 nghi trùng |
 | I-13 | Gộp hai Lead | Mọi bản ghi liên quan chuyển về Lead chính |
 
+## 3b. Kịch bản tích hợp bắt buộc Đợt 3 (D3-06)
+
+Chạy từ webhook Zalo ký thật qua `process_identity` đến bot (FakeAIClient), **mọi job nền bằng Guest** (như worker RQ) và thao tác của sale bằng Sales User thật (`tests/test_dot3_integration.py`; bảng ánh xạ tên test ở `docs/nghiem-thu/dot-3.md` mục 2).
+
+| # | Kịch bản | Kỳ vọng |
+| --- | --- | --- |
+| D-01 | Nháp hiện cho sale; gửi nguyên văn, sửa rồi gửi, bỏ; chấm; khách nhắn tiếp | Đúng người thấy, tin ra `source=Sale`, nháp cũ `Expired`, người không có quyền Lead bị từ chối |
+| D-02 | Hỏi giá | Handoff, đúng một thông báo cho chủ Lead, bot tạm dừng, bot im, sale cho bot tiếp tục |
+| D-03 | Khách chèn lệnh | Không làm theo (chốt chặn bằng mã chuyển người, không có văn bản gửi được) |
+| D-04 | Nhóm Auto (khóa hạ tầng đặt trong phạm vi test) | Gửi đúng một tin Bot; ngoài khung Zalo/ngoài giờ/khóa đóng -> Draft; sale chấm Sai hoặc khách khiếu nại -> nhóm tự tắt + cảnh báo |
+| D-05 | Hết hạn mức AI khi đang Auto | Không tin Bot nào, kênh vẫn xử lý tin, cảnh báo đúng một lần |
+| D-06 | Ghi âm -> tóm tắt, quyền nghe ghi âm | **Bỏ qua** (D3-04 không làm vì cổng chuyển giọng nói chưa đo) |
+| D-07 | Quay lui mức 1 (từng công tắc) và mức 2 (`Off` + analyze 0) | Chỉ phần đó dừng; mức 2 chỉ còn "kênh vào CRM"; nháp cũ không gửi được |
+| Đồng thời | Hai job `reply_batch` cùng lượt; nhiều khách song song | Một nháp, tối đa một tin Bot (lỗi E12 tìm thấy ở D3-06) |
+
 ## 4. Kiểm thử tải (`tests/load/send_burst.py`)
 
 - Tham số: `--site-url`, `--channel`, `--rate` (tin/giây), `--duration`, `--customers` (số khách giả), `--dup-ratio` (tỉ lệ gửi lại).

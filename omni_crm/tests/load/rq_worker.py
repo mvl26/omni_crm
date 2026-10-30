@@ -6,6 +6,10 @@
 để lấy redis_queue của site (đặt tạm trong site_config.json khi đo, khôi phục sau đó).
 `--fake-ai <tệp>`: cài FakeAIClient; nội dung tệp điều khiển: `ok` (trả kết quả tối thiểu), `fail` (mọi lần gọi lỗi
 HTTP 400 giả), hoặc `slow:<giây>`. Không bao giờ gọi AI thật.
+D3-06: biến môi trường `OMNI_LOAD_D3=1` cho bot trả lời đáp án thật theo kho tri thức tải (nhóm `LOAD Gio lam viec`, mục
+`KB-93001`; câu hỏi giá thì chuyển người qua nhóm `LOAD Hoi gia`), để đường Draft/Handoff chạy trọn qua worker thật.
+`OMNI_LOAD_AUTO_INFRA=1` mở khóa hạ tầng tự gửi CHỈ TRONG TIẾN TRÌNH worker này (vá `flags.auto_send_infra_allowed`);
+KHÔNG đụng site_config.json. Luôn đi cùng sandbox_mode bật (script không gửi gì ra ngoài).
 """
 
 from __future__ import annotations
@@ -23,6 +27,11 @@ def _install_fake_ai(control: str) -> None:
 	from omni_crm.bot.fake_client import FakeAIClient
 
 	class Controlled(FakeAIClient):
+		def __init__(self):
+			super().__init__()
+			if os.environ.get("OMNI_LOAD_D3"):
+				self.rules = _d3_rules()
+
 		def create(self, **kw):
 			mode = open(control, encoding="utf-8").read().strip() if os.path.exists(control) else "ok"
 			if mode == "fail":
@@ -33,6 +42,59 @@ def _install_fake_ai(control: str) -> None:
 			return super().create(**kw)
 
 	ai_client.set_client(Controlled())
+
+
+def _d3_rules() -> list:
+	"""Luật trả lời cho tải Đợt 3: câu hỏi giá/báo giá -> chuyển người (nhóm luôn chuyển người); còn lại trả đáp án giờ làm việc."""
+	from omni_crm.bot.fake_client import Rule
+
+	hours = {
+		"action": "reply",
+		"question_group": "LOAD Gio lam viec",
+		"reply_text": "Dạ Miyano làm việc từ 8 giờ đến 17 giờ 30 các ngày trong tuần ạ.",
+		"kb_item_ids": ["KB-93001"],
+		"ask_contact_info": False,
+		"confidence": 0.9,
+		"handoff_reason": None,
+	}
+	price = {
+		"action": "handoff",
+		"question_group": "LOAD Hoi gia",
+		"reply_text": "",
+		"kb_item_ids": ["KB-93002"],
+		"ask_contact_info": False,
+		"confidence": 0.9,
+		"handoff_reason": "Khách hỏi giá",
+	}
+	analysis = {  # tối thiểu hợp lệ nhưng ý định "Tư vấn" (giá trị đầu của enum là "Hỏi giá", sẽ ép chuyển người)
+		"customer_name": None,
+		"organization": None,
+		"phones": [],
+		"emails": [],
+		"need": None,
+		"products": [],
+		"quantity": None,
+		"timeframe": None,
+		"timeframe_within_30d": None,
+		"urgency": None,
+		"intent": "Tư vấn",
+		"wants_human": False,
+		"summary": "Khách hỏi thông tin.",
+		"evidence": {},
+	}
+	return [
+		Rule(analysis, kind="Analyze"),
+		Rule(price, kind="Reply", keyword="hỏi giá máy a"),
+		Rule(price, kind="Reply", keyword="báo giá xe nâng"),
+		Rule(hours, kind="Reply"),
+	]
+
+
+def _open_auto_infra() -> None:
+	"""Chỉ trong tiến trình này: coi khóa hạ tầng tự gửi là mở (site_config không đổi). Các tiến trình con của RQ kế thừa."""
+	from omni_crm import flags
+
+	flags.auto_send_infra_allowed = lambda: True
 
 
 def _install_trace(path: str) -> None:
@@ -71,6 +133,8 @@ def main() -> None:
 	qs = get_queue_list([q.strip() for q in queues.split(",")], build_queue_name=True)
 	if fake:
 		_install_fake_ai(fake)  # biến toàn cục của module, các tiến trình con của RQ kế thừa khi fork
+	if os.environ.get("OMNI_LOAD_AUTO_INFRA"):
+		_open_auto_infra()
 	if os.environ.get("OMNI_LOAD_TRACE"):
 		frappe.connect()
 		_install_trace(os.environ["OMNI_LOAD_TRACE"])
