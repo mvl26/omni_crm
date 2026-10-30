@@ -31,7 +31,7 @@ bench --site <site> execute omni_crm.bot.smoke.run
 
 Lệnh gọi Claude API thật một lần và in một dòng `Omni Bot Run` (trạng thái `Success`, số token, độ trễ). Thêm `--kwargs "{'fake': True}"` để chạy bằng client giả (không cần khóa). Kết quả: xem tại `/app/omni-bot-run`. **Chưa chạy thử với khóa thật** khi viết tài liệu này.
 
-Nếu `omni_ai_allow_customer_data` chưa bật, mọi lời gọi AI với hội thoại khách thật bị bỏ qua và `Omni Bot Run` ghi `Skipped Switch`.
+Nếu `omni_ai_allow_customer_data` chưa bật, mọi lời gọi AI với hội thoại khách thật bị bỏ qua và `Omni Bot Run` ghi `Skipped Switch` (lý do "Chính sách gửi dữ liệu khách sang AI (Q11) chưa được chốt"). Chưa có khóa API thì cũng `Skipped Switch` với lý do "Chưa cấu hình khóa Claude API".
 
 ## 2. Kho tri thức
 
@@ -43,7 +43,7 @@ Kho tri thức (DocType **Omni Knowledge Item**) là các cặp hỏi–đáp m�
 - **Không ghi giá.** Không ghi thông tin chưa được công bố chính thức.
 - Mã mục `KB-00001`, `KB-00002`, ... **không bao giờ đổi** cho một mục; thêm mục mới thì cấp số mới. Nhập lại cùng mã sẽ cập nhật mục cũ.
 - Ô còn dấu ngoặc vuông `[...]` là chỗ chưa điền: mục đó **không được nhập** (hệ thống không bịa nội dung).
-- Tối đa **150 mục đang dùng**: vượt ngưỡng này bot **không soạn trả lời** cho tới khi có thiết kế truy hồi (ghi vào Error Log "kho quá lớn"). Dùng `active` (Đang dùng) để tạm loại mục.
+- Tối đa **150 mục đang dùng**: vượt ngưỡng này bot **không soạn trả lời** cho tới khi có thiết kế truy hồi (ghi Error Log tiêu đề "Omni: kho tri thức vượt ngưỡng truy hồi"). Dùng `active` (Đang dùng) để tạm loại mục.
 
 **Nhập từ CSV** (mẫu: `mau/kho-tri-thuc-mau.csv`, cột `item_id, question_group, question, answer, source, owner_email`). Nhóm câu hỏi phải **tồn tại trước** (mục 3). Chạy trong `<bench-dir>`, với đường dẫn tuyệt đối:
 
@@ -91,6 +91,7 @@ bench --site <site> execute omni_crm.bot.eval.importer.import_jsonl --kwargs "{'
 bench --site <site> execute omni_crm.bot.eval.run.run_cli --kwargs "{'gate': 'phan_tich', 'allow_real': True, 'reviewed': True}"
 ```
 
+- `'reviewed': True` là lời **khai** rằng người có trách nhiệm đã duyệt bộ đề: chỉ đặt khi thật sự đã duyệt, nếu không kết quả không được tính là đo.
 - Không `allow_real`: client thật bị từ chối; không có khóa thì mọi ca ghi **"chưa đo"** và cổng KHÔNG qua. `fake: True` chỉ để kiểm hạ tầng.
 - Kết quả ghi `Omni Eval Run` (`/app/omni-eval-run`) và báo cáo Markdown `eval/reports/<ngày>-<phiên bản>.md` liệt kê ca trượt kèm lý do.
 - Phần "câu trả lời đạt" do mô hình giám khảo chấm theo `eval/rubric.md`; **người chấm lại ngẫu nhiên 20%** và mọi ca giám khảo cho trượt (`export_regrade_csv` rồi `import_regrade`). Chưa chấm lại đủ thì cổng không qua. Lần chạy đạt dùng làm mốc bằng `accept_run`.
