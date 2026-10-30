@@ -1,8 +1,9 @@
 """Bot soạn trả lời (docs/08 mục 5): chế độ ngầm (Shadow, D2-07) và Nháp cho sale duyệt (Draft, D3-01).
 
 Shadow: bản nháp chỉ để đo, không hiện cho sale. Draft: nháp hiện trong Hộp thư, sale bấm Gửi/Sửa/Bỏ (api/drafts.py).
-Module này (và cả thư mục `bot/`) KHÔNG tạo Omni Outbound Message và không có đường gửi nào; test quét mã nguồn để
-giữ điều đó. Chế độ Auto (tự gửi) thuộc D3-05.
+Module này (và cả thư mục `bot/`, trừ `auto_send.py`) KHÔNG tạo Omni Outbound Message và không có đường gửi nào; test
+quét mã nguồn để giữ điều đó. Chế độ Auto (tự gửi theo nhóm, D3-05) chỉ nằm ở `bot/auto_send.py`; tại đây chỉ gọi nó
+sau khi nháp được ghi (`_after_insert`).
 
 Nội dung khách là dữ liệu: nằm trong thẻ, bị chốt chặn bằng code kiểm đầu ra trước khi lưu (guards.py). Mọi lỗi
 của bot chỉ ghi log không chứa nội dung khách, không làm hỏng pipeline.
@@ -564,11 +565,14 @@ def _after_insert(name: str, base: dict, action: str) -> None:
 	`handoff.handoff` (im bot + một thông báo duy nhất); nháp Reply báo "có nháp chờ duyệt". Không commit."""
 	if base.get("mode") != "Draft":
 		return
+	from omni_crm.bot import auto_send  # import trễ: auto_send import module này
+
 	expire_stale_for_lead(base["lead"])
 	if frappe.db.get_value(DRAFT, name, "decision") == "Pending":
 		if action == "Handoff":
+			auto_send.try_holding(name)  # D3-05: trước khi chuyển người (nó tạm dừng bot); chỉ nhóm đang Auto
 			handoff.handoff(name)
-		else:
+		elif not auto_send.try_auto_send(name):  # D3-05: nháp đủ điều kiện của nhóm Auto thì bot tự gửi
 			notify_pending_draft(base["lead"], action)
 
 

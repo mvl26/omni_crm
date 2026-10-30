@@ -429,9 +429,10 @@ def after_analyze(batch_id: str, lead: str | None) -> None:
 
 	Rồi đẩy bot trả lời ngầm (D2-07, docs/08 mục 5.1); chấm điểm chạy trước để bản nháp thấy điểm mới.
 	"""
-	from omni_crm.bot import reply, scoring
+	from omni_crm.bot import auto_send, reply, scoring
 
 	scoring.run_scoring(lead)
+	auto_send.on_analysis(batch_id, lead)  # D3-05: ngắt mạch khiếu nại (tự bắt lỗi)
 	reply.enqueue_reply(batch_id, lead)
 
 

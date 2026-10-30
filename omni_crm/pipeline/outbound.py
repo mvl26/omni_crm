@@ -101,7 +101,18 @@ def _window_confirmation(req: OutboundRequest, confirmed_paid: bool) -> str | No
 
 
 def _check_bot_draft(req: OutboundRequest) -> None:
-	"""Tin có `bot_draft` chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (bot không tự gửi; Handoff không gửi được)."""
+	"""Kiểm nguồn Bot và liên kết nháp.
+
+	- `source="Bot"`: chỉ đi qua `bot.auto_send` (D3-05): cần nháp hợp lệ và `auto_send.assert_can_queue` kiểm lại MỌI điều
+	  kiện (khóa hạ tầng, nhóm bật, nháp Draft/Reply/Pending, khung miễn phí, giờ bot...). Mọi tin Bot khác bị từ chối.
+	- Tin có `bot_draft` mà không phải Bot: chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (Handoff
+	  không gửi được).
+	"""
+	if req.source == "Bot":
+		from omni_crm.bot import auto_send  # import trễ: auto_send import module này
+
+		auto_send.assert_can_queue(req)
+		return
 	if not req.bot_draft:
 		return
 	row = frappe.db.get_value(
@@ -172,6 +183,7 @@ def _row(name: str, lock: bool = False) -> Any:
 			"next_attempt_at",
 			"last_error",
 			"is_sandbox",
+			"bot_draft",
 		],
 		as_dict=True,
 		for_update=lock,
@@ -309,6 +321,14 @@ def send_outbound(outbound_name: str) -> str:
 	row = _row(outbound_name)
 	if not row or row.status != "Queued":
 		return row.status if row else "Missing"
+	if (
+		row.source == "Bot"
+	):  # tin bot: kiểm lại công tắc NGAY trước khi gửi (nhóm có thể vừa bị tắt/ngắt mạch)
+		from omni_crm.bot import auto_send
+
+		allowed_now, why_not = auto_send.send_time_check(row)
+		if not allowed_now:
+			return _block_locked(outbound_name, why_not)
 	channel_doc = frappe.get_doc(CHANNEL, row.channel) if frappe.db.exists(CHANNEL, row.channel) else None
 	if not channel_doc or not cint(channel_doc.outbound_enabled):
 		return _block_locked(outbound_name, _("Kênh đã tắt chiều ra"))

@@ -174,6 +174,7 @@ scheduler_events = {
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
 	},
+	"hourly": ["omni_crm.bot.auto_send.run_breaker_checks"],  # D3-05: ngắt mạch Handoff gấp đôi
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
 }
 
