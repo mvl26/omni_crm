@@ -77,7 +77,14 @@ def main() -> None:
 		_install_trace(os.environ["OMNI_LOAD_TRACE"])
 		frappe.destroy()
 		frappe.init(site, sites_path=".")
-	Worker(qs, connection=conn).work(logging_level="WARNING", date_format="%H:%M:%S")
+	# Như supervisor khởi động lại worker: mất kết nối Redis (sự cố) thì thử nối lại chứ không thoát
+	while True:
+		try:
+			Worker(qs, connection=get_redis_conn()).work(logging_level="WARNING", date_format="%H:%M:%S")
+			break
+		except Exception as e:
+			print(f"worker dừng: {type(e).__name__}; thử lại sau 5 giây", flush=True)
+			time.sleep(5)
 
 
 if __name__ == "__main__":

@@ -254,3 +254,145 @@ def cleanup(channel: str, state: str | None = None, call_prefix: str = "LOADCALL
 		with open(state, encoding="utf-8") as f:
 			set_settings(**{k: v for k, v in json.load(f).items() if v is not None})
 	print(f"đã xóa {len(lead_list)} Lead, {len(call_ids)} cuộc gọi, {len(tasks)} việc của kênh {channel}")
+
+
+def setup_zalo(channel: str = "LOAD kenh", state: str | None = None) -> None:
+	"""Kênh Zalo OA tải (KHÔNG token, sandbox bật); in app_id/secret ngẫu nhiên cho send_burst.py. Lưu Settings nếu có `state`."""
+	if state and not frappe.db.exists("Omni Channel", {"channel_name": ["like", "LOAD%"]}):
+		with open(state, "w", encoding="utf-8") as f:
+			json.dump({k: frappe.db.get_single_value("Omni Settings", k) for k in SETTINGS_KEYS}, f)
+	set_settings(sandbox_mode=1)
+	app_id, sec = "app-load-" + secrets.token_hex(4), secrets.token_urlsafe(32)
+	frappe.db.delete("Omni Channel", {"channel_name": channel})
+	frappe.get_doc(
+		{
+			"doctype": "Omni Channel",
+			"channel_name": channel,
+			"channel_type": "Zalo OA",
+			"enabled": 1,
+			"zalo_app_id": app_id,
+			"zalo_oa_secret_key": sec,
+		}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()
+	print(json.dumps({"OMNI_LOAD_APP_ID": app_id, "OMNI_LOAD_OA_SECRET": sec}))
+
+
+def bot_report(channel: str = "LOAD kenh", lead_prefix: str = "LOADC") -> None:
+	"""Báo cáo bot sau tải Zalo: Bot Run theo trạng thái, Lead có trường bot, nháp, tin ra (phải 0), Lead nóng."""
+	leads = frappe.db.sql_list(
+		f"select distinct lead from `tab{INBOUND}` where channel=%s and lead is not null", channel
+	)
+	batches = frappe.db.sql_list(
+		f"select distinct batch_id from `tab{INBOUND}` where channel=%s and batch_id is not null", channel
+	)
+	runs = dict(
+		frappe.db.sql(
+			"select concat(kind, ':', status), count(*) from `tabOmni Bot Run` where batch_id in %s group by 1",
+			(tuple(batches) or ("",),),
+		)
+	)
+	filled = frappe.db.sql(
+		"select count(*) from `tabCRM Lead` where name in %s and (omni_need is not null and omni_need != '')",
+		(tuple(leads) or ("",),),
+	)[0][0]
+	scored = frappe.db.sql(
+		"select count(*) from `tabCRM Lead` where name in %s and omni_score is not null and omni_score != 0",
+		(tuple(leads) or ("",),),
+	)[0][0]
+	drafts = dict(
+		frappe.db.sql(
+			"select concat(mode, ':', action, ':', decision), count(*) from `tabOmni Bot Draft` where batch_id in %s group by 1",
+			(tuple(batches) or ("",),),
+		)
+	)
+	outbound = frappe.db.count("Omni Outbound Message", {"lead": ["in", leads or [""]]})
+	statuses = _counts(channel)
+	print(
+		json.dumps(
+			{
+				"inbound_status": statuses,
+				"bot_runs": runs,
+				"leads": len(leads),
+				"leads_with_omni_need": filled,
+				"leads_with_score": scored,
+				"bot_drafts": drafts,
+				"outbound_rows_for_these_leads": outbound,
+			},
+			ensure_ascii=False,
+			indent=1,
+		)
+	)
+
+
+def cleanup_bot(channel: str = "LOAD kenh") -> None:
+	"""Xóa Bot Run/Draft/Notification của kênh Zalo tải (gọi TRƯỚC verify_burst.cleanup)."""
+	frappe.db.rollback()
+	batches = frappe.db.sql_list(
+		f"select distinct batch_id from `tab{INBOUND}` where channel=%s and batch_id is not null", channel
+	)
+	leads = frappe.db.sql_list(
+		f"select distinct lead from `tab{INBOUND}` where channel=%s and lead is not null", channel
+	)
+	for dt in ("Omni Bot Run", "Omni Bot Draft"):
+		frappe.db.delete(dt, {"batch_id": ["in", batches or [""]]})
+	frappe.db.delete("Notification Log", {"document_name": ["in", leads or [""]]})
+	frappe.db.commit()
+	print(f"đã xóa dữ liệu bot của {len(batches)} lô")
+
+
+SCORE_RULES = [
+	("has_phone", 15, "Có số điện thoại hợp lệ"),
+	("intent_price", 15, "Hỏi giá"),
+	("intent_purchase", 25, "Muốn đặt hàng"),
+	("quantity_given", 15, "Nêu số lượng"),
+	("repeat_contact", 5, "Liên hệ lại"),
+]
+
+
+def bot_on(reply_mode: str = "Shadow", budget: int = 100_000_000, scoring: int = 1) -> None:
+	"""Bật bot phân tích + chấm điểm + chế độ trả lời cho đo tải (FakeAIClient ở worker; hạn mức lớn)."""
+	frappe.db.rollback()
+	doc = frappe.get_doc("Omni Settings")
+	doc.update(
+		{
+			"bot_analyze_enabled": 1,
+			"bot_reply_mode": reply_mode,
+			"daily_token_budget": int(budget),
+			"lead_scoring_enabled": int(scoring),
+			"hot_lead_threshold": 60,
+			"assignment_fallback_users": "Administrator",
+			"score_rules": [{"signal": s, "points": p, "note": n} for s, p, n in SCORE_RULES],
+		}
+	)
+	doc.flags.ignore_permissions = True
+	doc.save()
+	frappe.db.commit()
+	frappe.cache().delete_keys("omni:ai:")
+	print("bot bật:", reply_mode, "budget", budget)
+
+
+def bot_off() -> None:
+	"""Tắt bot và chấm điểm, xóa bảng điểm tải."""
+	doc = frappe.get_doc("Omni Settings")
+	doc.update(
+		{"bot_analyze_enabled": 0, "bot_reply_mode": "Off", "lead_scoring_enabled": 0, "score_rules": []}
+	)
+	doc.flags.ignore_permissions = True
+	doc.save()
+	frappe.db.commit()
+
+
+def alerts_now() -> None:
+	"""In khối bot của snapshot giám sát và các cảnh báo đang bật (chỉ đọc, không gửi thư)."""
+	from omni_crm.monitoring import alerts
+	from omni_crm.monitoring.snapshot import build_snapshot
+
+	snap = build_snapshot()
+	print(
+		json.dumps(
+			{"bot": snap["bot"], "alerts": [a.kind for a in alerts.evaluate(snap)]},
+			ensure_ascii=False,
+			indent=1,
+		)
+	)
