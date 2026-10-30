@@ -36,6 +36,7 @@ REALTIME_EVENT = "omni_handoff"
 SUBJECT_MAX = 140
 NAME_MAX = 60
 SLOT_PLACEHOLDER = "{gio_lam_viec_ke_tiep}"
+NO_RECIPIENT = "NO_RECIPIENT"  # dấu trong handoff_logs: chưa có ai để báo, job sẽ thử lại
 FLAG_WANTS_HUMAN = "handoff_topic:khach_muon_gap_nguoi"
 FLAG_ALWAYS_GROUP = "handoff_topic:nhom_luon_chuyen_nguoi"
 
@@ -210,8 +211,8 @@ def note_on_lead(lead: str, text: str, user: str | None = None) -> None:
 
 
 def manual_pause(lead: str, user: str) -> datetime:
-	"""Sale tạm dừng bot với khách của Lead; ghi ai bấm vào dòng thời gian."""
-	until = pause_lead(lead)
+	"""Sale tạm dừng bot với khách của Lead (cấu hình 0 giờ thì dùng 24 giờ); ghi ai bấm vào dòng thời gian."""
+	until = pause_lead(lead, pause_hours() or DEFAULT_PAUSE_HOURS)
 	note_on_lead(
 		lead,
 		_("{0} tạm dừng bot với khách này đến {1}").format(
@@ -327,10 +328,24 @@ def handoff(draft: str) -> dict[str, Any]:
 	if row.handoff_notified_at:
 		return {"status": "already"}
 	lead = lead_bridge.follow_merged(row.lead) or row.lead
-	until = pause_lead(lead)
+	retry = row.handoff_logs == NO_RECIPIENT
+	until = (paused_until(lead) if retry else None) or pause_lead(lead)
 	label = reason_label(row.guard_flags, row.question_group)
 	channel_type = frappe.db.get_value(CHANNEL, row.channel, "channel_type") if row.channel else None
 	users = recipients(lead)
+	if not users:
+		if not retry:  # ghi một lần; job thử lại không ghi lặp
+			frappe.log_error(
+				title="Omni: chuyển người nhưng không có người nhận", message=f"lead={lead} draft={draft}"
+			)
+			note_on_lead(
+				lead,
+				_(
+					"Bot chuyển người nhưng không có người nhận thông báo (Lead chưa có người phụ trách và chưa cấu hình người dự phòng). Bot tạm dừng đến {0}"
+				).format(frappe.utils.format_datetime(until)),
+			)
+			frappe.db.set_value(DRAFT, draft, "handoff_logs", NO_RECIPIENT, update_modified=False)
+		return {"status": "no_recipient", "until": until}
 	chans = notify_channels()
 	logs = _notify_system(lead, users, label, channel_type) if "system" in chans else []
 	emailed = 0
@@ -360,6 +375,7 @@ def email_unread_handoffs() -> dict[str, int]:
 	Chỉ khi `handoff_notify_channels` có email. Nháp đã được xử lý (không còn Pending) thì không nhắc. Mỗi nháp
 	một lần. Không gọi API ngoài: email chỉ vào hàng đợi, sandbox chỉ ghi log. Commit sau từng nháp.
 	"""
+	retried = _retry_without_recipient()
 	cutoff = add_to_date(now_datetime(), minutes=-EMAIL_AFTER_MINUTES)
 	rows = frappe.get_all(
 		DRAFT,
@@ -373,7 +389,7 @@ def email_unread_handoffs() -> dict[str, int]:
 		order_by="handoff_notified_at asc",
 		limit_page_length=EMAIL_BATCH,
 	)
-	out = {"checked": 0, "emailed": 0, "skipped": 0}
+	out = {"checked": 0, "emailed": 0, "skipped": 0, "retried": retried}
 	email_on = "email" in notify_channels()
 	for r in rows:
 		out["checked"] += 1
@@ -397,3 +413,32 @@ def email_unread_handoffs() -> dict[str, int]:
 			frappe.db.rollback()
 			frappe.log_error(title="Omni: lỗi email nhắc chuyển người", message=f"draft={r.name}")
 	return out
+
+
+def _retry_without_recipient() -> int:
+	"""Nháp Handoff còn Pending mà lúc chuyển người chưa có ai nhận: nay có người thì báo; trả số nháp đã báo."""
+	names = frappe.get_all(
+		DRAFT,
+		filters={
+			"mode": "Draft",
+			"action": "Handoff",
+			"decision": "Pending",
+			"handoff_logs": NO_RECIPIENT,
+			"handoff_notified_at": ["is", "not set"],
+		},
+		fields=["name", "lead"],
+		limit_page_length=EMAIL_BATCH,
+	)
+	done = 0
+	for r in names:
+		try:
+			if (
+				recipients(lead_bridge.follow_merged(r.lead) or r.lead)
+				and handoff(r.name)["status"] == "done"
+			):
+				done += 1
+			frappe.db.commit()
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(title="Omni: lỗi thử lại báo chuyển người", message=f"draft={r.name}")
+	return done

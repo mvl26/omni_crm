@@ -16,6 +16,15 @@ from omni_crm.tests.test_draft import TEXT, DraftTestCase
 from omni_crm.tests.test_inbox import SALE1, SALE2
 from omni_crm.utils import business_hours
 
+SETTING_FIELDS = (
+	"handoff_notify_channels",
+	"handoff_pause_hours",
+	"handoff_message_in_hours",
+	"handoff_message_after_hours",
+	"bot_active_hours",
+	"callback_fallback_user",
+	"assignment_fallback_users",
+)
 SECRET = "SECRETTEXT9"
 REASON = "Khách hỏi SECRETREASON7"
 FRI_EVENING = datetime(2026, 10, 30, 18, 0)  # thứ Sáu 18:00
@@ -34,7 +43,7 @@ def fixed_hours():
 class HandoffTestCase(DraftTestCase):
 	def setUp(self):
 		super().setUp()
-		self._orig_fallback = frappe.db.get_single_value("Omni Settings", "callback_fallback_user")
+		self._orig = {f: frappe.db.get_single_value("Omni Settings", f) for f in SETTING_FIELDS}
 		self.addCleanup(self._clean_d302)
 
 	def _clean_d302(self):
@@ -48,14 +57,7 @@ class HandoffTestCase(DraftTestCase):
 			},
 		)
 		frappe.db.set_value("Omni Identity", self.ident1, "bot_paused_until", None)
-		set_settings(
-			handoff_notify_channels="system",
-			handoff_pause_hours=24,
-			handoff_message_in_hours=None,
-			handoff_message_after_hours=None,
-			bot_active_hours=None,
-			callback_fallback_user=self._orig_fallback,
-		)
+		set_settings(**self._orig)
 		frappe.db.commit()
 
 	def handoff_draft(self, text=None, reason=REASON):
@@ -403,3 +405,45 @@ class TestManualControls(HandoffTestCase):
 		frappe.set_user(SALE1)
 		self.assertIsNone(inbox.get_thread(self.lead1)["bot"]["paused_until"])
 		frappe.set_user("Administrator")
+
+
+class TestNoRecipientAndZeroPause(HandoffTestCase):
+	def no_owner(self):
+		frappe.db.set_value("CRM Lead", self.lead1, {"lead_owner": None, "_assign": None})
+		set_settings(callback_fallback_user=None, assignment_fallback_users=None)
+
+	def test_no_recipient_logged_noted_and_retried_when_owner_appears(self):
+		self.no_owner()
+		name = self.handoff_draft()
+		d = self.d(name)
+		self.assertIsNone(d.handoff_notified_at)
+		self.assertEqual(d.handoff_logs, handoff.NO_RECIPIENT)
+		self.assertTrue(self.paused())
+		self.assertEqual(self.logs(), [])
+		note = frappe.get_all(
+			"Comment",
+			filters={"reference_name": self.lead1, "content": ["like", "%không có người nhận%"]},
+			pluck="content",
+		)
+		self.assertEqual(len(note), 1)
+		self.assertNotIn(SECRET, note[0])
+		err = frappe.get_all(
+			"Error Log", filters={"method": "Omni: chuyển người nhưng không có người nhận"}, pluck="error"
+		)
+		self.assertTrue(err)
+		self.assertNotIn(SECRET, err[0])
+		self.assertEqual(handoff.email_unread_handoffs()["retried"], 0)  # vẫn chưa có người
+		frappe.db.set_value("CRM Lead", self.lead1, "lead_owner", SALE1)
+		self.assertEqual(handoff.email_unread_handoffs()["retried"], 1)
+		self.assertEqual([x.for_user for x in self.logs()], [SALE1])
+		self.assertTrue(self.d(name).handoff_notified_at)
+		handoff.email_unread_handoffs()
+		self.assertEqual(len(self.logs()), 1)
+
+	def test_manual_pause_with_zero_hours_uses_default(self):
+		set_settings(handoff_pause_hours=0)
+		before = now_datetime()
+		res = self.call(bot_control.pause_bot, self.lead1)
+		delta = frappe.utils.get_datetime(res["paused_until"]) - before
+		self.assertAlmostEqual(delta.total_seconds(), 24 * 3600, delta=120)
+		self.assertTrue(handoff.is_bot_paused(self.ident1))
