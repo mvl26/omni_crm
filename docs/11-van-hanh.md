@@ -30,6 +30,7 @@ Nút thao tác: "Xử lý lại" tin Manual (đưa về New), "Quét ngay", "Là
 | Zalo không gửi được | Hạn token, lỗi làm mới, quyền OA | "Làm mới token"; không được → cấp quyền lại qua luồng OAuth |
 | Không nhận được tin Zalo | Cấu hình webhook phía Zalo, xác thực tên miền, chứng chỉ HTTPS, log 401 | Sửa cấu hình; nếu lỗi chữ ký hàng loạt → kiểm tra secret |
 | Bot trả lời sai với khách | Tìm Bot Draft, Bot Run, nhóm câu hỏi | **Tắt `auto_send_enabled` của nhóm** ngay; sale gửi đính chính; sửa kho tri thức; chạy lại bộ đề |
+| Sale báo nháp bot sai/bất thường (chế độ Draft) | Báo cáo "Bot nháp" (tỉ lệ bỏ, chấm Sai, nghiêm trọng theo nhóm/tuần); Bot Draft có `rating`/`critical` | Đặt `bot_reply_mode = Shadow` hoặc Off (sale không còn nhận nháp mới); sửa kho tri thức; chạy lại bộ đề. Nháp đã gửi là tin của sale (`source=Sale`, `bot_draft` truy ngược được) |
 | Chi phí AI tăng vọt | Bot Run theo giờ, kind | Giảm hạn mức; kiểm tra vòng lặp gọi lại |
 | Lộ `webhook_token` tổng đài | — | Đổi token trên Omni Channel và phía nhà cung cấp (Stringee: `docs/huong-dan/cau-hinh-stringee.md` mục 6) |
 

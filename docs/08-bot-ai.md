@@ -128,8 +128,19 @@ Mọi bộ lọc có test riêng, gồm cả ca phải chặn và ca không đư
 | Chế độ | Hành vi |
 | --- | --- |
 | Shadow | Tạo `Omni Bot Draft(mode=Shadow, decision=Pending)`; không hiện cho sale. Khi sale trả lời khách trong 24 giờ sau (Outbound Sale, `oa_echo`, email đi), ghi `sale_reply_text`, `decision = Shadow Compared` |
-| Draft | Tạo nháp, hiện trong hộp thư/Lead cho sale: Gửi, Sửa rồi gửi, Bỏ. Nháp quá 24 giờ hoặc khi có tin khách mới → `Expired` |
+| Draft | Tạo nháp, hiện trong hộp thư/Lead cho sale: Gửi, Sửa rồi gửi, Bỏ. Nháp quá 24 giờ hoặc khi có tin khách mới → `Expired` (chi tiết triển khai ở 5.5.1) |
 | Auto (theo nhóm) | Chỉ khi `action = reply`, qua mọi chốt chặn, nhóm có `auto_send_enabled`, trong khung gửi miễn phí → tạo `Omni Outbound Message(source=Bot)`; ngược lại rơi về Draft |
+
+#### 5.5.1 Chế độ Draft đã triển khai (D3-01)
+
+- `reply_batch` đọc `bot_reply_mode` và ghi `Omni Bot Draft.mode` = Shadow hoặc Draft. Replay và bộ đề luôn là Shadow. Ở Draft, ghi chú khung gửi (`info:khung_gui`) kiểm theo nguồn **Sale** (sale được gửi cả khung có phí, có xác nhận).
+- **Bot vẫn không tự gửi.** Không có đường mã nào trong `bot/` tạo `Omni Outbound Message`; sale bấm gửi qua `api/drafts.py::send_draft`, đi qua `queue_zalo_reply` -> `queue_outbound` với `source=Sale`, `sent_by` = sale, `bot_draft` = nháp. `queue_outbound` từ chối mọi yêu cầu có `bot_draft` mà nguồn khác Sale, nháp không phải Draft hoặc `action` khác Reply (nên nháp Handoff không gửi được kể cả gọi API trực tiếp).
+- Gửi: `decision = Sent As Is` nếu văn bản (đã cắt khoảng trắng đầu cuối) giống nguyên văn nháp, `edit_distance_ratio = 0`; khác thì `Sent Edited`, `edit_distance_ratio` theo `reply.edit_distance_ratio` (tối thiểu 0.001 để văn bản chỉ đổi hoa thường/khoảng trắng vẫn khác 0). Ghi `final_text`, `decided_by`, `decided_at` cùng giao dịch với việc xếp hàng tin. Khung có phí chưa xác nhận (`confirm_required`) hoặc `Blocked` thì nháp **vẫn Pending**. Bỏ: `Discarded`. Hai lần bấm không gửi hai tin (khóa dòng nháp, kiểm `Pending`).
+- Hết hạn: khi có tin khách mới (job `reply_batch` của lượt mới, kể cả khi lượt đó không soạn nháp vì tạm dừng bot/sale đã trả lời/giới hạn tần suất) nháp Draft Pending có mốc tin khách cũ hơn tin mới nhất của Lead -> `Expired`; sau mỗi lần ghi nháp Draft mới cũng quét lại (nháp đến muộn do AI chậm). Tác vụ 5 phút/lần `reply.expire_pending_drafts`: quá 24 giờ -> `Expired`. Khi `bot_reply_mode = Off`, `reply_batch` không chạy nên chỉ có hết hạn 24 giờ.
+- Chấm: `api/drafts.py::rate_draft` (Đúng/Sai/Thiếu, ghi chú tối đa 300 ký tự, cờ nghiêm trọng) chỉ với nháp đã Sent/Discarded; không bắt buộc.
+- Báo người phụ trách: mỗi nháp Draft mới còn Pending tạo `Notification Log` cho chủ Lead và người được giao (cơ chế như báo Lead nóng, ADR 0004), nội dung chỉ có tên Lead và liên kết `/app/omni-inbox?lead=...`, không có tin khách hay nháp; có sự kiện realtime `omni_inbox_update` không kèm nội dung. Nháp Handoff cũng báo ("Bot chuyển người, mời xem"); việc tạm dừng bot, thông báo theo Q8 và câu giữ chân thuộc D3-02, có thể gộp với thông báo này.
+- Quyền: `thread_drafts` chỉ chạy trong `get_thread` sau khi kiểm quyền đọc Lead; gửi/bỏ/chấm cần quyền GHI Lead (cùng mức với trả lời tay). `Omni Bot Draft` có `permission_query_conditions` và `has_permission` theo Lead (như tin nhắn), nên Omni Knowledge Editor (quyền DocType Đọc) chỉ thấy nháp của Lead họ xem được CRM cho phép; báo cáo "Bot nháp" chỉ có số đếm, không có văn bản.
+- Hạn chế đã biết: nháp của kênh Email hiện trong Hộp thư để đọc/bỏ nhưng không gửi từ đó (Email trả lời bằng trình soạn thư CRM, như `send_reply`). Sale trả lời tay khi nháp còn Pending không làm nháp hết hạn ngay (hết hạn khi khách nhắn tiếp hoặc sau 24 giờ).
 
 ### 5.6 Chạy lại dữ liệu cũ (replay)
 
@@ -208,5 +219,7 @@ Xem `eval/README.md`. Tóm tắt các ngưỡng cổng:
 | Hành động đúng (trả lời/chuyển người) | — | ≥ 90% |
 | Câu trả lời đạt | — | ≥ 85% |
 | Lỗi nghiêm trọng (ca `critical`) | — | 0 |
+
+**Trạng thái cổng `nhap` (D3-01): CHƯA ĐO.** Môi trường phát triển không có khóa AI và bộ đề (220 ca) đều `Synthetic`, chưa duyệt, 0 ca Real; lần chạy `gate='nhap'` không client ghi 220/220 ca "chưa đo" (`EVR-2026-00415`, `eval/reports/2026-10-30-analyze-v1_reply-v1_judge-v1-EVR-2026-00415.md`). Con số 100% của client Fake không phải điểm của bot. **Bật Draft ở môi trường thật chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt và đạt.** `bot_reply_mode` mặc định Off.
 
 Ngưỡng mở tự động cho một nhóm câu hỏi, tính trên 14 ngày gần nhất: mẫu số = **mọi** nháp Draft của nhóm đã có quyết định (Sent As Is + Sent Edited + Discarded), tối thiểu 30; tử số = nháp Sent As Is hoặc Sent Edited có `edit_distance_ratio` ≤ 0.1; tỉ lệ ≥ 95%; không có nháp nào `critical = 1` hoặc chấm "Sai" kèm ghi chú nghiêm trọng.

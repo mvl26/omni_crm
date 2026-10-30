@@ -271,6 +271,8 @@ Bật `track_changes`. Mỗi lần lưu, tăng `Omni Settings.kb_version` (Int, 
 | `rating_note` | Small Text | Ghi chú khi chấm; đánh dấu "nghiêm trọng" nếu sai về giá, cam kết, y khoa |
 | `critical` | Check | Sale hoặc người duyệt đánh dấu lỗi nghiêm trọng |
 
+D3-01: ở `mode = Draft`, `decision` đi `Pending -> Sent As Is | Sent Edited | Discarded | Expired`; `final_text`, `edit_distance_ratio`, `decided_by`, `decided_at` ghi khi sale quyết định (`Expired`: chỉ `decided_at`); `rating`, `rating_note`, `critical` do sale chấm sau khi gửi/bỏ. Tin ra từ nháp có `Omni Outbound Message.bot_draft`, `source = Sale`. Không thêm trường nào so với bảng trên. Quyền theo Lead: xem `permissions.py::bot_draft_conditions` và mục 16.
+
 ## 14. Omni Eval Case và Omni Eval Run (Đợt 2)
 
 **Omni Eval Case**: `case_id` (duy nhất), `source` (Real / Synthetic), `conversation` (JSON: danh sách lượt `{role: customer|sale, text}`), `expected_fields` (JSON), `expected_action` (Reply/Handoff), `expected_group` (Link), `reference_answer` (Long Text), `critical` (Check — ca bắt lỗi nghiêm trọng), `active` (Check).
@@ -329,5 +331,7 @@ Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không tr�
 | Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
 
 "Theo Lead xem được": kiểm tra quyền bằng `frappe.has_permission("CRM Lead", doc=lead)` trong API, không chỉ dựa vào quyền DocType.
+
+D3-01: `Omni Bot Draft` cũng có `permission_query_conditions` và `has_permission` theo Lead (cùng hàm với tin nhắn); Sales User không có quyền DocType nên chỉ thấy nháp qua `api/drafts.py` / `get_thread` (kiểm quyền Lead). Omni Knowledge Editor đọc được nháp chỉ khi CRM cho phép xem Lead đó; báo cáo "Bot nháp" cho Omni Admin và Omni Knowledge Editor (chỉ số đếm).
 
 D1-06 thi hành: hook `permission_query_conditions` và `has_permission` (`omni_crm/permissions.py`) cho Omni Inbound Message, Omni Outbound Message và Omni Identity, gọi lại điều kiện của chính CRM Lead nên Sales User chỉ thấy bản ghi có `lead` mà CRM cho phép xem; Omni Admin, System Manager, Administrator không bị giới hạn. Bản ghi chưa có `lead` chỉ Omni Admin/System Manager thấy.
