@@ -40,6 +40,8 @@ GROUP = "Omni Question Group"
 QUEUE = "omni"
 JOB = "omni_crm.bot.reply.reply_batch"
 JOB_TIMEOUT = 600
+LOCK_WAIT_SECONDS = 100  # chờ khóa lượt tối đa (E12); nhỏ hơn timeout job RQ để job còn kịp trả "locked"
+LOCK_TTL_SECONDS = 150  # khóa tự hết nếu tiến trình chết; nhỏ hơn timeout job RQ
 UNMASK_CONF = "omni_ai_unmask_pii"  # như analyze: chỉ bật sau khi chủ dự án chốt Q11
 MAX_TURNS = 20
 MAX_DRAFTS_PER_HOUR = 6  # giới hạn tần suất nháp cho một khách (chống bão tin, chống đốt hạn mức)
@@ -606,8 +608,8 @@ def _batch_lock(batch_id: str) -> Iterator[bool]:
 	try:
 		lock = frappe.cache().lock(
 			frappe.cache().make_key(f"omni:lock:reply:{batch_id}"),
-			timeout=JOB_TIMEOUT,
-			blocking_timeout=JOB_TIMEOUT,
+			timeout=LOCK_TTL_SECONDS,
+			blocking_timeout=LOCK_WAIT_SECONDS,
 		)
 		held = bool(lock.acquire())
 	except Exception:
@@ -627,7 +629,13 @@ def _batch_lock(batch_id: str) -> Iterator[bool]:
 def reply_batch(batch_id: str) -> str:
 	"""Job nền: như `_reply_batch` nhưng tuần tự hóa các job cùng lượt (khóa Redis); trả "locked" nếu không lấy được khóa."""
 	with _batch_lock(batch_id) as held:
-		return _reply_batch(batch_id) if held else "locked"
+		if not held:
+			frappe.log_error(
+				title="Omni: bot trả lời bỏ qua vì khóa lượt",
+				message=f"batch_id={batch_id}\nloai=khong_lay_duoc_khoa_sau_{LOCK_WAIT_SECONDS}s",
+			)
+			return "locked"
+		return _reply_batch(batch_id)
 
 
 def _reply_batch(batch_id: str) -> str:

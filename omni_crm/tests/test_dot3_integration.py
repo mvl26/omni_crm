@@ -12,6 +12,7 @@ D-03: client giả LÀM THEO lệnh chèn (trả giá/khuyến mãi); thứ ch�
 """
 
 import threading
+from contextlib import contextmanager
 from unittest import mock
 
 import frappe
@@ -760,6 +761,36 @@ class TestConcurrentConnections(D3E2E):
 	def test_double_run_of_same_batch_makes_one_draft(self):
 		b = self._double_run("TD108U2")
 		self.assertEqual(frappe.db.count(DRAFT, {"batch_id": b}), 1, "một lượt chỉ một nháp")
+
+	def test_auto_group_sends_at_most_one_bot_message_even_when_redis_lock_is_down(self):
+		"""Chốt thứ hai ở `try_auto_send`: khóa Redis theo lượt hỏng/xóa thì hai nháp cùng lượt vẫn chỉ gửi 1 tin Bot."""
+		self.enable_raw()
+
+		@contextmanager
+		def no_lock(_batch):
+			yield True
+
+		with mock.patch.object(reply, "_batch_lock", no_lock):
+			b = self._double_run("TD108U2")
+		lead = frappe.db.get_value(INBOUND, {"batch_id": b}, "lead")
+		self.assertEqual(frappe.db.count(OUTBOUND, {"lead": lead, "source": "Bot"}), 1, "tin Bot gửi lặp")
+
+	def test_reply_batch_returns_locked_logs_and_makes_no_draft_when_lock_not_acquired(self):
+		b, _lead, _s = self.customer("Cho hỏi giờ làm việc", result=ok(), until="analyze")
+		fake_lock = mock.Mock()
+		fake_lock.acquire.return_value = False
+		with (
+			mock.patch.object(frappe.cache(), "lock", return_value=fake_lock),
+			mock.patch("frappe.log_error") as log,
+			mock.patch.object(reply, "make_draft") as make,
+		):
+			self.assertEqual(reply.reply_batch(b), "locked")
+		make.assert_not_called()
+		self.assertEqual(log.call_count, 1)
+		self.assertIn(b, log.call_args.kwargs["message"])
+		self.assertEqual(frappe.db.count(DRAFT, {"batch_id": b}), 0)
+		self.assertLessEqual(reply.LOCK_WAIT_SECONDS, 120)
+		self.assertLess(reply.LOCK_TTL_SECONDS, reply.JOB_TIMEOUT)
 
 	def test_double_run_of_same_batch_in_auto_group_sends_at_most_one_bot_message(self):
 		self.enable_raw()
