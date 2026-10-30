@@ -17,6 +17,7 @@ Tệp sống: agent cập nhật mỗi khi xác nhận một giả định hoặ
 | Q9 | Có tạo Lead khi khách chỉ bấm quan tâm OA? | D1-08 | Mặc định: không |
 | Q10 | Lead đã chuyển thành Deal: ghi tin mới vào Deal | D1-05, D1-06 | Mặc định: có |
 | Q11 | Chính sách gửi dữ liệu hội thoại khách sang dịch vụ AI (Claude API) và dịch vụ chuyển giọng nói: được phép không, phạm vi, thông báo cho khách | D2-04, D2-05, D2-07, D2-08, D3-03 | **Chưa chốt — chặn mọi lần chạy AI trên dữ liệu khách thật** |
+| Q12 | Khi nào bật `bot_reply_mode = Draft` ở môi trường thật | D3-01 | Đã chốt: chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt và đạt. Hiện **chưa đo** (EVR-2026-00415: 220/220 ca chưa đo); mặc định Off |
 
 ## B. Giả định cần xác nhận với hệ thống thật
 
@@ -283,3 +284,4 @@ Bước 0 của D1-08 không làm được: developers.zalo.me là trang SPA, We
 | 2026-10-30 | **D3-01:** giao diện Hộp thư (thẻ nháp, Gửi/Sửa rồi gửi/Bỏ, hỏi nhanh Đúng/Sai/Thiếu, xem mục kho tri thức) chỉ được kiểm cú pháp JS (`node --check`) và qua test API; **chưa mở trên trình duyệt**. | Trung bình | Kiểm tay trên staging ở UAT | D3-01 |
 | 2026-10-30 | **D3-01:** nháp kênh Email hiện trong Hộp thư nhưng không gửi từ đó (cùng giới hạn của `send_reply`). Sale trả lời tay khi nháp còn Pending không làm nháp hết hạn ngay. Nháp Handoff đã báo người phụ trách nhưng đặt `bot_paused_until`, câu giữ chân, kênh báo theo Q8 vẫn là D3-02. | Thấp | D3-02 gộp thông báo; cân nhắc hết hạn nháp khi sale trả lời tay | D3-01 |
 | 2026-10-30 | **D3-01:** `Omni Bot Draft` trước đây chỉ có quyền DocType (Omni Knowledge Editor đọc được mọi nháp, gồm văn bản trả lời). Đã thêm `permission_query_conditions`/`has_permission` theo Lead; nháp Shadow của Lead mà Editor không xem được nay cũng ẩn với Editor ở Desk (báo cáo "Bot ngầm" dùng `get_all` nên không đổi). | Thấp | Nếu Editor cần xem nháp: dùng báo cáo hoặc cấp quyền Lead | D3-01 |
+| 2026-10-30 | **D3-01 (chỉ ghi, ngoài phạm vi):** góc nhìn "Nháp khác câu sale nhất" của báo cáo "Bot ngầm" (D2-07) trả `draft_text` và `sale_reply_text` cho Omni Knowledge Editor bằng `get_all`, không kiểm quyền Lead; ngược tinh thần mục 6 của prompt D3-01 ("Editor không xem hội thoại nếu không có quyền Lead"). Báo cáo "Bot nháp" mới không có văn bản. | Trung bình | Quyết định có giữ góc nhìn đó cho Editor không (cần để sửa kho tri thức) hay che/giới hạn | D3-01 |
