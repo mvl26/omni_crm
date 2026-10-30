@@ -29,11 +29,11 @@ Mở **Desk > `/app/omni-channel` > Thêm mới** (hoặc nút New).
 
 | Trường | Điền |
 | --- | --- |
-| Tên kênh (`channel_name`) | Tên ngắn, không dấu cách, ví dụ `email-ban-hang`. Đây cũng là mã của kênh (không đổi được về sau). |
+| Tên kênh (`channel_name`) | Tên ngắn, không dấu cách, ví dụ `email-ban-hang`. Đây cũng là mã của kênh: đặt một lần, tránh đổi về sau. |
 | Loại kênh (`channel_type`) | `Email` |
 | Tài khoản email (`email_account`) | Email Account vừa cấu hình |
 | Bật kênh (`enabled`) | Tích **sau cùng**, khi mọi thứ đã sẵn sàng. Kênh email đang bật mà thiếu tài khoản email thì không lưu được. |
-| Bật chiều ra (`outbound_enabled`) | Với email không cần: sale trả lời bằng trình soạn thư của CRM, không qua chiều ra của Omni. Chỉ ảnh hưởng chế độ Auto của bot nếu sau này bạn mở (hiện không áp dụng cho email). |
+| Bật chiều ra (`outbound_enabled`) | Với email không cần: sale trả lời bằng trình soạn thư của CRM, không qua chiều ra của Omni. Bot tự gửi chỉ áp dụng cho Zalo OA (`bot/auto_send.py` kiểm kênh là Zalo OA), nên ô này không có tác dụng thực tế với email. |
 | Token webhook (`webhook_token`) | Không dùng cho email. Để trống. |
 
 Lưu lại.
