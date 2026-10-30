@@ -275,8 +275,8 @@ class BotE2E(SignedZaloCase):
 
 	def _restore(self):
 		frappe.db.rollback()
-		values = {k: v for k, v in self._orig.items() if v is not None}
-		set_settings(**{**values, "score_rules": [], "lead_scoring_enabled": 0})
+		# khôi phục CẢ giá trị rỗng (None) để test sau không thừa hưởng cài đặt của test này
+		set_settings(**{**self._orig, "score_rules": []})
 		frappe.cache().delete_keys("omni:ai:")
 
 	def _clean_bot_data(self):
@@ -292,6 +292,23 @@ class BotE2E(SignedZaloCase):
 		frappe.db.delete("Notification Log", {"document_name": ["in", leads or [""]]})
 		frappe.db.delete(ITEM, {"name": ["like", "KB-92%"]})
 		frappe.db.delete(GROUP, {"name": ["like", "D209 %"]})
+		frappe.db.commit()
+
+	def seed_kb(self) -> None:
+		"""Một nhóm câu hỏi và một mục kho tri thức (xóa ở `_clean_bot_data`)."""
+		frappe.get_doc(
+			{"doctype": GROUP, "group_name": G_HOURS, "always_handoff": 0, "description": "Giờ làm việc"}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": ITEM,
+				"item_id": KB1,
+				"question_group": G_HOURS,
+				"question": "Mấy giờ làm việc?",
+				"answer": KB1_ANSWER,
+				"active": 1,
+			}
+		).insert(ignore_permissions=True)
 		frappe.db.commit()
 
 	def turn(self, text: str) -> tuple[str, str, list]:
@@ -429,20 +446,7 @@ class TestB01B02AnalyzeAndScore(BotE2E):
 class TestB03Shadow(BotE2E):
 	def setUp(self):
 		super().setUp()
-		frappe.get_doc(
-			{"doctype": GROUP, "group_name": G_HOURS, "always_handoff": 0, "description": "Giờ làm việc"}
-		).insert(ignore_permissions=True)
-		frappe.get_doc(
-			{
-				"doctype": ITEM,
-				"item_id": KB1,
-				"question_group": G_HOURS,
-				"question": "Mấy giờ làm việc?",
-				"answer": KB1_ANSWER,
-				"active": 1,
-			}
-		).insert(ignore_permissions=True)
-		frappe.db.commit()
+		self.seed_kb()
 		set_settings(bot_reply_mode="Shadow")
 
 	def test_b03_shadow_draft_pending_and_nothing_sent_to_customer(self):
@@ -510,18 +514,20 @@ class TestB04BudgetExhausted(BotE2E):
 
 class TestB05AIFailsEverywhere(BotE2E):
 	def test_b05_ai_fails_100_percent_pipeline_done_breaker_opens_alert_raised(self):
+		self.seed_kb()  # kho KHÔNG rỗng: bot trả lời phải thật sự gọi AI (kho rỗng thì chuyển người mà không gọi AI)
 		set_settings(bot_reply_mode="Shadow")
 		self.fake.faults = ["fatal"] * 1000  # mọi lần gọi đều lỗi
 		batches = []
 		for i in range(8):
 			batch, lead, _j = self.turn(f"Cho mình hỏi giá găng tay lần {i}")
 			analyze.analyze_batch(batch)
+			reply.reply_batch(batch)  # job nền kế tiếp: AI lỗi nên không có nháp, không ném lỗi
 			batches.append(batch)
 		rows = frappe.get_all(INBOUND, filters={"channel": self.channel.name}, fields=["status", "lead"])
 		self.assertEqual(len(rows), 8)
 		self.assertEqual({r.status for r in rows}, {"Done"}, "AI lỗi không được làm hỏng lượt xử lý tin")
 		self.assertEqual(len({r.lead for r in rows}), 1)
-		statuses = [s for s in frappe.get_all(BOT_RUN, filters={"batch_id": ["in", batches]}, pluck="status")]
+		statuses = frappe.get_all(BOT_RUN, filters={"batch_id": ["in", batches]}, pluck="status")
 		self.assertEqual(statuses.count("Error"), ai_client.BREAKER_FAILURES)
 		self.assertEqual(set(statuses) - {"Error", "Skipped Switch"}, set())
 		self.assertTrue(ai_client.breaker_open(), "ngắt mạch phải mở")

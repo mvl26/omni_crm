@@ -376,7 +376,14 @@ def bot_off() -> None:
 	"""Tắt bot và chấm điểm, xóa bảng điểm tải."""
 	doc = frappe.get_doc("Omni Settings")
 	doc.update(
-		{"bot_analyze_enabled": 0, "bot_reply_mode": "Off", "lead_scoring_enabled": 0, "score_rules": []}
+		{
+			"bot_analyze_enabled": 0,
+			"bot_reply_mode": "Off",
+			"lead_scoring_enabled": 0,
+			"score_rules": [],
+			"assignment_fallback_users": "",
+			"hot_lead_threshold": 60,
+		}
 	)
 	doc.flags.ignore_permissions = True
 	doc.save()
