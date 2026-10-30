@@ -26,6 +26,8 @@ class OmniInbox {
 		this.current = null;
 		this.subscribed = null;
 		this.refresh_timer = null;
+		this.draft_edit = null; // {name, text}: nháp đang được sửa (giữ khi làm mới)
+		this.rate_pending = null; // {lead, draft}: nháp vừa gửi/bỏ, hỏi nhanh Đúng/Sai/Thiếu
 		const e = frappe.utils.escape_html;
 		$(page.body).html(`
 			<div class="oi-system-status" style="display:none"></div>
@@ -138,7 +140,7 @@ class OmniInbox {
 					(r) => `
 			<div class="oi-item ${r.lead === this.current ? "active" : ""}" data-lead="${e(r.lead)}">
 				<div class="oi-top">
-					<span>${r.unanswered ? '<span class="oi-dot" title="' + e(__("Chưa trả lời")) + '"></span>' : ""}${e(r.lead_name)}</span>
+					<span>${r.draft_pending ? '<span class="oi-chan oi-draftchip" title="' + e(__("Có nháp bot chờ duyệt")) + '">' + e(__("Nháp")) + "</span> " : ""}${r.unanswered ? '<span class="oi-dot" title="' + e(__("Chưa trả lời")) + '"></span>' : ""}${e(r.lead_name)}</span>
 					<span class="oi-time">${e(frappe.datetime.prettyDate(r.last_at))}</span>
 				</div>
 				<div class="oi-snippet">${r.last_direction === "out" ? e(__("Bạn")) + ": " : ""}${e(r.last_text || "")}</div>
@@ -153,6 +155,10 @@ class OmniInbox {
 
 	show(lead) {
 		if (!lead) return;
+		if (lead !== this.current) {
+			this.draft_edit = null;
+			this.rate_pending = null;
+		}
 		this.current = lead;
 		this.$list.find(".oi-item").removeClass("active").filter(`[data-lead="${CSS.escape(lead)}"]`).addClass("active");
 		// Phòng của Lead: Frappe chỉ nhận đăng ký khi người dùng có quyền đọc Lead.
@@ -207,9 +213,10 @@ class OmniInbox {
 				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a>
 			</div>
 			${this.bot_html(lead)}
-			<div class="oi-thread">${msgs || `<div class="oi-empty">${e(__("Chưa có tin nhắn."))}</div>`}</div>
+			<div class="oi-thread">${msgs || `<div class="oi-empty">${e(__("Chưa có tin nhắn."))}</div>`}${this.drafts_html(data)}</div>
 			${this.compose_html(data)}`);
 		this.bind_compose(data);
+		this.bind_drafts(data);
 		if (draft) this.$right.find(".oi-text").val(draft);
 		if (data.truncated) {
 			this.$right.find(".oi-thread").prepend(`<div class="oi-empty">${e(__("Chỉ hiện các tin gần nhất."))}</div>`);
@@ -235,6 +242,155 @@ class OmniInbox {
 		const intent = lead.omni_intent ? `<span class="oi-chan oi-intent">${e(lead.omni_intent)}</span> ` : "";
 		return `<div class="oi-bot">${intent}${e(lead.omni_bot_summary || "")}
 			<span class="oi-meta">${e(__("Tóm tắt do bot, có thể chưa chính xác"))}</span></div>`;
+	}
+
+	// Nháp của bot (D3-01): nằm ngay dưới tin khách cuối, luôn ghi rõ "chưa gửi"; mọi chuỗi từ máy chủ đều thoát HTML.
+	drafts_html(data) {
+		const e = frappe.utils.escape_html;
+		const cards = (data.drafts || []).map((d) => {
+			const kb = (d.kb || [])
+				.map((k) => `<a class="oi-kb" href="#" data-draft="${e(d.name)}" data-item="${e(k.id)}" title="${e(k.question)}">${e(k.id)}</a>`)
+				.join(" ");
+			const head = `<div class="oi-meta"><b>${e(__("Nháp của bot — chưa gửi"))}</b>${d.question_group ? " · " + e(__("Nhóm") + ": " + d.question_group) : ""}</div>`;
+			const src = kb ? `<div class="oi-meta">${e(__("Nguồn kho tri thức"))}: ${kb}</div>` : "";
+			if (d.action === "Handoff") {
+				return `<div class="oi-draft oi-draft-handoff" data-draft="${e(d.name)}">${head}
+					<div><b>${e(__("Bot đề nghị chuyển người"))}</b>: ${e(d.handoff_reason || "")}</div>${src}
+					<div class="oi-actions">${d.can_decide ? `<button class="btn btn-default btn-sm oi-draft-discard">${e(__("Bỏ"))}</button>` : ""}
+					<span class="oi-meta">${e(__("Không có nội dung để gửi"))}</span></div></div>`;
+			}
+			const editing = this.draft_edit && this.draft_edit.name === d.name;
+			const body = editing
+				? `<textarea class="form-control oi-draft-text" rows="4" maxlength="6000">${e(this.draft_edit.text)}</textarea>`
+				: `<div class="oi-draft-body">${e(d.text || "").replace(/\n/g, "<br>")}</div>`;
+			let actions = "";
+			if (d.can_send && editing) {
+				actions = `<button class="btn btn-primary btn-sm oi-draft-send-edited">${e(__("Gửi bản đã sửa"))}</button>
+					<button class="btn btn-default btn-sm oi-draft-cancel-edit">${e(__("Hủy sửa"))}</button>`;
+			} else if (d.can_send) {
+				actions = `<button class="btn btn-primary btn-sm oi-draft-send">${e(__("Gửi"))}</button>
+					<button class="btn btn-default btn-sm oi-draft-edit">${e(__("Sửa rồi gửi"))}</button>
+					<button class="btn btn-default btn-sm oi-draft-discard">${e(__("Bỏ"))}</button>`;
+			} else if (d.can_decide) {
+				actions = `<button class="btn btn-default btn-sm oi-draft-discard">${e(__("Bỏ"))}</button>
+					<span class="oi-meta">${e(__("Kênh này trả lời trong CRM, không gửi từ Hộp thư"))}</span>`;
+			}
+			return `<div class="oi-draft" data-draft="${e(d.name)}">${head}${body}${src}<div class="oi-actions">${actions}</div></div>`;
+		});
+		let rate = "";
+		const rp = this.rate_pending;
+		if (rp && rp.lead === this.current) {
+			rate = `<div class="oi-draft oi-rate" data-draft="${e(rp.draft)}"><span>${e(__("Nháp này"))}:</span>
+				<button class="btn btn-default btn-xs oi-rate-btn" data-rating="Đúng">${e(__("Đúng"))}</button>
+				<button class="btn btn-default btn-xs oi-rate-btn" data-rating="Sai">${e(__("Sai"))}</button>
+				<button class="btn btn-default btn-xs oi-rate-btn" data-rating="Thiếu">${e(__("Thiếu"))}</button>
+				<a href="#" class="oi-rate-skip oi-meta">${e(__("Bỏ qua"))}</a></div>`;
+		}
+		return cards.join("") + rate;
+	}
+
+	bind_drafts(data) {
+		const $r = this.$right;
+		const name = (el) => $(el).closest(".oi-draft").data("draft");
+		const draft_of = (n) => (data.drafts || []).find((d) => d.name === n) || {};
+		$r.find(".oi-kb").on("click", (ev) => {
+			ev.preventDefault();
+			const $a = $(ev.currentTarget);
+			frappe
+				.call({
+					method: "omni_crm.api.drafts.get_draft_kb_item",
+					args: { draft: $a.data("draft"), item: $a.data("item") },
+					freeze: false,
+				})
+				.then((r) => {
+					const k = r.message || {};
+					const e = frappe.utils.escape_html;
+					frappe.msgprint({
+						title: e(k.question || k.id || ""),
+						message: e(k.answer || "").replace(/\n/g, "<br>"),
+					});
+				});
+		});
+		$r.find(".oi-draft-send").on("click", (ev) => this.send_draft(name(ev.currentTarget), null, 0));
+		$r.find(".oi-draft-edit").on("click", (ev) => {
+			const n = name(ev.currentTarget);
+			this.draft_edit = { name: n, text: draft_of(n).text || "" };
+			this.render_thread(data, true);
+		});
+		$r.find(".oi-draft-text").on("input", (ev) => {
+			if (this.draft_edit) this.draft_edit.text = $(ev.currentTarget).val();
+		});
+		$r.find(".oi-draft-cancel-edit").on("click", () => {
+			this.draft_edit = null;
+			this.render_thread(data, true);
+		});
+		$r.find(".oi-draft-send-edited").on("click", (ev) => {
+			const n = name(ev.currentTarget);
+			const text = $r.find(".oi-draft-text").val();
+			if (!(text || "").trim()) {
+				frappe.show_alert({ message: __("Nội dung tin nhắn đang trống"), indicator: "orange" });
+				return;
+			}
+			this.send_draft(n, text, 0);
+		});
+		$r.find(".oi-draft-discard").on("click", (ev) => this.discard_draft(name(ev.currentTarget)));
+		$r.find(".oi-rate-btn").on("click", (ev) => {
+			const n = name(ev.currentTarget);
+			const rating = $(ev.currentTarget).data("rating");
+			this.rate_pending = null;
+			frappe
+				.call({ method: "omni_crm.api.drafts.rate_draft", args: { draft: n, rating }, freeze: false })
+				.then(() => frappe.show_alert({ message: __("Đã ghi nhận, cảm ơn"), indicator: "green" }))
+				.finally(() => this.load_thread(this.current, true));
+		});
+		$r.find(".oi-rate-skip").on("click", (ev) => {
+			ev.preventDefault();
+			this.rate_pending = null;
+			this.render_thread(data, true);
+		});
+	}
+
+	send_draft(draft, text, confirm_paid) {
+		const lead = this.current;
+		this.$right.find(".oi-draft button").prop("disabled", true); // chống bấm hai lần
+		frappe
+			.call({
+				method: "omni_crm.api.drafts.send_draft",
+				args: { draft, text, confirm_paid },
+				freeze: false,
+			})
+			.then((r) => {
+				const res = r.message || {};
+				if (res.status === "confirm_required") {
+					frappe.confirm(
+						frappe.utils.escape_html(res.warning) + "<br>" + __("Bạn vẫn muốn gửi?"),
+						() => this.send_draft(draft, text, 1),
+						() => this.load_thread(lead, true)
+					);
+					return;
+				}
+				if (res.status === "Blocked") {
+					frappe.show_alert({ message: frappe.utils.escape_html(res.reason), indicator: "red" }, 8);
+				}
+				if (res.status === "Queued") {
+					this.draft_edit = null;
+					this.rate_pending = { lead, draft };
+				}
+				this.load_thread(lead);
+			})
+			.catch(() => this.load_thread(lead, true));
+	}
+
+	discard_draft(draft) {
+		const lead = this.current;
+		this.$right.find(".oi-draft button").prop("disabled", true);
+		frappe
+			.call({ method: "omni_crm.api.drafts.discard_draft", args: { draft }, freeze: false })
+			.then(() => {
+				this.draft_edit = null;
+				this.rate_pending = { lead, draft };
+			})
+			.finally(() => this.load_thread(lead));
 	}
 
 	compose_html(data) {
