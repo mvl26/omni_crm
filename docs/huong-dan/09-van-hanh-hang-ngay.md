@@ -42,9 +42,9 @@ Cứ mỗi 5 phút hệ thống kiểm các luật và gửi cảnh báo qua **N
 | Token Zalo sắp hết hạn | Token còn < 1 giờ (tác vụ làm mới chạy khi còn < 2 giờ, nên làm mới đã thất bại) | **Làm mới token Zalo**; không được thì "Kết nối Zalo OA" lại. Không áp khi sandbox bật |
 | Làm mới token Zalo lỗi | Lần làm mới gần nhất lỗi | Như trên |
 | Có việc gọi lại quá hạn | Việc gọi lại quá hạn (gửi cả cho người được giao) | Trưởng sale nhắc người phụ trách; kiểm người nhận ([05](05-kenh-tong-dai-stringee.md)) |
-| Đối soát bù nhiều / đối soát lỗi | Đối soát đêm bù > 1% hoặc lỗi | Webhook tổng đài rơi sự kiện / API Stringee lỗi |
+| Đối soát đêm bù nhiều cuộc gọi / Đối soát đêm tổng đài không hoàn thành | Đối soát đêm bù > 1% hoặc lỗi | Webhook tổng đài rơi sự kiện / API Stringee lỗi |
 | Bot AI sắp hết hạn mức token | Dùng > 80% | Xem chi phí; tăng hạn mức nếu hợp lý |
-| Bot AI hết hạn mức | Dùng hết hạn mức (một lần/ngày) | Bot dừng đến hôm sau |
+| Bot AI hết hạn mức token hôm nay | Dùng hết hạn mức (một lần/ngày) | Bot dừng đến hôm sau |
 | Bot AI tạm ngừng vì lỗi liên tiếp | Ngắt mạch mở (5 lần lỗi liên tiếp, 5 phút) | Kiểm khóa/mạng/nhà cung cấp AI |
 | Bot AI lỗi nhiều | > 5% lần gọi lỗi/sai định dạng (từ 20 lần) | Xem `Omni Bot Run` |
 | Bot tự gửi nhóm X đã tự tắt: <lý do> | Ngắt mạch Auto ([07](07-bot-ai.md) mục 9) | Xem nguyên nhân, sửa kho trước khi bật lại |
