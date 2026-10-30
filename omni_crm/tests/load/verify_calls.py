@@ -403,3 +403,146 @@ def alerts_now() -> None:
 			indent=1,
 		)
 	)
+
+
+# --- D3-06: tải Đợt 3 (Draft / Handoff / Auto trên worker RQ thật chạy bằng Guest) -----------------------------------
+
+D3_GROUPS = {"LOAD Gio lam viec": 0, "LOAD Hoi gia": 1}  # tên nhóm -> always_handoff
+D3_ITEMS = (
+	(
+		"KB-LOAD-1",
+		"LOAD Gio lam viec",
+		"Mấy giờ làm việc?",
+		"Miyano làm việc từ 8 giờ đến 17 giờ 30 các ngày trong tuần.",
+	),
+	("KB-LOAD-2", "LOAD Hoi gia", "Giá bao nhiêu?", "Vui lòng liên hệ nhân viên để được báo giá."),
+)
+
+
+def setup_d3() -> None:
+	"""Tạo 2 nhóm câu hỏi và 2 mục kho tri thức tải (tiền tố LOAD / KB-LOAD); nhóm Auto vẫn TẮT. Idempotent."""
+	for name, handoff_flag in D3_GROUPS.items():
+		if not frappe.db.exists("Omni Question Group", name):
+			frappe.get_doc(
+				{
+					"doctype": "Omni Question Group",
+					"group_name": name,
+					"always_handoff": handoff_flag,
+					"description": f"Nhóm tải {name}",
+				}
+			).insert(ignore_permissions=True)
+	for item_id, group, question, answer in D3_ITEMS:
+		if not frappe.db.exists("Omni Knowledge Item", {"item_id": item_id}):
+			frappe.get_doc(
+				{
+					"doctype": "Omni Knowledge Item",
+					"item_id": item_id,
+					"question_group": group,
+					"question": question,
+					"answer": answer,
+					"active": 1,
+				}
+			).insert(ignore_permissions=True)
+	frappe.db.commit()
+	print("đã tạo nhóm và kho tri thức tải (Auto tắt)")
+
+
+def auto_group(on: int | str = 1, group: str = "LOAD Gio lam viec") -> None:
+	"""Bật/tắt cờ `auto_send_enabled` của nhóm tải bằng đường bật nội bộ của test (bỏ qua điều kiện số liệu)."""
+	from frappe.utils import now_datetime
+
+	from omni_crm.omni_crm.doctype.omni_question_group.omni_question_group import enabling
+
+	doc = frappe.get_doc("Omni Question Group", group)
+	with enabling():
+		doc.auto_send_enabled = int(on)
+		doc.auto_send_enabled_at = now_datetime() if int(on) else None
+		doc.auto_send_enabled_by = "Administrator" if int(on) else None
+		doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	print(f"nhóm {group}: auto_send_enabled = {int(on)}")
+
+
+def d3_report(channel: str = "LOAD kenh", since: str | None = None) -> None:
+	"""Báo cáo Đợt 3 sau tải: nháp theo chế độ/hành động/quyết định, tin ra theo nguồn/trạng thái, thông báo, Error Log,
+	và các bất biến (mỗi lượt <= 1 nháp, mỗi khách <= 1 tin Bot, Bot Run Reply theo trạng thái)."""
+	frappe.db.rollback()
+	batches = frappe.db.sql_list(
+		f"select distinct batch_id from `tab{INBOUND}` where channel=%s and batch_id is not null", channel
+	)
+	leads = frappe.db.sql_list(
+		f"select distinct lead from `tab{INBOUND}` where channel=%s and lead is not null", channel
+	)
+	b, ld = tuple(batches) or ("",), tuple(leads) or ("",)
+	by = lambda sql, args: {str(k): v for k, v in frappe.db.sql(sql, args)}  # noqa: E731
+	drafts = by(
+		"select concat(mode,':',action,':',decision), count(*) from `tabOmni Bot Draft` where batch_id in %s group by 1",
+		(b,),
+	)
+	multi = frappe.db.sql(
+		"select count(*) from (select batch_id from `tabOmni Bot Draft` where batch_id in %s group by batch_id having count(*)>1) t",
+		(b,),
+	)[0][0]
+	outs = by(
+		"select concat(source,':',status,':',is_sandbox), count(*) from `tabOmni Outbound Message` where lead in %s group by 1",
+		(ld,),
+	)
+	bot_multi = frappe.db.sql(
+		"select count(*) from (select identity from `tabOmni Outbound Message` where lead in %s and source='Bot' group by identity having count(*)>1) t",
+		(ld,),
+	)[0][0]
+	runs = by(
+		"select concat(kind,':',status), count(*) from `tabOmni Bot Run` where batch_id in %s group by 1",
+		(b,),
+	)
+	notif = frappe.db.sql(
+		"select count(*), count(distinct document_name) from `tabNotification Log` where document_name in %s",
+		(ld,),
+	)[0]
+	notif_multi = frappe.db.sql(
+		"select count(*) from (select document_name, for_user from `tabNotification Log` where document_name in %s and subject like 'Bot chuyển người%%' group by 1,2 having count(*)>1) t",
+		(ld,),
+	)[0][0]
+	paused = frappe.db.count(
+		"Omni Identity", {"identity_key": ["like", "Zalo OA:LOADC%"], "bot_paused_until": ["is", "set"]}
+	)
+	errors = []
+	if since:
+		errors = frappe.db.sql(
+			"select method, count(*) from `tabError Log` where creation >= %s group by 1", (since,)
+		)
+	print(
+		json.dumps(
+			{
+				"inbound": _counts(channel),
+				"bot_runs": runs,
+				"drafts_mode_action_decision": drafts,
+				"batches_with_more_than_one_draft": multi,
+				"outbound_source_status_sandbox": outs,
+				"identities_with_more_than_one_bot_message": bot_multi,
+				"notification_logs": {
+					"total": notif[0],
+					"leads": notif[1],
+					"handoff_dup_per_lead_user": notif_multi,
+				},
+				"identities_bot_paused": paused,
+				"error_logs_since": errors,
+			},
+			ensure_ascii=False,
+			indent=1,
+			default=str,
+		)
+	)
+
+
+def cleanup_d3() -> None:
+	"""Xóa nhóm, kho tri thức tải và mọi Comment/Notification/Version gắn với chúng (gọi SAU cleanup_bot và verify_burst.cleanup)."""
+	frappe.db.rollback()
+	groups = list(D3_GROUPS)
+	for dt, field in (("Comment", "reference_name"), ("Notification Log", "document_name")):
+		frappe.db.delete(dt, {field: ["in", groups]})
+	frappe.db.delete("Version", {"ref_doctype": "Omni Question Group", "docname": ["in", groups]})
+	frappe.db.delete("Omni Knowledge Item", {"item_id": ["in", [i[0] for i in D3_ITEMS]]})
+	frappe.db.delete("Omni Question Group", {"name": ["in", groups]})
+	frappe.db.commit()
+	print("đã xóa nhóm/kho tri thức tải")
