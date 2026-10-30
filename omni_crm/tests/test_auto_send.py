@@ -634,6 +634,28 @@ class TestSendTimeRecheck(AutoTestCase):
 				self.send_blocked(name)
 			frappe.conf[flags.AUTO_SEND_CONF] = 1
 
+	def test_bot_message_blocked_at_send_time_returns_draft_to_sale(self):
+		"""Tin Bot bị chặn lúc gửi không được làm khách bị bỏ rơi trong im lặng: nháp về Draft/Pending và có báo."""
+		name = self.queued()
+		before = frappe.db.count("Notification Log", {"document_name": self.lead1})
+		frappe.db.set_value(GROUP, G_HOURS, "auto_send_enabled", 0)  # nhóm vừa bị tắt (vd ngắt mạch)
+		frappe.db.commit()
+		self.send_blocked(name)
+		(d,) = self.drafts()
+		self.assertEqual((d.mode, d.decision, d.final_text, d.decided_at), ("Draft", "Pending", None, None))
+		self.assertEqual(len(drafts.thread_drafts(self.lead1)), 1)  # sale thấy nháp để tự gửi
+		self.assertGreater(frappe.db.count("Notification Log", {"document_name": self.lead1}), before)
+		# nháp đã về Draft không thể bị tự gửi lại khi nhóm tắt, và Outbound cũ không bị gửi lần nữa
+		self.assertFalse(auto_send.try_auto_send(d.name))
+		self.assertEqual(frappe.db.get_value(OUT, name, "status"), "Blocked")
+
+	def test_bot_message_blocked_by_paid_window_returns_draft(self):
+		name = self.queued()
+		self.set_last_inbound(hours_ago=72)  # trong lúc chờ khung chuyển sang có phí
+		self.send_blocked(name)
+		(d,) = self.drafts()
+		self.assertEqual((d.mode, d.decision), ("Draft", "Pending"))
+
 
 class TestBreakers(AutoTestCase):
 	def auto_sent(self, text="Cho hỏi giờ làm việc"):

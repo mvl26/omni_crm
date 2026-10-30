@@ -68,6 +68,7 @@ DISABLE_MARK = "omni:auto_send:disable"
 HOLDING_MARK = "auto:holding_sent"
 SENDING_FLAG = "omni_auto_sending"
 SAVEPOINT = "omni_auto_send"
+SAVEPOINT_COMPLAINT = "omni_auto_complaint"
 ADMIN_ROLE = "Omni Admin"
 LEAD_MANAGER_ROLE = "Sales Manager"  # CRM: vai trò quản lý sale (đã xác nhận ở apps/crm, docs/12 mục C)
 
@@ -379,6 +380,7 @@ def on_analysis(batch_id: str, lead: str | None) -> list[str]:
 		return []
 	tripped: list[str] = []
 	try:
+		frappe.db.savepoint(SAVEPOINT_COMPLAINT)  # không rollback nhầm việc của người gọi (after_analyze)
 		if reply.analysis_of(batch_id).get("intent") != COMPLAINT_INTENT:
 			return []
 		times = [m.received_at for m in reply._batch_messages(batch_id) if m.received_at]
@@ -390,7 +392,7 @@ def on_analysis(batch_id: str, lead: str | None) -> list[str]:
 		if tripped:
 			frappe.db.commit()
 	except Exception:
-		frappe.db.rollback()
+		frappe.db.rollback(save_point=SAVEPOINT_COMPLAINT)
 		frappe.log_error(title="Omni: lỗi ngắt mạch khiếu nại", message=f"batch_id={batch_id}")
 	return tripped
 
@@ -606,6 +608,48 @@ def send_time_check(row: Any) -> tuple[bool, str]:
 	if not handoff.bot_active_now():
 		return False, _("Ngoài giờ bot được tự gửi")
 	return True, ""
+
+
+def revert_to_draft(row: Any) -> bool:
+	"""Tin Bot bị chặn lúc gửi (công tắc vừa tắt, bot tạm dừng, ngoài giờ, khung gửi...): nháp quay về Draft/Pending để
+	sale xử lý (khách không bị bỏ rơi trong im lặng) và báo người phụ trách. `row` là dòng Omni Outbound Message.
+
+	Chỉ nháp còn ở trạng thái Auto/Sent As Is mới quay lại; commit. Không ném lỗi. Trả True nếu đã đưa về nháp.
+	"""
+	try:
+		draft = row.get("bot_draft")
+		d = (
+			frappe.db.get_value(
+				DRAFT, draft, ["mode", "decision", "lead", "action"], as_dict=True, for_update=True
+			)
+			if draft
+			else None
+		)
+		if not d or (d.mode, d.decision, d.action) != ("Auto", "Sent As Is", "Reply"):
+			frappe.db.rollback()
+			return False
+		frappe.db.set_value(
+			DRAFT,
+			draft,
+			{
+				"mode": "Draft",
+				"decision": "Pending",
+				"decided_at": None,
+				"final_text": None,
+				"edit_distance_ratio": 0,
+			},
+		)
+		reply.expire_stale_for_lead(d.lead)  # khách đã nhắn thêm thì nháp thành lỗi thời
+		if frappe.db.get_value(DRAFT, draft, "decision") == "Pending":
+			reply.notify_pending_draft(d.lead, "Reply")
+		frappe.db.commit()
+		return True
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(
+			title="Omni: lỗi đưa tin bot bị chặn về nháp", message=f"draft={row.get('bot_draft')}"
+		)
+		return False
 
 
 def try_auto_send(draft: str) -> bool:

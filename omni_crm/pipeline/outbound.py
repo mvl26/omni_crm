@@ -328,10 +328,10 @@ def send_outbound(outbound_name: str) -> str:
 
 		allowed_now, why_not = auto_send.send_time_check(row)
 		if not allowed_now:
-			return _block_locked(outbound_name, why_not)
+			return _block_bot(row, outbound_name, why_not)
 	channel_doc = frappe.get_doc(CHANNEL, row.channel) if frappe.db.exists(CHANNEL, row.channel) else None
 	if not channel_doc or not cint(channel_doc.outbound_enabled):
-		return _block_locked(outbound_name, _("Kênh đã tắt chiều ra"))
+		return _block_bot(row, outbound_name, _("Kênh đã tắt chiều ra"))
 	identity = frappe.db.get_value(IDENTITY, row.identity, "name") if row.identity else None
 	if not identity:
 		return _fail_locked(outbound_name, _("Không tìm thấy người nhận (định danh)"))
@@ -342,7 +342,7 @@ def send_outbound(outbound_name: str) -> str:
 	identity_doc = frappe.get_doc(IDENTITY, identity)
 	allowed, reason = adapter.can_send_now(identity_doc, channel_doc, source=row.source)
 	if not allowed:
-		return _block_locked(outbound_name, reason)
+		return _block_bot(row, outbound_name, reason)
 	if reason and row.source == "Sale" and frappe.cache().get_value(paid_ok_key(outbound_name)) != "paid":
 		return _block_locked(
 			outbound_name,
@@ -398,6 +398,16 @@ def _block_locked(name: str, reason: str) -> str:
 		frappe.db.rollback()
 		return "Queued"
 	return _block(row, reason) if row else (frappe.db.get_value(OUTBOUND, name, "status") or "Missing")
+
+
+def _block_bot(row: Any, name: str, reason: str) -> str:
+	"""Như `_block_locked`; tin Bot bị chặn thì nháp của nó quay về Draft/Pending cho sale xử lý (D3-05)."""
+	result = _block_locked(name, reason)
+	if result == "Blocked" and row.source == "Bot":
+		from omni_crm.bot import auto_send
+
+		auto_send.revert_to_draft(row)
+	return result
 
 
 def _fail_locked(name: str, reason: str) -> str:
