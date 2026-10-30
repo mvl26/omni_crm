@@ -45,7 +45,14 @@
   "sec_score",
   "lead_scoring_enabled",
   "hot_lead_threshold",
-  "score_rules"
+  "score_rules",
+  "sec_handoff",
+  "handoff_pause_hours",
+  "handoff_notify_channels",
+  "bot_active_hours",
+  "col_handoff",
+  "handoff_message_in_hours",
+  "handoff_message_after_hours"
  ],
  "fields": [
   {
@@ -276,6 +283,50 @@
    "fieldtype": "Table",
    "label": "Bảng điểm",
    "options": "Omni Score Rule"
+  },
+  {
+   "fieldname": "sec_handoff",
+   "fieldtype": "Section Break",
+   "label": "Chuyển người (Đợt 3)"
+  },
+  {
+   "fieldname": "handoff_pause_hours",
+   "fieldtype": "Int",
+   "label": "Bot im sau khi chuyển người (giờ)",
+   "default": "24",
+   "description": "Sau khi chuyển người, bot không soạn nháp cho khách đó trong khoảng này; sale bấm Cho bot tiếp tục để mở lại sớm"
+  },
+  {
+   "fieldname": "handoff_notify_channels",
+   "fieldtype": "Small Text",
+   "label": "Kênh báo sale khi chuyển người",
+   "default": "system",
+   "description": "system = thông báo trong hệ thống; email = thêm email nếu thông báo hệ thống chưa được mở sau 10 phút. Ví dụ: system,email (mặc định tạm, chờ chủ dự án chốt Q8)"
+  },
+  {
+   "fieldname": "bot_active_hours",
+   "fieldtype": "Small Text",
+   "label": "Giờ bot hoạt động (JSON)",
+   "description": "Cùng định dạng Giờ làm việc, ví dụ {\"mon-fri\":\"08:00-17:30\"}. Để trống = theo Giờ làm việc (mặc định tạm, chờ chủ dự án chốt Q6). Chế độ tự gửi (D3-05) dùng; chế độ Nháp không bị chặn bởi giờ này"
+  },
+  {
+   "fieldname": "col_handoff",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "handoff_message_in_hours",
+   "fieldtype": "Small Text",
+   "label": "Câu giữ chân trong giờ làm việc",
+   "default": "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị sớm nhất có thể.",
+   "description": "Chỉ dùng khi một nhóm câu hỏi được mở chế độ tự gửi (D3-05); chế độ Nháp không gửi câu này"
+  },
+  {
+   "fieldname": "handoff_message_after_hours",
+   "fieldtype": "Small Text",
+   "label": "Câu giữ chân ngoài giờ làm việc",
+   "default": "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị vào {gio_lam_viec_ke_tiep}.",
+   "description": "{gio_lam_viec_ke_tiep} được thay bằng thời điểm mở cửa kế tiếp"
   }
  ],
  "permissions": [
