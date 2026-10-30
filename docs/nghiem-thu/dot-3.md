@@ -24,7 +24,7 @@ Kênh (email, Zalo OA, tổng đài, Lead, chống trùng) không đổi so vớ
 1. **Không có staging, AI thật, Zalo thật, Stringee thật, trình duyệt, sale thật.** Mọi lời gọi AI là `FakeAIClient`; mọi tin ra là sandbox (không HTTP). Do đó **chưa có số nào về chất lượng câu trả lời của bot, về độ trễ AI hay chi phí token thật.**
 2. **p95 webhook ~17-19 ms là thời gian NHẬN, không phải độ trễ xử lý.** Từ lúc nhận đến khi tin Done (Lead, dòng thời gian, bot) là p50 66-99 giây, p95 128-191 giây ở các pha tải dồn với 8 worker RQ (backlog do mỗi lượt giữ worker ~6 giây, E4/E9). Đừng đọc p95 nhận như "phản hồi khách < 15 phút" hay "tin -> Lead < 1 phút": hai chỉ số đó chưa đo bằng khách thật.
 3. **Máy dev 16 nhân dùng chung với 3 bench khác**, MariaDB cục bộ, không nginx/HTTPS/mạng thật. Số đo là cận dưới về độ trễ mạng.
-4. **Redis queue của bench (cổng 11000) hỏng và bị `bench start` khởi động lại liên tục (khi đo ở trạng thái "loading dataset")**. Không đụng vào. Toàn bộ test và tải ở D3-06 chạy với `FRAPPE_REDIS_QUEUE` trỏ Redis tạm cổng riêng (11097; cache tạm 11096 cho tải), đã tắt sau khi xong. Hệ quả cần biết: khi chạy thử một số module riêng lúc Redis 11000 ở trạng thái "đang nạp", 23 test (2 của `test_draft`, 21 của `test_handoff`) đỏ vì `frappe.enqueue` chưa mock ném `ConnectionError`; với Redis tạm khỏe chúng qua (mục 1). Các test này nằm trong nền 1006 OK đã nêu nên đây là phụ thuộc môi trường của test cũ, không phải lỗi mã. Nguyên nhân phía Redis 11000 là suy luận từ thông báo lỗi, chưa kiểm sâu hơn. **Lưu ý:** các lần chạy module riêng trước khi dựng Redis tạm (gồm `test_bot_reply` 65 OK và lần `test_dot3_integration` 27 OK đầu) chạy với Redis 11000 mặc định; chỉ lần chạy toàn bộ (mục 1) và toàn bộ tải dùng Redis tạm.
+4. **Redis queue của bench (cổng 11000) hỏng và bị `bench start` khởi động lại liên tục (khi đo ở trạng thái "loading dataset")**. Không đụng vào. Lần chạy toàn bộ test cuối và mọi lần đo tải ở D3-06 chạy với `FRAPPE_REDIS_QUEUE` trỏ Redis tạm cổng riêng (11097; cache tạm 11096 cho tải), đã tắt sau khi xong. Hệ quả cần biết: khi chạy thử một số module riêng lúc Redis 11000 ở trạng thái "đang nạp", 23 test (2 của `test_draft`, 21 của `test_handoff`) đỏ vì `frappe.enqueue` chưa mock ném `ConnectionError`; với Redis tạm khỏe chúng qua (mục 1). Các test này nằm trong nền 1006 OK đã nêu nên đây là phụ thuộc môi trường của test cũ, không phải lỗi mã. Nguyên nhân phía Redis 11000 là suy luận từ thông báo lỗi, chưa kiểm sâu hơn. **Lưu ý:** các lần chạy module riêng trước khi dựng Redis tạm (gồm `test_bot_reply` 65 OK và lần `test_dot3_integration` 27 OK đầu) chạy với Redis 11000 mặc định; chỉ lần chạy toàn bộ (mục 1) và toàn bộ tải dùng Redis tạm.
 5. **Chưa có tuần chạy thử** nên không có số "nháp đúng", "lỗi nghiêm trọng trên khách thật", "bot tự xử lý theo nhóm", "phản hồi lần đầu": `measure_dot3.py` có, in "chưa đủ dữ liệu" cho tới khi có dữ liệu thật (mục 4).
 6. **Lần chạy tải đầu có webhook p95 16,9 giây không giải thích được** (mục 3.6). Không tái hiện ở các lần chạy sau (p95 14,6-19,8 ms). Ghi như một rủi ro chưa hiểu, không hạ nhẹ.
 
@@ -41,14 +41,18 @@ Kênh (email, Zalo OA, tổng đài, Lead, chống trùng) không đổi so vớ
 Lệnh: `cd /home/hoangvietyeuem/frappe-bench && FRAPPE_REDIS_QUEUE=redis://127.0.0.1:11097 bench --site omni.test run-tests --app omni_crm` (Redis tạm khỏe, xem giới hạn 4; ruff 0.8.1: `check` và `format --check` sạch).
 
 ```
-[[FULL_RUN]]
+Ran 1043 tests in 1484.785s
+
+OK
 ```
+
+1043 = 1006 nền + 27 (`test_dot3_integration`) + 10 (`test_measure_dot3`); **0 skipped**: với Redis tạm khỏe, 4 test `test_enqueue_integration` (bị skip ở nền vì Redis 11000 hỏng) chạy và qua. **Lần chạy toàn bộ đầu tiên của D3-06 cho 1042 test, 3 đỏ** (`test_enqueue_integration`, 3 test): lỗi nằm ở test mới của chính tôi: `TestConcurrentConnections` dùng `mock.patch("frappe.enqueue")` lồng nhau giữa các luồng nên để lại mock vĩnh viễn trên `frappe.enqueue`, làm các test enqueue thật sau đó đỏ (chỉ lộ khi Redis khỏe vì ở nền chúng bị skip). Đã sửa (mock một lần ở luồng chính), kiểm bằng probe cùng thứ tự (đỏ trước, xanh sau), rồi chạy lại toàn bộ như trên. Trên commit nền `5cd6eb3` bốn test enqueue qua khi chạy riêng với Redis tạm.
 
 Test mới của D3-06: `test_dot3_integration` 27 test, `test_measure_dot3` 10 test. Hai test đồng thời `test_double_run_of_same_batch_*` **đỏ trước khi sửa** (2 nháp / 2 tin Bot cho một lượt) và xanh sau khi khóa Redis theo lượt ở `reply_batch`. Trước lần chạy toàn bộ, chạy riêng sau khi sửa (với Redis 11000 mặc định): `test_bot_reply` 65 OK, `test_dot3_integration` 27 OK.
 
-`bench --site omni.test migrate`: [[MIGRATE]]
+`bench --site omni.test migrate`: thoát mã 0, không lỗi (chạy sau toàn bộ test, với Redis tạm).
 
-Dữ liệu tải đã dọn sạch (0 Lead/Cuộc gọi/Định danh/kênh/nhóm câu hỏi/mục kho `LOAD*`/`KB-93*`); `sites/omni.test/site_config.json` giống hệt bản sao lưu (`cmp`), không có `developer_mode` hay `omni_auto_send_allowed`; Omni Settings đã khôi phục đúng giá trị trước khi đo (xem mục 7). Đã xóa các dòng Error Log tiêu đề `Omni…` tạo sau 10:50 giờ site (do chính các lượt test/tải của phiên này, kể cả các lần chạy bị ngắt); Error Log cũ hơn giữ nguyên.
+Dữ liệu tải đã dọn sạch (0 Lead/Cuộc gọi/Định danh/kênh/nhóm câu hỏi/mục kho `LOAD*`/`KB-93*`); `sites/omni.test/site_config.json` giống hệt bản sao lưu (`cmp`), không có `developer_mode` hay `omni_auto_send_allowed`; Omni Settings đã khôi phục đúng giá trị trước khi đo (xem mục 7). Đã xóa các dòng Error Log tiêu đề `Omni…` tạo sau 10:50 giờ site (do chính các lượt test/tải của phiên này, kể cả các lần chạy bị ngắt); Error Log cũ hơn giữ nguyên. Cũng đã xóa các dòng `Comment` loại Deleted/Assigned và `Deleted Document` do việc xóa dữ liệu tải/test sinh ra sau mốc đó, và 3 Lead `TD204 Xoa` còn sót từ các lần chạy test bị ngắt. Còn lại có chủ đích: bản ghi `Omni Eval Run` `EVR-2026-00832` và tệp báo cáo của nó (bằng chứng cổng `nhap` chưa đo); các dòng `Omni Bot Run`/`Communication`/`Version` do chạy bộ test bình thường để lại (không phải dữ liệu tải; không có cách phân biệt chắc chắn với dữ liệu của các phiên trước).
 
 ## 2. Bảng ánh xạ kịch bản Đợt 3
 
@@ -204,6 +208,7 @@ Mức: Chặn / Cao / Trung bình / Thấp. Đỏ trước, xanh sau.
 | # | Mức | Lỗi | Trạng thái |
 | --- | --- | --- | --- |
 | E12 | **Cao** (chỉ khi job chạy lặp) | **`reply_batch` chạy lặp cùng một lượt ghi hai nháp; ở nhóm Auto gửi cho khách hai tin Bot giống nhau.** Hàm kiểm "đã có nháp chưa" rồi mới soạn (check-then-act); hai job cùng một lượt (ví dụ một job bị thử lại hoặc chạy lại trong khi bản trước còn chạy) cùng qua bước kiểm trước khi một bên ghi. `try_auto_send` khóa theo từng nháp nên mỗi nháp riêng đều "hợp lệ" và cả hai được gửi. Test cũ chạy một kết nối nên không bắt được. RQ `deduplicate` chỉ chặn khi job cũ còn trong hàng đợi, không chặn job chạy lại sau khi lượt trước đã bắt đầu | **Đã sửa** (`fix(reply)`, commit trên nhánh `d3-06-kiem-thu-dot-3`, không tách nhánh `fix/…`): khóa Redis `omni:lock:reply:<batch>` quanh `reply_batch` (giữ được suốt lúc gọi AI, không phải khóa DB), `commit` ngay sau khi lấy được khóa để đọc từ ảnh chụp mới; Redis lỗi thì chạy không khóa (fail-open). **Hạn chế đã biết:** thời gian chờ khóa, TTL khóa và timeout job RQ đều 600 giây, nên một job chờ khóa bị kẹt có thể giữ worker tới 600 giây và bị RQ giết trước khi kịp trả "locked" (nhánh "locked" thực tế gần như không bao giờ chạy); nên hạ thời gian chờ khóa xuống <= 120 giây (đề xuất, chưa làm vì đổi mã sau khi đã chạy toàn bộ test) Test: `test_double_run_of_same_batch_makes_one_draft` và `..._in_auto_group_sends_at_most_one_bot_message` (hai kết nối thật, hàng rào trước `make_draft`; đỏ: 2 nháp / 2 tin Bot; xanh sau sửa). Chưa sửa cùng kiểu cho `analyze_batch` (chạy lặp chỉ tốn thêm lời gọi AI, không có kiểm "đã có", ngoài phạm vi) |
+| (test của chính D3-06) | Thấp | `TestConcurrentConnections` rò rỉ mock `frappe.enqueue` giữa các luồng làm 3 test enqueue thật đỏ khi Redis khỏe | **Đã sửa** (mock một lần ở luồng chính) |
 | (môi trường) | — | 23 test (`test_draft` 2, `test_handoff` 21) đỏ khi Redis queue 11000 ở trạng thái "đang nạp dữ liệu" (`ConnectionError` từ `frappe.enqueue` chưa mock); xanh với Redis tạm khỏe | Không sửa test (không nới lỏng). Ghi vào docs/12 mục D |
 | (quan sát) | Thấp | Lần chạy tải đầu có webhook p95 16,9 giây (mục 3.6) | **Mở**, không tái hiện |
 | (mở từ trước) | | E2, E3, E4 (số worker), E8 còn tồn dư, E9, E10 | Xem dot-1 mục 6, dot-2 mục 6 |
@@ -214,7 +219,7 @@ Mức: Chặn / Cao / Trung bình / Thấp. Đỏ trước, xanh sau.
 
 - **Hàm whitelisted:** Đợt 3 không thêm hàm `allow_guest`; `test_only_webhook_allows_guest` vẫn chỉ cho `zalo`, `telephony_event`, `telephony_lookup`.
 - **Quyền thật đã thử** (Sales User, không Administrator, không `ignore_permissions`): xem mục 6. Omni Admin **không** có quyền đọc `CRM Lead` theo mặc định nên không mở được `get_thread` (nút "Tắt tự động nhóm này" trong Hộp thư chỉ hiện với người vừa là Omni Admin vừa đọc được Lead; đường chắc chắn là biểu mẫu Nhóm câu hỏi), xem docs/12 D3-05.
-- **Bí mật:** không có trong log/Error Log của các lượt tải (mọi khóa tải sinh ngẫu nhiên, không in; `redact()` giữ nguyên). Đã quét Error Log của phiên: không có token/khóa.
+- **Bí mật:** không có trong log/Error Log của các lượt tải (mọi khóa tải sinh ngẫu nhiên, không in; `redact()` giữ nguyên). Đã quét Error Log và Comment của phiên tìm 4 khóa/token do chính các lượt tải sinh ra (app id, OA secret, webhook token, secret tổng đài): 0 lần xuất hiện.
 - **Cấu hình trên omni.test (để người duyệt biết, không tự đổi):** `bot_analyze_enabled = 1` và `bot_reply_mode = Draft` là **giá trị do phiên trước để lại**, không phải mặc định phát hành (mặc định phát hành là `0` / `Off`). Không có khóa AI và Q11 chưa chốt nên `call_tool` chặn mọi lời gọi AI thật. `sandbox_mode = 1`; `lead_scoring_enabled = 0`; `daily_token_budget = 10000000`; `bot_active_hours` và `handoff_*` rỗng. Omni Settings sau D3-06 giống hệt trước D3-06 (so từng trường) **trừ `kb_version`** (bộ đếm tăng 7546 -> giá trị lớn hơn do test thêm/xóa mục kho tri thức; không khôi phục được và không có ý nghĩa nghiệp vụ). **Phải đặt lại về `0` / `Off` trên staging/production.**
 - **Chưa phủ:** `erase_customer_data` chưa xóa `Omni Call` / `CRM Call Log`.
 
@@ -298,7 +303,7 @@ Lệnh: `bench --site omni.test execute omni_crm.bot.eval.run.run_cli --kwargs "
 
 | Hạng mục | Kết quả |
 | --- | --- |
-| Lần chạy | [[NHAP_RUN]] |
+| Lần chạy | `EVR-2026-00832`, 2026-10-30, báo cáo `eval/reports/2026-10-30-analyze-v1_reply-v1_judge-v1-EVR-2026-00832.md` (so với D3-01: `EVR-2026-00415`, cùng kết quả) |
 | Bộ đề | 220 ca, tất cả `Synthetic`, chưa duyệt, 0 ca `Real` |
 | Hành động đúng / Câu trả lời đạt / Lỗi nghiêm trọng | **chưa đo** / **chưa đo** / **chưa đo** |
 | Cổng `doi_cau_lenh`, `phan_tich` | **chưa đo** (cùng lý do); không so sánh suy giảm bằng số của Fake |
