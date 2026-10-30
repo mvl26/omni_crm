@@ -211,7 +211,7 @@ Gọi công cụ propose_reply để trả kết quả.
 ## 9. Tóm tắt cuộc gọi (Đợt 3)
 
 - Interface `stt/base.py`: `transcribe(audio: bytes, mime: str, *, stereo: bool) -> Transcript(text, segments[{speaker, start, end, text}], confidence)`.
-- Nhà cung cấp chọn ở D3-03 (thử trên ≥ 20 ghi âm thật). Không đạt ngưỡng → không làm phần này ở Đợt 3.
+- Nhà cung cấp chọn ở D3-03 (thử trên ≥ 20 ghi âm thật). Không đạt ngưỡng → không làm phần này ở Đợt 3. Khung đã có: `omni_crm/stt/` (`base`, `registry`, `client` với cổng Q11, `fake`, `trial`) và `tests/stt_trial/run_trial.py`; adapter nhà cung cấp thật chỉ thêm sau khi chủ dự án chọn (docs/12 Q13).
 - Có văn bản → bot phân tích (mục 3) + tóm tắt 3–5 câu vào `Omni Call.summary` và một Note trên Lead. `confidence` thấp hơn ngưỡng → chỉ ghi "Bản ghi chất lượng thấp, nghe ghi âm" và không phân tích.
 
 ## 10. Chấm bot

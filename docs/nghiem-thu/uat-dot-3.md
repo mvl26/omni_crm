@@ -69,3 +69,15 @@ Cần chủ dự án chốt Q6 (giờ bot, câu ngoài giờ) và Q8 (kênh báo
 - Hiển thị Notification Log thực tế, email thông báo.
 - Gửi thật qua Zalo (mọi test dùng sandbox và mock).
 - Chất lượng nháp của bot thật (không có khóa AI).
+
+## 6. Thử nghiệm chuyển giọng nói D3-03 (cổng quyết định cho D3-04) — CHƯA ĐO
+
+Chưa có nhà cung cấp, khóa dùng thử, ghi âm thật, bản chuẩn gõ tay, và Q11 chưa chốt, nên **không có số WER hay tỉ lệ trường đúng nào**. Khung và cách chạy: `docs/nghiem-thu/stt-thu-nghiem.md`. Việc của người phụ trách:
+
+| # | Việc | Kết quả (điền sau) |
+| --- | --- | --- |
+| 1 | Chốt Q11 (cho phép gửi ghi âm tới dịch vụ chuyển giọng nói) và Q7 (điều khoản dữ liệu nhà cung cấp) | |
+| 2 | Chọn 2–3 nhà cung cấp (Q13); thêm adapter theo mục 5 của tài liệu thử nghiệm | |
+| 3 | Chuẩn bị 20 ghi âm được phép dùng nội bộ, ít nhất 5 bản chuẩn gõ tay, bảng giá | |
+| 4 | Chạy `run_trial` trên máy có khóa, người duyệt điền cột `correct` trong `bang-danh-dau.csv`, chạy `--summarize-review` | |
+| 5 | Ghi nhánh theo ngưỡng: có nhà cung cấp ĐẠT thì làm D3-04, nếu không thì D3-04 hoãn (Đợt 3 chỉ gồm bot nháp và mở tự động) | |
