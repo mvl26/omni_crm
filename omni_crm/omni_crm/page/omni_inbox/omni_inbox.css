@@ -41,3 +41,5 @@
 .omni-inbox .oi-draft .oi-kb { font-size: 11px; margin-right: 4px; }
 .omni-inbox .oi-rate { align-self: flex-start; display: flex; gap: 6px; align-items: center; border-style: solid; }
 .omni-inbox .oi-draftchip { background: var(--orange-100, #ffedd5); font-weight: 600; }
+.omni-inbox .oi-botsent { margin-top: 4px; font-size: 12px; color: var(--text-muted, #6b7280); }
+.omni-inbox .oi-botsent-chip { background: var(--blue-50, #eff6ff); color: var(--blue-700, #1d4ed8); }
