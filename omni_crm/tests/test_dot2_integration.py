@@ -7,6 +7,7 @@ khác (C-03, đa số sự cố tổng đài) không lặp lại ở đây.
 """
 
 import json
+import threading
 from unittest import mock
 
 import frappe
@@ -17,14 +18,15 @@ from frappe.utils import get_datetime
 from omni_crm.api import inbox
 from omni_crm.bot import ai_client, analyze, reply, scoring
 from omni_crm.bot.fake_client import FakeAIClient
-from omni_crm.channels.telephony import callbacks
+from omni_crm.channels.telephony import callbacks, calls
+from omni_crm.channels.telephony.base import CallEvent
 from omni_crm.channels.zalo.adapter import parse_event
 from omni_crm.ingest.gateway import save_inbound
 from omni_crm.monitoring import alerts
 from omni_crm.monitoring.snapshot import build_snapshot
 from omni_crm.pipeline.worker import process_identity
 from omni_crm.tests import zalo_helpers
-from omni_crm.tests.telephony_helpers import TelephonyTestCase, call
+from omni_crm.tests.telephony_helpers import CUSTOMER_E164, TelephonyTestCase, call
 from omni_crm.tests.telephony_helpers import cleanup as cleanup_telephony
 from omni_crm.tests.test_ai_client import set_settings
 from omni_crm.tests.test_bot_analyze import signals
@@ -484,3 +486,79 @@ class TestBreakerAlertRule(FrappeTestCase):
 		self.assertEqual(
 			alerts.evaluate(self.snap(usage_pct=1.0, runs_24h=3, errors_24h=0)), []
 		)  # khóa vắng: bình thường
+
+
+class TestConcurrentCallCreate(TelephonyTestCase):
+	"""Tải cuộc gọi D2-09: hai worker tạo Omni Call cho hai call_id KHÁC nhau cùng lúc không được bế tắc (deadlock).
+
+	`SELECT ... FOR UPDATE` trên khóa duy nhất chưa tồn tại giữ khóa khoảng (gap lock) tương thích nhau, rồi cả hai
+	INSERT chờ nhau: InnoDB báo lỗi 1213 cho một bên (đo được ~8% tin cuộc gọi phải thử lại ở tải 10 cuộc/giây).
+	"""
+
+	def _event(self, cid: str) -> CallEvent:
+		return CallEvent(
+			call_id=f"td201-{cid}",
+			direction="Inbound",
+			from_number=CUSTOMER_E164,
+			to_number="+842873001234",
+			status="Ended",
+		)
+
+	def test_two_workers_creating_different_calls_do_not_deadlock(self):
+		site, sites_path = frappe.local.site, frappe.local.sites_path
+		channel_name = self.channel.name
+		barrier = threading.Barrier(2)
+		real = calls._locked_name
+		errors: list[BaseException] = []
+
+		def hooked(call_id: str):
+			result = real(call_id)  # đã giữ khóa khoảng nếu hàng chưa có
+			try:
+				barrier.wait(timeout=5)  # đảm bảo cả hai đã tra xong trước khi INSERT
+			except threading.BrokenBarrierError:
+				pass
+			return result
+
+		def other_worker():
+			frappe.init(site=site, sites_path=sites_path)
+			frappe.connect()
+			try:
+				frappe.set_user("Administrator")
+				calls.get_or_create(frappe.get_doc("Omni Channel", channel_name), self._event("dl2"))
+				frappe.db.commit()
+			except BaseException as e:
+				errors.append(e)
+				frappe.db.rollback()
+			finally:
+				frappe.destroy()
+
+		with mock.patch.object(calls, "_locked_name", side_effect=hooked):
+			thread = threading.Thread(target=other_worker)
+			thread.start()
+			try:
+				calls.get_or_create(self.channel, self._event("dl1"))
+				frappe.db.commit()
+			except BaseException as e:
+				errors.append(e)
+				frappe.db.rollback()
+			thread.join(timeout=60)
+		self.assertEqual(errors, [], f"bế tắc khi tạo Omni Call song song: {errors}")
+		self.assertEqual(frappe.db.count(CALL, {"call_id": ["in", ["td201-dl1", "td201-dl2"]]}), 2)
+
+	def test_existing_call_is_locked_and_returned_and_race_on_insert_is_handled(self):
+		ev = self._event("dl3")
+		first = calls.get_or_create(self.channel, ev)
+		self.assertEqual(calls.get_or_create(self.channel, ev), first)  # đã có: khóa dòng và trả lại
+		# hàng chưa thấy trong ảnh chụp (yêu cầu kia vừa commit) -> INSERT đụng khóa duy nhất -> khóa và trả hàng đã có
+		real_get = frappe.db.get_value
+		hidden = {"n": 0}
+
+		def get_value(doctype, filters=None, *a, **kw):
+			if doctype == CALL and kw.get("for_update") is None and not hidden["n"]:
+				hidden["n"] += 1
+				return None
+			return real_get(doctype, filters, *a, **kw)
+
+		with mock.patch.object(frappe.db, "get_value", side_effect=get_value):
+			self.assertEqual(calls.get_or_create(self.channel, ev), first)
+		self.assertEqual(frappe.db.count(CALL, {"call_id": "td201-dl3"}), 1)

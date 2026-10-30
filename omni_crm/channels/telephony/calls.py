@@ -82,10 +82,16 @@ def _merge_raw(current: Any, entry: dict) -> str:
 
 
 def get_or_create(channel_doc, ev: CallEvent) -> str:
-	"""Tên Omni Call của `ev.call_id`, khóa dòng để hai yêu cầu song song không ghi đè nhau; tạo bản tạm nếu chưa có."""
-	name = _locked_name(ev.call_id)
-	if name:
-		return name
+	"""Tên Omni Call của `ev.call_id`, khóa dòng để hai yêu cầu song song không ghi đè nhau; tạo bản tạm nếu chưa có.
+
+	Không `SELECT ... FOR UPDATE` trên call_id CHƯA có: khóa khoảng của InnoDB tương thích nhau nên hai worker tạo hai
+	cuộc gọi khác nhau cùng giữ khóa rồi chờ nhau khi INSERT (deadlock 1213, đo được ở tải 10 cuộc/giây). Chỉ khóa khi
+	hàng đã có (khóa bản ghi); chưa có thì INSERT thẳng, đụng khóa duy nhất mới quay lại khóa hàng của bên kia.
+	"""
+	if frappe.db.get_value(CALL, {"call_id": ev.call_id}, "name"):
+		name = _locked_name(ev.call_id)
+		if name:
+			return name
 	doc = frappe.get_doc(
 		{
 			"doctype": CALL,
