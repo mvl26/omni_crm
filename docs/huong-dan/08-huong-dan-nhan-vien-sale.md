@@ -8,7 +8,7 @@ Mục lục: [1. Mở Hộp thư](#1-mở-hộp-thư-omni) · [2. Danh sách h�
 
 ## 1. Mở Hộp thư Omni
 
-Vào địa chỉ `https://<tên-miền-CRM>/app/omni-inbox`, hoặc gõ "Hộp thư Omni" vào ô tìm kiếm trên cùng của hệ thống (Desk). Trang có tên **Hộp thư Omni**. Bạn cần vai trò Sales User, Sales Manager, Omni Admin hoặc System Manager. Nếu có lời nhắn "Không có quyền xem hoặc không tìm thấy hội thoại", hãy hỏi quản trị.
+Vào địa chỉ `https://<tên-miền-CRM>/app/omni-inbox`, hoặc gõ "Hộp thư Omni" vào ô tìm kiếm trên cùng của hệ thống (Desk; cách này chưa kiểm). Trang có tên **Hộp thư Omni**. Bạn cần vai trò Sales User, Sales Manager, Omni Admin hoặc System Manager. Nếu có lời nhắn "Không có quyền xem hoặc không tìm thấy hội thoại", hãy hỏi quản trị.
 
 Từ thông báo (chuông) "Có nháp bot chờ duyệt", "Bot chuyển người, mời xem" hoặc "Lead nóng", bấm vào cũng mở thẳng Hộp thư/hội thoại đúng khách.
 
@@ -131,7 +131,7 @@ Hệ thống tự nhận ra khách qua SĐT/email/định danh kênh, nhưng khi
 | Không có khung nhập tin | Hội thoại là email/điện thoại, hoặc bạn không có quyền sửa Lead, hoặc đã quá 7 ngày | Email: dùng CRM. Quyền: hỏi quản trị |
 | Nháp biến mất | Khách vừa nhắn thêm hoặc quá 24 giờ | Chờ nháp mới hoặc trả lời tay |
 | Không thấy nút Cho bot tiếp tục / Tạm dừng | Bot đang tắt, hoặc bạn không có quyền sửa Lead | Bình thường nếu bot tắt |
-| Bấm Gửi nháp báo "không còn" | Khách nhắn thêm trong lúc bạn xem, nháp đã hết hạn | Làm mới (mở lại hội thoại) |
+| Bấm Gửi nháp bị từ chối kèm thông báo | Khách vừa nhắn thêm trong lúc bạn xem, hoặc nháp đã hết hạn, hoặc quản trị vừa đổi chế độ bot | Mở lại hội thoại để thấy nháp mới (nếu có), hoặc trả lời tay |
 | Khách hỏi giá mà bot "chuyển người" | Đúng thiết kế: bot **không bao giờ** báo giá | Trả lời theo bảng giá chính thức |
 | Việc gọi lại không thấy | Khách ẩn số, hoặc chưa có Lead | Báo trưởng sale; xem nhật ký cuộc gọi |
 
