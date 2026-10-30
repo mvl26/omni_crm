@@ -144,7 +144,7 @@ Hệ thống gửi thư cho chính nhân viên trong hai trường hợp: **thư
 2. `bench` có tiến trình lập lịch email (scheduler bật, mục 4).
 3. Người nhận có địa chỉ email thật trong User.
 
-Khi `sandbox_mode` bật, thư nhắc chuyển người **không** được xếp (chỉ ghi log). Thư cảnh báo thì vẫn gửi nếu `alert_recipients` có địa chỉ (xem [09](09-van-hanh-hang-ngay.md)). Thông báo trong hệ thống (Notification Log, chuông) luôn tạo, không cần email.
+Khi `sandbox_mode` bật, thư nhắc chuyển người **không** được xếp (chỉ ghi log). Mã cảnh báo (`monitoring/alerts.py`) không kiểm sandbox cho thư cảnh báo nên thư vẫn đi nếu `alert_recipients` có địa chỉ (đọc từ mã, chưa kiểm thực tế; xem [09](09-van-hanh-hang-ngay.md)). Thông báo trong hệ thống (Notification Log, chuông) luôn tạo, không cần email.
 
 Hộp thư **nhận** khách (kênh Email) là Email Account khác với tài khoản gửi mặc định này nếu muốn; xem [03-kenh-email.md](03-kenh-email.md).
 
