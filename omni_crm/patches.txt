@@ -6,3 +6,5 @@
 # Patches added in this section will be executed after doctypes are migrated
 omni_crm.patches.compute_lead_normalized_fields
 omni_crm.patches.backfill_lead_first_response
+omni_crm.patches.v2.add_b2b_sales_stages
+omni_crm.patches.backfill_contact_match_keys
