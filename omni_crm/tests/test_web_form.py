@@ -262,55 +262,57 @@ class TestWorker(WebCase):
 			frappe.db.get_value(LEAD, lead, "organization"), f"Công ty {PREFIX} Y tế"
 		)  # chỉ chuỗi, không tạo Organization
 
-	def test_existing_organization_by_tax_id_attaches_lead(self):
+	def make_real_org(self):
 		org = frappe.get_doc(
 			{
 				"doctype": "CRM Organization",
-				"organization_name": f"{PREFIX} Có sẵn",
+				"organization_name": f"{PREFIX} Nhà thầu thật",
 				"omni_tax_id": "0505050503",
 				"omni_verified": 1,
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.commit()
-		_row, lead = self.process()
-		self.assertEqual(frappe.db.get_value(LEAD, lead, "organization"), org.name)
-		self.assertEqual(
-			frappe.db.get_value("CRM Organization", org.name, "omni_verified"), 1
-		)  # không đổi sang chưa xác minh
-
-	def test_open_contractor_lead_is_reused_owner_and_first_touch_kept(self):
-		org = frappe.get_doc(
-			{
-				"doctype": "CRM Organization",
-				"organization_name": f"{PREFIX} Nhà thầu",
-				"omni_tax_id": "0505050503",
-				"omni_verified": 1,
-			}
-		).insert(ignore_permissions=True)
-		existing = frappe.get_doc(
+		real = frappe.get_doc(
 			{
 				"doctype": LEAD,
-				"first_name": f"{PREFIX} Đã nhập",
+				"first_name": f"{PREFIX} Đầu mối thật",
 				"organization": org.name,
 				"lead_owner": "Administrator",
-				"omni_ad_platform": "Danh sách mua sắm công",
+				"mobile_no": "+84900000999",
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.set_value(LEAD, existing.name, "omni_campaign", None)
 		frappe.db.commit()
+		return org, real
+
+	def test_anonymous_tax_id_of_real_contractor_is_weak_new_lead_is_created_and_flagged(self):
+		# V2-05 (review): người lạ khai MST của nhà thầu thật không được gắn vào Lead của nhà thầu và không để lại SĐT/email ở đó
+		org, real = self.make_real_org()
 		n = frappe.db.count(LEAD)
 		_row, lead = self.process()
-		self.assertEqual(lead, existing.name)
-		self.assertEqual(frappe.db.count(LEAD), n)
-		d = frappe.get_doc(LEAD, lead)
-		self.assertEqual(d.lead_owner, "Administrator")
-		self.assertEqual(d.omni_ad_platform, "Danh sách mua sắm công")  # first touch giữ nguyên
-		self.assertEqual(d.omni_last_campaign, f"{PREFIX} Chiến dịch web")
+		self.assertNotEqual(lead, real.name)
+		self.assertEqual(frappe.db.count(LEAD), n + 1)
+		stranger = frappe.get_doc(LEAD, lead)
+		self.assertNotEqual(stranger.organization, org.name)
+		self.assertEqual(stranger.omni_phone_e164, "+84912345611")
+		r = frappe.get_doc(LEAD, real.name)
+		self.assertFalse(r.email)
+		self.assertNotEqual(r.omni_phone_e164, "+84912345611")
+		self.assertEqual(frappe.db.get_value("CRM Organization", org.name, "omni_verified"), 1)
 		self.assertTrue(
-			frappe.get_all(
-				"Communication", filters={"reference_name": lead, "content": ["like", "%Điền biểu mẫu%"]}
+			frappe.db.exists(
+				"Comment", {"reference_name": lead, "content": ["like", f"%trùng Organization {org.name}%"]}
 			)
 		)
+		self.assertEqual(
+			frappe.db.count("Comment", {"reference_name": real.name, "content": ["like", "%MST khai%"]}), 0
+		)
+		self.assertEqual(
+			frappe.db.count("Communication", {"reference_name": real.name}), 0
+		)  # không thêm hoạt động vào Lead thật
+
+	def test_unverified_new_org_for_unknown_tax_id_still_created(self):
+		_row, lead = self.process()
+		org = frappe.get_doc("CRM Organization", frappe.db.get_value(LEAD, lead, "organization"))
+		self.assertEqual((org.omni_tax_id, org.omni_verified), ("0505050503", 0))
 
 	def test_form_off_switch(self):
 		frappe.db.set_value("Omni Lead Form", self.form.name, "enabled", 0)

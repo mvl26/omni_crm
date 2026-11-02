@@ -258,22 +258,27 @@ def _fill_lead(lead: str, mapped: dict, row: Any, created: bool) -> dict:
 	return values
 
 
-def _ensure_organization(lead: str, mapped: dict, row: Any, matched_by: str) -> str | None:
-	"""MST khách tự khai không khớp Organization nào -> tạo Organization `omni_verified = 0` (docs/15 mục 7 bước 1).
+def _ensure_organization(
+	lead: str, mapped: dict, row: Any, matched_by: str, platform: str = ""
+) -> tuple[str | None, str | None]:
+	"""(Organization để gắn, Organization trùng MST chưa xác minh). MST khai không khớp Organization nào -> tạo `omni_verified = 0`.
+
+	Web Form (ẩn danh) là tín hiệu YẾU: nếu Organization với MST đó đã có thì KHÔNG gắn, trả nó ở phần tử thứ hai để ghi
+	chú cho người xử lý. Meta/Google (đã xác thực nền tảng) gắn như cũ (docs/15 mục 7 bước 1).
 
 	Khớp đúng một đã được resolver gắn (matched_by org_*). MST sai định dạng: bỏ qua. Không bao giờ ghi MST rỗng ('' vi phạm UNIQUE).
 	"""
 	if matched_by.startswith("org_"):
-		return None
+		return None, None
 	try:
 		tax = normalize_tax_id(mapped.get("tax_id"))
 	except InvalidTaxId:
-		return None
+		return None, None
 	if not tax:
-		return None
+		return None, None
 	existing = frappe.db.get_value(ORG, {"omni_tax_id": tax}, "name")
 	if existing:
-		return existing
+		return (None, existing) if platform == "Website" else (existing, None)
 	company = _plain_name(mapped.get("company_name")) or f"MST {tax}"
 	if frappe.db.exists(ORG, company):
 		company = f"{company} ({tax})"[:140]
@@ -288,7 +293,7 @@ def _ensure_organization(lead: str, mapped: dict, row: Any, matched_by: str) -> 
 	)
 	doc.flags.ignore_permissions = True
 	doc.insert()
-	return doc.name
+	return doc.name, None
 
 
 def record_consent(form: dict, phone: str | None, email: str | None) -> list[str]:
@@ -462,7 +467,14 @@ def _apply(res: Any, msg: Any) -> None:
 			)  # chặn đồng bộ Facebook của crm tạo Lead đôi (ĐQ-11)
 		if not row.get("facebook_form_id"):
 			values["facebook_form_id"] = form.get("form_id") or None
-	org = _ensure_organization(lead, mapped, row, res.matched_by)
+	org, tax_conflict = _ensure_organization(lead, mapped, row, res.matched_by, form.get("platform") or "")
+	if tax_conflict:
+		_comment(
+			lead,
+			_(
+				"MST khai trên form trùng Organization {0}, chưa xác minh: chưa gắn Lead vào Organization đó"
+			).format(tax_conflict),
+		)
 	if org and (res.created_lead or not row.get("organization")):
 		values["organization"] = org
 		if res.created_lead and frappe.db.exists("CRM Lead Status", PROSPECT_STATUS):

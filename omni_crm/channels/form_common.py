@@ -193,6 +193,8 @@ def profile_of(form: dict) -> dict:
 		profile["phone"] = phone
 	if email:
 		profile["email"] = email
+	if form.get("platform") == "Website":
+		return profile  # người ẩn danh khai MST: tín hiệu YẾU, không đưa vào resolver (không tự gắn Lead/Organization thật)
 	try:
 		tax = normalize_tax_id(mapped.get("tax_id"))
 	except InvalidTaxId:
