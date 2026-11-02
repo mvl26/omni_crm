@@ -236,16 +236,16 @@
    "default": "claude-sonnet-5-5"
   },
   {
+   "description": "Phiên bản được GHIM cho đường chạy thật (vd v1). Chỉ đổi sau khi bộ đề đạt cổng đổi câu lệnh. Để trống = bản mặc định trong mã.",
    "fieldname": "analyze_prompt_version",
    "fieldtype": "Data",
-   "label": "Phiên bản câu lệnh phân tích",
-   "read_only": 1
+   "label": "Phiên bản câu lệnh phân tích"
   },
   {
+   "description": "Phiên bản được GHIM cho đường chạy thật (vd v1). Chỉ đổi sau khi bộ đề đạt cổng đổi câu lệnh. Để trống = bản mặc định trong mã.",
    "fieldname": "reply_prompt_version",
    "fieldtype": "Data",
-   "label": "Phiên bản câu lệnh trả lời",
-   "read_only": 1
+   "label": "Phiên bản câu lệnh trả lời"
   },
   {
    "fieldname": "summarize_prompt_version",

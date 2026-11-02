@@ -182,7 +182,13 @@ scheduler_events = {
 # --------
 doc_events = {
 	"Communication": {
-		"after_insert": "omni_crm.channels.email.adapter.on_communication_insert",  # D1-07
+		"after_insert": [
+			"omni_crm.channels.email.adapter.on_communication_insert",  # D1-07
+			"omni_crm.crm_bridge.first_response.on_communication_insert",  # V2-01: thư gửi đi = phản hồi đầu tiên
+		],
+	},
+	"Omni Outbound Message": {
+		"after_insert": "omni_crm.crm_bridge.first_response.on_outbound_insert",  # V2-01: tin Sent tạo sẵn (oa_echo)
 	},
 	"CRM Lead": {
 		"validate": [

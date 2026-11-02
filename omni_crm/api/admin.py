@@ -136,6 +136,7 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		where {where}""",
 		params,
 	)
+	calls_n, call_logs_n = _erase_calls(lead)
 	frappe.get_doc(
 		{
 			"doctype": "Comment",
@@ -143,15 +144,48 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 			"reference_doctype": "CRM Lead",
 			"reference_name": lead,
 			"content": _(
-				"Omni: {0} đã xóa nội dung tin của khách ({1} tin vào, {2} tin ra). Lý do: {3}"
-			).format(frappe.session.user, inbound_n, outbound_n, escape_html(reason)),
+				"Omni: {0} đã xóa nội dung tin của khách ({1} tin vào, {2} tin ra, {3} cuộc gọi). Lý do: {4}"
+			).format(frappe.session.user, inbound_n, outbound_n, calls_n, escape_html(reason)),
 		}
 	).insert(ignore_permissions=True)
 	frappe.logger("omni").warning(
-		"omni: xóa dữ liệu khách lead=%s vào=%s ra=%s bởi=%s",
+		"omni: xóa dữ liệu khách lead=%s vào=%s ra=%s cuộc_gọi=%s bởi=%s",
 		lead,
 		inbound_n,
 		outbound_n,
+		calls_n,
 		frappe.session.user,
 	)
-	return {"inbound": inbound_n, "outbound": outbound_n, "identities": len(identities)}
+	return {
+		"inbound": inbound_n,
+		"outbound": outbound_n,
+		"identities": len(identities),
+		"calls": calls_n,
+		"call_logs": call_logs_n,
+	}
+
+
+def _erase_calls(lead: str) -> tuple[int, int]:
+	"""Xóa số điện thoại, sự kiện thô, tham chiếu ghi âm của Omni Call và CRM Call Log của Lead (V2-01, 07.08).
+
+	CRM Call Log tìm qua `Omni Call.crm_call_log` và qua tham chiếu tới Lead hoặc Deal của Lead (`from`/`to` bắt
+	buộc nên đặt "[đã xóa]"). Giữ bản ghi kỹ thuật (trạng thái, thời lượng, thời điểm). Trả (số Omni Call, số CRM Call Log).
+	"""
+	calls = frappe.get_all("Omni Call", filters={"lead": lead}, fields=["name", "crm_call_log"])
+	deals = frappe.get_all("CRM Deal", filters={"lead": lead}, pluck="name")
+	logs = {c.crm_call_log for c in calls if c.crm_call_log}
+	logs.update(
+		frappe.get_all("CRM Call Log", filters={"reference_docname": ["in", [lead, *deals]]}, pluck="name")
+	)
+	if calls:
+		frappe.db.sql(
+			"""update `tabOmni Call` set from_number = %s, to_number = %s, raw_events = null, recording_ref = null
+			where name in %s""",
+			(ERASED, ERASED, tuple(c.name for c in calls)),
+		)
+	if logs:
+		frappe.db.sql(
+			"update `tabCRM Call Log` set `from` = %s, `to` = %s, recording_url = null where name in %s",
+			(ERASED, ERASED, tuple(logs)),
+		)
+	return len(calls), len(logs)

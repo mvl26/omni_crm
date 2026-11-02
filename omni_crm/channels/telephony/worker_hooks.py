@@ -13,7 +13,7 @@ import frappe
 
 from omni_crm import flags
 from omni_crm.channels.telephony import calls
-from omni_crm.crm_bridge import call_log
+from omni_crm.crm_bridge import call_log, first_response
 from omni_crm.crm_bridge import task as task_bridge
 from omni_crm.identity.normalize import normalize_phone
 
@@ -35,6 +35,7 @@ def _record(channel_doc: Any, ev: Any, lead: str | None, deal: str | None) -> An
 	if call.crm_call_log != log:
 		frappe.db.set_value(calls.CALL, name, "crm_call_log", log, update_modified=False)
 		call.crm_call_log = log
+	first_response.on_call_recorded(call, lead)  # V2-01: cuộc gọi đi được nghe máy = phản hồi đầu tiên
 	return call
 
 

@@ -472,23 +472,26 @@ class TestPromptLoader(FrappeTestCase):
 		self.assertIn("Zalo OA", text)
 		self.assertNotIn("{kenh}", text)
 
-	def test_newer_file_becomes_active_and_sync_writes_settings(self):
+	def test_newer_file_is_not_loaded_until_pinned(self):
+		# V2-01 (gate 1, ĐQ-6): trước đây tệp số cao nhất tự thành bản chạy thật; nay phải ghim mới có hiệu lực.
 		tmp = loader.PROMPT_DIR / "analyze_v2.md"
 		tmp.write_text("version: v2\n\nnội dung mới\n", encoding="utf-8")
 		self.addCleanup(tmp.unlink)
-		self.assertEqual(loader.active_version("analyze"), "v2")
+		self.assertEqual(loader.latest_version("analyze"), "v2")
+		self.assertEqual(loader.active_version("analyze"), "v1")
+		self.assertEqual(loader.load_prompt("analyze").version, "v1")
 		self.assertEqual(loader.load_prompt("analyze", "v1").version, "v1")
 		orig = frappe.db.get_single_value("Omni Settings", "analyze_prompt_version")
 		self.addCleanup(frappe.db.set_single_value, "Omni Settings", "analyze_prompt_version", orig)
-		self.assertEqual(loader.sync_settings()["analyze"], "v2")
-		self.assertEqual(frappe.db.get_single_value("Omni Settings", "analyze_prompt_version"), "v2")
+		self.assertNotIn("analyze", loader.sync_settings())  # đã có bản ghim: không ghi đè
+		self.assertEqual(frappe.db.get_single_value("Omni Settings", "analyze_prompt_version"), "v1")
 
 	def test_bad_header_rejected(self):
 		tmp = loader.PROMPT_DIR / "zz_v1.md"
 		tmp.write_text("khong co dong version\n", encoding="utf-8")
 		self.addCleanup(tmp.unlink)
 		with self.assertRaises(ValueError):
-			loader.load_prompt("zz")
+			loader.load_prompt("zz", "v1")
 
 
 class TestBotMonitoring(AITestCase):

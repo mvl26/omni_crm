@@ -52,10 +52,10 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | `prospect_import_enabled`, `fit_scoring_enabled` | Check | 1, 1 | D1-13/D1-14: công tắc nhập danh sách và tính điểm phù hợp |
 | `assignment_fallback_users` | Small Text | | Đợt 1: chỉ dùng nếu Assignment Rule của CRM không áp dụng được (G11) — mỗi dòng một user, chia vòng tròn |
 | `bot_active_hours` | JSON | để trống = 24/7 | Đợt 3: giờ bot được tự gửi (Q6); ngoài giờ chỉ soạn nháp |
-| `recording_enabled` | Check | 0 | Đợt 3: công tắc tải ghi âm và chuyển văn bản |
-| `stt_provider` | Select | (theo D3-03) | Đợt 3: nhà cung cấp chuyển giọng nói |
-| `stt_api_key` | Password | | Đợt 3 |
-| `stt_min_confidence` | Float | theo báo cáo D3-03 | Đợt 3: dưới ngưỡng thì không phân tích bản ghi |
+| `recording_enabled` | Check | 0 | Đợt 3: công tắc tải ghi âm và chuyển văn bản. **CHƯA LÀM** (D3-04 bỏ qua có chủ đích, chờ cổng STT; V2-01): trường không có trong DocType; `flags.recording_enabled()` luôn trả tắt |
+| `stt_provider` | Select | (theo D3-03) | Đợt 3: nhà cung cấp chuyển giọng nói. **CHƯA LÀM** (như `recording_enabled`) |
+| `stt_api_key` | Password | | Đợt 3. **CHƯA LÀM** |
+| `stt_min_confidence` | Float | theo báo cáo D3-03 | Đợt 3: dưới ngưỡng thì không phân tích bản ghi. **CHƯA LÀM** |
 | **Bot (Đợt 2)** | | | |
 | `bot_analyze_enabled` | Check | 0 | Công tắc bot phân tích |
 | `bot_reply_mode` | Select | Off / Shadow / Draft | Chế độ trả lời toàn cục. Tự động bật **theo nhóm** ở Omni Question Group |
@@ -199,10 +199,10 @@ Ràng buộc duy nhất trên (`lead_a`, `lead_b`).
 | `crm_call_log` | Link | CRM Call Log | Bản ghi tương ứng trong CRM |
 | `callback_task` | Link | CRM Task | Với gọi nhỡ |
 | `recording_ref` | Data | | Đường dẫn/ID ghi âm phía nhà cung cấp |
-| `recording_file` | Attach | private | Đợt 3 |
-| `transcript` | Long Text | | Đợt 3 |
-| `summary` | Small Text | | Đợt 3 |
-| `stt_status` | Select | Not Started / Pending / Done / Failed / Skipped | Đợt 3 |
+| `recording_file` | Attach | private | Đợt 3. **CHƯA LÀM** (D3-04) |
+| `transcript` | Long Text | | Đợt 3. **CHƯA LÀM** (D3-04) |
+| `summary` | Small Text | | Đợt 3. **CHƯA LÀM** (D3-04) |
+| `stt_status` | Select | Not Started / Pending / Done / Failed / Skipped | Đợt 3. **CHƯA LÀM** (D3-04) |
 | `raw_events` | JSON | | Các sự kiện gốc của cuộc gọi (kể cả trung gian) |
 | `unverified` | Check | | Không xác minh được `call_id` qua API nhà cung cấp |
 
@@ -279,6 +279,9 @@ Bật `track_changes`. Mỗi lần lưu, tăng `Omni Settings.kb_version` (Int, 
 | `rating` | Select | Đúng / Sai / Thiếu | Sale chấm |
 | `rating_note` | Small Text | Ghi chú khi chấm; đánh dấu "nghiêm trọng" nếu sai về giá, cam kết, y khoa |
 | `critical` | Check | Sale hoặc người duyệt đánh dấu lỗi nghiêm trọng |
+| `handoff_notified_at` | Datetime | D3-02: lúc gửi thông báo chuyển người (hệ thống ghi) |
+| `handoff_email_done` | Check | D3-02: đã gửi email nhắc vì sale chưa mở thông báo sau 10 phút |
+| `handoff_logs` | Small Text | D3-02: nhật ký các kênh thông báo đã thử (không chứa nội dung khách) |
 
 D3-01: ở `mode = Draft`, `decision` đi `Pending -> Sent As Is | Sent Edited | Discarded | Expired`; `final_text`, `edit_distance_ratio`, `decided_by`, `decided_at` ghi khi sale quyết định (`Expired`: chỉ `decided_at`); `rating`, `rating_note`, `critical` do sale chấm sau khi gửi/bỏ. Tin ra từ nháp có `Omni Outbound Message.bot_draft`, `source = Sale`. Không thêm trường nào so với bảng trên. Quyền theo Lead: xem `permissions.py::bot_draft_conditions` và mục 16.
 
@@ -296,6 +299,7 @@ D3-01: ở `mode = Draft`, `decision` đi `Pending -> Sent As Is | Sent Edited |
 | --- | --- | --- |
 | `omni_first_channel` | Data | Kênh liên hệ đầu tiên |
 | `omni_last_inbound_at` | Datetime | Khách liên hệ gần nhất |
+| `omni_first_response_at` | Datetime (chỉ đọc) | V2-01: phản hồi đầu tiên — tin ra đầu tiên không sandbox của Sale/Bot, thư gửi đi từ CRM, cuộc gọi đi được nghe máy (nhật ký chăm sóc: V2-04). Luôn giữ giá trị sớm nhất; `crm_bridge/first_response.py`, patch điền ngược `backfill_lead_first_response` |
 | `omni_manual_fields` | JSON (ẩn) | Các trường sale đã sửa tay — bot không ghi đè |
 | `omni_phone_e164` | Data (ẩn, search_index) | SĐT chuẩn hóa từ `mobile_no`/`phone` (xem `docs/04` mục 4) |
 | `omni_email_norm` | Data (ẩn, search_index) | Email chuẩn hóa |

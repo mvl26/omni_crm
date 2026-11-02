@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import random
+from contextvars import ContextVar
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,7 @@ from omni_crm.bot import ai_client, analyze, knowledge, reply
 from omni_crm.bot.context import escape_tags, render_turns
 from omni_crm.bot.eval import grading
 from omni_crm.bot.eval.fake import OracleClient
-from omni_crm.bot.prompts.loader import load_prompt, render
+from omni_crm.bot.prompts.loader import active_version, load_prompt, render
 
 CASE = "Omni Eval Case"
 RUN = "Omni Eval Run"
@@ -207,6 +208,19 @@ def _scrub(batch_id: str) -> None:
 	frappe.db.commit()
 
 
+_VERSIONS: ContextVar[dict[str, str] | None] = ContextVar("omni_eval_prompt_versions", default=None)
+
+
+def _effective_version(name: str) -> str | None:
+	"""Phiên bản câu lệnh dùng cho lần chạy: bản chỉ định của lần chạy (so sánh), không thì bản GHIM của production."""
+	return (_VERSIONS.get() or {}).get(name) or active_version(name)
+
+
+def _load(name: str):
+	"""Nạp câu lệnh cho bộ đề theo `_effective_version` (không bao giờ tự lấy bản mới nhất)."""
+	return load_prompt(name, _effective_version(name))
+
+
 def _customer_text(turns: list[dict], after_last_sale: bool = False) -> str:
 	if after_last_sale:
 		idx = max((i for i, t in enumerate(turns) if t["actor"] != "customer"), default=-1)
@@ -216,7 +230,7 @@ def _customer_text(turns: list[dict], after_last_sale: bool = False) -> str:
 
 def analyze_case(case: dict, turns: list[dict], tag: str, mask: bool, settings: Any) -> dict:
 	"""Bước phân tích: trả {"accepted": {...}} hoặc {"unmeasured": "lý do"}; không ghi CRM."""
-	prompt = load_prompt("analyze")
+	prompt = _load("analyze")
 	batch_id = f"eval::{tag}::{case['case_id']}"
 	raw = ai_client.call_tool(
 		"Analyze",
@@ -258,7 +272,7 @@ def reply_case(
 		return {"unmeasured": f"reply: kho {len(items)} mục vượt ngưỡng truy hồi {reply.KB_MAX_ITEMS}"}
 	at = get_datetime(case["conversation"][-1].get("at") or DEFAULT_AT)
 	hours = reply.hours_context(at)
-	prompt = load_prompt("reply")
+	prompt = _load("reply")
 	batch_id = f"eval::{tag}::{case['case_id']}"
 	conversation = render_turns(turns, reply.MAX_TURNS, 6000, mask)
 	raw = ai_client.call_tool(
@@ -308,7 +322,7 @@ def reply_case(
 
 def judge_case(case: dict, turns: list[dict], text: str, kb_texts: list[str], tag: str, mask: bool) -> dict:
 	"""Giám khảo chấm một câu trả lời; trả verdict đã tính lại bằng code hoặc {"unmeasured"}."""
-	prompt = load_prompt("judge")
+	prompt = _load("judge")
 	batch_id = f"eval::{tag}::{case['case_id']}"
 	kb_block = "\n".join(f"<muc>{escape_tags(t)}</muc>" for t in kb_texts)
 	content = "\n".join(
@@ -432,13 +446,31 @@ def _baseline() -> dict | None:
 
 
 def _prompt_label(steps: tuple[str, ...], judge: bool) -> str:
-	from omni_crm.bot.prompts.loader import active_version
-
-	parts = [f"{n}-{active_version(n)}" for n in ("analyze", "reply") if n in steps]
-	return "_".join(parts + ([f"judge-{active_version('judge')}"] if judge and "reply" in steps else []))
+	parts = [f"{n}-{_effective_version(n)}" for n in ("analyze", "reply") if n in steps]
+	return "_".join(parts + ([f"judge-{_effective_version('judge')}"] if judge and "reply" in steps else []))
 
 
 def run(
+	case_filter: dict | None = None,
+	judge: bool = True,
+	gate: str = "nhap",
+	kb_file: str | None = None,
+	groups_file: str | None = None,
+	allow_real: bool = False,
+	reviewed: bool = False,
+	mode: str | None = None,
+	prompt_versions: dict[str, str] | None = None,
+) -> str:
+	"""Chạy bộ đề (xem `_run`). `prompt_versions` ({"analyze": "v2", …}, giá trị `latest` = bản mới nhất) chỉ định bản câu
+	lệnh để SO SÁNH; bỏ trống = đúng bản đã ghim cho production. Không bao giờ đổi bản ghim."""
+	token = _VERSIONS.set(dict(prompt_versions) if prompt_versions else None)
+	try:
+		return _run(case_filter, judge, gate, kb_file, groups_file, allow_real, reviewed, mode)
+	finally:
+		_VERSIONS.reset(token)
+
+
+def _run(
 	case_filter: dict | None = None,
 	judge: bool = True,
 	gate: str = "nhap",
