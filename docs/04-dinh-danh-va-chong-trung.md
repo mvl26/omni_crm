@@ -54,6 +54,8 @@ Chữ thường, bỏ khoảng trắng. Không bỏ dấu chấm hay phần `+ta
 1. identity = get_or_create Omni Identity theo identity_key; cập nhật display_name, phone_e164/email_norm nếu có tín hiệu mạnh
 2. Nếu identity.lead tồn tại, chưa bị gộp:            → dùng lead đó. Kết thúc (vẫn thực hiện bước 6).
 3. Thu tín hiệu mạnh S và trung bình M từ msgs + sender_profile
+3b. (V2-02, docs/14 mục 2) Trước bước 4 và sau khi thử chuỗi thư: khớp NHÀ THẦU theo thứ tự mã số thuế (hồ sơ kênh) → Contact đã biết (SĐT/email mạnh) → tên miền email công ty. Khớp đúng MỘT Organization → gắn Lead đang mở của nó (tạo Lead Tiềm năng nếu chưa có). Nhiều Organization → không liên kết, tạo lead mới + Duplicate Candidate với Lead của từng ứng viên + Comment liệt kê. Định danh đã gắn Lead khác thì không gắn lại, chỉ tạo Duplicate Candidate.
+3c. (V2-02, 04.08) Lô chỉ gồm tin nhân viên trả lời ngoài hệ thống (oa_echo) và định danh chưa có Lead → chỉ ghi Identity, không tạo Lead.
 4. Tìm Lead ứng viên:
      L_S = Lead có omni_phone_e164 ∈ S.phones hoặc omni_email_norm ∈ S.emails
            + Lead gắn với Omni Identity khác có phone/email ∈ S
@@ -61,7 +63,7 @@ Chữ thường, bỏ khoảng trắng. Không bỏ dấu chấm hay phần `+ta
 5. Quyết định:
      |L_S| == 1                       → gắn lead đó
      |L_S| > 1                        → gắn lead hoạt động gần nhất; tạo Duplicate Candidate cho từng lead còn lại
-     |L_S| == 0 và |L_M| == 1         → gắn nếu tên không mâu thuẫn (xem 3.1); mâu thuẫn → tạo lead mới + Duplicate Candidate
+     |L_S| == 0 và |L_M| == 1         → gắn CHỈ nếu tên hai bên đủ thông tin và giống nhau >= 0.5 (xem 3.1, R1/ADR 0008); còn lại → tạo lead mới + Duplicate Candidate
      |L_S| == 0 và |L_M| > 1          → tạo lead mới + Duplicate Candidate với từng lead
      không có gì                      → tạo lead mới
 6. Lead mới hoặc đã có: tìm Lead khác có tên hiển thị giống (≥ 0.9 sau bỏ dấu, chữ thường) trong 90 ngày
@@ -69,7 +71,9 @@ Chữ thường, bỏ khoảng trắng. Không bỏ dấu chấm hay phần `+ta
 7. Gắn identity.lead = lead; commit
 ```
 
-### 3.1 "Tên mâu thuẫn"
+### 3.1 "Tên mâu thuẫn" và điều kiện gắn bằng tín hiệu trung bình
+
+**Từ V2-02 (R1, ADR 0008)**, gắn bằng tín hiệu trung bình đòi hỏi tên hai bên đều có ít nhất 2 từ riêng và độ giống >= 0.5; tên rỗng, một từ hoặc chung chung KHÔNG đủ để gắn (tạo lead mới + nghi trùng). Bản gốc dưới đây là định nghĩa "mâu thuẫn" dùng để chọn điểm của nghi trùng (60 mâu thuẫn, 55 thiếu thông tin).
 
 Cả hai tên có ít nhất 2 từ và độ giống (sau bỏ dấu, chữ thường, so khớp từ) < 0.5. Tên một từ hoặc tên chung chung ("Anh", "Chị", "Khách", "Zalo user") coi như không có thông tin.
 

@@ -58,7 +58,7 @@ Quy tắc deploy: mỗi đợt gắn tag `dot-N-rcX`; migration chỉ **thêm** 
 
 - `raw_payload` xóa sau `raw_payload_retention_days`; ghi âm xóa sau `recording_retention_days` (tác vụ đêm).
 - Sao lưu DB hằng ngày (bench backup) và kiểm tra khôi phục mỗi quý.
-- Yêu cầu xóa dữ liệu của khách: Omni Admin dùng thao tác "Xóa dữ liệu khách" trên Lead → xóa nội dung tin vào/ra, ghi âm, bản ghi bot của Lead, giữ bản ghi kỹ thuật ẩn danh. (Làm ở D1-10 ở mức tối thiểu.)
+- Yêu cầu xóa dữ liệu của khách: Omni Admin dùng thao tác "Xóa dữ liệu khách" trên Lead → xóa nội dung tin vào/ra, ghi âm, bản ghi bot của Lead, cuộc gọi, và (V2-02) dữ liệu cá nhân của Contact là chính người của Lead (họ tên, SĐT, email, ghi chú; đặt `omni_consent = Từ chối`; giữ bản ghi ẩn danh + khóa HMAC để lần nhập sau không tạo lại), giữ bản ghi kỹ thuật ẩn danh. Một người liên hệ cụ thể: `omni_crm.api.admin.erase_contact_data(contact, reason)`.
 
 ## Lưu ý D1-05: khóa tín hiệu `sig:`
 
