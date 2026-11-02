@@ -118,3 +118,4 @@ Ba đợt phát hành trong đặc tả (`docs/00-tong-quan.md`): **Đợt 1** e
 - [ ] Hạ tầng xong theo [01](01-cai-dat-va-ha-tang.md) mục 13 và cấu hình theo [02](02-cau-hinh-omni-settings.md) mục 13.
 - [ ] Mỗi kênh dùng thật đã qua checklist "Đã xong khi" của tệp kênh tương ứng.
 - [ ] Mọi cổng ở [10](10-quy-trinh-len-san-xuat.md) mục 2 có kết quả ghi lại, trung thực: "chưa đo" không được đọc là "đạt".
+- [Gắn form website vào Omni CRM](gan-form-website.md) (V2-05)

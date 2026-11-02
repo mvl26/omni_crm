@@ -375,3 +375,10 @@ Trường ẩn `omni_import_snapshot` (Long Text) trên CRM Organization và Con
 D3-01: `Omni Bot Draft` cũng có `permission_query_conditions` và `has_permission` theo Lead (cùng hàm với tin nhắn); Sales User không có quyền DocType nên chỉ thấy nháp qua `api/drafts.py` / `get_thread` (kiểm quyền Lead). Omni Knowledge Editor đọc được nháp chỉ khi CRM cho phép xem Lead đó; báo cáo "Bot nháp" cho Omni Admin và Omni Knowledge Editor (chỉ số đếm).
 
 D1-06 thi hành: hook `permission_query_conditions` và `has_permission` (`omni_crm/permissions.py`) cho Omni Inbound Message, Omni Outbound Message và Omni Identity, gọi lại điều kiện của chính CRM Lead nên Sales User chỉ thấy bản ghi có `lead` mà CRM cho phép xem; Omni Admin, System Manager, Administrator không bị giới hạn. Bản ghi chưa có `lead` chỉ Omni Admin/System Manager thấy.
+
+## V2-05 · Thi hành lead quảng cáo (ghi chú)
+
+- `Omni Campaign` (autoname theo `campaign_name`; `campaign_key` ẩn duy nhất = "nền tảng:mã", NULL khi chưa có mã; `status` Nháp/Đang chạy/Tạm dừng/Kết thúc) và `Omni Lead Form` (autoname hash; `form_key` ẩn duy nhất; `secret` Password `permlevel 1` chỉ Omni Admin; thêm `last_reconciled_at`) cùng bảng con `Omni Lead Form Field` (`source_key`, `target` kiểm hợp lệ ở controller: các đích của docs/15 mục 5 hoặc `custom:<tên>`).
+- `Omni Channel`: thêm `meta_page_id, meta_app_secret, meta_verify_token, meta_page_access_token` (Password) và `webform_captcha_provider, webform_captcha_secret`. `Omni Identity.channel_type` thêm 3 loại.
+- `Omni Settings`: `ads_silence_hours`, `webform_rate_limit`, `webform_rate_window_minutes`; `default_lead_source_map` mặc định có 6 khóa (site cũ giữ giá trị đã lưu, mã lấy mặc định cho khóa còn thiếu nên KHÔNG cần patch).
+- CRM Lead: 14 Custom Field của docs/15 mục 6 trừ `omni_first_response_at` đã có (`omni_ad_platform, omni_campaign, omni_last_campaign, omni_ad_id, omni_adset_id, omni_form_id, omni_utm_*, omni_click_id, omni_landing_page, omni_is_test`), đều chỉ đọc với người dùng.

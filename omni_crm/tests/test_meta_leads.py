@@ -473,6 +473,7 @@ class TestTestLead(MetaCase):
 		self.assertEqual(frappe.db.count("ToDo", {"reference_name": lead, "status": "Open"}), 0)
 		self.assertFalse(d.omni_phone_e164)
 		self.assertEqual(frappe.db.count("Notification Log", {"document_name": lead}), 0)
+		self.assertEqual(frappe.db.count("CRM Notification", {"reference_name": lead}), 0)  # chuông của CRM
 
 
 class TestHostileInput(MetaCase):

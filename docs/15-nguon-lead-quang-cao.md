@@ -108,3 +108,9 @@ Khối **Theo chiến dịch** (lọc theo kỳ): mỗi chiến dịch/nguồn �
 - Web form: honeypot, quá tần suất, thiếu đồng ý, UTM lưu đúng.
 - Cùng một người điền form Meta rồi nhắn Zalo (cùng SĐT) → một Lead, có cả hai hoạt động, `omni_campaign` giữ chiến dịch Meta.
 - SLA (giờ làm 08:00–17:30 thứ Hai–Sáu, 08:00–12:00 thứ Bảy, ngưỡng 15 phút): Lead vào 16:50 thứ Sáu → hạn 17:05 thứ Sáu; Lead vào 17:20 thứ Sáu → hạn 08:05 thứ Bảy; Lead vào 11:55 thứ Bảy → hạn 08:10 thứ Hai.
+
+## 11. Ghi chú thi hành V2-05 (2026-11-02)
+
+- Đã đối chiếu tài liệu Meta/Google (docs/12 G15, G16); **chưa thử với nền tảng thật**.
+- Lệch có chủ đích so với văn bản trên: (1) KHÔNG có email xác nhận tự động (mục 7 bước 5, ADR 0013); (2) Graph API đọc lead lấy chiến dịch qua `GET /<ad_id>` (mục 2) vì tài liệu không liệt kê `campaign_id` trên nút lead; (3) đồng ý chỉ ghi lên Contact đã có; (4) đối soát Meta lùi mốc 5 phút và lần đầu quét 24 giờ; (5) "Thiếu thông tin liên hệ" là Comment trên Lead + cách tính "Lead hợp lệ", không phải trạng thái.
+- Lead thử (`omni_is_test`) bị loại khỏi mọi khối Tổng quan, không giao sale, không nhắc quá hạn.

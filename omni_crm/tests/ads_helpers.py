@@ -81,12 +81,20 @@ def cleanup() -> None:
 		frappe.delete_doc(
 			"CRM Organization", org, force=True, ignore_permissions=True, delete_permanently=True
 		)
-	frappe.db.delete("Omni Lead Form", {"form_name": ["like", f"{PREFIX}%"]})
+	forms = frappe.get_all("Omni Lead Form", filters={"form_name": ["like", f"{PREFIX}%"]}, pluck="name")
+	if forms:  # bảng con và mật khẩu không tự xóa theo (db.delete không cascade): chỉ xóa của biểu mẫu TD505
+		frappe.db.delete("Omni Lead Form Field", {"parent": ["in", forms]})
+		frappe.db.delete("__Auth", {"doctype": "Omni Lead Form", "name": ["in", forms]})
+	frappe.db.delete("Omni Lead Form", {"name": ["in", forms or [""]]})
+	for source in ("Quảng cáo Meta", "Quảng cáo Google", "Website", "Danh sách mua sắm công"):
+		if frappe.db.exists("CRM Lead Source", source) and not frappe.db.count(
+			"CRM Lead", {"source": source}
+		):
+			frappe.delete_doc("CRM Lead Source", source, force=True, ignore_permissions=True)
 	frappe.db.delete("Omni Campaign", {"campaign_name": ["like", f"%{PREFIX}%"]})
 	frappe.db.delete("Omni Campaign", {"external_campaign_id": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("Omni Channel", {"channel_name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("__Auth", {"doctype": "Omni Channel", "name": ["like", f"{PREFIX}%"]})
-	frappe.db.delete("__Auth", {"doctype": "Omni Lead Form"})
 	frappe.db.delete("ToDo", {"allocated_to": ["in", [SALE, SALE2]]})
 	for u in (SALE, SALE2):
 		if frappe.db.exists("User", u):

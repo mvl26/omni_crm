@@ -158,3 +158,19 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
   Kết quả trên máy dev `omni.test` (25.000 Lead, 100.000 tin vào, tất cả Lead đều đang chờ trả lời = tình huống xấu, mọi tính năng Đợt 2-3 bật), p95 mili giây: trưởng nhóm hôm nay 507, 7 ngày 541, 30 ngày 632; Sales User (1/10 Lead) hôm nay 200, 30 ngày 215. Mục tiêu docs/13 mục 4 (p95 < 800 ms) đạt trên dữ liệu tổng hợp; **chưa đo trên staging**. Trước khi thêm chỉ mục, 30 ngày là 882 ms.
 - **Đổi tên nhà thầu** (CRM Organization): `Lead.organization` và `Contact.company_name` tự theo; đổi tên kiểu "gộp" bị chặn, dùng `merge_organizations`.
 - **Quay lui**: tắt hai công tắc; DocType Omni Care Log chỉ thêm, không ảnh hưởng luồng cũ.
+
+## Lưu ý V2-05: lead quảng cáo (Meta, Google, Web Form)
+
+**Chưa thử với nền tảng thật** (không có tài khoản/token). Mọi điều dưới đây kiểm bằng payload mẫu và Graph API giả.
+
+- **Cảnh báo mới** `khong_co_lead_quang_cao`: không có lead thật nào trong `ads_silence_hours` giờ làm việc khi có chiến dịch `Đang chạy` và kênh quảng cáo bật. Kênh Meta/Google/Web Form không còn dùng cảnh báo `kenh_im_lang` chung (vì kênh quảng cáo im lặng là bình thường khi chiến dịch dừng). Cách xử lý: xem Giám sát > số tin New/Manual của kênh; Meta: kiểm token Page còn hạn, ứng dụng còn đăng ký `leadgen`, Leads Access Manager; Google: kiểm URL webhook và `google_key`.
+- **Nhắc quá hạn**: tác vụ 5 phút `omni_crm.crm_bridge.response_sla.run` nhắc người được giao khi Lead quảng cáo quá `response_sla_minutes` phút làm việc kể từ `received_at`, báo trưởng nhóm khi quá gấp đôi (mỗi người một lần, dấu là Notification Log).
+- **Đối soát Meta** hằng giờ (`channels.meta_leads.reconcile.run`): bù lead sót; lỗi một biểu mẫu chỉ ghi log loại lỗi. Token Page hết hạn -> lead mới vào `Manual` (tin_manual) vì không lấy được nội dung; cấp lại token rồi bấm Xử lý lại.
+- **Web Form**: lỗi 429 nhiều từ một IP là bị giới hạn tần suất (cấu hình ở Omni Settings). Honeypot trả 200 giả nên không thấy trong bảng tin.
+- **Nhập CSV Google**: `bench --site <site> execute omni_crm.channels.google_leads.csv_import.run --kwargs "{'channel': '<kênh>', 'file': '<csv>', 'form_id': '<mã>'}"`. Dry run: thêm `'dry_run': True`. Chống trùng với webhook theo `lead_id`.
+- **Điền ngược chiến dịch cho Lead nhập ở V2-03** (KHÔNG đăng ký trong patches.txt): `bench --site <site> execute omni_crm.patches.v2.backfill_ad_fields.execute` (dry run mặc định); sau khi duyệt: thêm `--kwargs "{'dry_run': False}"`. Chưa chạy trên staging.
+- **Trước khi bật Meta**: giữ MỌI `Lead Sync Source` của crm ở trạng thái tắt (cảnh báo `dong_bo_lead_crm_dang_bat`); lead Omni ghi `facebook_lead_id` nên nếu lỡ bật thì đồng ý bị báo trùng thay vì tạo Lead đôi.
+- **Phiên bản Graph API**: mặc định `v26.0` (lấy từ tóm tắt trang tài liệu Meta ngày 2026-11-02, CHƯA kiểm với API thật). Nếu sai thì mọi lead Meta vào `Manual`. Đổi bằng `omni_meta_graph_version` trong `site_config.json` (dạng `vNN.N`, giá trị khác bị bỏ qua).
+- **Địa chỉ IP của Web Form**: giới hạn tần suất dựa vào `frappe.local.request_ip`, mà Frappe lấy từ phần tử ĐẦU của `X-Forwarded-For`. Nginx PHẢI ghi đè header này (`proxy_set_header X-Forwarded-For $remote_addr;`) chứ không nối thêm, nếu không người gọi xoay header để né giới hạn. Chưa kiểm trên nginx thật.
+- **Lead đã được liên hệ rồi điền biểu mẫu mới**: không còn `omni_first_response_at` làm sạch trạng thái chờ; chỉ nhật ký chăm sóc do sale ghi (hoặc cuộc gọi đi được nghe máy) SAU lúc điền, hoặc tin ra, mới làm hết "Quá hạn phản hồi". Việc NHẮC quá hạn bằng thông báo chỉ áp cho Lead chưa từng được phản hồi.
+

@@ -158,7 +158,13 @@ def waiting_leads(q: Query) -> list[dict]:
 			) u group by `lead`
 		) lo on lo.`lead` = `tabCRM Lead`.`name`
 		where {q.where} and (lo.last_out is null or lo.last_out < li.last_in)
-			and not (ifnull(li.last_form = li.last_in, 0) and ifnull(`tabCRM Lead`.`omni_first_response_at` >= li.last_in, 0))
+			and not (ifnull(li.last_form = li.last_in, 0) and (
+				ifnull(`tabCRM Lead`.`omni_first_response_at` >= li.last_in, 0)
+				or exists (select 1 from `tabOmni Care Log` cl where cl.`lead` = `tabCRM Lead`.`name`
+					and ifnull(cl.`outcome_by`, '') != '' and cl.`outcome_at` >= li.last_in)
+				or exists (select 1 from `tabOmni Call` oc where oc.`lead` = `tabCRM Lead`.`name` and oc.`direction` = 'Outbound'
+					and oc.`status` = 'Answered' and coalesce(oc.`answered_at`, oc.`started_at`) >= li.last_in)
+			))
 		""",
 	)
 	q.memo["waiting"] = rows

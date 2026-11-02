@@ -133,3 +133,7 @@ stateDiagram-v2
 
 `resolver.resolve` commit khi còn giữ khóa tín hiệu SĐT/email (ADR 0003). Vì vậy `Omni Identity` và `CRM Lead` vừa tạo được giữ lại dù bước sau của lô (ghi dòng thời gian, đánh dấu Done) lỗi; lô thử lại sẽ dùng lại chúng (không tạo trùng). Chỉ phần còn lại của lô được rollback.
 
+## Ghi chú V2-05
+
+`_handle_webhook(channel_type, *, max_bytes=MAX_BODY_BYTES, guard=None)`: `max_bytes` là giới hạn kích thước riêng của kênh (Web Form 64 KB), `guard(channel_doc)` là kiểm tra thêm sau khi tải kênh (giới hạn tần suất theo IP của Web Form, trả 429). Ba webhook mới: `meta_leads` (GET handshake trả `hub.challenge` nguyên văn; POST kiểm `X-Hub-Signature-256`), `google_leads` (trả `{}` mã 200; 401 sai `google_key`; 503 khi hết hạn chờ khóa DB), `web_form` (Guest). Sự kiện `form_lead` dùng mã lead của nền tảng làm `external_sender_id`; adapter có `prepare_batch` (lấy dữ liệu Meta, bỏ biểu mẫu tắt) và `after_resolve` (quy kết chiến dịch, giao sale).
+

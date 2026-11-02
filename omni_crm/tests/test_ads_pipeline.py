@@ -349,6 +349,36 @@ class TestDashboardForFormLeads(WebCase):
 		frappe.db.set_value(LEAD, lead, "omni_first_response_at", now_datetime() - timedelta(days=4))
 		self.assertNotIn(lead, {r["lead"] for r in blocks.attention(self.query())["rows"]})
 
+	def test_returning_lead_stays_overdue_until_a_later_sale_record_then_clears(self):
+		# Lead đã được liên hệ từ trước (vd nhập từ danh sách và đã gọi) rồi điền biểu mẫu mới: `omni_first_response_at` cũ
+		# KHÔNG được làm sạch trạng thái chờ; nhật ký chăm sóc của sale GHI sau lúc điền thì có.
+		lead = self.submit().lead
+		now = now_datetime()
+		frappe.db.set_value(
+			"Omni Inbound Message",
+			{"lead": lead, "event_type": "form_lead"},
+			"received_at",
+			now - timedelta(days=5),
+		)
+		frappe.db.set_value(LEAD, lead, "omni_first_response_at", now - timedelta(days=30))
+		rows = {r["lead"]: r for r in blocks.attention(self.query())["rows"]}
+		self.assertEqual(rows[lead]["reason"], "overdue")
+		frappe.get_doc(
+			{
+				"doctype": "Omni Care Log",
+				"lead": lead,
+				"channel": "Điện thoại",
+				"started_at": now - timedelta(days=4),
+				"last_activity_at": now - timedelta(days=4),
+				"handled_kind": "Sale",
+				"handled_by": SALE,
+				"outcome": "Đã tư vấn",
+				"outcome_by": SALE,
+				"outcome_at": now - timedelta(days=4),
+			}
+		).insert(ignore_permissions=True)
+		self.assertNotIn(lead, {r["lead"] for r in blocks.attention(self.query())["rows"]})
+
 	def test_test_leads_are_excluded_from_every_block(self):
 		lead = self.submit().lead
 		frappe.db.set_value(LEAD, lead, "omni_is_test", 1)

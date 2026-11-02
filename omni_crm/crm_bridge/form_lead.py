@@ -369,6 +369,9 @@ def unassign(lead: str) -> None:
 		assign_to.clear(LEAD, lead, ignore_permissions=True)
 	frappe.db.set_value(LEAD, lead, "lead_owner", None, update_modified=False)
 	frappe.db.delete("Notification Log", {"document_type": LEAD, "document_name": lead})
+	frappe.db.delete(
+		"CRM Notification", {"reference_doctype": LEAD, "reference_name": lead}
+	)  # chuông của CRM
 
 
 def notify_users(lead: str, users: list[str], subject: str, content: str) -> int:
