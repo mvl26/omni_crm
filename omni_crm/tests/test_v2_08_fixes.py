@@ -4,7 +4,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from omni_crm.bot import guards, knowledge
+from omni_crm.bot import analyze, guards, knowledge
 
 GROUP, ITEM = "Omni Question Group", "Omni Knowledge Item"
 
@@ -65,3 +65,21 @@ class TestKbItemsFollowActiveGroups(FrappeTestCase):
 		self.assertNotIn("KB-90802", knowledge.render_kb())
 		self.assertIn("KB-90802", {i["id"] for i in knowledge.kb_items(active_only=False)})
 		self.assertEqual({i["id"] for i in knowledge.kb_items(ids=["KB-90802"])}, set())
+
+
+class TestTaxIdVersusPhone(FrappeTestCase):
+	def test_ten_digit_phone_in_evidence_is_not_a_tax_id(self):
+		self.assertFalse(analyze.tax_id_supported("0912345678", "SĐT của mình là 0912345678"))
+		self.assertFalse(analyze.tax_id_supported("0398765432", "gọi em theo số 0398765432 nhé"))
+
+	def test_phone_shaped_number_is_accepted_when_evidence_says_it_is_a_tax_code(self):
+		self.assertTrue(analyze.tax_id_supported("0312345678", "mã số thuế công ty tôi 0312345678"))
+		self.assertTrue(analyze.tax_id_supported("0312345678", "MST: 0312345678"))
+
+	def test_number_that_is_not_phone_shaped_is_accepted_without_cue(self):
+		self.assertTrue(analyze.tax_id_supported("0100109140", "công ty 0100109140"))
+
+	def test_missing_or_wrong_digits_still_rejected(self):
+		self.assertFalse(analyze.tax_id_supported("", "MST 0100109140"))
+		self.assertFalse(analyze.tax_id_supported("0100109140", "MST 0100109141"))
+		self.assertFalse(analyze.tax_id_supported("0100109140", None))
