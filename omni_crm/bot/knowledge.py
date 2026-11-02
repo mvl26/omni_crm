@@ -198,7 +198,10 @@ def plain(text: str | None) -> str:
 
 
 def kb_items(ids: list[str] | None = None, active_only: bool = True) -> list[dict[str, str]]:
-	"""Mục kho tri thức (mã, nhóm, hỏi, đáp thuần văn bản) theo mã tăng dần; `ids` lọc theo mã."""
+	"""Mục kho tri thức (mã, nhóm, hỏi, đáp thuần văn bản) theo mã tăng dần; `ids` lọc theo mã.
+
+	`active_only`: chỉ mục đang dùng VÀ thuộc nhóm đang hoạt động.
+	"""
 	filters: dict[str, Any] = {}
 	if active_only:
 		filters["active"] = 1
@@ -207,6 +210,9 @@ def kb_items(ids: list[str] | None = None, active_only: bool = True) -> list[dic
 	rows = frappe.get_all(
 		ITEM, filters=filters, fields=["name", "question_group", "question", "answer"], order_by="name asc"
 	)
+	if active_only:  # mục thuộc nhóm đã ngừng hoạt động không hiện cho bot (V2-08)
+		inactive = set(frappe.get_all(GROUP, filters={"active": 0}, pluck="name"))
+		rows = [r for r in rows if r.question_group not in inactive]
 	return [
 		{
 			"id": r.name,

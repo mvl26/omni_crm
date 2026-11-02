@@ -4,7 +4,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from omni_crm.bot import guards
+from omni_crm.bot import guards, knowledge
 
 GROUP, ITEM = "Omni Question Group", "Omni Knowledge Item"
 
@@ -42,3 +42,26 @@ class TestGuardsFoldSeparators(FrappeTestCase):
 			with self.subTest(text):
 				self.assertEqual(guards.sensitive_topics(text), [], text)
 				self.assertFalse(guards.guard_injection(text)[0], text)
+
+
+class TestKbItemsFollowActiveGroups(FrappeTestCase):
+	def test_item_of_inactive_group_is_hidden_from_the_bot_but_still_listed_for_review(self):
+		frappe.get_doc({"doctype": GROUP, "group_name": "TD808 Nhom dang chay", "active": 1}).insert()
+		frappe.get_doc({"doctype": GROUP, "group_name": "TD808 Nhom ngung", "active": 0}).insert()
+		for n, group in ((90801, "TD808 Nhom dang chay"), (90802, "TD808 Nhom ngung")):
+			frappe.get_doc(
+				{
+					"doctype": ITEM,
+					"item_id": f"KB-{n}",
+					"question_group": group,
+					"active": 1,
+					"question": "Hỏi thử",
+					"answer": "Đáp thử",
+				}
+			).insert()
+		ids = {i["id"] for i in knowledge.kb_items()}
+		self.assertIn("KB-90801", ids)
+		self.assertNotIn("KB-90802", ids)
+		self.assertNotIn("KB-90802", knowledge.render_kb())
+		self.assertIn("KB-90802", {i["id"] for i in knowledge.kb_items(active_only=False)})
+		self.assertEqual({i["id"] for i in knowledge.kb_items(ids=["KB-90802"])}, set())
