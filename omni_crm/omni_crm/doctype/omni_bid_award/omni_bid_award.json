@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "creation": "2026-11-02 09:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "organization",
+  "tax_id",
+  "notice_no",
+  "package_name",
+  "hospital",
+  "hospital_key",
+  "hospital_province",
+  "category",
+  "award_date",
+  "award_value",
+  "item_count",
+  "duration_months",
+  "end_date",
+  "role",
+  "source_url",
+  "hospital_raw_key",
+  "import_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "organization",
+   "fieldtype": "Link",
+   "label": "Nhà thầu",
+   "options": "CRM Organization",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "tax_id",
+   "fieldtype": "Data",
+   "label": "Mã số thuế",
+   "description": "Sao chép từ nhà thầu để đối chiếu khi nhập"
+  },
+  {
+   "fieldname": "notice_no",
+   "fieldtype": "Data",
+   "label": "Số TBMT",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "package_name",
+   "fieldtype": "Small Text",
+   "label": "Tên gói thầu"
+  },
+  {
+   "fieldname": "hospital",
+   "fieldtype": "Data",
+   "label": "Bệnh viện / bên mời thầu",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "hospital_key",
+   "fieldtype": "Data",
+   "label": "Khóa bệnh viện",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "Tên đã chuẩn hóa và áp bảng Omni Hospital Alias; dùng để đếm bệnh viện khác nhau"
+  },
+  {
+   "fieldname": "hospital_province",
+   "fieldtype": "Data",
+   "label": "Tỉnh của bệnh viện"
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "Loại hàng",
+   "options": "VTYT tiêu hao\nHóa chất – sinh phẩm\nThuốc\nTrang thiết bị\nKhác",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "award_date",
+   "fieldtype": "Date",
+   "label": "Ngày phê duyệt KQLCNT",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "award_value",
+   "fieldtype": "Currency",
+   "label": "Giá trúng thầu",
+   "options": "VND",
+   "precision": "0"
+  },
+  {
+   "fieldname": "item_count",
+   "fieldtype": "Int",
+   "label": "Số mã hàng trúng"
+  },
+  {
+   "fieldname": "duration_months",
+   "fieldtype": "Int",
+   "label": "Thời gian thực hiện HĐ (tháng)"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "Ngày kết thúc dự kiến",
+   "read_only": 1,
+   "description": "Ngày phê duyệt cộng số tháng thực hiện"
+  },
+  {
+   "fieldname": "role",
+   "fieldtype": "Select",
+   "label": "Vai trò",
+   "options": "\nNhà thầu độc lập\nLiên danh – đứng đầu\nLiên danh – thành viên"
+  },
+  {
+   "fieldname": "source_url",
+   "fieldtype": "Data",
+   "label": "Đường dẫn nguồn"
+  },
+  {
+   "fieldname": "hospital_raw_key",
+   "fieldtype": "Data",
+   "label": "Khóa bệnh viện trước khi gộp tên",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "Chuẩn hóa nhưng chưa áp Omni Hospital Alias"
+  },
+  {
+   "fieldname": "import_key",
+   "fieldtype": "Data",
+   "label": "Khóa nhập",
+   "read_only": 1,
+   "unique": 1,
+   "hidden": 1,
+   "description": "tax_id|notice_no|hospital_raw_key (thiếu số TBMT: tax_id|hospital_raw_key|ngày|giá trị)"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-02 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Bid Award",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "email": 0,
+   "print": 0,
+   "share": 0
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "title_field": "hospital",
+ "search_fields": "hospital,notice_no,tax_id",
+ "track_changes": 1
+}

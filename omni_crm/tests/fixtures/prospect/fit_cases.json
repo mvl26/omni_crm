@@ -1,0 +1,207 @@
+{
+ "today": "2026-10-30",
+ "note": "Bộ dữ liệu giả lập đối chiếu với mẫu Excel (ThamSo mặc định, ngày tính 30/10/2026). Tên bệnh viện viết thống nhất vì Excel đếm theo chuỗi thô.",
+ "cases": [
+  {
+   "key": "A",
+   "name": "TD213 Nhà thầu 6 bệnh viện",
+   "tax_id": "0100000011",
+   "est_item_count": 0,
+   "awards": [
+    {
+     "notice_no": "A01",
+     "hospital": "Bệnh viện Đa khoa H1",
+     "category": "VTYT tiêu hao",
+     "award_date": "2026-03-15",
+     "award_value": 4000000000,
+     "item_count": 250,
+     "duration_months": 12
+    },
+    {
+     "notice_no": "A02",
+     "hospital": "Bệnh viện Đa khoa H2",
+     "category": "VTYT tiêu hao",
+     "award_date": "2026-01-10",
+     "award_value": 2000000000,
+     "item_count": 120,
+     "duration_months": 12
+    },
+    {
+     "notice_no": "A03",
+     "hospital": "Bệnh viện Đa khoa H3",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-11-20",
+     "award_value": 2000000000,
+     "item_count": 80,
+     "duration_months": 24
+    },
+    {
+     "notice_no": "A04",
+     "hospital": "Bệnh viện Đa khoa H4",
+     "category": "VTYT tiêu hao",
+     "award_date": "2026-02-01",
+     "award_value": 2000000000,
+     "item_count": 60,
+     "duration_months": 24
+    },
+    {
+     "notice_no": "A05",
+     "hospital": "Bệnh viện Đa khoa H5",
+     "category": "VTYT tiêu hao",
+     "award_date": "2026-04-01",
+     "award_value": 1000000000,
+     "item_count": 50,
+     "duration_months": 12
+    },
+    {
+     "notice_no": "A06",
+     "hospital": "Bệnh viện Đa khoa H6",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-01-10",
+     "award_value": 1000000000,
+     "item_count": 40,
+     "duration_months": 6
+    },
+    {
+     "notice_no": "A07",
+     "hospital": "Bệnh viện Đa khoa H1",
+     "category": "VTYT tiêu hao",
+     "award_date": "2026-06-01",
+     "award_value": 1000000000,
+     "item_count": 30,
+     "duration_months": 12
+    },
+    {
+     "notice_no": "A08",
+     "hospital": "Bệnh viện Đa khoa H7",
+     "category": "VTYT tiêu hao",
+     "award_date": "2024-06-01",
+     "award_value": 5000000000,
+     "item_count": 400,
+     "duration_months": 36
+    },
+    {
+     "notice_no": "A09",
+     "hospital": "Bệnh viện Đa khoa H8",
+     "category": "Thuốc",
+     "award_date": "2026-05-01",
+     "award_value": 3000000000,
+     "item_count": 900,
+     "duration_months": 12
+    }
+   ],
+   "expected": {
+    "awards_in_period": 7,
+    "hospital_count": 6,
+    "max_items": 250,
+    "items_for_scoring": 250,
+    "award_value_bn": 13.0,
+    "active_awards": 7,
+    "meets_criteria": 1,
+    "fit_score": 62,
+    "fit_tier": "B"
+   }
+  },
+  {
+   "key": "B",
+   "name": "TD213 Nhà thầu 5 bệnh viện hợp đồng đã hết",
+   "tax_id": "0100000028",
+   "est_item_count": 300,
+   "awards": [
+    {
+     "notice_no": "B01",
+     "hospital": "Bệnh viện B1",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-02-01",
+     "award_value": 3000000000,
+     "item_count": 120,
+     "duration_months": 6
+    },
+    {
+     "notice_no": "B02",
+     "hospital": "Bệnh viện B2",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-02-01",
+     "award_value": 3000000000,
+     "item_count": 100,
+     "duration_months": 6
+    },
+    {
+     "notice_no": "B03",
+     "hospital": "Bệnh viện B3",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-02-01",
+     "award_value": 3000000000,
+     "item_count": 90,
+     "duration_months": 6
+    },
+    {
+     "notice_no": "B04",
+     "hospital": "Bệnh viện B4",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-02-01",
+     "award_value": 3000000000,
+     "item_count": 80,
+     "duration_months": 6
+    },
+    {
+     "notice_no": "B05",
+     "hospital": "Bệnh viện B5",
+     "category": "VTYT tiêu hao",
+     "award_date": "2025-02-01",
+     "award_value": 3000000000,
+     "item_count": 70,
+     "duration_months": 6
+    }
+   ],
+   "expected": {
+    "awards_in_period": 5,
+    "hospital_count": 5,
+    "max_items": 120,
+    "items_for_scoring": 300,
+    "award_value_bn": 15.0,
+    "active_awards": 0,
+    "meets_criteria": 1,
+    "fit_score": 53,
+    "fit_tier": "B"
+   }
+  },
+  {
+   "key": "C",
+   "name": "TD213 Nhà thầu 2 bệnh viện",
+   "tax_id": "0100000035",
+   "est_item_count": 0,
+   "awards": [
+    {
+     "notice_no": "C01",
+     "hospital": "Bệnh viện C1",
+     "category": "Hóa chất – sinh phẩm",
+     "award_date": "2026-06-01",
+     "award_value": 1000000000,
+     "item_count": 80,
+     "duration_months": 12
+    },
+    {
+     "notice_no": "C02",
+     "hospital": "Bệnh viện C2",
+     "category": "VTYT tiêu hao",
+     "award_date": "2026-07-01",
+     "award_value": 1000000000,
+     "item_count": 40,
+     "duration_months": 12
+    }
+   ],
+   "expected": {
+    "awards_in_period": 2,
+    "hospital_count": 2,
+    "max_items": 80,
+    "items_for_scoring": 80,
+    "award_value_bn": 2.0,
+    "active_awards": 2,
+    "meets_criteria": 0,
+    "fit_score": 25,
+    "fit_tier": "C"
+   }
+  }
+ ]
+}
