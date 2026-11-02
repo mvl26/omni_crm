@@ -519,6 +519,25 @@ class TestAlwaysHandoffByCode(ReplyTestCase):
 		(d,) = self.drafts(batch_id=batch)
 		self.assertEqual((d.mode, d.action), ("Draft", "Handoff"))
 
+	def test_shadow_only_group_can_never_auto_send(self):
+		"""Nhóm shadow_only: khóa hạ tầng mở và auto_send_enabled=1 vẫn không tự gửi (kể cả tin giữ chỗ); không bật được."""
+		from omni_crm import flags
+		from omni_crm.bot import auto_send
+
+		name = "T07 Giờ làm việc"
+		with mock.patch.object(flags, "auto_send_infra_allowed", return_value=True):
+			frappe.db.set_value(GROUP, name, {"auto_send_enabled": 1, "shadow_only": 0})
+			self.assertTrue(flags.group_auto_send(name))
+			frappe.db.set_value(GROUP, name, "shadow_only", 1)
+			self.assertFalse(flags.group_auto_send(name))
+			self.assertFalse(auto_send._group_on(None, auto_send._lock_group(name)))
+			frappe.db.set_value(GROUP, name, "auto_send_enabled", 0)
+			with mock.patch.object(auto_send, "_require_admin"):
+				with self.assertRaises(frappe.ValidationError):
+					auto_send.enable_group(name, confirm=True, force=True, reason="x" * 50)
+		frappe.db.set_value(GROUP, name, {"auto_send_enabled": 0, "shadow_only": 0})
+		frappe.db.commit()
+
 
 class ImportCase(FrappeTestCase):
 	"""Nhập nhóm/kho tri thức: khôi phục nguyên trạng hoạt động của các nhóm đang có và dọn mục/nhóm mới tạo."""
