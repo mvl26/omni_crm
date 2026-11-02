@@ -446,6 +446,23 @@ class TestMergeAndErase(CareCase):
 
 
 class TestSettingsAndSwitches(FrappeTestCase):
+	def test_first_save_of_settings_keeps_care_switches_on(self):
+		"""Single không áp default JSON: lần lưu đầu từng ghi 0 làm tắt Dashboard âm thầm (đã gặp trên omni.test)."""
+		from omni_crm import flags
+
+		fields = tuple(flags.CARE_DEFAULTS)
+		try:
+			frappe.db.sql("delete from `tabSingles` where doctype='Omni Settings' and field in %s", (fields,))
+			frappe.get_doc("Omni Settings").save()
+			self.assertTrue(flags.dashboard_enabled())
+			self.assertTrue(flags.care_log_enabled())
+			self.assertEqual(flags.care_setting("response_sla_minutes"), 15)
+			self.assertEqual(flags.care_setting("care_session_gap_hours"), 4)
+			self.assertEqual(flags.care_setting("team_lead_role"), "Sales Manager")
+		finally:
+			frappe.db.rollback()
+			frappe.clear_document_cache("Omni Settings", "Omni Settings")
+
 	def test_care_defaults_when_never_saved_or_zero(self):
 		from omni_crm import flags
 

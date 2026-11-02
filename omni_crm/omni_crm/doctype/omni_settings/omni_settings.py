@@ -29,6 +29,25 @@ class OmniSettings(Document):
 		self.validate_handoff()
 		self.validate_prompt_pins()
 		self.validate_fit_params()
+		self.fill_care_defaults()
+
+	def fill_care_defaults(self) -> None:
+		"""Cấu hình chăm sóc (V2-04): trường chưa từng lưu thì điền mặc định thay vì lưu 0 (làm TẮT công tắc âm thầm).
+
+		Single không áp `default` của JSON cho trường chưa có dòng trong tabSingles, nên lần lưu đầu sẽ ghi 0 vào hai công tắc
+		`dashboard_enabled`, `care_log_enabled` và các ngưỡng; xem `flags.care_setting`.
+		"""
+		from omni_crm.flags import CARE_DEFAULTS
+
+		stored = dict(
+			frappe.db.sql(
+				"select field, value from `tabSingles` where doctype = 'Omni Settings' and field in %s",
+				(tuple(CARE_DEFAULTS),),
+			)
+		)
+		for fieldname, default in CARE_DEFAULTS.items():
+			if fieldname not in stored and not self.get(fieldname):
+				self.set(fieldname, default)
 
 	def validate_fit_params(self) -> None:
 		"""Tham số điểm phù hợp (V2-02): mức tối đa và kỳ xét phải dương, trọng số/ngưỡng không âm, có ít nhất một loại hàng.
