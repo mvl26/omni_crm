@@ -48,6 +48,7 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | `callback_fallback_user` | Link User | | Đợt 2: người nhận việc gọi lại khi Lead chưa có người phụ trách |
 | `holidays` | JSON | `[]` | D1-12: danh sách ngày nghỉ lễ `["2027-01-01", …]` cho tính giờ làm việc |
 | `response_sla_minutes`, `care_session_gap_hours`, `team_lead_role` | Int, Int, Link Role | 15, 4, Sales Manager | D1-12: xem `docs/13` mục 5 |
+| `dashboard_enabled`, `care_log_enabled` | Check, Check | 1, 1 | V2-04: công tắc Dashboard CSKH và tự ghi nhật ký chăm sóc (docs/09) |
 | `fit_*` (12 trường) | Int/Float/Small Text | xem `docs/14` mục 3.1 | D1-13: tham số điểm phù hợp, mặc định giống sheet ThamSo của mẫu Excel |
 | `prospect_import_enabled`, `fit_scoring_enabled` | Check | 1, 1 | D1-13/D1-14: công tắc nhập danh sách và tính điểm phù hợp |
 | `assignment_fallback_users` | Small Text | | Đợt 1: chỉ dùng nếu Assignment Rule của CRM không áp dụng được (G11) — mỗi dòng một user, chia vòng tròn |
