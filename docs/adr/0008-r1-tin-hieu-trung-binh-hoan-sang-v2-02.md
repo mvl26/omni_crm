@@ -25,6 +25,8 @@ Anh chốt ĐQ-4: siết tín hiệu trung bình; khớp mã số thuế / tên 
 3. **04.08**: lô chỉ có `oa_echo` và định danh chưa có Lead/chuỗi thư -> ghi Identity, không tạo Lead (`Resolution.lead = None`; worker, dòng thời gian và `first_response` chịu được `lead = None`, có test). Echo đó không gắn vào Lead về sau (chấp nhận).
 4. **04.07**: chấp nhận không nối được. Không thêm trường vào Omni Identity (đổi DocType ngoài danh sách, phải có ADR riêng). Hệ quả: SĐT khách nhắc trong nội dung mà Lead được tạo sau đó sẽ không tự nối; người xử lý bằng nghi trùng/gộp tay.
 
+**Bổ sung sau reviewer (V2-02):** độ giống tập từ >= 0,5 vẫn gắn nhầm "Nguyễn Văn Nam" ~ "Nguyễn Văn Hùng" và "Nguyễn Hùng" ~ "Nguyễn Nam" (chung họ). Nay còn bắt buộc tên riêng (từ cuối) của mỗi bên có mặt trong tên bên kia (cho phép đổi thứ tự họ/tên và khác dấu). Khớp tên miền chỉ dùng email của kênh Email (email tự khai ở form Zalo/cuộc gọi không dùng); tên miền thư chung (kể cả fpt.vn, vnpt.vn, viettel.com.vn) và website mạng xã hội của Organization bị loại.
+
 Định danh đã gắn một Lead khác với Lead của Organization khớp: KHÔNG gắn lại (đổi hành vi với khách), chỉ tạo nghi trùng (điểm 70).
 
 Test cũ đã đổi vì mâu thuẫn trực tiếp: `test_resolver::TestResolverBasics::test_medium_signal_with_placeholder_sender_name_attaches_per_spec` (ghim hành vi cũ "tên rỗng vẫn gắn") thành `..._does_not_attach_r1`.
