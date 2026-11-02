@@ -196,7 +196,16 @@ def resolve_campaign(form: dict, form_doc) -> str | None:
 			}
 		)
 		doc.flags.ignore_permissions = True
-		doc.insert()
+		try:
+			doc.insert()
+		except frappe.DuplicateEntryError:
+			# V2-08: hai worker cùng thấy chưa có chiến dịch và cùng tạo (lượt lead đầu của chiến dịch mới): dùng bản đã có
+			name = frappe.db.get_value(CAMPAIGN, {"campaign_key": campaign_key(platform, ext)}, "name") or (
+				label if frappe.db.exists(CAMPAIGN, label) else None
+			)
+			if not name:
+				raise
+			return name
 		return doc.name
 	utm = (form.get("utm") or {}).get("utm_campaign")
 	if utm:

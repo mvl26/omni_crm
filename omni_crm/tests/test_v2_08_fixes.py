@@ -123,3 +123,35 @@ class TestBridgeCleanupLeavesNoOrphanNotifications(BridgeTestCase):
 		self.assertFalse(frappe.db.exists("CRM Lead", lead.name))
 		self.assertEqual(frappe.db.count("CRM Notification", {"reference_name": lead.name}), 0)
 		self.assertEqual(frappe.db.count("CRM Notification", {"to_user": ["in", bridge_helpers.USERS]}), 0)
+
+
+class TestCampaignCreateRace(FrappeTestCase):
+	def test_second_creator_of_the_same_campaign_reuses_it_instead_of_failing(self):
+		from unittest import mock
+
+		from omni_crm.crm_bridge import form_lead
+
+		form = {"platform": "Meta", "campaign_ext_id": "TD808EXT", "campaign_name": "TD808 camp dua"}
+		first = form_lead.resolve_campaign(form, None)
+		# bản của worker thứ nhất chưa có khóa nền tảng trong mắt worker thứ hai: chỉ còn trùng khóa chính (tên) khi chèn
+		frappe.db.set_value("Omni Campaign", first, "campaign_key", "td808-khac")
+		real = frappe.db.get_value
+		calls = {"n": 0}
+
+		def blind_first(*a, **kw):  # worker thứ hai chưa thấy bản của worker thứ nhất
+			calls["n"] += 1
+			return None if calls["n"] <= 1 else real(*a, **kw)
+
+		real_exists = frappe.db.exists
+		seen = {"n": 0}
+
+		def blind_exists(*a, **kw):
+			seen["n"] += 1
+			return False if seen["n"] <= 1 else real_exists(*a, **kw)
+
+		with (
+			mock.patch.object(frappe.db, "get_value", side_effect=blind_first),
+			mock.patch.object(frappe.db, "exists", side_effect=blind_exists),
+		):
+			second = form_lead.resolve_campaign(form, None)
+		self.assertEqual(second, first)
