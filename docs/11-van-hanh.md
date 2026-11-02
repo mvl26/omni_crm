@@ -174,3 +174,14 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
 - **Địa chỉ IP của Web Form**: giới hạn tần suất dựa vào `frappe.local.request_ip`, mà Frappe lấy từ phần tử ĐẦU của `X-Forwarded-For`. Nginx PHẢI ghi đè header này (`proxy_set_header X-Forwarded-For $remote_addr;`) chứ không nối thêm, nếu không người gọi xoay header để né giới hạn. Chưa kiểm trên nginx thật.
 - **Lead đã được liên hệ rồi điền biểu mẫu mới**: không còn `omni_first_response_at` làm sạch trạng thái chờ; chỉ nhật ký chăm sóc do sale ghi (hoặc cuộc gọi đi được nghe máy) SAU lúc điền, hoặc tin ra, mới làm hết "Quá hạn phản hồi". Việc NHẮC quá hạn bằng thông báo chỉ áp cho Lead chưa từng được phản hồi.
 
+
+## Lưu ý V2-08: chạy chiến dịch quảng cáo, tải và sự cố (đo trên site test)
+
+Số đo đầy đủ ở `docs/nghiem-thu/v2.md`; **chưa đo trên staging**.
+
+- **Worker và hàng đợi:** lead quảng cáo và chat dùng chung hàng đợi `omni`. Với 8 worker và 1,67 tin chat/giây cùng lúc, lead quảng cáo chờ p95 ~113 giây mới có người phụ trách. Giờ cao điểm cần ≥ 12 worker `omni` (hoặc quyết hàng đợi riêng). **Scheduler phải bật**: lượt thử lại, quét tin kẹt, đối soát Meta hằng giờ và nhắc quá hạn đều chạy từ scheduler.
+- **Graph Meta lỗi lâu:** với cấu hình mặc định (`max_attempts` 3, backoff "1,5" phút) tin form Meta thành `Manual` sau ~17 phút Graph chết và `reconcile` KHÔNG kéo lại. Giảm nhẹ: đặt `max_attempts` ≥ 8 và `retry_backoff_minutes` "1,5,15,30,60" (chưa thử). Phục hồi: trang Giám sát → Xử lý lại các tin `Manual` (hoặc `omni_crm.api.admin.reprocess`). Cảnh báo `tin_manual` sẽ nổ.
+- **Redis queue chết:** webhook vẫn lưu tin (200); tin `New`/`Retry` được tác vụ quét đẩy lại, tối đa ~7 phút sau khi Redis lên (cron 5 phút, tin phải quá 2 phút).
+- **Token Meta:** không có cảnh báo hết hạn. Dùng token System User dài hạn; đặt nhắc lịch.
+- **Tải thử lại:** `omni_crm/tests/load/` có `send_ads_burst.py`, `fake_graph.py`, `ads_setup.py` (`setup`, `verify`, `cleanup`, `reconcile_with_fake_graph`), `rq_worker.py --fake-graph`. Chỉ chạy trên site test, dữ liệu tiền tố `LOADADS`, và **luôn chạy `ads_setup.cleanup` trước khi chạy bộ test** (G-5). `ads_setup.setup` nâng giới hạn tần suất form website và `cleanup` khôi phục đúng giá trị cũ.
+- **Đo chỉ số chiến dịch sau tuần chạy:** `omni_crm.tests.acceptance.measure_campaign.run` (chỉ đọc).

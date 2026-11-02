@@ -211,6 +211,15 @@ Bước 0 của D1-08 không làm được: developers.zalo.me là trang SPA, We
 
 - G-V2-06-1 (2026-11-02): `context.mask_pii` che cả mã số thuế 10 số (test `TestPostprocessB2B::test_masked_conversation_hides_tax_id_from_ai`) nên khi che SĐT/email (mặc định) bot KHÔNG thấy MST và không trích được; tính năng MST chỉ hoạt động sau khi Q11 chốt và `omni_ai_unmask_pii` bật, hoặc nới che có chủ đích (chưa làm, anh quyết) Mức: Trung bình. Người quyết: Anh quyết khi chốt Q11.
 
+**V2-08 — Đã xác nhận (đo trên `omni.test`, không phải staging):**
+
+- G-V2-08-1 (2026-11-03): với `max_attempts` 3 và `retry_backoff_minutes` "1,5", lượt thử lại của tin Meta chỉ chạy khi tác vụ quét (cron `*/5`) chạy: Graph chết 30 phút làm 20/20 tin form thành `Manual` sau ~17 phút. `reconcile` bỏ qua lead đã có bản ghi (kể cả `Manual`), chỉ bù lead webhook chưa từng tới (10/10 bù đủ, 1 lần). Xử lý lại bằng `api.admin.reprocess` (20/20 Done). Chưa thử cấu hình retry dài. (`docs/nghiem-thu/v2.md` mục 4.1)
+- G-V2-08-2: webhook Google trả 503 sau ~5 giây khi bảng tin vào bị khóa; gửi lại hai lần sau khi nhả khóa không tạo thêm tin hay Lead (đo bằng HTTP thật vào gunicorn, `hold_db_lock.py`). Google thật có gửi lại khi 5xx không: CHƯA xác nhận (Z10, S8, G16).
+- G-V2-08-3: Redis queue tắt 30 giây giữa đợt: webhook vẫn trả 200 (p95 27,7 ms), tin lưu `New`; worker tự nối lại; sweeper đưa 15 `New` + 2 `Retry` về Done sau ~2 phút kể từ lúc Redis lên.
+- G-V2-08-4: điều kiện quyền Lead của CRM cho Sales User viết `lead_owner` và `name` KHÔNG qualifier (đã ghi ở V2-04); mọi truy vấn Dashboard có JOIN bảng có cột `name` (Organization) làm lỗi 1052. Khối "Theo chiến dịch" đã đổi sang truy vấn con tương quan. Test Dashboard cũ chạy bằng Administrator nên không bắt được.
+- G-V2-08-5: Frappe trả 500 (JSONDecodeError, không lưu gì, không `Error Log`) khi body JSON hỏng gửi tới endpoint `allow_guest` với `Content-Type: application/json`, trước khi mã app chạy (Zalo và Web Form như nhau).
+- G-V2-08-6: bộ test dùng `FrappeTestCase` không dọn dữ liệu commit thật cho `CRM Notification`: người dùng `td106_*` để lại ~57.000 dòng mồ côi (nguồn: `bridge_helpers.cleanup`). Đã sửa; còn 3 dòng/lần từ bộ TD404.
+
 ## D. Phát hiện ngoài phạm vi
 
 | Ngày | Phát hiện | Mức độ | Đề xuất | Prompt phát hiện |
@@ -412,3 +421,14 @@ Bước 0 của D1-08 không làm được: developers.zalo.me là trang SPA, We
 | 2026-11-02 | V2-06: ca "chèn lệnh trong email" có 3 ca (`B2B-INJ-002/003/004`); chốt chặn `guard_injection` chặn theo từ khóa nên Oracle chỉ kiểm hạ tầng, hiệu quả thật với AI chờ V2-07 | Trung bình | V2-07 | V2-06 |
 | 2026-11-02 | V2-06: lần chạy Oracle (client giả) bản v1 cũng đạt 100% trường B2B vì Oracle không theo schema tool và `postprocess` luôn xử lý trường B2B; ĐÂY LÀ HIỆN VẬT CỦA CLIENT GIẢ, không phải điểm bot (AI thật với câu lệnh/schema v1 không bao giờ nhận các trường này). Hai báo cáo `-fake.md` chỉ chứng minh công cụ chấm chạy được | Thấp | V2-07 đo thật | V2-06 |
 | 2026-11-02 | V2-06: test cũ `test_ai_client::test_newer_file_is_not_loaded_until_pinned` ghi rồi xóa `analyze_v2.md` TRONG thư mục thật nên sẽ xóa mất tệp v2 thật; đã đổi có chủ đích sang `analyze_v9.md` (cùng ý kiểm), không nới lỏng | Thấp | Đã xử lý | V2-06 |
+| 2026-11-03 | V2-08: `inbox.send_reply` (Zalo) không kiểm `omni_consent = Từ chối`; chỉ giao diện ẩn nút. docs/14 mục 6 "cảnh báo khi sale cố liên hệ" chưa có ở phía máy chủ | Trung bình | Chờ kết luận Q12 rồi chặn/cảnh báo ở `send_reply` | V2-08 |
+| 2026-11-03 | V2-08: không có cảnh báo token Page Meta hết hạn (chỉ Zalo); chỉ có luật "không có lead N giờ" bắt gián tiếp | Trung bình | Token System User dài hạn + nhắc lịch, hoặc thêm luật | V2-08 |
+| 2026-11-03 | V2-08: lead quảng cáo và chat dùng chung hàng đợi `omni`; 8 worker + 1,67 tin chat/giây làm lead chờ p95 ~113 giây mới có người phụ trách (mục tiêu v1: tin → Lead < 1 phút) | Trung bình | ≥ 12 worker hoặc hàng đợi riêng cho kênh quảng cáo | V2-08 |
+| 2026-11-03 | V2-08: Graph chết > ~17 phút → tin Meta `Manual`, đối soát không kéo lại (G-V2-08-1) | Trung bình | `max_attempts` ≥ 8, backoff dài, hoặc `reconcile` đặt lại tin Manual do Graph tạm thời | V2-08 |
+| 2026-11-03 | V2-08: chốt chặn bot gập ký tự chèn (gạch nối, gạch dưới, dấu chấm, dấu chấm giữa, sao, ngoặc nháy… giữa chữ, chữ cách từng ký tự) và thêm "thỏa thuận" (điều khoản), "phần trăm" (hỏi giá). Chặn nhầm có thể với câu như "chính xác 100 phần trăm" (chuyển người, không mất khách). Test v1 không đỏ | Thấp | Chấp nhận | V2-08 |
+| 2026-11-03 | V2-08: `tax_id_supported`: chuỗi 10 số dạng SĐT di động (`0[35789]xxxxxxxx`) chỉ là MST khi trích dẫn nêu "mã số thuế"/"MST"; MST thật đầu 03/05/07/08/09 mà trích dẫn không nêu rõ sẽ bị bỏ | Thấp | Chấp nhận (thà bỏ sót hơn gắn nhầm SĐT) | V2-08 |
+| 2026-11-03 | V2-08: `kb_items` (active_only) nay loại mục thuộc nhóm `active = 0`; `active_only=False` (màn duyệt, bộ đề) vẫn thấy hết | Thấp | Chấp nhận | V2-08 |
+| 2026-11-03 | V2-08: lead quảng cáo đã tồn tại nhưng chưa có người phụ trách được giao khi tin form xử lý lại (trước đây chỉ "báo") | Thấp | Chấp nhận; đổi nhỏ hành vi với Lead không người phụ trách | V2-08 |
+| 2026-11-03 | V2-08: `Omni Campaign` tạo trùng giữa hai worker dùng bản đã có (bắt `DuplicateEntryError`) | Thấp | Đã xử lý | V2-08 |
+| 2026-11-03 | V2-08: báo cáo eval Fake ghi "Ca chạy qua bộ chấm bằng client giả: N/N … bot THẬT chưa được đo ca nào" thay cho "Ca đo được N/N; chưa đo: 0" | Thấp | Đã xử lý | V2-08 |
+| 2026-11-03 | V2-08: test v2 (`test_meta_leads` đối soát, `test_web_form` tần suất, `test_ads_pipeline` khối Tổng quan) đỏ nếu dữ liệu tải `LOADADS` còn trên site test; chạy `ads_setup.cleanup` trước khi chạy bộ test | Thấp | Ghi trong hướng dẫn | V2-08 |
