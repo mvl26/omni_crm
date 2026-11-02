@@ -82,6 +82,13 @@ def load_params() -> dict[str, Any]:
 	for key, default in FIT_DEFAULTS.items():
 		value = stored.get(key)
 		params[key] = default if value in (None, "") else value
+	for key, default in FIT_DEFAULTS.items():  # tabSingles lưu chuỗi: ép về đúng kiểu số
+		if key != "fit_categories":
+			params[key] = (
+				flt(params[key])
+				if isinstance(default, float) or key == "fit_max_value_bn"
+				else cint(params[key])
+			)
 	params["categories"] = {x.strip() for x in str(params.pop("fit_categories")).splitlines() if x.strip()}
 	return params
 

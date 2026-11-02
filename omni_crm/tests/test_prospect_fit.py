@@ -191,6 +191,7 @@ class TestFitCases(FrappeTestCase):
 		self.assertGreater(frappe.db.get_value("CRM Organization", org, "omni_fit_score"), 0)
 
 	def test_defaults_match_threshold_sheet_when_settings_never_saved(self):
+		frappe.db.delete("Singles", {"doctype": SETTINGS, "field": ["like", "fit\\_%"]})
 		params = fit.load_params()
 		self.assertEqual(
 			(params["fit_period_months"], params["fit_min_hospitals"], params["fit_min_items"]), (24, 5, 200)
