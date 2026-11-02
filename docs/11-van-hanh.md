@@ -60,6 +60,14 @@ Quy tắc deploy: mỗi đợt gắn tag `dot-N-rcX`; migration chỉ **thêm** 
 - Sao lưu DB hằng ngày (bench backup) và kiểm tra khôi phục mỗi quý.
 - Yêu cầu xóa dữ liệu của khách: Omni Admin dùng thao tác "Xóa dữ liệu khách" trên Lead → xóa nội dung tin vào/ra, ghi âm, bản ghi bot của Lead, cuộc gọi, và (V2-02) dữ liệu cá nhân của Contact là chính người của Lead (họ tên, SĐT, email, ghi chú; đặt `omni_consent = Từ chối`; giữ bản ghi ẩn danh + khóa HMAC để lần nhập sau không tạo lại), giữ bản ghi kỹ thuật ẩn danh. Một người liên hệ cụ thể: `omni_crm.api.admin.erase_contact_data(contact, reason)`.
 
+## Lưu ý V2-03: nhập danh sách nhà thầu
+
+- Chỉ Omni Admin (và System Manager). Công tắc `prospect_import_enabled` (Omni Settings) tắt thì không nhập được.
+- Cách làm: tạo `Omni Prospect Import` (Desk, tìm "Omni Prospect Import"), đính kèm tệp `.xlsx` (riêng tư), bấm **Chạy thử**, đọc báo cáo (số dòng, **Cần xác nhận**, đối chiếu với TongHop), tải `error_file`, sửa lỗi, rồi **Nhập thật**. Nhập lại cùng tệp không tạo trùng. Từ dòng lệnh: `bench --site <site> execute omni_crm.prospect.importer.import_workbook --kwargs "{'file_url_or_path': '/đường/dẫn/ngoài/repo/file.xlsx', 'dry_run': True, 'now': True}"` (đường dẫn tuyệt đối chỉ chạy được từ dòng lệnh, chạy ngay trong tiến trình; trên web chỉ nhận tệp riêng tư đã tải lên).
+- Mẫu mở rộng: 1.000 nhà thầu / 5.000 gói thầu / 3.000 người liên hệ; tệp lớn hơn bị từ chối (giới hạn 15 MB, 5.000 / 25.000 / 15.000 dòng, không macro, không bom nén). Việc chạy trên hàng đợi `omni` (cần worker `omni`), commit mỗi 100 dòng; lỗi một dòng không ảnh hưởng dòng khác.
+- Quay lui: importer không xóa gì. Muốn bỏ một lần nhập: lọc `Omni Bid Award`/Organization theo `omni_data_source` "Nhập danh sách nhà thầu (NHAP-…)" và xử lý tay, hoặc khôi phục bản sao lưu trước khi nhập.
+- Không bao giờ gửi tin tự động từ importer; Lead mới nằm ở "Tiềm năng", việc liên hệ là của sale từng nhà thầu (docs/14 mục 6).
+
 ## Lưu ý D1-05: khóa tín hiệu `sig:`
 
 Khóa Redis `omni:lock:sig:{SĐT/email}` (ADR 0003) có timeout 60 giây và KHÔNG được gia hạn; chờ tối đa 20 giây rồi ném `TransientError` (tin thử lại theo backoff). Nếu bước tìm + tạo Lead một lô kéo dài hơn 60 giây (ví dụ gọi mạng chậm, DB nghẽn) khóa hết hạn và lượt khác có thể chen vào, mất bảo đảm chống trùng. Triệu chứng: nhiều tin `Retry` với lỗi "Khóa tín hiệu định danh đang bận", hoặc Candidate cùng SĐT tăng bất thường. Khi gặp, kiểm tra độ trễ DB trước.
