@@ -220,6 +220,7 @@ doc_events = {
 			"omni_crm.bot.scoring.protect_score_fields",  # D2-06: điểm chỉ đọc với người dùng
 		],
 		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06
+		"on_trash": "omni_crm.crm_bridge.care_log.delete_for_lead",  # V2-04: nhật ký chăm sóc đi theo Lead
 	},
 }
 fixtures = [

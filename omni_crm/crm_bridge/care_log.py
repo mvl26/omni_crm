@@ -205,6 +205,11 @@ def on_call_recorded(call: Any, lead: str | None) -> None:
 	_safe(touch_session, lead, "Điện thoại", at, kind, call.agent, call.name)
 
 
+def delete_for_lead(doc: Any, method: str | None = None) -> None:
+	"""Hook `CRM Lead.on_trash`: nhật ký chăm sóc là dữ liệu của Lead (docs/13 mục 3.2) nên đi theo khi Lead bị xóa."""
+	frappe.db.delete(LOG, {"lead": doc.name})
+
+
 # --- ghi kết quả -----------------------------------------------------------------------------------------------
 
 

@@ -432,6 +432,13 @@ class TestMergeAndErase(CareCase):
 		merge_leads(self.lead, secondary, "Administrator")
 		self.assertEqual(frappe.db.get_value(LOG, keep, "lead"), self.lead)
 
+	def test_deleting_a_lead_deletes_its_care_logs(self):
+		doomed = make_lead("TD404 Se xoa", owner=SALE1)
+		care_log.touch_session(doomed, "Zalo OA", T0, "Khách", None, None, "x")
+		self.assertEqual(frappe.db.count(LOG, {"lead": doomed}), 1)
+		frappe.delete_doc("CRM Lead", doomed, force=True, ignore_permissions=True)
+		self.assertEqual(frappe.db.count(LOG, {"lead": doomed}), 0)
+
 	def test_erase_customer_data_clears_summary_keeps_outcome(self):
 		log = care_log.touch_session(self.lead, "Zalo OA", T0, "Khách", None, None, "Số CCCD 0123 của khách")
 		care_log.save_outcome(
