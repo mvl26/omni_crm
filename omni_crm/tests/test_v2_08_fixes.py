@@ -6,9 +6,9 @@ from unittest import mock
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from omni_crm.api import inbox
 from omni_crm.bot import analyze, guards, knowledge
 from omni_crm.tests.bridge_helpers import BridgeTestCase
-from omni_crm.api import inbox
 from omni_crm.tests.test_ads_pipeline import WebCase
 from omni_crm.tests.test_inbox import SALE1
 from omni_crm.tests.test_outbound import OUT, OutboundTestCase
