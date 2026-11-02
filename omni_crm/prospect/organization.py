@@ -47,3 +47,29 @@ def validate(doc: Any, method: str | None = None) -> None:
 			frappe.DuplicateEntryError,
 			title=_("Trùng mã số thuế"),
 		)
+
+
+def before_rename(doc: Any, method: str, old: str, new: str, merge: bool = False) -> None:
+	"""Hook `CRM Organization.before_rename`: đổi tên kiểu "gộp vào nhà thầu có sẵn" bị chặn (V2-04).
+
+	Gộp phải qua `api.organization.merge_organizations` (kiểm mã số thuế, chuyển Contact/gói thầu/Lead/Deal, xử lý Lead
+	trùng); đổi tên + gộp của Frappe không làm các việc đó và sẽ để `Lead.organization` trỏ vào tên đã bị xóa.
+	"""
+	if merge:
+		frappe.throw(
+			_("Không gộp nhà thầu bằng cách đổi tên. Dùng chức năng Gộp nhà thầu (merge_organizations)."),
+			title=_("Không thể gộp bằng đổi tên"),
+		)
+
+
+def after_rename(doc: Any, method: str, old: str, new: str, merge: bool = False) -> None:
+	"""Hook `CRM Organization.after_rename`: đồng bộ các trường Data trỏ theo tên (V2-04, docs/12 G14).
+
+	`CRM Lead.organization` và `Contact.company_name` là Data (không phải Link) nên Frappe không cập nhật khi đổi tên;
+	nếu không đồng bộ, Lead/Contact mất liên kết với nhà thầu (không thấy gói thầu, hạng, người liên hệ). Link
+	(`Omni Bid Award.organization`, `CRM Deal.organization`) do Frappe tự cập nhật.
+	"""
+	if old == new:
+		return
+	frappe.db.sql("update `tabCRM Lead` set `organization` = %s where `organization` = %s", (new, old))
+	frappe.db.sql("update `tabContact` set `company_name` = %s where `company_name` = %s", (new, old))

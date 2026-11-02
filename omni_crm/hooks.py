@@ -201,6 +201,8 @@ doc_events = {
 	"CRM Organization": {
 		"validate": "omni_crm.prospect.organization.validate",  # V2-02: chuẩn hóa + chặn trùng mã số thuế
 		"on_update": "omni_crm.prospect.fit.on_organization_update",  # V2-02: số mã hàng ước tính đổi -> tính lại điểm
+		"before_rename": "omni_crm.prospect.organization.before_rename",  # V2-04: chặn đổi tên kiểu gộp
+		"after_rename": "omni_crm.prospect.organization.after_rename",  # V2-04: đồng bộ Lead.organization, Contact.company_name
 	},
 	"Contact": {
 		"validate": "omni_crm.prospect.contacts.validate",  # V2-02: khóa SĐT/email chuẩn hóa để khớp định danh
