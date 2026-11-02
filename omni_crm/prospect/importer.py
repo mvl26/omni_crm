@@ -230,6 +230,8 @@ def run_job(log: str, commit: bool = True, path: str | None = None) -> str:
 	except WorkbookError as e:
 		return _finish(doc, "Failed", commit, message=str(e))
 	except Exception as e:
+		if commit:
+			frappe.db.rollback()  # bỏ phần ghi dở của đơn vị việc đang chạy; trạng thái Running đã commit ở trên
 		frappe.log_error(title="Nhập danh sách nhà thầu lỗi", message=f"{type(e).__name__} (nhật ký {log})")
 		return _finish(
 			doc, "Failed", commit, message=_("Lỗi hệ thống khi nhập: {0}").format(type(e).__name__)
