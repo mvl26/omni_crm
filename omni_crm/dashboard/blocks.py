@@ -136,7 +136,7 @@ def waiting_leads(q: Query) -> list[dict]:
 		from `tabCRM Lead`
 		join (
 			select `lead`, max(`received_at`) as last_in from `tab{INBOUND}`
-			where `event_type` in ('message', 'user_info') and `status` != 'Ignored' and ifnull(`lead`, '') != ''
+			where `event_type` in ('message', 'user_info', 'form_lead') and `status` != 'Ignored' and ifnull(`lead`, '') != ''
 			group by `lead`
 		) li on li.`lead` = `tabCRM Lead`.`name`
 		left join (

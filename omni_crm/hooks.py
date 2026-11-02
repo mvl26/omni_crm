@@ -185,7 +185,10 @@ scheduler_events = {
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
 	},
-	"hourly": ["omni_crm.bot.auto_send.run_breaker_checks"],  # D3-05: ngắt mạch Handoff gấp đôi
+	"hourly": [
+		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi
+		"omni_crm.channels.meta_leads.reconcile.run",  # V2-05: bù lead Meta mà webhook bị sót
+	],
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
 }
 

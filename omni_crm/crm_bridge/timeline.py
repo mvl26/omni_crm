@@ -23,7 +23,7 @@ OUTBOUND = "Omni Outbound Message"
 COMMUNICATION = "Communication"
 EMAIL = "Email"
 # Sự kiện có nội dung hội thoại để hiện trên dòng thời gian (follow/unfollow/user_info... không hiện).
-TIMELINE_EVENTS = {"message", "oa_echo"}
+TIMELINE_EVENTS = {"message", "oa_echo", "form_lead"}
 SUBJECT_LEN = 80
 REALTIME_EVENT = "omni_inbox_update"
 

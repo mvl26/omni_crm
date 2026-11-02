@@ -1,0 +1,8 @@
+{
+ "id": "TD505AD1",
+ "name": "TD505 Quảng cáo video",
+ "adset_id": "TD505ADSET1",
+ "campaign_id": "TD505CAMP1",
+ "adset": {"name": "TD505 Nhóm bệnh viện", "id": "TD505ADSET1"},
+ "campaign": {"name": "TD505 Chiến dịch Meta", "id": "TD505CAMP1"}
+}
