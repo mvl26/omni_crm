@@ -41,6 +41,10 @@ TRACKED_FIELDS = [
 	"omni_timeframe",
 	"omni_urgency",
 	"omni_intent",
+	"omni_tax_id_stated",
+	"omni_hospitals_mentioned",
+	"omni_current_pain",
+	"omni_decision_role",
 ]
 
 

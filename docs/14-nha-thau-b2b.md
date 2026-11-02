@@ -177,6 +177,8 @@ Agent xác nhận cách CRM lưu trạng thái và cách chuyển Lead → Deal 
 - Kho tri thức thêm nhóm: **Cách vận hành dịch vụ**, **Gói dịch vụ** (phạm vi Điều phối/Trọn gói, không có phí), **Thanh toán back-to-back**, **Kết quả triển khai** (case study đã ẩn danh, đã duyệt công bố), **Hồ sơ năng lực**. Nhóm **Phí dịch vụ** và **Đàm phán hợp đồng** luôn chuyển người.
 - Bot phân tích thêm trường cho B2B trong tool `record_lead_signals`: `organization` (đã có — tên công ty khách nêu), `tax_id`, `hospitals_mentioned`, `current_pain` (vướng mắc vận hành: vốn, công nợ, giao hàng, nhân sự), `decision_role` của người đang nhắn. Lưu vào custom field CRM Lead (D2-05): `omni_tax_id_stated` (Data), `omni_hospitals_mentioned` (Small Text), `omni_current_pain` (Small Text), `omni_decision_role` (Select: Người quyết định / Phụ trách đấu thầu / Kế toán – công nợ / Mua hàng / Khác). Mã số thuế bot trích được là **tín hiệu trung bình** — chỉ gắn Organization khi khớp đúng một bản ghi; không khớp thì để ở `omni_tax_id_stated` cho sale xác nhận.
 
+**[V2-06] Đã thi hành:** xem docs/08 mục 8.3 và ADR 0010. Lead nóng theo ma trận mục 3.3 trong `scoring.is_hot` (hạng C không nóng; Lead không có nhà thầu hoặc chưa có hạng giữ quy tắc cũ). MST bot trích chỉ gắn khi người nhắn đã là Contact của nhà thầu khớp (tín hiệu yếu ở kênh công khai).
+
 ## 8. Thay đổi giao diện (`docs/13`)
 
 - **Chi tiết Lead → Chi tiết nhà thầu**: tiêu đề là tên công ty + mã số thuế; cột trái thêm danh sách người liên hệ (vai trò, đồng ý nhận liên hệ); tab mới **Gói thầu đã trúng** (bảng: bệnh viện, số TBMT, loại hàng, ngày, giá trị, mã hàng, còn hiệu lực); cột phải thêm khối **Mức phù hợp** (đạt/chưa đạt từng tiêu chí, điểm, hạng, cách tính) bên cạnh **Điểm quan tâm**; khối **Gói đề xuất**.

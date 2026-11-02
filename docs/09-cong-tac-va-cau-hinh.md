@@ -7,6 +7,9 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | Công tắc | Ở đâu | Tắt thì | Đợt |
 | --- | --- | --- | --- |
 | `sandbox_mode` | Omni Settings | (Bật) không gửi gì thật ra ngoài | 1 |
+| `active`, `shadow_only` | Omni Question Group | V2-06: `active = 0` ngừng nhóm (bot không thấy); `shadow_only = 1` giữ nháp trả lời của nhóm ở Shadow. Bỏ cả hai về mặc định (1/0) thì như v1 | 2 |
+| `active` (dòng bảng điểm) | Omni Settings.score_rules | V2-06: `0` = quy tắc tắt, không xóa; `lead_scoring_enabled = 0` vẫn tắt mọi chấm điểm như v1 | 2 |
+| `analyze_prompt_version`/`reply_prompt_version` | Omni Settings | V2-06: v2 chỉ chạy khi ghim; mặc định v1. Quay lui = đặt về `v1` | 2 |
 | `enabled` | Omni Channel | Webhook vẫn trả 200 và **lưu** tin, không xử lý | 1 |
 | `enabled` (kênh Telephony) | Omni Channel | Sự kiện cuộc gọi vẫn được lưu (200) nhưng không xử lý; `telephony_lookup` trả phản hồi "khách mới" rỗng, không tra DB | 2 |
 | `outbound_enabled` | Omni Channel | Tin ra bị `Blocked` | 1 |

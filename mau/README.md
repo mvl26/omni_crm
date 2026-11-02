@@ -9,3 +9,5 @@
 | `bang-diem-lead-b2b-mau.csv` | Trưởng sale | Trước V2-06 | Bản v2 (tín hiệu B2B, docs/14 mục 3). **Chưa nhập được**: enum tín hiệu B2B đổi ở V2-02/V2-06, khi đó `SAMPLE_FILE` trỏ sang tệp này |
 
 Các ô trong ngoặc vuông `[...]` là chỗ cần thay bằng thông tin thật đã được duyệt công bố. Agent nhập các tệp này bằng lệnh nhập trong D2-06 và D2-07; không tự bịa nội dung.
+
+**V2-06:** `kho-tri-thuc-mau.csv` nhập bằng `omni_crm.bot.knowledge.import_b2b` luôn ở trạng thái KHÔNG hoạt động (dữ liệu mẫu chờ phòng kinh doanh duyệt). `bang-diem-lead-b2b-mau.csv` nhập bằng `import_rules(path, merge=True)`; `SAMPLE_FILE_B2B` trỏ tệp này.

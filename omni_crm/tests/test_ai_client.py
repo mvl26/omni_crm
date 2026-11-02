@@ -474,10 +474,11 @@ class TestPromptLoader(FrappeTestCase):
 
 	def test_newer_file_is_not_loaded_until_pinned(self):
 		# V2-01 (gate 1, ĐQ-6): trước đây tệp số cao nhất tự thành bản chạy thật; nay phải ghim mới có hiệu lực.
-		tmp = loader.PROMPT_DIR / "analyze_v2.md"
-		tmp.write_text("version: v2\n\nnội dung mới\n", encoding="utf-8")
+		# V2-06: analyze_v2.md là tệp thật trong kho mã nên test dùng số cao hơn (v9), không ghi đè/xóa tệp thật
+		tmp = loader.PROMPT_DIR / "analyze_v9.md"
+		tmp.write_text("version: v9\n\nnội dung mới\n", encoding="utf-8")
 		self.addCleanup(tmp.unlink)
-		self.assertEqual(loader.latest_version("analyze"), "v2")
+		self.assertEqual(loader.latest_version("analyze"), "v9")
 		self.assertEqual(loader.active_version("analyze"), "v1")
 		self.assertEqual(loader.load_prompt("analyze").version, "v1")
 		self.assertEqual(loader.load_prompt("analyze", "v1").version, "v1")

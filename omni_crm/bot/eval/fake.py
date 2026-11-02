@@ -15,6 +15,15 @@ from omni_crm.identity.normalize import normalize_phone
 EVIDENCE_MAX = 200
 
 
+def _window(text: str, needle: str) -> str:
+	"""Đoạn tối đa EVIDENCE_MAX ký tự của `text` quanh `needle` (không thấy thì đầu `text`)."""
+	at = text.lower().find(str(needle).lower())
+	if at < 0:
+		return text[:EVIDENCE_MAX]
+	start = max(at - 40, 0)
+	return text[start : start + EVIDENCE_MAX]
+
+
 class OracleClient(FakeAIClient):
 	"""FakeAIClient biết ca đang chạy (`prepare(case, items)`) và trả đáp án theo `expected_*` của ca."""
 
@@ -43,12 +52,22 @@ class OracleClient(FakeAIClient):
 			if expected.get(key):
 				out[key] = expected[key]
 				out["evidence"][key] = quote
-		for key in ("phones", "emails", "products"):
+		for key in ("phones", "emails", "products", "hospitals_mentioned"):
 			if expected.get(key):
 				out[key] = (
 					[normalize_phone(x) or x for x in expected[key]] if key == "phones" else expected[key]
 				)
 				out["evidence"][key] = quote
+		# Trường B2B (schema v2): trích dẫn là đoạn quanh giá trị trong lời khách để qua kiểm căn cứ như bot thật
+		for key in ("tax_id", "current_pain", "decision_role"):
+			if expected.get(key):
+				out[key] = expected[key]
+				out["evidence"][key] = (
+					_window(turns[-1] if turns else "", expected[key]) if key == "tax_id" else quote
+				)
+		if expected.get("asks_proposal"):
+			out["asks_proposal"] = True
+			out["evidence"]["asks_proposal"] = quote
 		return out
 
 	def _reply(self) -> dict:

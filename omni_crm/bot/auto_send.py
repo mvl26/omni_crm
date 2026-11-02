@@ -193,7 +193,11 @@ def _note_on_group(group: str, mark: str, text: str, user: str | None = None) ->
 
 def _lock_group(group: str) -> Any:
 	return frappe.db.get_value(
-		GROUP, group, ["name", "always_handoff", "auto_send_enabled"], as_dict=True, for_update=True
+		GROUP,
+		group,
+		["name", "always_handoff", "auto_send_enabled", "shadow_only"],
+		as_dict=True,
+		for_update=True,
 	)
 
 
@@ -218,6 +222,8 @@ def enable_group(
 		frappe.throw(_("Không tìm thấy nhóm câu hỏi"), frappe.DoesNotExistError)
 	if cint(row.always_handoff):
 		frappe.throw(_("Nhóm luôn chuyển người không thể bật tự động gửi"), frappe.ValidationError)
+	if cint(row.shadow_only):
+		frappe.throw(_("Nhóm chỉ chạy ngầm (Shadow) không thể bật tự động gửi"), frappe.ValidationError)
 	if cint(row.auto_send_enabled):
 		return {"status": "already", "eligibility": eligibility(group)}
 	el = eligibility(group)
@@ -501,7 +507,11 @@ def _group_on(row: Any, group_row: Any | None) -> bool:
 	REPEATABLE READ có thể thấy bản cũ của một lần tắt vừa commit)."""
 	if group_row is None:
 		return flags.group_auto_send(row.question_group)
-	return bool(cint(group_row.auto_send_enabled) and not cint(group_row.always_handoff))
+	return bool(
+		cint(group_row.auto_send_enabled)
+		and not cint(group_row.always_handoff)
+		and not cint(group_row.shadow_only)
+	)
 
 
 def _common_checks(row: Any, now: datetime, group_row: Any | None = None) -> str | None:

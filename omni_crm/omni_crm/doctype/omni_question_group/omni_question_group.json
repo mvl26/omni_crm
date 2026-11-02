@@ -5,6 +5,8 @@
  "field_order": [
   "group_name",
   "always_handoff",
+  "active",
+  "shadow_only",
   "description",
   "sec_auto",
   "auto_send_enabled",
@@ -26,6 +28,22 @@
    "label": "Luôn chuyển người",
    "in_list_view": 1,
    "description": "Nhóm luôn chuyển người (Hỏi giá, Khiếu nại)"
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Đang dùng",
+   "default": "1",
+   "in_list_view": 1,
+   "description": "V2-06: bỏ chọn = nhóm ngừng hoạt động (giữ lịch sử Bot Run/nháp). Bot không được đưa nhóm này; nhóm AI chọn mà không đang dùng bị coi là nhóm lạ và chuyển người."
+  },
+  {
+   "fieldname": "shadow_only",
+   "fieldtype": "Check",
+   "label": "Chỉ chạy ngầm (Shadow)",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "V2-06: nháp TRẢ LỜI của nhóm này luôn ở Shadow (sale không thấy) kể cả khi chế độ chung là Draft. Chuyển người vẫn báo sale như thường."
   },
   {
    "fieldname": "description",
@@ -90,7 +108,7 @@
  "sort_order": "DESC",
  "actions": [],
  "creation": "2026-10-30 12:00:00.000000",
- "modified": "2026-10-30 18:00:00.000000",
+ "modified": "2026-11-02 12:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "module": "Omni CRM",

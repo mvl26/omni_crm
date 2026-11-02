@@ -71,3 +71,7 @@ Kết quả ghi `Omni Eval Run` và một báo cáo Markdown `eval/reports/<ngà
 - Chạy: `bench --site <site> execute omni_crm.bot.eval.run.run_cli --kwargs "{'gate': 'phan_tich'}"` (`nhap`, `doi_cau_lenh`); `fake: True` dùng client giả chỉ để kiểm hạ tầng; client thật cần `allow_real: True`. Ca không đo được ghi "chưa đo" và làm cổng KHÔNG qua.
 - Chấm lại: `export_regrade_csv(run)` rồi `import_regrade(run, path)`; ngưỡng cổng ở `grading.GATES`.
 
+
+## 6. Bộ đề B2B (V2-06)
+
+`python3 eval/sinh_ca_b2b.py` sinh `eval/cases/b2b-2026-11-02.jsonl` (237 ca tổng hợp: 100 hỏi có trong kho, 20 hỏi phí, 15 đàm phán điều khoản, 20 khiếu nại, 25 ngoài kho, 10 đòi gặp người, 10 chèn lệnh gồm 3 ca nằm trong thân email, 5 hỏi y khoa, 22 trích thông tin có MST/bệnh viện/vướng mắc/vai trò, 2 ca đề xuất và 8 ca `MAU-*` lấy từ `eval/mau-ca-kiem-thu.jsonl` đã đổi SĐT/MST sang giá trị bịa và thay ô `[...]` bằng đáp án kho bịa). Chạy với `kb_file=eval/kb-b2b-tong-hop.csv` (kho BỊA, không nhập vào site) và `groups_file=mau/nhom-cau-hoi-mau.csv`, `case_filter={"prefix": "B2B-"}`, `prompt_versions={"analyze": "v2", "reply": "v2"}` để so v2 với v1. MST bịa dạng `0900000xxx` để qua lớp bảo vệ Q11 của importer. Ca v1 (`synthetic-2026-10-30.jsonl`) giữ nguyên; chúng gắn nhóm cũ (Hỏi giá, Thông tin sản phẩm…) nay đã tắt trong DB sau khi nhập bộ nhóm B2B, nên chạy chúng với `groups_file` phù hợp nếu cần hồi quy v1.

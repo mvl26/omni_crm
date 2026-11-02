@@ -293,12 +293,19 @@ def tile_missed_calls(q: Query) -> dict:
 def tile_hot_leads(q: Query) -> dict:
 	"""Lead nóng: Lead đang mở có `omni_score` >= ngưỡng (Đợt 2, khi bật chấm điểm)."""
 	ctx = _context(q)
+	blocked = (  # Lead của nhà thầu hạng phù hợp C không nóng (docs/14 mục 3.3); fit tắt thì giữ quy tắc cũ
+		"""and not exists (select 1 from `tabCRM Organization` o
+			where o.`name` = `tabCRM Lead`.`organization` and o.`omni_fit_tier` = %(c)s)"""
+		if fit_mod.fit_enabled()
+		else ""
+	)
 	row = _sql(
 		q,
 		f"""select count(*) as n from `tabCRM Lead` where {q.where} and `tabCRM Lead`.`converted` = 0
 		and `tabCRM Lead`.`omni_score` >= %(t)s
-		and `tabCRM Lead`.`status` not in (select `name` from `tabCRM Lead Status` where `type` = 'Lost')""",
-		{"t": ctx.threshold},
+		and `tabCRM Lead`.`status` not in (select `name` from `tabCRM Lead Status` where `type` = 'Lost')
+		{blocked}""",
+		{"t": ctx.threshold, "c": priority.scoring.FIT_BLOCKED_TIER},
 	)
 	return {"label": _("Lead nóng"), "value": cint(row[0].n), "unit": "", "delta": None}
 
@@ -342,7 +349,7 @@ def attention(q: Query) -> dict:
 	ranked = []
 	for lead, r in waiting.items():
 		since = get_datetime(r.get("last_in")) if r.get("last_in") else None
-		result = priority.classify(lead, ctx, since, r.omni_intent, r.omni_score)
+		result = priority.classify(lead, ctx, since, r.omni_intent, r.omni_score, r.get("organization"))
 		if result:
 			ranked.append((priority.RANK[result[0]], -result[1], lead, result[0], result[1], r))
 	ranked.sort(key=lambda x: (x[0], x[1], x[2]))

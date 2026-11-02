@@ -194,8 +194,11 @@ def group_auto_send(group: str | None) -> bool:
 		return False
 	try:
 		row = frappe.db.get_value(
-			"Omni Question Group", group, ["auto_send_enabled", "always_handoff"], as_dict=True
+			"Omni Question Group", group, ["auto_send_enabled", "always_handoff", "shadow_only"], as_dict=True
 		)
 	except Exception:
 		return False
-	return bool(row and cint(row.auto_send_enabled) and not cint(row.always_handoff))
+	# nhóm chỉ chạy ngầm (V2-06) cũng không bao giờ tự gửi, kể cả tin giữ chỗ
+	return bool(
+		row and cint(row.auto_send_enabled) and not cint(row.always_handoff) and not cint(row.shadow_only)
+	)

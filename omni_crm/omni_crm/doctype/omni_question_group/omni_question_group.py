@@ -27,6 +27,8 @@ def enabling():
 class OmniQuestionGroup(Document):
 	def validate(self):
 		"""Nhóm luôn chuyển người không bao giờ tự gửi; bật tự gửi chỉ qua `enabling()`; tắt thì xóa dấu vết bật."""
+		if self.active in (0, "0", False):  # V2-06: nhóm ngừng hoạt động không bao giờ tự gửi
+			self.auto_send_enabled = 0
 		if self.always_handoff and self.auto_send_enabled:
 			if self.is_new() or not self.has_value_changed("always_handoff"):
 				frappe.throw(_("Nhóm luôn chuyển người không thể bật tự động gửi"), frappe.ValidationError)
