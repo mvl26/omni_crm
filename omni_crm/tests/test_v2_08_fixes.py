@@ -83,3 +83,19 @@ class TestTaxIdVersusPhone(FrappeTestCase):
 		self.assertFalse(analyze.tax_id_supported("", "MST 0100109140"))
 		self.assertFalse(analyze.tax_id_supported("0100109140", "MST 0100109141"))
 		self.assertFalse(analyze.tax_id_supported("0100109140", None))
+
+
+class TestFakeEvalReportWording(FrappeTestCase):
+	def test_fake_reports_never_say_cases_were_measured(self):
+		import pathlib
+
+		import omni_crm
+
+		reports = pathlib.Path(omni_crm.__file__).resolve().parents[1] / "eval" / "reports"
+		fakes = list(reports.glob("*-fake.md"))
+		self.assertTrue(fakes)
+		for path in fakes:
+			text = path.read_text(encoding="utf-8")
+			with self.subTest(path.name):
+				self.assertNotIn("Ca đo được", text)
+				self.assertIn("bot THẬT chưa được đo ca nào", text)

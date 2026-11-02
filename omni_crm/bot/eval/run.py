@@ -732,7 +732,12 @@ def render_report(name: str) -> str:
 	)
 	lines += [
 		"",
-		f"Ca đo được: {metrics['measured_cases']}/{metrics['total_cases']}; chưa đo: {metrics['unmeasured_cases']}.",
+		(
+			f"Ca chạy qua bộ chấm bằng client giả: {metrics['measured_cases']}/{metrics['total_cases']}. "
+			"Đây chỉ là kiểm hạ tầng: bot THẬT chưa được đo ca nào (0 ca đo bot)."
+			if fake
+			else f"Ca đo được: {metrics['measured_cases']}/{metrics['total_cases']}; chưa đo: {metrics['unmeasured_cases']}."
+		),
 		"",
 		f"## Kết luận cổng `{meta['gate']}`: "
 		+ ("**KHÔNG ÁP DỤNG (giả lập)**" if fake else ("**QUA**" if check["passed"] else "**KHÔNG QUA**")),
