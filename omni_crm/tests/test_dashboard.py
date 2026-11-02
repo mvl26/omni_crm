@@ -323,6 +323,17 @@ class TestPermissions(DashCase):
 			dashboard.snapshot("today")
 		dashboard.clear_cache()
 
+	def test_unknown_period_never_reaches_cache_key(self):
+		dashboard.clear_cache()
+		frappe.set_user(SALE_A)
+		keys = []
+		real = dashboard._cache_key
+		with mock.patch.object(dashboard, "_cache_key", side_effect=lambda *a: keys.append(a) or real(*a)):
+			res = dashboard.snapshot("7d'; DROP--" + "x" * 500)
+		self.assertEqual(res["period"], "today")
+		self.assertEqual(keys[0][1], "today")
+		dashboard.clear_cache()
+
 	def test_dashboard_switch_off_returns_no_blocks(self):
 		frappe.db.sql("delete from `tabSingles` where doctype='Omni Settings' and field='dashboard_enabled'")
 		frappe.db.sql(

@@ -39,8 +39,11 @@ def snapshot(period: str = "today", scope: str | None = None) -> dict[str, Any]:
 		frappe.throw(_("Cần đăng nhập"), frappe.PermissionError)
 	if not flags.dashboard_enabled():
 		return {"enabled": False, "blocks": {}, "message": _("Dashboard CSKH đang tắt")}
+	period = (
+		period if period in blocks.PERIODS else "today"
+	)  # V2-05: danh sách cho phép trước khi vào khóa cache
 	q = blocks.make_query(period, scope, user)
-	key = _cache_key(user, str(period), q.scope)
+	key = _cache_key(user, period, q.scope)
 	cache = frappe.cache()
 	hit = cache.get_value(
 		key, expires=True
@@ -50,7 +53,7 @@ def snapshot(period: str = "today", scope: str | None = None) -> dict[str, Any]:
 	result = {
 		"enabled": True,
 		"generated_at": str(now_datetime()),
-		"period": period if period in blocks.PERIODS else "today",
+		"period": period,
 		"scope": q.scope,
 		"can_team": access.is_team_lead(user),
 		"sla_minutes": flags.care_setting("response_sla_minutes"),
