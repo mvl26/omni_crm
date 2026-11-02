@@ -23,6 +23,8 @@ from typing import Any
 import frappe
 from frappe.utils import get_datetime, now_datetime
 
+from omni_crm.utils import business_hours
+
 DEFAULT_EXCLUDE = ("LOAD", "PLT", "TD1", "DEMO", "RV")
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 OPEN_STATES = ("New", "Processing", "Retry")
@@ -36,30 +38,8 @@ def _pct(values: list[float], p: float) -> float | None:
 
 
 def _in_business_hours(at: datetime, hours: dict[str, str]) -> bool:
-	"""`hours` dạng Omni Settings.business_hours: {"mon-fri": "08:00-17:30", "sat": "08:00-12:00"}."""
-	for key, span in hours.items():
-		days = key.split("-")
-		if len(days) == 2:
-			a, b = WEEKDAYS.index(days[0]), WEEKDAYS.index(days[1])
-			ok = a <= at.weekday() <= b
-		else:
-			ok = WEEKDAYS.index(days[0]) == at.weekday()
-		if not ok:
-			continue
-		start_s, end_s = span.split("-")
-		start = time(*map(int, start_s.split(":")))
-		end = time(*map(int, end_s.split(":")))
-		if start <= at.time() <= end:
-			return True
-	return False
-
-
-def _business_hours() -> dict[str, str]:
-	raw = frappe.db.get_single_value("Omni Settings", "business_hours")
-	try:
-		return json.loads(raw) if raw else {"mon-fri": "08:00-17:30", "sat": "08:00-12:00"}
-	except ValueError:
-		return {"mon-fri": "08:00-17:30", "sat": "08:00-12:00"}
+	"""`hours` dạng Omni Settings.business_hours: {"mon-fri": "08:00-17:30", "sat": "08:00-12:00"}; dùng module chung."""
+	return business_hours.is_business_time(at, business_hours.parse_hours(hours), frozenset())
 
 
 def _excluded_channels(prefixes: tuple[str, ...]) -> list[str]:
@@ -137,10 +117,13 @@ def message_to_lead(start, end, channels_excl: list[str]) -> dict[str, Any]:
 
 
 def first_response(start, end, channels_excl: list[str], include_sandbox: bool) -> dict[str, Any]:
-	"""Phản hồi lần đầu: Lead tạo trong kỳ có tin đầu rơi vào giờ hành chính; đo tới tin ra Sale đầu tiên."""
-	hours = _business_hours()
+	"""Phản hồi lần đầu (V2-01, docs/13 mục 1.2): Lead tạo trong kỳ có tin đầu rơi vào giờ làm việc; đo từ tin đầu tới
+	`CRM Lead.omni_first_response_at`, chỉ đếm phút trong giờ làm việc (utils/business_hours, có ngày lễ).
+
+	Trường này không tính tin sandbox (định nghĩa docs/15 mục 7 bước 4), nên `include_sandbox` không còn tác dụng.
+	"""
 	leads = frappe.db.sql(
-		"""select l.name, min(m.received_at) first_in
+		"""select l.name, min(m.received_at) first_in, l.omni_first_response_at
 		from `tabCRM Lead` l join `tabOmni Inbound Message` m on m.lead = l.name
 		where l.creation between %s and %s and l.omni_first_channel is not null
 			and m.channel not in %s and m.event_type not in ('oa_echo','follow','unfollow')
@@ -150,27 +133,16 @@ def first_response(start, end, channels_excl: list[str], include_sandbox: bool) 
 	waits: list[float] = []
 	unanswered = 0
 	considered = 0
-	for lead, first_in in leads:
-		if not first_in or not _in_business_hours(get_datetime(first_in), hours):
+	for _lead, first_in, responded_at in leads:
+		if not first_in or not business_hours.is_business_time(get_datetime(first_in)):
 			continue
 		considered += 1
-		sandbox_clause = "" if include_sandbox else "and is_sandbox = 0"
-		out_at = frappe.db.sql(
-			f"""select min(sent_at) from `tabOmni Outbound Message`
-			where lead=%s and status='Sent' and source='Sale' and sent_at >= %s {sandbox_clause}""",
-			(lead, first_in),
-		)[0][0]
-		mail_at = frappe.db.sql(
-			"""select min(communication_date) from `tabCommunication`
-			where reference_doctype='CRM Lead' and reference_name=%s and sent_or_received='Sent'
-				and communication_date >= %s""",
-			(lead, first_in),
-		)[0][0]
-		cands = [x for x in (out_at, mail_at) if x]
-		if not cands:
-			unanswered += 1
+		if not responded_at or get_datetime(responded_at) < get_datetime(first_in):
+			unanswered += 1  # chưa phản hồi (hoặc phản hồi có trước tin đầu: không tính là trả lời tin đó)
 			continue
-		waits.append((min(cands) - first_in).total_seconds() / 60)
+		waits.append(
+			business_hours.business_minutes_between(get_datetime(first_in), get_datetime(responded_at))
+		)
 	return {
 		"leads_considered": considered,
 		"answered": len(waits),
@@ -204,11 +176,10 @@ def gateway_activity(start, end, channels_excl: list[str], uptime_pct: float | N
 		where received_at between %s and %s and channel not in %s order by channel, received_at""",
 		(start, end, tuple(channels_excl) or ("",)),
 	)
-	hours = _business_hours()
 	longest: dict[str, float] = {}
 	prev: dict[str, datetime] = {}
 	for ch, at in rows:
-		if ch in prev and _in_business_hours(at, hours) and _in_business_hours(prev[ch], hours):
+		if ch in prev and business_hours.is_business_time(at) and business_hours.is_business_time(prev[ch]):
 			gap = (at - prev[ch]).total_seconds() / 3600
 			longest[ch] = max(longest.get(ch, 0.0), gap)
 		prev[ch] = at

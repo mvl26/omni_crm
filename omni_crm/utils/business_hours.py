@@ -155,3 +155,10 @@ def business_seconds_between(
 				total += (hi - lo).total_seconds()
 		day += timedelta(days=1)
 	return total
+
+
+def business_minutes_between(
+	start: datetime, end: datetime, hours: dict | None = None, holidays: frozenset[date] | None = None
+) -> float:
+	"""Số phút nằm trong giờ làm việc giữa `start` và `end` (0 nếu end <= start); dùng chung cho mọi hạn/đồng hồ phản hồi."""
+	return business_seconds_between(start, end, hours, holidays) / 60.0

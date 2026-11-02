@@ -23,8 +23,8 @@ from frappe.utils import add_to_date, cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
+from omni_crm.crm_bridge import first_response, timeline
 from omni_crm.crm_bridge import lead as lead_bridge
-from omni_crm.crm_bridge import timeline
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline.retry import is_transient, mark_retry, redact
 
@@ -258,15 +258,17 @@ def drop_echo_duplicate(row: Any, external_id: str) -> None:
 
 def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
 	"""Ghi Sent + mã tin + dòng thời gian trong MỘT commit (mã tin phải có ngay để nhận ra echo)."""
+	sent_at = now_datetime()
 	_set(
 		row,
 		status="Sent",
 		external_message_id=external_id,
-		sent_at=now_datetime(),
+		sent_at=sent_at,
 		is_sandbox=1 if sandbox else 0,
 		last_error=None,
 	)
 	frappe.db.commit()  # trạng thái Sent + mã tin phải bền trước các bước phụ bên dưới
+	first_response.on_outbound_sent({**row, "is_sandbox": 1 if sandbox else 0}, sent_at)  # V2-01; tự bắt lỗi
 	if external_id and not sandbox:
 		try:
 			drop_echo_duplicate(row, external_id)
