@@ -179,3 +179,16 @@ class TestOrphanLeadGetsOwnerOnRetry(WebCase):
 			),
 			1,
 		)
+
+
+class TestCampaignBlockForSalesUser(WebCase):
+	def test_campaign_block_runs_for_a_sales_user_with_the_crm_permission_condition(self):
+		from omni_crm.dashboard import blocks
+		from omni_crm.tests.ads_helpers import SALE
+
+		self.submit()
+		frappe.set_user(SALE)  # điều kiện quyền CRM của Sales User viết `name`/`lead_owner` không qualifier
+		self.addCleanup(frappe.set_user, "Administrator")
+		q = blocks.make_query("7d", "mine", SALE)
+		rows = blocks.campaigns(q)["rows"]  # trước đây: OperationalError 1052 "Column 'name' is ambiguous"
+		self.assertEqual(sum(r["leads"] for r in rows), 1)
