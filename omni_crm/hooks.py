@@ -175,6 +175,7 @@ scheduler_events = {
 			"omni_crm.channels.telephony.callbacks.sweep_pending",  # D2-03
 			"omni_crm.bot.reply.compare_pending",  # D2-07: so nháp Shadow với câu sale, hết hạn sau 24 giờ
 			"omni_crm.bot.reply.expire_pending_drafts",  # D3-01: nháp Draft chờ duyệt quá 24 giờ -> Expired
+			"omni_crm.crm_bridge.response_sla.run",  # V2-05: nhắc lead quảng cáo quá hạn phản hồi (giờ làm việc)
 			"omni_crm.bot.handoff.email_unread_handoffs",  # D3-02: email nhắc nếu chưa mở thông báo chuyển người sau 10 phút
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08

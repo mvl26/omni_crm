@@ -67,6 +67,7 @@ class OmniDashboard {
 		if (b.tier_region) h += this.tierRegion(b.tier_region);
 		h += "</div>";
 		if (b.prospects_ab) h += this.prospects(b.prospects_ab);
+		if (b.campaigns) h += this.campaigns(b.campaigns);
 		this.$root.html(h);
 		this.$root.find(".ou-period").on("change", (ev) => { this.period = ev.target.value; this.load(); });
 		this.$root.find(".ou-scope").on("change", (ev) => { this.scope = ev.target.value; this.load(); });
@@ -125,6 +126,17 @@ class OmniDashboard {
 		const keys = ["Miền Bắc", "Miền Trung", "Miền Nam", "unknown"];
 		return `<div class="ou-card"><h3>${e(__("Nhà thầu theo hạng và khu vực"))}</h3><table><tr><th>${e(__("Hạng"))}</th>${t.regions.map((r) => `<th>${e(r)}</th>`).join("")}<th>${e(__("Tổng"))}</th></tr>
 			${t.rows.map((r) => `<tr><td><b>${e(r.tier)}</b></td>${keys.map((k) => `<td>${e(r.regions[k] || 0)}</td>`).join("")}<td>${e(r.total)}</td></tr>`).join("")}</table></div>`;
+	}
+	campaigns(c) {
+		const e = this.esc.bind(this);
+		const v = (x) => (x == null ? "—" : e(x));
+		const rows = c.rows.map((r) => `<tr><td>${e(r.label)}<div class="muted">${e(r.platform || "")}</div></td><td>${e(r.leads)}</td><td>${e(r.valid)}</td>
+			<td>${r.on_time_pct == null ? "—" : e(r.on_time_pct) + "%"}</td><td>${v(r.median_first_response)}</td><td>${e(r.tier_ab)}</td><td>${e(r.progressed)}</td>
+			<td>${e(r.deals)}</td><td>${v(r.spend)}</td><td>${v(r.cost_per_valid_lead)}</td></tr>`).join("");
+		return `<div class="ou-card"><h3>${e(__("Theo chiến dịch"))}</h3><table><tr><th>${e(__("Chiến dịch"))}</th><th>${e(__("Lead"))}</th><th>${e(__("Hợp lệ"))}</th>
+			<th>${e(__("Phản hồi trong hạn"))}</th><th>${e(__("Phản hồi lần đầu (trung vị, phút)"))}</th><th>${e(__("Nhà thầu hạng A/B"))}</th><th>${e(__("Đã trao đổi nhu cầu+"))}</th>
+			<th>${e(__("Deal"))}</th><th>${e(__("Chi phí"))}</th><th>${e(__("Chi phí/Lead hợp lệ"))}</th></tr>${rows || `<tr><td colspan="10" class="muted">${e(__("Không có"))}</td></tr>`}</table>
+			<div class="muted">${e(__("Không tính Lead thử nghiệm. Chi phí mỗi Lead hợp lệ tính trên cả chiến dịch, không theo kỳ."))}</div></div>`;
 	}
 	prospects(p) {
 		const e = this.esc.bind(this);

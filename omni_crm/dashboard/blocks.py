@@ -135,7 +135,8 @@ def waiting_leads(q: Query) -> list[dict]:
 			`tabCRM Lead`.`organization`, `tabCRM Lead`.`omni_intent`, `tabCRM Lead`.`omni_score`, li.last_in
 		from `tabCRM Lead`
 		join (
-			select `lead`, max(`received_at`) as last_in from `tab{INBOUND}`
+			select `lead`, max(`received_at`) as last_in,
+				max(case when `event_type` = 'form_lead' then `received_at` end) as last_form from `tab{INBOUND}`
 			where `event_type` in ('message', 'user_info', 'form_lead') and `status` != 'Ignored' and ifnull(`lead`, '') != ''
 			group by `lead`
 		) li on li.`lead` = `tabCRM Lead`.`name`
@@ -157,6 +158,7 @@ def waiting_leads(q: Query) -> list[dict]:
 			) u group by `lead`
 		) lo on lo.`lead` = `tabCRM Lead`.`name`
 		where {q.where} and (lo.last_out is null or lo.last_out < li.last_in)
+			and not (ifnull(li.last_form = li.last_in, 0) and ifnull(`tabCRM Lead`.`omni_first_response_at` >= li.last_in, 0))
 		""",
 	)
 	q.memo["waiting"] = rows
@@ -599,6 +601,118 @@ def tier_region(q: Query) -> dict:
 			continue
 		rows.append({"tier": tier or "-", "regions": counts, "total": total})
 	return {"rows": rows, "regions": [*REGIONS, "Chưa rõ"]}
+
+
+# --- Theo chiến dịch (docs/15 mục 9) ----------------------------------------------------------------------------
+
+CAMPAIGN_ROW_LIMIT = 50
+PROGRESSED_STATUSES = ("Đã trao đổi nhu cầu", "Qualified", "Converted")
+
+
+def _campaigns_on(q: Query) -> bool:
+	return bool(frappe.db.exists("Omni Campaign", {})) or bool(
+		frappe.db.exists(LEAD, {"omni_ad_platform": ["in", ["Meta", "Google", "Website"]]})
+	)
+
+
+def _median(values: list[float]) -> float | None:
+	if not values:
+		return None
+	v = sorted(values)
+	mid = len(v) // 2
+	return round(v[mid] if len(v) % 2 else (v[mid - 1] + v[mid]) / 2, 1)
+
+
+@block("campaigns", 1, enabled=_campaigns_on)
+def campaigns(q: Query) -> dict:
+	"""Theo chiến dịch (kỳ đang chọn): Lead, Lead hợp lệ, % phản hồi trong hạn, trung vị phản hồi lần đầu, hạng A/B, đã trao đổi nhu cầu, Deal.
+
+	Lead thử nghiệm đã bị loại ở điều kiện quyền (`access.lead_where`). "Hợp lệ" = có SĐT hoặc email hợp lệ. Thời điểm vào là
+	`received_at` của tin form đầu tiên (không phải lúc worker xong). Chi phí mỗi Lead hợp lệ = chi phí nhập tay / số Lead hợp lệ
+	CỦA CẢ CHIẾN DỊCH (không theo kỳ, vì chi phí không chia theo kỳ).
+	"""
+	ctx = _context(q)
+	rows = _sql(
+		q,
+		f"""select `tabCRM Lead`.`name` as lead, `tabCRM Lead`.`omni_campaign` as campaign, `tabCRM Lead`.`omni_ad_platform` as platform,
+			`tabCRM Lead`.`status`, `tabCRM Lead`.`converted`, `tabCRM Lead`.`omni_first_response_at` as responded,
+			(ifnull(`tabCRM Lead`.`omni_phone_e164`, '') != '' or ifnull(`tabCRM Lead`.`omni_email_norm`, '') != '') as valid,
+			coalesce(f.entered, `tabCRM Lead`.`creation`) as entered, o.`omni_fit_tier` as tier
+		from `tabCRM Lead`
+		left join (select `lead`, min(`received_at`) as entered from `tab{INBOUND}` where `event_type` = 'form_lead' group by `lead`) f
+			on f.`lead` = `tabCRM Lead`.`name`
+		left join `tabCRM Organization` o on o.`name` = `tabCRM Lead`.`organization`
+		where {q.where} and ifnull(`tabCRM Lead`.`omni_ad_platform`, '') in ('Meta', 'Google', 'Website', 'Danh sách mua sắm công')
+			and coalesce(f.entered, `tabCRM Lead`.`creation`) >= %(s)s and coalesce(f.entered, `tabCRM Lead`.`creation`) < %(e)s""",
+		{"s": q.start, "e": q.end},
+	)
+	deals: dict[str, int] = defaultdict(int)
+	if rows:
+		for r in frappe.db.sql(
+			"select lead, count(*) from `tabCRM Deal` where lead in %s group by lead",
+			(tuple(r.lead for r in rows),),
+		):
+			deals[r[0]] = cint(r[1])
+	groups: dict[str, dict] = {}
+	for r in rows:
+		key = r.campaign or ""
+		g = groups.setdefault(
+			key,
+			{
+				"campaign": r.campaign,
+				"platform": r.platform,
+				"leads": 0,
+				"valid": 0,
+				"on_time": 0,
+				"times": [],
+				"ab": 0,
+				"progressed": 0,
+				"deals": 0,
+			},
+		)
+		g["leads"] += 1
+		if not cint(r.valid):
+			continue
+		g["valid"] += 1
+		if r.responded:
+			minutes = business_hours.business_minutes_between(
+				get_datetime(r.entered), get_datetime(r.responded), ctx.hours, ctx.holidays
+			)
+			g["times"].append(minutes)
+			g["on_time"] += int(minutes <= ctx.sla)
+		g["ab"] += int(r.tier in ("A", "B"))
+		g["progressed"] += int(bool(cint(r.converted)) or r.status in PROGRESSED_STATUSES)
+		g["deals"] += deals.get(r.lead, 0)
+	out = []
+	for key, g in sorted(groups.items(), key=lambda kv: -kv[1]["leads"])[:CAMPAIGN_ROW_LIMIT]:
+		spend = cost = None
+		if key:
+			spend = frappe.db.get_value("Omni Campaign", key, "spend")
+			total_valid = cint(
+				frappe.db.sql(
+					"""select count(*) from `tabCRM Lead` where omni_campaign = %s and ifnull(omni_is_test, 0) = 0
+					and omni_merged_into is null and (ifnull(omni_phone_e164, '') != '' or ifnull(omni_email_norm, '') != '')""",
+					key,
+				)[0][0]
+			)
+			cost = round(spend / total_valid) if spend and total_valid else None
+		out.append(
+			{
+				"campaign": key or None,
+				"label": key or _("(Chưa rõ chiến dịch)"),
+				"platform": g["platform"],
+				"leads": g["leads"],
+				"valid": g["valid"],
+				"on_time_pct": round(100 * g["on_time"] / g["valid"]) if g["valid"] else None,
+				"median_first_response": _median(g["times"]),
+				"tier_ab": g["ab"],
+				"progressed": g["progressed"],
+				"deals": g["deals"],
+				"spend": spend or None,
+				"cost_per_valid_lead": cost,
+			}
+		)
+	return {"rows": out, "sla_minutes": ctx.sla, "total_campaigns": len(groups)}
 
 
 # --- Điểm vào ---------------------------------------------------------------------------------------------------

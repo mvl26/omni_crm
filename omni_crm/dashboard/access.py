@@ -60,7 +60,11 @@ def mine_lead_sql() -> str:
 def lead_where(scope: str, user: str | None = None) -> tuple[str, dict]:
 	"""(mệnh đề WHERE, tham số) cho truy vấn trên `tabCRM Lead`: chưa gộp + quyền xem + (nếu "mine") của tôi."""
 	user = user or frappe.session.user
-	clause = f"`tabCRM Lead`.`omni_merged_into` is null and ({lead_condition(user)})"
+	# V2-05: Lead thử nghiệm (Meta Testing Tool / is_test của Google) không tính vào báo cáo nào
+	clause = (
+		"`tabCRM Lead`.`omni_merged_into` is null and ifnull(`tabCRM Lead`.`omni_is_test`, 0) = 0 "
+		f"and ({lead_condition(user)})"
+	)
 	params: dict = {"me": user}
 	if normalize_scope(scope, user) == "mine":
 		clause += f" and {mine_lead_sql()}"

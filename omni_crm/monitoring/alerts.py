@@ -15,9 +15,9 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, get_url, now_datetime
+from frappe.utils import cint, get_datetime, get_url, now_datetime
 
-from omni_crm.monitoring.snapshot import build_snapshot
+from omni_crm.monitoring.snapshot import AD_CHANNEL_TYPES, build_snapshot
 from omni_crm.pipeline.retry import redact
 from omni_crm.utils.business_hours import business_seconds_between, is_business_time
 
@@ -170,11 +170,35 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				users=tuple(tel.get("callbacks_overdue_users") or ()),
 			)
 		)
+	ads = snap.get("ads") or {}
+	if (
+		is_business_time(now)
+		and cint(ads.get("campaigns_running"))
+		and cint(ads.get("channels_enabled"))
+		and (ads.get("last_lead_at") or ads.get("first_campaign_created"))
+	):
+		hours = cint(ads.get("silence_hours")) or 6
+		silent = business_seconds_between(
+			get_datetime(ads.get("last_lead_at") or ads["first_campaign_created"]), now
+		)
+		if silent > hours * 3600:
+			out.append(
+				Alert(
+					"khong_co_lead_quang_cao",
+					"",
+					_("Không có lead quảng cáo"),
+					_(
+						"Không có lead quảng cáo nào trong {0} giờ làm việc (ngưỡng {1} giờ) trong khi có {2} chiến dịch đang chạy. Kiểm tra webhook Meta/Google, token và biểu mẫu."
+					).format(int(silent // 3600), hours, ads["campaigns_running"]),
+				)
+			)
 	sandbox = cint(snap["switches"]["sandbox_mode"])
 	business_now = is_business_time(now)
 	for ch in snap["channels"]:
 		if not ch["enabled"]:
 			continue
+		if ch["channel_type"] in AD_CHANNEL_TYPES:
+			continue  # kênh quảng cáo có cảnh báo riêng theo chiến dịch đang chạy (khong_co_lead_quang_cao)
 		if business_now:
 			ref = ch["last_inbound_at"] or ch["created"]
 			silent = business_seconds_between(ref, now)
