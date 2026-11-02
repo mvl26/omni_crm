@@ -1,13 +1,11 @@
 signal,points,note
-has_phone,10,Có số điện thoại người liên hệ
-has_email,5,Có email người liên hệ
-known_org,10,Đã gắn được nhà thầu (mã số thuế)
-replied,10,Nhà thầu phản hồi lần đầu
-needs_discussed,15,Đã trao đổi nhu cầu với người phụ trách
-intent_service_info,10,Hỏi cách vận hành / gói dịch vụ
-intent_fee,15,Hỏi phí dịch vụ
-intent_proposal,20,Yêu cầu đề xuất / hợp đồng mẫu
-decision_maker_engaged,15,Người quyết định tham gia trao đổi
-pain_point_stated,10,"Nêu vướng mắc: vốn, công nợ, giao hàng, nhân sự"
-repeat_contact,5,Liên hệ từ lần thứ 2 trong 30 ngày
-complaint,-10,Đang khiếu nại
+has_phone,15,Có số điện thoại hợp lệ
+has_email,5,Có email
+has_org,10,Nêu tên đơn vị (bệnh viện / phòng khám / công ty)
+intent_price,15,Hỏi giá hoặc báo giá
+intent_purchase,25,Muốn đặt hàng
+quantity_given,15,Nêu số lượng cụ thể
+timeframe_within_30d,15,Cần trong vòng 30 ngày
+urgency_high,10,Khách nói gấp
+repeat_contact,5,Liên hệ từ lần thứ 2 trở lên trong 30 ngày
+complaint,-10,Đang khiếu nại (ưu tiên xử lý nhưng không phải Lead nóng)

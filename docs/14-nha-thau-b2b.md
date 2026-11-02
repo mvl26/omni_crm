@@ -113,7 +113,7 @@ Tham số lưu trong Omni Settings: `fit_period_months`, `fit_min_hospitals`, `f
 
 ### 3.2 Điểm quan tâm (engagement)
 
-Là `omni_score` hiện có (`docs/08` mục 4), dùng bảng tín hiệu B2B (`mau/bang-diem-lead-mau.csv`): phản hồi lần đầu, đã trao đổi nhu cầu, hỏi về gói dịch vụ, hỏi phí, yêu cầu đề xuất, có người quyết định tham gia, số lần liên hệ 30 ngày.
+Là `omni_score` hiện có (`docs/08` mục 4), dùng bảng tín hiệu B2B (`mau/bang-diem-lead-b2b-mau.csv`): phản hồi lần đầu, đã trao đổi nhu cầu, hỏi về gói dịch vụ, hỏi phí, yêu cầu đề xuất, có người quyết định tham gia, số lần liên hệ 30 ngày.
 
 ### 3.3 Ưu tiên liên hệ
 
