@@ -14,7 +14,7 @@
 | Câu trả lời đạt | giả lập, không phải điểm bot | ≥ 85% |
 | Lỗi nghiêm trọng | giả lập, không phải điểm bot | ≤ 0 |
 
-Ca đo được: 220/220; chưa đo: 0.
+Ca chạy qua bộ chấm bằng client giả: 220/220. Đây chỉ là kiểm hạ tầng: bot THẬT chưa được đo ca nào (0 ca đo bot).
 
 ## Kết luận cổng `nhap`: **KHÔNG ÁP DỤNG (giả lập)**
 

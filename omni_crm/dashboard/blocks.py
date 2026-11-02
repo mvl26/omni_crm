@@ -645,18 +645,22 @@ def campaigns(q: Query) -> dict:
 	CỦA CẢ CHIẾN DỊCH (không theo kỳ, vì chi phí không chia theo kỳ).
 	"""
 	ctx = _context(q)
+	# V2-08: KHÔNG dùng JOIN: điều kiện quyền của CRM cho Sales User viết `name` / `lead_owner` không qualifier nên JOIN gây lỗi
+	# "Column 'name' is ambiguous" (500) với mọi Sales User khi đã có Lead quảng cáo. Dùng truy vấn con tương quan.
+	entered = (
+		f"coalesce((select min(f.`received_at`) from `tab{INBOUND}` f where f.`lead` = `tabCRM Lead`.`name` "
+		"and f.`event_type` = 'form_lead'), `tabCRM Lead`.`creation`)"
+	)
 	rows = _sql(
 		q,
 		f"""select `tabCRM Lead`.`name` as lead, `tabCRM Lead`.`omni_campaign` as campaign, `tabCRM Lead`.`omni_ad_platform` as platform,
 			`tabCRM Lead`.`status`, `tabCRM Lead`.`converted`, `tabCRM Lead`.`omni_first_response_at` as responded,
 			(ifnull(`tabCRM Lead`.`omni_phone_e164`, '') != '' or ifnull(`tabCRM Lead`.`omni_email_norm`, '') != '') as valid,
-			coalesce(f.entered, `tabCRM Lead`.`creation`) as entered, o.`omni_fit_tier` as tier
+			{entered} as entered,
+			(select o.`omni_fit_tier` from `tabCRM Organization` o where o.`name` = `tabCRM Lead`.`organization`) as tier
 		from `tabCRM Lead`
-		left join (select `lead`, min(`received_at`) as entered from `tab{INBOUND}` where `event_type` = 'form_lead' group by `lead`) f
-			on f.`lead` = `tabCRM Lead`.`name`
-		left join `tabCRM Organization` o on o.`name` = `tabCRM Lead`.`organization`
 		where {q.where} and ifnull(`tabCRM Lead`.`omni_ad_platform`, '') in ('Meta', 'Google', 'Website', 'Danh sách mua sắm công')
-			and coalesce(f.entered, `tabCRM Lead`.`creation`) >= %(s)s and coalesce(f.entered, `tabCRM Lead`.`creation`) < %(e)s""",
+			and {entered} >= %(s)s and {entered} < %(e)s""",
 		{"s": q.start, "e": q.end},
 	)
 	deals: dict[str, int] = defaultdict(int)

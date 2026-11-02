@@ -53,6 +53,12 @@ def cleanup() -> None:
 	frappe.db.delete("Omni Channel", {"channel_name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("__Auth", {"doctype": "Omni Channel", "name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("ToDo", {"allocated_to": ["in", USERS]})
+	# V2-08: chuông của CRM (CRM Notification) sinh khi giao Lead cho người dùng test; xóa Lead mà không xóa chuông để lại
+	# hàng chục nghìn dòng mồ côi trên site test.
+	frappe.db.delete("CRM Notification", {"to_user": ["in", USERS]})
+	frappe.db.delete(
+		"CRM Notification", {"reference_doctype": "CRM Lead", "reference_name": ["in", lead_list]}
+	)
 	if frappe.db.exists("Assignment Rule", "td106-rule"):
 		frappe.delete_doc("Assignment Rule", "td106-rule", force=True, ignore_permissions=True)
 	for u in USERS:

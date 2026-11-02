@@ -590,6 +590,12 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 	target = _zalo_target(lead)
 	if not target:
 		frappe.throw(_("Khách này chưa có tài khoản Zalo liên kết với Lead"))
+	from omni_crm.api import customer as customer_api
+
+	if customer_api._person_flags(lead)["refused"]:  # V2-08 (N-2): từ chối / đã xóa dữ liệu (docs/14 mục 6)
+		frappe.throw(
+			_("Người này đã từ chối nhận liên hệ (hoặc đã bị xóa dữ liệu): không gửi tin nhắn từ hệ thống.")
+		)
 	identity_doc, channel_doc = target
 	return queue_zalo_reply(lead, identity_doc, channel_doc, text, confirm_paid)
 

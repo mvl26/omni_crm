@@ -93,6 +93,7 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bphi (?:dich vu|quan ly|van hanh|bao nhieu|the nao|ap dung)\b",
 		r"\b(?:ty le|muc) phi\b",
 		r"\bbao nhieu phan tram\b",
+		r"\bphan tram\b",  # V2-08: "phần trăm hoa hồng/chiết khấu"
 		r"\bhoa hong\b",
 	),
 	# B2B (V2-06): điều khoản/đàm phán hợp đồng. KHÔNG dùng "hợp đồng" trơn vì dịch vụ chính là vận hành hợp đồng.
@@ -100,6 +101,7 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bdieu khoan\b",
 		r"\bdam phan\b",
 		r"\bthuong luong\b",
+		r"\bthoa thuan\b",  # V2-08
 		r"\bbao lanh\b",
 		r"\bchinh sua (?:hop dong|dieu khoan)\b",
 	),
@@ -256,9 +258,35 @@ def _folded(text: str | None) -> str:
 	return re.sub(r"\s+", " ", strip_accents(normalize_text(text or "")).lower())
 
 
+_SEP = r"[-_.·•*~'\u2019`|/\\]+"
+_INVISIBLE = re.compile(
+	"[\u200b-\u200f\u2060\ufeff\u00ad]"
+)  # ký tự không hiển thị chèn giữa chữ (V2-08 review)
+
+
+def _folded_variants(text: str | None) -> str:
+	"""Văn bản đã gập ở nhiều dạng nối bằng " | ": gốc, ký tự chèn giữa chữ thành khoảng trắng / bị xóa, chữ cách từng ký tự được nối lại.
+
+	Để "đàm-phán", "p h í dịch vụ", "phí d.ịch vụ", "đàm" + ký tự rộng bằng không + "phán" không né được so khớp từ khóa (V2-08).
+	"""
+	raw = text or ""
+	parts: list[str] = []
+	# ký tự không hiển thị: bị xóa (chèn giữa chữ) hoặc thay bằng khoảng trắng (đứng ở chỗ dấu cách)
+	for base in (_folded(_INVISIBLE.sub("", raw)), _folded(_INVISIBLE.sub(" ", raw))):
+		spaced = re.sub(rf"(?<=[a-z])\s*{_SEP}\s*(?=[a-z])", " ", base)
+		joined = re.sub(rf"(?<=[a-z])\s*{_SEP}\s*(?=[a-z])", "", base)
+		parts += [base, spaced, joined, _collapse(spaced), _collapse(joined)]
+	return " | ".join(dict.fromkeys(v for v in parts if v))
+
+
+def _collapse(s: str) -> str:
+	"""Nối lại chữ bị cách từng ký tự ("p h i" -> "phi")."""
+	return re.sub(r"\b(?:[a-z] ){2,}[a-z]\b", lambda m: m.group(0).replace(" ", ""), s)
+
+
 def sensitive_topics(customer_text: str | None) -> list[str]:
 	"""Chủ đề nhạy cảm (giá, khiếu nại, pháp lý, y khoa, muốn gặp người) xuất hiện trong lời khách."""
-	folded = _folded(customer_text)
+	folded = _folded_variants(customer_text)
 	topics = [
 		topic
 		for topic, patterns in SENSITIVE_CUSTOMER_PATTERNS.items()
@@ -437,7 +465,7 @@ def guard_unsafe_output(reply_text: str) -> GuardResult:
 
 def guard_injection(customer_text: str | None) -> GuardResult:
 	"""Lời khách có dấu hiệu chèn lệnh ("bỏ qua hướng dẫn", "báo giá 0 đồng"…) thì bot không tự trả lời."""
-	folded = _folded(customer_text)
+	folded = _folded_variants(customer_text)
 	for pattern in INJECTION_PATTERNS:
 		if re.search(pattern, folded):
 			return True, "nghi_chen_lenh"

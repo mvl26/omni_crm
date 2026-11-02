@@ -200,9 +200,25 @@ def _clean(value: Any, limit: int) -> str:
 	return re.sub(r"\s+", " ", text).strip()[:limit]
 
 
+_PHONE_SHAPED = re.compile(r"0[35789]\d{8}")
+_TAX_CUE = re.compile(r"\b(?:ma so thue|mst|tax)\b")
+
+
 def tax_id_supported(tax: str, evidence: str | None) -> bool:
-	"""Mã số thuế đã chuẩn hóa có nằm (theo chữ số) trong trích dẫn không; chặn ca trích dẫn thật nhưng MST bịa."""
-	return bool(tax) and re.sub(r"\D", "", tax) in re.sub(r"\D", "", evidence or "")
+	"""Mã số thuế đã chuẩn hóa có nằm (theo chữ số) trong trích dẫn không; chặn ca trích dẫn thật nhưng MST bịa.
+
+	Chuỗi 10 số có dạng SĐT di động VN (0[35789]xxxxxxxx) chỉ được coi là MST khi trích dẫn nêu rõ "mã số thuế"/"MST"
+	(V2-08): tránh lấy SĐT của khách làm MST.
+	"""
+	have = re.sub(r"\D", "", evidence or "")
+	want = re.sub(r"\D", "", tax)
+	if not tax or want not in have:
+		return False
+	if _PHONE_SHAPED.fullmatch(want[:10]) and len(want) in (10, 13):
+		from omni_crm.bot.guards import _folded
+
+		return bool(_TAX_CUE.search(_folded(evidence)))
+	return True
 
 
 def _postprocess_b2b(
