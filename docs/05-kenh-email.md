@@ -14,6 +14,7 @@ Hook `Communication.after_insert` → `channels/email/adapter.py::on_communicati
 
 1. Bỏ qua nếu `communication_medium != "Email"` hoặc `sent_or_received != "Received"` hoặc Email Account không thuộc `Omni Channel` nào đang bật.
 2. Bỏ qua (lưu với `status = Ignored`) thư tự động: header `Auto-Submitted` khác `no`, `Precedence: bulk/list/junk`, có `List-Unsubscribe`, người gửi thuộc danh sách hệ thống (`docs/04` mục 1.2), thư báo lỗi gửi.
+   **Khác đặc tả (V2-01, docs/12 mục D D1-07):** Frappe không lưu header thư vào Communication nên **không đọc được** `Auto-Submitted`, `Precedence`, `List-Unsubscribe`; code nhận diện thư tự động qua người gửi hệ thống và tiêu đề (`test_email_channel::test_all_ignored_fixtures_saved_ignored_without_lead`). Thư tự động lạ vẫn có thể thành Lead. Chấp nhận vì sửa cần đổi Frappe.
 3. Dựng `InboundEvent`:
    - `external_message_id` = `Message-ID` của thư (trường `message_id` của Communication); không có thì băm.
    - `external_sender_id` = email người gửi đã chuẩn hóa.

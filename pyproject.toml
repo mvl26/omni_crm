@@ -11,6 +11,7 @@ dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
     "anthropic>=2.3.0,<3",
     "jsonschema>=4.10",
+    "openpyxl>=3.1",  # V2-03: đọc tệp .xlsx danh sách nhà thầu (bench đã có 3.1.5)
 ]
 
 [build-system]

@@ -82,7 +82,7 @@ Yêu cầu:
 ## 4. Khóa theo định danh
 
 - Dùng khóa Redis của cache Frappe (`frappe.cache` là client Redis; xác nhận cú pháp v15: `frappe.cache.lock(name, timeout=...)` hay `frappe.cache().lock(...)`).
-- Tên khóa: `omni:lock:{identity_key}`; timeout 120 giây; chờ lấy khóa tối đa 30 giây, không lấy được thì enqueue lại chính job sau 30 giây.
+- Tên khóa: `omni:lock:{identity_key}`; timeout 120 giây; chờ lấy khóa tối đa 30 giây, không lấy được thì **không** enqueue lại chính job: Frappe v15 không có enqueue trì hoãn và `deduplicate` chặn job cùng `job_id` đang chạy (ADR 0001). Tin giữ `New`; lượt đang giữ khóa kiểm tra lại tin `New`/`Retry` đến hạn ở mỗi vòng và đẩy job tiếp nối sau khi nhả khóa; tác vụ quét 5 phút đẩy lại tin `New` cũ hơn 2 phút. Trường hợp xấu nhất chậm ~7 phút (đã đo).
 - Khi hai định danh khác nhau cùng trỏ một Lead (ví dụ Zalo và email của cùng người), có thể xảy ra ghi đồng thời vào Lead: các thao tác ghi Lead dùng `doc.save()` với kiểm tra `modified` của Frappe; gặp `TimestampMismatchError` thì coi là TransientError.
 
 ## 5. Thử lại

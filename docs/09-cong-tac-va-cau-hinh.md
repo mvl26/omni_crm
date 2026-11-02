@@ -17,12 +17,13 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `prospect_import_enabled` | Omni Settings | Không chạy được nhập danh sách nhà thầu | 1 (D1-14) |
 | `fit_scoring_enabled` | Omni Settings | Không tính lại điểm phù hợp (giữ giá trị cũ) | 1 (D1-13) |
 | `bot_analyze_enabled` | Omni Settings | Không gọi AI phân tích | 2 |
+| `analyze_prompt_version`, `reply_prompt_version` | Omni Settings | **Ghim phiên bản câu lệnh** (V2-01, ĐQ-6): đường chạy thật chỉ nạp phiên bản ghim; để trống = bản mặc định trong mã (`loader.PINNED_DEFAULTS`, hiện `v1`). Tệp `*_v2.md` mới không có hiệu lực cho tới khi ghim. Giám khảo (`judge`) dùng hằng. Bộ đề chạy bản chỉ định qua `eval.run.run(prompt_versions=…)` để so sánh | 2 |
 | `lead_scoring_enabled` | Omni Settings | Không tính điểm mới, không báo Lead nóng; `omni_score` và breakdown cũ giữ nguyên. Bảng điểm `score_rules` rỗng cũng coi như không chấm (không có điểm mặc định bịa). `hot_lead_threshold` (mặc định 60; <= 0 dùng 60) | 2 |
 | `bot_reply_mode` = Off | Omni Settings | Không soạn trả lời (không enqueue `reply_batch`, `call_tool` ghi `Skipped Switch`). Shadow chỉ ghi `Omni Bot Draft` ngầm (sale không thấy). **Draft (D3-01)**: nháp hiện trong Hộp thư để sale Gửi/Sửa rồi gửi/Bỏ; bot vẫn không tự gửi, tin đi là `source=Sale`. Chuyển Draft -> Shadow/Off: nháp Pending cũ hết hạn sau 24 giờ hoặc khi khách nhắn tiếp, sale không còn thấy nút Gửi mới. Mặc định Off; **bật Draft ở môi trường thật chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt** (docs/08 mục 10) | 2 |
 | `bot_paused_until` (kiểm tra) | Omni Identity | Bot ngầm không soạn nháp cho khách này đến thời điểm đó | 2 |
 | `omni_auto_send_allowed` | **site_config.json** (ngoài DB) | Khóa hạ tầng: vắng/0 = KHÔNG ai bật được tự gửi và mọi đường gửi Bot bị chặn (kể cả nhóm đã bật, kể cả tin Bot đang chờ). Chỉ người vận hành đặt sau khi chủ dự án chốt Q1; không đặt trên dev/test | 3 |
 | `auto_send_enabled` | Omni Question Group | Nhóm đó rơi về Draft (tin Bot đang chờ bị `Blocked`). Chỉ Omni Admin bật được, chỉ khi đạt điều kiện (docs/08 mục 5.5.2); tự tắt khi ngắt mạch | 3 |
-| `recording_enabled` | Omni Settings | Không tải ghi âm, không chuyển văn bản | 3 |
+| `recording_enabled` | Omni Settings | **CHƯA LÀM** (D3-04 bỏ qua, chờ cổng STT): trường chưa có trong DocType, `flags.recording_enabled()` luôn False. Khi làm: không tải ghi âm, không chuyển văn bản | 3 |
 | `daily_token_budget` = 0 | Omni Settings | Bot dừng hẳn (tương đương tắt mọi AI); lần gọi ghi `Skipped Budget`. Site đã migrate bắt đầu ở 0 cho đến khi đặt hạn mức | 2 |
 | `daily_token_budget` — tính chất | Omni Settings | **Hạn mức mềm**: `call_tool` giữ chỗ token ước lượng (~ký tự/3 + max_tokens) trước khi gọi rồi hiệu chỉnh theo số thật, nhưng các worker chạy song song vẫn có thể vượt khoảng (số worker × max_tokens) | 2 |
 | `sandbox_mode` — với AI | Omni Settings | `call_tool` KHÔNG đọc sandbox_mode: sandbox chỉ áp chiều gửi ra khách. Lời gọi AI thật bị chặn bằng cổng Q11 (`synthetic` / `omni_ai_allow_customer_data`) | 2 |
@@ -32,7 +33,17 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | site_config `omni_eval_judge_model` | site_config | Mô hình giám khảo của bộ đề (mặc định `claude-sonnet-5-5`); chạy bộ đề tay, không cần công tắc bot (`call_tool(eval_mode=True)`), vẫn chịu hạn mức token, ngắt mạch và Q11 | 2 |
 | `bot_paused_until` | Omni Identity | Bot im với một khách | 3 |
 | `alert_recipients` (trống) | Omni Settings | Không gửi thư cảnh báo (Notification Log cho Omni Admin vẫn tạo; không có công tắc riêng, xem docs/12 mục D) | 1 |
-| `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload` | 1 |
+| `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload`. Tác vụ đêm xóa theo `creation` (không theo `modified`) và chỉ với tin đã xử lý xong (bỏ qua New/Processing/Retry) | 1 |
+
+### 1.1 Phần không có công tắc riêng và cách tắt thay thế (V2-01, ADR 0009)
+
+| Phần | Cách tắt thay thế |
+| --- | --- |
+| Cảnh báo (`monitoring/alerts.py`) | Để trống `alert_recipients` (không gửi thư; Notification Log cho Omni Admin vẫn tạo) |
+| Theo dõi sửa tay Lead | Không tắt được riêng; hệ thống ghi qua `flags.omni_bot()` thì không bị tính là sửa tay |
+| Trang Hộp thư (`omni-inbox`) | Gỡ vai trò khỏi trang; tin vẫn được lưu và xử lý |
+| Bộ định danh | Tắt `enabled` của kênh: tin vẫn lưu, không xử lý |
+| Đồng bộ lead Facebook có sẵn của app `crm` (`Lead Sync Source`) | **Không dùng** (V2-01, ĐQ-11): giữ mọi nguồn ở trạng thái tắt; nếu bật, màn giám sát nổ cảnh báo `dong_bo_lead_crm_dang_bat`. Lead từ Meta chỉ đi qua kênh `Meta Lead Ads` của Omni (V2-05) |
 
 ## 2. Đọc công tắc — `flags.py`
 

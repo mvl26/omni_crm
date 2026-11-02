@@ -14,7 +14,7 @@ Bot làm 4 việc, theo thứ tự rủi ro tăng dần:
 ## 1. Client AI — `bot/ai_client.py`
 
 - Dùng SDK Python chính thức `anthropic`. **Trước khi code, agent đọc tài liệu hiện hành tại docs.claude.com** (cách gọi Messages API, tool use, prompt caching, tên mô hình). Tên mô hình lấy từ `Omni Settings` (`analyze_model`, `reply_model`), không viết cứng.
-- Đầu ra có cấu trúc bằng **tool use bắt buộc**: định nghĩa đúng một tool với `input_schema` JSON và ép `tool_choice` vào tool đó. Kết quả được kiểm tra lại bằng JSON Schema trong code; sai schema → `Omni Bot Run.status = Invalid Output`, thử lại tối đa 1 lần, sau đó bỏ qua (không làm hỏng lượt xử lý).
+- Đầu ra có cấu trúc bằng **tool use bắt buộc**: định nghĩa đúng một tool với `input_schema` JSON và `tool_choice` ép vào tool đó **với mô hình cho phép**; các mô hình hiện hành (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-fable-5-1`, `claude-mythos-5-1`) trả HTTP 400 khi ép nên code dùng `auto` và nhờ kiểm tra schema + thử lại (docs/12 mục C, G12; `ai_client.NO_FORCED_TOOL_PREFIXES`). Kết quả được kiểm tra lại bằng JSON Schema trong code; sai schema → `Omni Bot Run.status = Invalid Output`, thử lại tối đa 1 lần, sau đó bỏ qua (không làm hỏng lượt xử lý).
 - Bật prompt caching cho phần cố định (câu lệnh hệ thống + kho tri thức) để giảm chi phí.
 - Timeout 60 giây; thử lại khi lỗi tạm thời (429, 5xx, quá tải) tối đa 2 lần với chờ tăng dần.
 - **Hạn mức**: trước mỗi lần gọi, cộng dồn token trong ngày (đếm từ `Omni Bot Run`, cache Redis theo ngày); vượt `daily_token_budget` → không gọi, ghi `Skipped Budget`, cảnh báo 1 lần/ngày.
