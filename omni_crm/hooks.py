@@ -26,6 +26,9 @@ required_apps = ["crm"]
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/omni_crm/css/omni_crm.css"
+app_include_css = (
+	"/assets/omni_crm/css/omni.css"  # V2-04: mọi luật nằm dưới .omni-ui (không đổi giao diện trang khác)
+)
 # app_include_js = "/assets/omni_crm/js/omni_crm.js"
 
 # include js, css files in header of web template
