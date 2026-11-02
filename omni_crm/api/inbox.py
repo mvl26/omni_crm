@@ -122,18 +122,70 @@ def _snippet(text: str | None) -> str:
 	return " ".join((text or "").split())[:SNIPPET_LEN]
 
 
+SEARCH_FIELDS = (
+	"lead_name",
+	"mobile_no",
+	"phone",
+	"email",
+	"organization",
+	"omni_phone_e164",
+	"omni_email_norm",
+)
+SEARCH_LIMIT = 2000
+
+
+def _search_matches(term: str) -> list[str]:
+	"""Tên các Lead (người dùng được xem) khớp `term` theo tên, SĐT, email hoặc đơn vị.
+
+	Tìm riêng rồi lọc `name in (...)` (không trộn vào `or_filters` của "Của tôi", vì hai nhóm OR đó sẽ thành "hoặc").
+	"""
+	term = term.strip()
+	if not term:
+		return []
+	return frappe.get_list(
+		LEAD,
+		filters=[["omni_merged_into", "is", "not set"]],
+		or_filters=[[f, "like", f"%{term}%"] for f in SEARCH_FIELDS],
+		pluck="name",
+		limit_page_length=SEARCH_LIMIT,
+	)
+
+
+def _fit_tiers(organizations: list[str]) -> dict[str, str]:
+	"""{tên nhà thầu: hạng phù hợp A/B/C} cho các tên đã có CRM Organization (một truy vấn); rỗng khi tắt điểm phù hợp."""
+	from omni_crm.prospect import fit
+
+	organizations = [o for o in set(organizations) if o]
+	if not organizations or not fit.fit_enabled():
+		return {}
+	rows = frappe.get_all(
+		"CRM Organization",
+		filters={"name": ["in", organizations], "omni_fit_tier": ["is", "set"]},
+		fields=["name", "omni_fit_tier"],
+	)
+	return {r.name: r.omni_fit_tier for r in rows}
+
+
 @frappe.whitelist()
 def list_conversations(filters: dict | str | None = None, page: int = 1, page_length: int = 20) -> dict:
 	"""Danh sách hội thoại (theo Lead) mà người dùng được xem, mới nhất trước.
 
-	`filters`: {"channel": "Zalo OA", "unanswered": 1, "mine": 1, "search": "tên"}.
+	`filters`: {"channel": "Zalo OA", "unanswered": 1, "mine": 1, "has_draft": 1, "search": "tên/SĐT/email/đơn vị"}.
+	Mỗi dòng có thêm `organization`, `fit_tier`, nhãn ưu tiên (`priority`, `priority_label`) và `unrecorded`.
 	"""
+	from omni_crm.crm_bridge import care_log
+	from omni_crm.dashboard import priority
+
 	f = _filters(filters)
 	page = max(cint(page), 1)
 	page_length = min(max(cint(page_length) or 20, 1), PAGE_LENGTH_MAX)
 	lead_filters: list = [["omni_last_inbound_at", "is", "set"], ["omni_merged_into", "is", "not set"]]
-	if f.get("search"):
-		lead_filters.append(["lead_name", "like", f"%{str(f['search']).strip()}%"])
+	term = str(f.get("search") or "").strip()
+	if term:
+		matches = _search_matches(term)
+		if not matches:
+			return {"rows": [], "page": page, "page_length": page_length, "total": 0, "has_more": False}
+		lead_filters.append(["name", "in", matches])
 	user = frappe.session.user
 	or_filters = None
 	if cint(f.get("mine")):
@@ -150,6 +202,9 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 			"status",
 			"converted",
 			"mobile_no",
+			"organization",
+			"omni_intent",
+			"omni_score",
 			"omni_last_inbound_at",
 			"omni_first_channel",
 		],
@@ -162,6 +217,9 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 	from omni_crm.api import drafts as drafts_mod
 
 	pending = drafts_mod.leads_with_pending(names)
+	tiers = _fit_tiers([r.organization for r in leads])
+	unrecorded = care_log.unrecorded_by_lead(names) if flags.care_log_enabled() else {}
+	ctx = priority.build_context(names)
 	rows = []
 	for r in leads:
 		ev = last.get(r.name)
@@ -171,6 +229,11 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 			continue
 		if cint(f.get("unanswered")) and not unanswered:
 			continue
+		if cint(f.get("has_draft")) and r.name not in pending:
+			continue
+		label = priority.classify(
+			r.name, ctx, get_datetime(ev["at"]) if unanswered else None, r.omni_intent, r.omni_score
+		)
 		rows.append(
 			{
 				"lead": r.name,
@@ -178,9 +241,14 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 				"lead_owner": r.lead_owner,
 				"status": r.status,
 				"converted": cint(r.converted),
+				"organization": r.organization or "",
+				"fit_tier": tiers.get(r.organization),
 				"channels": chans,
 				"unanswered": unanswered,
 				"draft_pending": r.name in pending,
+				"unrecorded": r.name in unrecorded,
+				"priority": label[0] if label else None,
+				"priority_label": priority.label(label[0]) if label else None,
 				"last_at": ev["at"] if ev else r.omni_last_inbound_at,
 				"last_direction": ev["direction"] if ev else None,
 				"last_channel": ev["channel_type"] if ev else None,
@@ -218,6 +286,7 @@ def check_lead_access(lead: str) -> None:
 def get_thread(lead: str) -> dict:
 	"""Toàn bộ hội thoại của Lead trên mọi kênh, theo thời gian tăng dần (không kèm payload gốc)."""
 	from omni_crm.api import bot_control  # import trễ: drafts.py dùng lại các hàm của module này
+	from omni_crm.api import customer as customer_api
 	from omni_crm.api import drafts as drafts_mod
 
 	check_lead_access(lead)
@@ -372,6 +441,7 @@ def get_thread(lead: str) -> dict:
 		"bot": bot_control.state(lead, bool(frappe.has_permission(LEAD, "write", doc=lead))),  # D3-02
 		"truncated": max(len(inbound), len(outbound), len(call_rows)) >= THREAD_LIMIT,
 		"compose": compose_state(lead),
+		"profile": customer_api.get_mini_profile(lead),  # V2-04: hồ sơ rút gọn (đơn vị, hạng, bước tiếp theo)
 	}
 
 
