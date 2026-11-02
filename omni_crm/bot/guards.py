@@ -89,6 +89,19 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bship bao nhieu\b",
 		r"\bphi (?:ship|van chuyen)\b",
 		r"\bprice\b",
+		# B2B (V2-06): phí dịch vụ của Miyano. Chỉ cụm cụ thể; "phí" trơn quá rộng.
+		r"\bphi (?:dich vu|quan ly|van hanh|bao nhieu|the nao|ap dung)\b",
+		r"\b(?:ty le|muc) phi\b",
+		r"\bbao nhieu phan tram\b",
+		r"\bhoa hong\b",
+	),
+	# B2B (V2-06): điều khoản/đàm phán hợp đồng. KHÔNG dùng "hợp đồng" trơn vì dịch vụ chính là vận hành hợp đồng.
+	"dieu_khoan_hop_dong": (
+		r"\bdieu khoan\b",
+		r"\bdam phan\b",
+		r"\bthuong luong\b",
+		r"\bbao lanh\b",
+		r"\bchinh sua (?:hop dong|dieu khoan)\b",
 	),
 	"khieu_nai": (
 		r"\bkhieu nai\b",

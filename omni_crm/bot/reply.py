@@ -108,7 +108,12 @@ def groups_block(rows: list[Any] | None = None) -> str:
 	`rows`: dòng có name/always_handoff/description; mặc định đọc từ DB (bộ đề có thể đưa dòng đọc từ tệp).
 	"""
 	if rows is None:
-		rows = frappe.get_all(GROUP, fields=["name", "always_handoff", "description"], order_by="name asc")
+		rows = frappe.get_all(
+			GROUP,
+			filters={"active": 1},
+			fields=["name", "always_handoff", "description"],
+			order_by="name asc",
+		)
 	lines = [
 		f'<nhom ten="{escape_tags(r.name)}" luon_chuyen_nguoi="{1 if r.always_handoff else 0}">'
 		f"{escape_tags(r.description or '')}</nhom>"
@@ -502,7 +507,12 @@ def make_draft(
 			return _handoff_without_ai(base, info)
 		return None
 	try:
-		group_rows = {r.name: r for r in frappe.get_all(GROUP, fields=["name", "always_handoff"])}
+		group_rows = {
+			r.name: r
+			for r in frappe.get_all(
+				GROUP, filters={"active": 1}, fields=["name", "always_handoff", "shadow_only"]
+			)
+		}  # nhóm ngừng hoạt động (V2-06) = nhóm lạ: chốt chặn đổi thành chuyển người
 		decision = evaluate(
 			raw,
 			{
@@ -516,6 +526,10 @@ def make_draft(
 				"allowed_phrases": [hours["gio_lam_viec_ke_tiep"]],
 			},
 		)
+		row = group_rows.get(decision["group"])
+		if base["mode"] == "Draft" and decision["action"] == "Reply" and row and cint(row.shadow_only):
+			base = {**base, "mode": "Shadow"}  # nhóm chỉ chạy ngầm (V2-06): nháp trả lời không hiện cho sale
+			info.append("info:nhom_chay_ngam")
 		run = _run_name(batch_id)
 		_scrub_run(
 			batch_id,

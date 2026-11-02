@@ -35,27 +35,47 @@ def has_placeholder(*values: str) -> bool:
 	return any(PLACEHOLDER.search(v or "") for v in values)
 
 
-def import_groups(path: str = "mau/nhom-cau-hoi-mau.csv") -> dict[str, Any]:
-	"""Nhập nhóm câu hỏi từ CSV (cập nhật theo group_name); trả {created, updated, warnings}."""
+def import_groups(
+	path: str = "mau/nhom-cau-hoi-mau.csv", shadow_only: bool = False, retire_missing: bool = False
+) -> dict[str, Any]:
+	"""Nhập nhóm câu hỏi từ CSV (cập nhật theo group_name, chạy lại không tạo trùng); trả {created, updated, retired, warnings}.
+
+	`shadow_only` (V2-06): nhóm trong CSV được đặt "chỉ chạy ngầm" (nháp trả lời không hiện cho sale). `retire_missing`:
+	nhóm CÓ trong DB mà KHÔNG còn trong CSV bị đặt ngừng hoạt động (`active = 0`), không xóa, để giữ lịch sử Bot Run.
+	Nhóm trong CSV luôn được bật lại (`active = 1`). Không bao giờ đụng `auto_send_enabled`.
+	"""
 	created = updated = 0
+	seen: list[str] = []
 	for row in _rows(_resolve(path)):
 		name = row.get("group_name")
 		if not name:
 			continue
+		seen.append(name)
 		values = {
 			"always_handoff": 1 if row.get("always_handoff") in ("1", "true", "True") else 0,
 			"description": row.get("description") or "",
 		}
+		if shadow_only:
+			values["shadow_only"] = 1
 		if frappe.db.exists(GROUP, name):
 			doc = frappe.get_doc(GROUP, name)
-			doc.update(values)
+			doc.update({**values, "active": 1})
 			doc.save(ignore_permissions=True)
 			updated += 1
 		else:
-			frappe.get_doc({"doctype": GROUP, "group_name": name, **values}).insert(ignore_permissions=True)
+			frappe.get_doc({"doctype": GROUP, "group_name": name, "active": 1, **values}).insert(
+				ignore_permissions=True
+			)
 			created += 1
+	retired: list[str] = []
+	if retire_missing and seen:
+		for name in frappe.get_all(GROUP, filters={"active": 1, "name": ["not in", seen]}, pluck="name"):
+			doc = frappe.get_doc(GROUP, name)
+			doc.active = 0  # qua save để validate tắt luôn cờ tự gửi của nhóm bị ngừng
+			doc.save(ignore_permissions=True)
+			retired.append(name)
 	frappe.db.commit()
-	return {"created": created, "updated": updated, "warnings": []}
+	return {"created": created, "updated": updated, "retired": retired, "warnings": []}
 
 
 def _owner(item_id: str, email: str, warnings: list[str]) -> str | None:
@@ -70,11 +90,31 @@ def _owner(item_id: str, email: str, warnings: list[str]) -> str | None:
 	return owner
 
 
-def import_items(path: str = "mau/kho-tri-thuc-mau.csv") -> dict[str, Any]:
-	"""Nhập mục kho tri thức từ CSV: cập nhật theo item_id (không đổi tên mục cũ).
+FEE_OR_COMMITMENT = re.compile(
+	r"(?:\d[\d.,]*\s*(?:%|đồng|vnđ|vnd|triệu|tỷ|tỉ|nghìn|ngàn|k|đ)(?!\w))|\b(?:phí|chiết khấu|hoa hồng|cam kết|đảm bảo|bảo lãnh"
+	r"|miễn phí|giảm giá)\b",
+	re.IGNORECASE,
+)
 
-	Dòng còn `[...]` trong câu hỏi/đáp bị bỏ và in cảnh báo. `owner_email` không tra ra User thì để trống và cảnh báo.
-	Mục mới nhập ở trạng thái đang dùng. Trả {created, updated, skipped, warnings}.
+
+def fee_or_commitment_terms(*values: str) -> list[str]:
+	"""Cụm nêu tiền/phí/chiết khấu/cam kết trong nội dung THẬT (đã bỏ phần `[...]` còn trống). Dùng cảnh báo khi nhập."""
+	text = PLACEHOLDER.sub(" ", " ".join(values))
+	return sorted({m.group(0).lower() for m in FEE_OR_COMMITMENT.finditer(text)})
+
+
+def import_items(
+	path: str = "mau/kho-tri-thuc-mau.csv", as_sample: bool = False, activate_new: bool = True
+) -> dict[str, Any]:
+	"""Nhập mục kho tri thức từ CSV: cập nhật theo item_id (không đổi tên mục cũ), chạy lại không tạo trùng.
+
+	Mặc định (v1): dòng còn `[...]` bị bỏ và in cảnh báo; mục mới nhập ở trạng thái đang dùng. `owner_email` không tra
+	ra User thì để trống và cảnh báo.
+
+	`as_sample` (V2-06): CSV là DỮ LIỆU MẪU chưa được phòng kinh doanh duyệt. Mọi mục (kể cả dòng còn `[...]`) được
+	nhập với `active = 0`, `reviewed_at` trống, để người phụ trách điền/duyệt rồi tự bật; mục đang dùng (`active = 1`)
+	không bị ghi đè; chạy lại không bao giờ bật mục nào. `activate_new = False`: mục mới luôn `active = 0`.
+	Trả {created, updated, skipped, warnings}.
 	"""
 	created = updated = 0
 	skipped: list[str] = []
@@ -84,7 +124,7 @@ def import_items(path: str = "mau/kho-tri-thuc-mau.csv") -> dict[str, Any]:
 		if not ITEM_ID.match(item_id):
 			warnings.append(f"Bỏ dòng có item_id không hợp lệ: {item_id!r}")
 			continue
-		if has_placeholder(*row.values()):
+		if has_placeholder(*row.values()) and not as_sample:
 			skipped.append(item_id)
 			warnings.append(f"{item_id}: có ô còn trong ngoặc vuông [...], chưa nhập (không bịa nội dung)")
 			continue
@@ -93,6 +133,9 @@ def import_items(path: str = "mau/kho-tri-thuc-mau.csv") -> dict[str, Any]:
 			skipped.append(item_id)
 			warnings.append(f"{item_id}: nhóm câu hỏi {group!r} chưa tồn tại, chưa nhập")
 			continue
+		terms = fee_or_commitment_terms(row.get("question", ""), row.get("answer", ""))
+		if terms:
+			warnings.append(f"{item_id}: nội dung có cụm phí/cam kết {terms}: phòng kinh doanh phải duyệt kỹ")
 		source = row.get("source", "")
 		values = {
 			"question_group": group,
@@ -102,12 +145,17 @@ def import_items(path: str = "mau/kho-tri-thuc-mau.csv") -> dict[str, Any]:
 			"owner_user": _owner(item_id, row.get("owner_email", ""), warnings),
 		}
 		if frappe.db.exists(ITEM, item_id):
+			if as_sample and frappe.db.get_value(ITEM, item_id, "active"):
+				skipped.append(item_id)
+				warnings.append(f"{item_id}: đang dùng, không ghi đè bằng dữ liệu mẫu")
+				continue
 			doc = frappe.get_doc(ITEM, item_id)
-			doc.update(values)
+			doc.update(values)  # KHÔNG đụng `active`/`reviewed_at`: nhập lại không bao giờ bật hay tắt mục
 			doc.save(ignore_permissions=True)
 			updated += 1
 		else:
-			frappe.get_doc({"doctype": ITEM, "item_id": item_id, "active": 1, **values}).insert(
+			active = 0 if (as_sample or not activate_new) else 1
+			frappe.get_doc({"doctype": ITEM, "item_id": item_id, "active": active, **values}).insert(
 				ignore_permissions=True
 			)
 			created += 1
@@ -115,6 +163,29 @@ def import_items(path: str = "mau/kho-tri-thuc-mau.csv") -> dict[str, Any]:
 	for w in warnings:
 		print(f"CẢNH BÁO: {w}")
 	return {"created": created, "updated": updated, "skipped": skipped, "warnings": warnings}
+
+
+def import_b2b(
+	groups_path: str = "mau/nhom-cau-hoi-mau.csv",
+	kb_path: str = "mau/kho-tri-thuc-mau.csv",
+	sample: bool = True,
+) -> dict[str, Any]:
+	"""Nhập bộ nhóm câu hỏi + kho tri thức B2B của V2-06 (chạy lại được).
+
+	Nhóm: đặt Shadow (`shadow_only`), nhóm cũ không còn trong CSV bị ngừng hoạt động (không xóa). Kho tri thức: `sample`
+	(mặc định) = dữ liệu mẫu chờ phòng kinh doanh duyệt, nhập KHÔNG hoạt động; chỉ đặt `sample=False` với CSV đã được duyệt
+	(khi đó dòng còn `[...]` vẫn bị bỏ và mục mới vẫn nhập không hoạt động để người duyệt bật tay).
+	Lệnh: `bench --site <site> execute omni_crm.bot.knowledge.import_b2b`.
+	"""
+	if isinstance(sample, str):  # `--kwargs` của bench có thể đưa chuỗi
+		sample = sample.strip().lower() not in ("0", "false", "no")
+	groups = import_groups(groups_path, shadow_only=True, retire_missing=True)
+	items = import_items(kb_path, as_sample=bool(sample), activate_new=False)
+	if sample:
+		print(
+			"CHỜ PHÒNG KINH DOANH DUYỆT: kho tri thức mẫu đã nhập ở trạng thái KHÔNG hoạt động; bot chưa dùng mục nào."
+		)
+	return {"groups": groups, "items": items}
 
 
 # --- Render cho bot ------------------------------------------------------------------------------------------
