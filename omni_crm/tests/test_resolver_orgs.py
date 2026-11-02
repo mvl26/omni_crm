@@ -41,7 +41,11 @@ def make_contact(org: str, first: str, *, phone_no: str | None = None, email: st
 
 def cleanup_orgs() -> None:
 	frappe.db.rollback()
-	for c in frappe.get_all("Contact", filters={"first_name": ["like", "TD213R%"]}, pluck="name"):
+	for c in frappe.get_all(
+		"Contact",
+		or_filters=[["first_name", "like", "TD213R%"], ["company_name", "like", "TD213R%"]],
+		pluck="name",
+	):
 		frappe.delete_doc("Contact", c, force=True, ignore_permissions=True, delete_permanently=True)
 	for lead in frappe.get_all("CRM Lead", filters={"organization": ["like", ORGS]}, pluck="name"):
 		frappe.db.delete("Omni Duplicate Candidate", {"lead_a": lead})

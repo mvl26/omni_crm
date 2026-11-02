@@ -11,6 +11,7 @@ from frappe.utils import escape_html
 from omni_crm.ingest.gateway import enqueue_identity
 from omni_crm.monitoring.snapshot import build_snapshot
 from omni_crm.pipeline.retry import redact
+from omni_crm.prospect.contacts import contacts_of_lead, erase_contact
 
 MAX_REPROCESS = 200
 MAX_MANUAL_LIST = 100
@@ -137,6 +138,7 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		params,
 	)
 	calls_n, call_logs_n = _erase_calls(lead)
+	contacts_n = _erase_contacts(lead, reason)
 	frappe.get_doc(
 		{
 			"doctype": "Comment",
@@ -144,8 +146,8 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 			"reference_doctype": "CRM Lead",
 			"reference_name": lead,
 			"content": _(
-				"Omni: {0} đã xóa nội dung tin của khách ({1} tin vào, {2} tin ra, {3} cuộc gọi). Lý do: {4}"
-			).format(frappe.session.user, inbound_n, outbound_n, calls_n, escape_html(reason)),
+				"Omni: {0} đã xóa nội dung tin của khách ({1} tin vào, {2} tin ra, {3} cuộc gọi, {5} người liên hệ). Lý do: {4}"
+			).format(frappe.session.user, inbound_n, outbound_n, calls_n, escape_html(reason), contacts_n),
 		}
 	).insert(ignore_permissions=True)
 	frappe.logger("omni").warning(
@@ -162,7 +164,35 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		"identities": len(identities),
 		"calls": calls_n,
 		"call_logs": call_logs_n,
+		"contacts": contacts_n,
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+def erase_contact_data(contact: str, reason: str) -> dict[str, Any]:
+	"""Xóa dữ liệu cá nhân của MỘT người liên hệ (Contact) theo yêu cầu (chỉ Omni Admin); giữ bản ghi ẩn danh (docs/14 mục 6)."""
+	require_omni_admin()
+	reason = (reason or "").strip()
+	if len(reason) < MIN_REASON_CHARS:
+		frappe.throw(_("Phải nhập lý do xóa dữ liệu"))
+	if not frappe.db.exists("Contact", contact):
+		frappe.throw(_("Không tìm thấy người liên hệ {0}").format(contact), frappe.DoesNotExistError)
+	org = frappe.db.get_value("Contact", contact, "company_name")
+	erased = erase_contact(contact, reason)
+	if org and frappe.db.exists("CRM Organization", org):
+		frappe.get_doc("CRM Organization", org).add_comment(
+			"Comment",
+			_("Omni: {0} đã xóa dữ liệu cá nhân của một người liên hệ. Lý do: {1}").format(
+				frappe.session.user, escape_html(reason)
+			),
+		)
+	frappe.logger("omni").warning("omni: xóa dữ liệu người liên hệ bởi=%s", frappe.session.user)
+	return {"erased": erased}
+
+
+def _erase_contacts(lead: str, reason: str) -> int:
+	"""Xóa dữ liệu cá nhân của các Contact là chính người của Lead (V2-02, docs/14 mục 6); trả số Contact đã xóa."""
+	return sum(1 for c in contacts_of_lead(lead) if erase_contact(c, reason))
 
 
 def _erase_calls(lead: str) -> tuple[int, int]:

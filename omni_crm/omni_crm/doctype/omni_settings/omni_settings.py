@@ -31,7 +31,17 @@ class OmniSettings(Document):
 		self.validate_fit_params()
 
 	def validate_fit_params(self) -> None:
-		"""Tham số điểm phù hợp (V2-02): mức tối đa và kỳ xét phải dương, trọng số/ngưỡng không âm, có ít nhất một loại hàng."""
+		"""Tham số điểm phù hợp (V2-02): mức tối đa và kỳ xét phải dương, trọng số/ngưỡng không âm, có ít nhất một loại hàng.
+
+		Trường chưa từng được lưu (site migrate từ bản cũ, tabSingles chưa có dòng) mà đang trống/0 thì điền mặc định
+		của sheet ThamSo thay vì lưu 0 làm hỏng cách tính.
+		"""
+		from omni_crm.prospect.fit import FIT_DEFAULTS, SWITCH_FIELDS, _stored
+
+		stored = _stored([*FIT_DEFAULTS, *SWITCH_FIELDS])
+		for fieldname, default in {**FIT_DEFAULTS, **dict.fromkeys(SWITCH_FIELDS, 1)}.items():
+			if fieldname not in stored and not self.get(fieldname):
+				self.set(fieldname, default)
 		positive = ("fit_period_months", "fit_max_hospitals", "fit_max_items", "fit_max_value_bn")
 		non_negative = (
 			"fit_min_hospitals",

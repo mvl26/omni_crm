@@ -39,6 +39,7 @@ FIT_DEFAULTS: dict[str, Any] = {
 	"fit_tier_a": 70,
 	"fit_categories": "VTYT tiêu hao\nHóa chất – sinh phẩm",
 }
+SWITCH_FIELDS = ("fit_scoring_enabled", "prospect_import_enabled")  # chưa từng lưu = bật (mặc định 1)
 RESULT_FIELDS = {
 	"awards_in_period": "omni_awards_in_period",
 	"hospital_count": "omni_hospital_count",
