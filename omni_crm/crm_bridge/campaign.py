@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """Chiến dịch "Liên hệ chủ động – <tháng>" cho Lead từ danh sách mua sắm công (docs/15 mục 8)."""
 
 from __future__ import annotations

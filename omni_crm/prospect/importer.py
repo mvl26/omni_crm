@@ -876,7 +876,7 @@ class Importer:
 
 			camp = campaign_bridge.ensure_proactive_campaign(
 				frappe.utils.now_datetime()
-			)  # V2-05: "Liên hệ chủ động – <tháng>"
+			)  # V2-05: "Liên hệ chủ động - <tháng>"
 			values["omni_campaign"] = values["omni_last_campaign"] = camp
 		doc = frappe.get_doc(values)
 		doc.flags.ignore_permissions = True

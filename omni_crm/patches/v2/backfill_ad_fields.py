@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """V2-05: điền ngược `omni_ad_platform` và `omni_campaign` cho Lead đã nhập từ danh sách nhà thầu ở V2-03 (docs/15 mục 8).
 
 Nhận diện Lead nhập từ danh sách bằng `source = "Danh sách mua sắm công"` (CRM Lead Source do importer tạo). Chỉ điền khi trường
