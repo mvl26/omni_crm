@@ -255,6 +255,10 @@ class TestStages(IdentityTestCase):
 		by = {(r["loai"], r["hien_tai"]): r for r in table}
 		self.assertEqual(by[("Lead", "New")]["de_xuat"], "Tiềm năng")
 		self.assertEqual(by[("Deal", "Negotiation")]["de_xuat"], "Đàm phán")
+		self.assertEqual(by[("Deal", "Qualification")]["de_xuat"], "Đã trao đổi nhu cầu")
+		self.assertEqual(by[("Deal", "Demo/Making")]["de_xuat"], "Đã trao đổi nhu cầu")
+		self.assertEqual(by[("Deal", "Proposal/Quotation")]["de_xuat"], "Đề xuất gói")
+		self.assertIn("đối thủ", by[("Deal", "Lost")]["ghi_chu"])
 		self.assertEqual(by[("Lead", "Unqualified")]["de_xuat"], "Không phù hợp")
 		total = sum(r["so_luong"] for r in table if r["loai"] == "Lead")
 		self.assertEqual(total, frappe.db.count("CRM Lead"))

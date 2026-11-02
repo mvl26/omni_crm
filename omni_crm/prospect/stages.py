@@ -44,13 +44,16 @@ PROPOSED_LEAD_MAPPING: dict[str, tuple[str, str]] = {
 	"Junk": ("(giữ nguyên Junk)", "Rác/thử/Lead đã gộp, không phải nhà thầu 'không phù hợp'"),
 }
 PROPOSED_DEAL_MAPPING: dict[str, tuple[str, str]] = {
-	"Qualification": ("Đề xuất gói", "Deal tồn tại nghĩa là đã trao đổi nhu cầu; giai đoạn Deal đầu tiên"),
-	"Demo/Making": ("Đề xuất gói", ""),
-	"Proposal/Quotation": ("Đề xuất gói", ""),
+	"Qualification": (
+		"Đã trao đổi nhu cầu",
+		"Chưa gửi đề xuất (docs/14 mục 4: Đề xuất gói chỉ khi đã gửi đề xuất)",
+	),
+	"Demo/Making": ("Đã trao đổi nhu cầu", "Chưa gửi đề xuất"),
+	"Proposal/Quotation": ("Đề xuất gói", "Đã báo giá/đề xuất"),
 	"Negotiation": ("Đàm phán", ""),
 	"Ready to Close": ("Đàm phán", ""),
 	"Won": ("Ký hợp đồng", ""),
-	"Lost": (NOT_FIT, "Giữ nguyên lý do mất hiện có"),
+	"Lost": (NOT_FIT, "Gộp cả thua đối thủ lẫn không có nhu cầu; giữ nguyên lý do mất hiện có để phân biệt"),
 }
 
 
