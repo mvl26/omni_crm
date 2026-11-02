@@ -123,6 +123,22 @@ def care_setting(fieldname: str):
 	return value
 
 
+ADS_DEFAULTS = {"ads_silence_hours": 6, "webform_rate_limit": 5, "webform_rate_window_minutes": 10}
+
+
+def ads_setting(fieldname: str) -> int:
+	"""Cấu hình lead quảng cáo (V2-05): chưa từng lưu, trống hoặc <= 0 thì dùng mặc định (đọc tabSingles như `care_setting`)."""
+	default = ADS_DEFAULTS[fieldname]
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = %s", fieldname
+		)
+	except Exception:
+		return default
+	value = cint(row[0][0]) if row and row[0][0] not in (None, "") else 0
+	return value if value > 0 else default
+
+
 def dashboard_enabled() -> bool:
 	"""Công tắc Dashboard CSKH (V2-04); chưa từng lưu = bật."""
 	return bool(care_setting("dashboard_enabled"))

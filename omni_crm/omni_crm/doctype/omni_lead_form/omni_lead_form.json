@@ -1,0 +1,140 @@
+{
+ "actions": [],
+ "creation": "2026-11-02 14:00:00.000000",
+ "modified": "2026-11-02 14:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Lead Form",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "title_field": "form_name",
+ "track_changes": 1,
+ "search_fields": "platform,external_form_id,form_name",
+ "field_order": [
+  "platform",
+  "external_form_id",
+  "form_name",
+  "form_key",
+  "enabled",
+  "col_a",
+  "campaign",
+  "default_owner",
+  "assignment_rule",
+  "secret",
+  "last_reconciled_at",
+  "sec_map",
+  "field_map"
+ ],
+ "fields": [
+  {
+   "fieldname": "platform",
+   "fieldtype": "Select",
+   "label": "Nền tảng",
+   "options": "Meta\nGoogle\nWebsite",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "external_form_id",
+   "fieldtype": "Data",
+   "label": "Mã biểu mẫu trên nền tảng",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "form_id của Meta/Google; với Website là mã do trang đặt. Duy nhất theo nền tảng."
+  },
+  {
+   "fieldname": "form_name",
+   "fieldtype": "Data",
+   "label": "Tên biểu mẫu",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "form_key",
+   "fieldtype": "Data",
+   "label": "Khóa duy nhất",
+   "hidden": 1,
+   "read_only": 1,
+   "unique": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Bật",
+   "default": "1",
+   "in_list_view": 1,
+   "description": "Tắt: lead của biểu mẫu này chỉ được lưu, không tạo Lead."
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "label": "Chiến dịch mặc định",
+   "options": "Omni Campaign",
+   "description": "Dùng khi nền tảng không gửi mã chiến dịch."
+  },
+  {
+   "fieldname": "default_owner",
+   "fieldtype": "Link",
+   "label": "Người phụ trách mặc định",
+   "options": "User"
+  },
+  {
+   "fieldname": "assignment_rule",
+   "fieldtype": "Data",
+   "label": "Assignment Rule áp dụng",
+   "description": "Tên Assignment Rule có sẵn; chỉ dùng khi không đặt người phụ trách mặc định."
+  },
+  {
+   "fieldname": "secret",
+   "fieldtype": "Password",
+   "label": "Khóa bí mật (google_key)",
+   "permlevel": 1,
+   "description": "Google: google_key của biểu mẫu. Chỉ Omni Admin xem được."
+  },
+  {
+   "fieldname": "last_reconciled_at",
+   "fieldtype": "Datetime",
+   "label": "Đối soát lần cuối",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_map",
+   "fieldtype": "Section Break",
+   "label": "Ánh xạ trường"
+  },
+  {
+   "fieldname": "field_map",
+   "fieldtype": "Table",
+   "label": "Ánh xạ trường",
+   "options": "Omni Lead Form Field"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Omni Admin",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1
+  }
+ ]
+}

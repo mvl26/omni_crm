@@ -15,7 +15,14 @@ from omni_crm.identity.normalize import is_mobile_phone, is_system_email, normal
 LEAD = "CRM Lead"
 MAX_MERGE_HOPS = 10
 LEAD_SOURCE = "CRM Lead Source"
-DEFAULT_SOURCE_MAP = {"Email": "Email", "Zalo OA": "Zalo OA", "Telephony": "Điện thoại"}
+DEFAULT_SOURCE_MAP = {
+	"Email": "Email",
+	"Zalo OA": "Zalo OA",
+	"Telephony": "Điện thoại",
+	"Meta Lead Ads": "Quảng cáo Meta",
+	"Google Lead Form": "Quảng cáo Google",
+	"Web Form": "Website",
+}
 INBOX_ROUTE = "/app/omni-inbox"
 
 # Trường mà sale sửa tay thì bot không được ghi đè (docs/02 mục 15, docs/08). Trường `omni_*` do bot ghi từ

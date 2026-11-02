@@ -75,7 +75,11 @@
   "response_sla_minutes",
   "col_care",
   "care_session_gap_hours",
-  "team_lead_role"
+  "team_lead_role",
+  "sec_ads",
+  "ads_silence_hours",
+  "webform_rate_limit",
+  "webform_rate_window_minutes"
  ],
  "fields": [
   {
@@ -152,7 +156,7 @@
    "fieldname": "default_lead_source_map",
    "fieldtype": "JSON",
    "label": "Ánh xạ kênh sang nguồn Lead",
-   "default": "{\"Email\":\"Email\",\"Zalo OA\":\"Zalo OA\",\"Telephony\":\"Điện thoại\"}"
+   "default": "{\"Email\":\"Email\",\"Zalo OA\":\"Zalo OA\",\"Telephony\":\"Điện thoại\",\"Meta Lead Ads\":\"Quảng cáo Meta\",\"Google Lead Form\":\"Quảng cáo Google\",\"Web Form\":\"Website\"}"
   },
   {
    "fieldname": "business_hours",
@@ -491,6 +495,31 @@
    "label": "Vai trò trưởng nhóm",
    "options": "Role",
    "default": "Sales Manager"
+  },
+  {
+   "fieldname": "sec_ads",
+   "fieldtype": "Section Break",
+   "label": "Lead quảng cáo (V2-05)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "ads_silence_hours",
+   "fieldtype": "Int",
+   "label": "Cảnh báo im lặng: số giờ",
+   "default": "6",
+   "description": "Cảnh báo nếu không có lead quảng cáo nào trong N giờ (chỉ trong giờ làm việc) khi có chiến dịch Đang chạy và kênh bật. Chưa từng lưu = 6."
+  },
+  {
+   "fieldname": "webform_rate_limit",
+   "fieldtype": "Int",
+   "label": "Web Form: số lần gửi tối đa mỗi IP",
+   "default": "5"
+  },
+  {
+   "fieldname": "webform_rate_window_minutes",
+   "fieldtype": "Int",
+   "label": "Web Form: cửa sổ giới hạn (phút)",
+   "default": "10"
   }
  ],
  "permissions": [

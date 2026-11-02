@@ -1,0 +1,135 @@
+{
+ "actions": [],
+ "creation": "2026-11-02 14:00:00.000000",
+ "modified": "2026-11-02 14:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Campaign",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:campaign_name",
+ "naming_rule": "By fieldname",
+ "title_field": "campaign_name",
+ "track_changes": 1,
+ "search_fields": "platform,utm_campaign",
+ "field_order": [
+  "campaign_name",
+  "platform",
+  "status",
+  "external_campaign_id",
+  "campaign_key",
+  "utm_campaign",
+  "col_dates",
+  "start_date",
+  "end_date",
+  "owner_team",
+  "sec_money",
+  "budget",
+  "spend"
+ ],
+ "fields": [
+  {
+   "fieldname": "campaign_name",
+   "fieldtype": "Data",
+   "label": "Tên chiến dịch",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Select",
+   "label": "Nền tảng",
+   "options": "Meta\nGoogle\nWebsite\nLiên hệ chủ động\nĐa kênh",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Nháp\nĐang chạy\nTạm dừng\nKết thúc",
+   "default": "Đang chạy",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "external_campaign_id",
+   "fieldtype": "Data",
+   "label": "Mã chiến dịch trên nền tảng",
+   "description": "campaign_id của Meta/Google. Duy nhất theo nền tảng."
+  },
+  {
+   "fieldname": "campaign_key",
+   "fieldtype": "Data",
+   "label": "Khóa duy nhất",
+   "hidden": 1,
+   "read_only": 1,
+   "unique": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "utm_campaign",
+   "fieldtype": "Data",
+   "label": "utm_campaign",
+   "search_index": 1,
+   "description": "Để khớp lead từ website."
+  },
+  {
+   "fieldname": "col_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Ngày bắt đầu"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "Ngày kết thúc"
+  },
+  {
+   "fieldname": "owner_team",
+   "fieldtype": "Data",
+   "label": "Nhóm phụ trách"
+  },
+  {
+   "fieldname": "sec_money",
+   "fieldtype": "Section Break",
+   "label": "Chi phí"
+  },
+  {
+   "fieldname": "budget",
+   "fieldtype": "Currency",
+   "label": "Ngân sách dự kiến",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "spend",
+   "fieldtype": "Currency",
+   "label": "Chi phí thực tế (nhập tay)",
+   "non_negative": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}
