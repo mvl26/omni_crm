@@ -385,8 +385,9 @@ class TestTaxIdLinking(TaxLinkCase):
 		analyze.analyze_batch(batch)
 		call = [c for c in self.fake.calls if c["kind"] == "Analyze"][-1]
 		self.assertNotIn("tax_id", call["tool"]["input_schema"]["properties"])
+		original = frappe.db.get_single_value("Omni Settings", "analyze_prompt_version")
+		self.addCleanup(set_settings, analyze_prompt_version=original or "")
 		set_settings(analyze_prompt_version="v2")
-		self.addCleanup(set_settings, analyze_prompt_version="")
 		batch2 = self.say("Cho hỏi thêm về dịch vụ")
 		analyze.analyze_batch(batch2)
 		call2 = [c for c in self.fake.calls if c["kind"] == "Analyze"][-1]
@@ -402,8 +403,8 @@ class TestPromptsV2(FrappeTestCase):
 			self.assertEqual(loader.load_prompt(name, "v2").version, "v2")
 			self.assertEqual(loader.latest_version(name), "v2")
 		self.assertEqual(loader.PINNED_DEFAULTS, {"analyze": "v1", "reply": "v1", "judge": "v1"})
-		self.assertEqual(frappe.db.get_single_value("Omni Settings", "analyze_prompt_version") or "v1", "v1")
-		self.assertEqual(frappe.db.get_single_value("Omni Settings", "reply_prompt_version") or "v1", "v1")
+		self.assertEqual(frappe.db.get_single_value("Omni Settings", "analyze_prompt_version"), "v1")
+		self.assertEqual(frappe.db.get_single_value("Omni Settings", "reply_prompt_version"), "v1")
 		self.assertEqual(loader.active_version("analyze"), "v1")
 		self.assertEqual(loader.active_version("reply"), "v1")
 		self.assertEqual(loader.load_prompt("analyze").version, "v1")

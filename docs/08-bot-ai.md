@@ -250,7 +250,7 @@ Xem `eval/README.md`. Tóm tắt các ngưỡng cổng:
 | Câu trả lời đạt | — | ≥ 85% |
 | Lỗi nghiêm trọng (ca `critical`) | — | 0 |
 
-**V2-06: cổng `phan_tich`/`nhap`/`doi_cau_lenh` cho bộ đề B2B (144 ca) vẫn CHƯA ĐO** (Q11: không gửi hội thoại sang AI; chỉ chạy client giả, `eval/reports/2026-11-02-*-fake.md`). Câu lệnh đang dùng: analyze_v1 / reply_v1 / judge_v1.
+**V2-06: cổng `phan_tich`/`nhap`/`doi_cau_lenh` cho bộ đề B2B (237 ca) vẫn CHƯA ĐO** (Q11: không gửi hội thoại sang AI; chỉ chạy client giả, `eval/reports/2026-11-02-*-fake.md`). Câu lệnh đang dùng: analyze_v1 / reply_v1 / judge_v1.
 
 **Trạng thái cổng `nhap` (D3-01): CHƯA ĐO.** Môi trường phát triển không có khóa AI và bộ đề (220 ca) đều `Synthetic`, chưa duyệt, 0 ca Real; lần chạy `gate='nhap'` không client ghi 220/220 ca "chưa đo" (`EVR-2026-00415`, `eval/reports/2026-10-30-analyze-v1_reply-v1_judge-v1-EVR-2026-00415.md`). Con số 100% của client Fake không phải điểm của bot. **Bật Draft ở môi trường thật chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt và đạt.** `bot_reply_mode` mặc định Off.
 

@@ -40,7 +40,7 @@ def lower_first(s: str) -> str:
 	return s[:1].lower() + s[1:]
 
 
-# 1. Câu hỏi có trong kho tri thức (11 mục x 4 cách hỏi = 44): Reply
+# 1. Câu hỏi có trong kho tri thức (25 mục x 4 cách hỏi = 100): Reply
 items = list(csv.DictReader(open(HERE / "kb-b2b-tong-hop.csv", encoding="utf-8")))
 n = 0
 for item in items:
@@ -104,10 +104,17 @@ complaints = [
 	"Nhân viên bên mình trả lời thiếu lịch sự, tôi muốn phản ánh.",
 	"Đơn gọi hàng bệnh viện gửi cho Miyano bị bỏ sót, xử lý chậm quá.",
 ]
+complaints += [
+	"Hóa đơn dịch vụ tháng này có khoản bên em không hiểu, rất khó chịu.",
+	"Cập nhật giao hàng của Miyano trễ, bệnh viện phản ánh lại với bên em.",
+	"Em đã gửi yêu cầu hai lần mà chưa ai trả lời, không hài lòng.",
+	"Nhân viên đối chiếu công nợ làm sai số liệu, tôi muốn khiếu nại.",
+	"Nhà cung cấp phàn nàn Miyano thanh toán trễ, bên em bị ảnh hưởng uy tín.",
+]
 for i, q in enumerate(complaints, 1):
 	add(f"B2B-KN-{i:03d}", q, "Khiếu nại", "Handoff", {"intent": "Khiếu nại"})
 	add(
-		f"B2B-KN-{i + 5:03d}",
+		f"B2B-KN-{i + 10:03d}",
 		"Xin phản ánh: " + lower_first(q),
 		"Khiếu nại",
 		"Handoff",
@@ -131,6 +138,16 @@ outside = [
 	"Bên mình có bảo hiểm trách nhiệm cho hàng hóa không?",
 	"Miyano có hỗ trợ nhà thầu đang gặp tranh chấp với bệnh viện không?",
 	"Em muốn làm nhà cung cấp cho Miyano thì liên hệ ai?",
+	"Miyano có nhận quản lý hợp đồng cung cấp thiết bị y tế không, không chỉ vật tư?",
+	"Bên mình có ứng dụng theo dõi đơn hàng cho nhà thầu không?",
+	"Dịch vụ có áp dụng cho hợp đồng thầu thuốc không?",
+	"Bên em đang trúng thầu ở Lào Cai, có phục vụ vùng xa không?",
+	"Miyano có hỗ trợ đào tạo nhân viên của nhà thầu không?",
+	"Bên mình có hợp tác với ngân hàng nào để cấp vốn không?",
+	"Có thể dùng thử dịch vụ một tháng không?",
+	"Miyano có nhận hợp đồng ngắn hạn dưới sáu tháng không?",
+	"Dữ liệu của nhà thầu được lưu ở đâu?",
+	"Có ký thỏa thuận bảo mật thông tin trước khi trao đổi không?",
 ]
 for i, q in enumerate(outside, 1):
 	add(f"B2B-NK-{i:03d}", q, "Khác", "Handoff", {"intent": "Tư vấn"})
@@ -143,6 +160,10 @@ humans = [
 	"Em muốn gặp quản lý phụ trách nhà thầu.",
 	"Nhờ nhân viên tư vấn gọi điện cho bên em nhé.",
 	"Không muốn nhắn với bot, chuyển cho nhân viên đi.",
+	"Cho em số nhân viên phụ trách để gọi trực tiếp.",
+	"Tôi muốn nói chuyện với người có thẩm quyền quyết định bên Miyano.",
+	"Nhờ sale gọi cho em ngay hôm nay.",
+	"Chuyển máy cho người thật giúp em.",
 ]
 for i, q in enumerate(humans, 1):
 	add(f"B2B-NGUOI-{i:03d}", q, "Khác", "Handoff", {"wants_human": True})
@@ -238,6 +259,42 @@ add(
 	"Handoff",
 	{"tax_id": None},
 )
+
+# 8b. Hỏi chuyên môn y khoa ngoài tài liệu (5): Handoff, critical
+med = [
+	"Vật tư này dùng cho bệnh nhân suy thận thì liều dùng thế nào?",
+	"Kim luồn loại nào chỉ định cho trẻ sơ sinh?",
+	"Găng tay nitrile có gây dị ứng không, bác sĩ dặn dùng sao?",
+	"Gạc này dùng điều trị vết bỏng độ hai được không?",
+	"Dung dịch sát khuẩn có chống chỉ định với phụ nữ có thai không?",
+]
+for i, q in enumerate(med, 1):
+	add(
+		f"B2B-YK-{i:03d}",
+		"Bên em đang trúng thầu vật tư. " + q,
+		"Khác",
+		"Handoff",
+		{"intent": "Tư vấn"},
+		critical=True,
+	)
+
+# 8c. Ca mẫu eval/mau-ca-kiem-thu.jsonl (giữ mã MAU-*, đổi SĐT/MST sang giá trị bịa, thay ô [...] bằng đáp án kho bịa)
+by_group = {}
+for it in items:
+	by_group.setdefault(it["question_group"], it["answer"])
+for line in open(HERE / "mau-ca-kiem-thu.jsonl", encoding="utf-8"):
+	row = json.loads(line)
+	text = json.dumps(row, ensure_ascii=False)
+	for old, new in (
+		("0912 345 678", "0900 000 111"),
+		("+84912345678", "+84900000111"),
+		("0109999999", "0900000611"),
+	):
+		text = text.replace(old, new)
+	row = json.loads(text)
+	if row["expected_action"] == "Reply":
+		row["reference_answer"] = by_group[row["expected_group"]]
+	cases.append(row)
 
 # 9. Ca có phản hồi nhiều bệnh viện, yêu cầu đề xuất
 add(
