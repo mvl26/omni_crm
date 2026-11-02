@@ -1,4 +1,5 @@
 import json
+import re
 
 import frappe
 from frappe import _
@@ -37,6 +38,8 @@ class OmniSettings(Document):
 			if not value:
 				continue
 			try:
+				if not re.fullmatch(r"v\d+", value):  # `latest` hay chuỗi lạ sẽ làm mất ý nghĩa của việc ghim
+					raise FileNotFoundError(value)
 				load_prompt(name, value)
 			except FileNotFoundError:
 				frappe.throw(_("Không có tệp câu lệnh {0} phiên bản {1}").format(name, value))

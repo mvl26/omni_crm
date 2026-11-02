@@ -68,6 +68,8 @@ def pinned_version(name: str) -> str | None:
 			value = (frappe.db.get_single_value("Omni Settings", field) or "").strip()
 		except Exception:  # chưa có bảng/trường (cài mới, migrate dở): rơi về hằng
 			value = None
+	if value == LATEST:  # `latest` chỉ dành cho bộ đề so sánh, không bao giờ là bản ghim
+		value = None
 	return value or PINNED_DEFAULTS.get(name)
 
 

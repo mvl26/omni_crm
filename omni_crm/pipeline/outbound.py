@@ -269,6 +269,7 @@ def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
 	)
 	frappe.db.commit()  # trạng thái Sent + mã tin phải bền trước các bước phụ bên dưới
 	first_response.on_outbound_sent({**row, "is_sandbox": 1 if sandbox else 0}, sent_at)  # V2-01; tự bắt lỗi
+	frappe.db.commit()  # bền ngay: các bước phụ bên dưới có thể rollback (dọn echo lỗi)
 	if external_id and not sandbox:
 		try:
 			drop_echo_duplicate(row, external_id)

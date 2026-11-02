@@ -80,6 +80,16 @@ class TestLoaderPin(PinCase):
 			set_settings(reply_prompt_version="v9")
 		frappe.db.rollback()
 
+	def test_latest_is_not_a_valid_pin(self):
+		for bad in ("latest", "V1", "2"):
+			with self.assertRaises(frappe.ValidationError):
+				set_settings(analyze_prompt_version=bad)
+			frappe.db.rollback()
+		# giá trị `latest` lọt vào DB bằng đường khác vẫn không được thành "bản số cao nhất"
+		frappe.db.set_single_value("Omni Settings", "analyze_prompt_version", "latest")
+		self.assertEqual(loader.pinned_version("analyze"), "v1")
+		self.assertEqual(loader.load_prompt("analyze").version, "v1")
+
 	def test_sync_settings_fills_empty_but_never_overwrites_pin(self):
 		set_settings(analyze_prompt_version="v2", reply_prompt_version="")
 		written = loader.sync_settings()
