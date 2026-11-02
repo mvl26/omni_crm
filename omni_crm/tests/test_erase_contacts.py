@@ -175,3 +175,24 @@ class TestEraseContacts(IdentityTestCase):
 			)
 		)
 		self.assertEqual(pc.contacts_of_lead(self.other_lead), [self.mate])
+
+	def test_secondary_deal_contact_colleague_is_not_erased(self):
+		# Review V2-02: sale gắn thêm đồng nghiệp vào Deal (Contact phụ) thì xóa dữ liệu của Lead không được xóa họ.
+		deal = frappe.get_doc(
+			{
+				"doctype": "CRM Deal",
+				"organization": self.org,
+				"lead": self.lead,
+				"status": "Qualification",
+				"contacts": [{"contact": self.person}, {"contact": self.mate}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+		self.addCleanup(
+			lambda: (
+				frappe.db.delete("CRM Contacts", {"parent": deal.name}),
+				frappe.db.delete("CRM Deal", {"name": deal.name}),
+				frappe.db.commit(),
+			)
+		)
+		self.assertEqual(pc.contacts_of_lead(self.lead), [self.person])

@@ -83,9 +83,11 @@ ERASED_NAME_PREFIX = "Đã xóa"
 
 
 def contacts_of_lead(lead: str) -> list[str]:
-	"""Contact là chính người của Lead: khớp email/SĐT của Lead (thô hoặc chuẩn hóa) hoặc nằm trong Deal của Lead.
+	"""Contact là chính người của Lead: khớp email/SĐT của Lead (thô hoặc chuẩn hóa) hoặc là Contact CHÍNH của Deal của Lead.
 
-	KHÔNG lấy các Contact khác của cùng Organization: xóa dữ liệu một người không được xóa đồng nghiệp của họ.
+	KHÔNG lấy các Contact khác của cùng Organization, cũng không lấy Contact phụ mà sale gắn thêm vào Deal (đồng nghiệp
+	của người đó): xóa dữ liệu một người không được xóa đồng nghiệp của họ. CRM đặt người của Lead là Contact chính
+	khi chuyển Lead thành Deal.
 	"""
 	row = frappe.db.get_value(
 		"CRM Lead", lead, ["email", "mobile_no", "phone", "omni_phone_e164", "omni_email_norm"], as_dict=True
@@ -106,7 +108,9 @@ def contacts_of_lead(lead: str) -> list[str]:
 	if deals:
 		found.update(
 			frappe.get_all(
-				"CRM Contacts", filters={"parenttype": "CRM Deal", "parent": ["in", deals]}, pluck="contact"
+				"CRM Contacts",
+				filters={"parenttype": "CRM Deal", "parent": ["in", deals], "is_primary": 1},
+				pluck="contact",
 			)
 		)
 	return sorted(x for x in found if x and frappe.db.exists(CONTACT, x))
