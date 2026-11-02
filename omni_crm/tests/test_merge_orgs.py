@@ -65,9 +65,10 @@ class TestLeadMergeKeepsOrganization(OrgMergeCase):
 		self.assertEqual(frappe.db.get_value("Contact", contact, "company_name"), org)
 		self.assertEqual(frappe.db.count(AWARD, {"organization": org}), 1)
 
-	def test_care_log_link_is_registered_and_skipped_when_doctype_missing(self):
+	def test_care_log_link_is_registered_and_present_since_v2_04(self):
 		self.assertIn(("Omni Care Log", "lead"), merge.OMNI_LEAD_LINKS)
-		self.assertFalse(merge._table_ok("Omni Care Log", "lead"))  # V2-04 chưa có DocType
+		# Đổi có chủ đích ở V2-04: trước đó DocType chưa có nên bị bỏ qua (assertFalse); nay đã có nên được chuyển theo Lead
+		self.assertTrue(merge._table_ok("Omni Care Log", "lead"))
 
 
 class TestMergeOrganizations(OrgMergeCase):

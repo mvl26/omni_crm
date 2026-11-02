@@ -1009,6 +1009,29 @@ class TestJobAndAccess(ImportCase):
 		frappe.set_user("Administrator")
 		self.assertEqual(frappe.db.count(ORG, {"omni_tax_id": ["like", "09030300%"]}), 3)
 
+	def test_job_rolls_back_before_recording_failure(self):
+		"""Reviewer V2-03: nhánh except của run_job phải rollback rồi mới ghi Failed (không commit phần dở)."""
+		log = importer.create_log(source_name="x.xlsx", dry_run=False, user=ADMIN2)
+		frappe.db.set_value(LOG, log, "status", "Queued")
+		calls: list[str] = []
+		real_finish = importer._finish
+
+		def finish(*a, **kw):
+			calls.append("finish")
+			return real_finish(*a, **kw)
+
+		with (
+			mock.patch.object(importer.Importer, "run", side_effect=RuntimeError("hỏng giữa chừng")),
+			mock.patch.object(frappe.db, "rollback", side_effect=lambda *a, **kw: calls.append("rollback")),
+			mock.patch.object(frappe.db, "commit"),
+			mock.patch.object(importer, "_finish", side_effect=finish),
+			mock.patch.object(frappe, "log_error"),
+		):
+			status = importer.run_job(log, commit=True, path=str(self.make()))
+		self.assertEqual(status, "Failed")
+		self.assertEqual(calls, ["rollback", "finish"])
+		self.assertEqual(frappe.db.get_value(LOG, log, "status"), "Failed")
+
 	def test_job_refuses_when_run_by_is_not_admin(self):
 		log = importer.create_log(source_name="x.xlsx", dry_run=True, user=SALE1)
 		frappe.db.set_value(LOG, log, "status", "Queued")

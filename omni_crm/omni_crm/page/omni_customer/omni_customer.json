@@ -1,0 +1,25 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "Omni CRM",
+ "name": "omni-customer",
+ "page_name": "omni-customer",
+ "roles": [
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "Omni Admin"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "title": "Chi tiết khách"
+}

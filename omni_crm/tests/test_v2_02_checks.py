@@ -41,6 +41,22 @@ EXPECTED_WHITELISTED = {
 		"run_import",
 		"download_template",
 	},  # V2-03: nhập danh sách (một nhật ký/lần), chỉ Omni Admin
+	"api/dashboard.py": {"snapshot"},  # V2-04: Tổng quan (chỉ đọc; phạm vi theo quyền xem Lead)
+	"api/customer.py": {  # V2-04: Chi tiết khách/nhà thầu; mỗi hàm kiểm quyền theo MỘT Lead, không có đường gửi tin
+		"get_header",
+		"get_profile",
+		"update_field",
+		"get_contacts",
+		"get_fit",
+		"get_side",
+		"set_task_done",
+		"add_task",
+		"get_awards",
+		"get_care_logs",
+		"save_care_log",
+		"get_activity",
+		"get_mini_profile",
+	},
 	"api/organization.py": {
 		"get_organization",
 		"get_contacts",

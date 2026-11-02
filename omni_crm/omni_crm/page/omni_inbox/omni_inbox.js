@@ -34,7 +34,7 @@ class OmniInbox {
 			<div class="omni-inbox">
 				<div class="oi-left">
 					<div class="oi-filters">
-						<input type="text" class="form-control oi-search" placeholder="${e(__("Tìm theo tên khách"))}" style="flex:1;min-width:120px">
+						<input type="text" class="form-control oi-search" placeholder="${e(__("Tìm theo tên, SĐT, email, đơn vị"))}" style="flex:1;min-width:120px">
 						<select class="form-control oi-channel" style="width:auto">
 							<option value="">${e(__("Mọi kênh"))}</option>
 							<option value="Zalo OA">Zalo OA</option>
@@ -43,6 +43,8 @@ class OmniInbox {
 						</select>
 						<label><input type="checkbox" class="oi-unanswered"> ${e(__("Chưa trả lời"))}</label>
 						<label><input type="checkbox" class="oi-mine"> ${e(__("Của tôi"))}</label>
+						<label><input type="checkbox" class="oi-calls"> ${e(__("Cuộc gọi"))}</label>
+						<label><input type="checkbox" class="oi-hasdraft"> ${e(__("Có nháp bot"))}</label>
 					</div>
 					<div class="oi-list"></div>
 				</div>
@@ -53,7 +55,7 @@ class OmniInbox {
 		this.$list = $(page.body).find(".oi-list");
 		this.$right = $(page.body).find(".oi-right");
 		$(page.body).find(".oi-search").on("input", frappe.utils.debounce(() => this.load_list(), 300));
-		$(page.body).find(".oi-channel, .oi-unanswered, .oi-mine").on("change", () => this.load_list());
+		$(page.body).find(".oi-channel, .oi-unanswered, .oi-mine, .oi-calls, .oi-hasdraft").on("change", () => this.load_list());
 		this.on_update_handler = (data) => this.on_update(data);
 		this.active = false;
 		this.$status = $(page.body).find(".oi-system-status");
@@ -104,7 +106,8 @@ class OmniInbox {
 		const b = $(this.page.body);
 		return {
 			search: b.find(".oi-search").val(),
-			channel: b.find(".oi-channel").val(),
+			channel: b.find(".oi-calls").is(":checked") ? "Telephony" : b.find(".oi-channel").val(),
+			has_draft: b.find(".oi-hasdraft").is(":checked") ? 1 : 0,
 			unanswered: b.find(".oi-unanswered").is(":checked") ? 1 : 0,
 			mine: b.find(".oi-mine").is(":checked") ? 1 : 0,
 		};
@@ -140,11 +143,11 @@ class OmniInbox {
 					(r) => `
 			<div class="oi-item ${r.lead === this.current ? "active" : ""}" data-lead="${e(r.lead)}">
 				<div class="oi-top">
-					<span>${r.draft_pending ? '<span class="oi-chan oi-draftchip" title="' + e(__("Có nháp bot chờ duyệt")) + '">' + e(__("Nháp")) + "</span> " : ""}${r.unanswered ? '<span class="oi-dot" title="' + e(__("Chưa trả lời")) + '"></span>' : ""}${e(r.lead_name)}</span>
+					<span>${r.draft_pending ? '<span class="oi-chan oi-draftchip" title="' + e(__("Có nháp bot chờ duyệt")) + '">' + e(__("Nháp")) + "</span> " : ""}${r.unanswered ? '<span class="oi-dot" title="' + e(__("Chưa trả lời")) + '"></span>' : ""}${e(r.lead_name)}${r.organization ? ' <span class="oi-meta">· ' + e(r.organization) + "</span>" : ""}${r.fit_tier ? ' <span class="oi-chan" title="' + e(__("Mức phù hợp")) + '">' + e(__("Hạng")) + " " + e(r.fit_tier) + "</span>" : ""}</span>
 					<span class="oi-time">${e(frappe.datetime.prettyDate(r.last_at))}</span>
 				</div>
 				<div class="oi-snippet">${r.last_direction === "out" ? e(__("Bạn")) + ": " : ""}${e(r.last_text || "")}</div>
-				<div>${(r.channels || []).map((c) => `<span class="oi-chan">${e(c)}</span>`).join("")}
+				<div>${r.priority_label ? '<span class="oi-chan" style="color:#b42318">' + e(r.priority_label) + "</span>" : ""}${r.unrecorded ? '<span class="oi-chan" style="color:#b42318">' + e(__("Chưa ghi kết quả")) + "</span>" : ""}${(r.channels || []).map((c) => `<span class="oi-chan">${e(c)}</span>`).join("")}
 					<span class="oi-meta">${e(r.lead_owner || "")}</span></div>
 			</div>`
 				)
@@ -207,11 +210,14 @@ class OmniInbox {
 			.join("");
 		this.$right.html(`
 			<div class="oi-head">
-				<div><b>${e(lead.lead_name || lead.name)}</b>
-					<div class="oi-meta">${e(lead.mobile_no || "")} ${e(lead.email || "")} · ${e(lead.status || "")}
+				<div><b>${e(lead.lead_name || lead.name)}</b>${data.profile && data.profile.organization ? ` <span class="oi-meta">· ${e(data.profile.organization)}</span>${data.profile.fit_tier ? ` <span class="oi-chan">${e(__("Hạng"))} ${e(data.profile.fit_tier)}</span>` : ""}` : ""}
+					<div class="oi-meta">${data.profile && data.profile.person_refused ? e(__("Từ chối nhận liên hệ")) : e(lead.mobile_no || "") + " " + e(lead.email || "")} · ${e(lead.status || "")}
+					${data.profile && data.profile.next_step ? " · " + e(__("Bước tiếp theo")) + ": " + e(data.profile.next_step.action) + " (" + e(data.profile.next_step.due) + ")" : ""}
+					${data.profile && data.profile.unrecorded ? ' <span class="oi-chan" style="color:#b42318">' + e(__("Chưa ghi kết quả")) + "</span>" : ""}
 					${(data.identities || []).map((i) => `<span class="oi-chan">${e(i.channel_type)}</span>`).join("")}
 					${this.score_html(data.score)}</div></div>
-				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a>
+				<span><a class="btn btn-default btn-sm" href="/app/omni-customer/${encodeURIComponent(lead.name)}">${e(__("Mở hồ sơ chăm sóc"))}</a>
+				<a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(data.deal ? __("Mở Deal trong CRM") : __("Mở Lead trong CRM"))}</a></span>
 			</div>
 			${this.pause_html(data.bot)}
 			${this.bot_html(lead)}

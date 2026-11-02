@@ -547,6 +547,7 @@ class TestEraseCoversBotRun(AITestCase):
 		lead.flags.ignore_permissions = True
 		with mock.patch("frappe.enqueue"):
 			lead.insert()
+		self.addCleanup(frappe.db.commit)  # chạy SAU xóa Lead (LIFO) để `clean()` không rollback lần xóa
 		self.addCleanup(
 			frappe.delete_doc,
 			"CRM Lead",

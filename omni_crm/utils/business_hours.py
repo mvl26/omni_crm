@@ -91,6 +91,13 @@ def is_business_time(
 	return bool(window and window[0] <= dt.time() <= window[1])
 
 
+def is_working_day(day: date, hours: dict | None = None, holidays: frozenset[date] | None = None) -> bool:
+	"""`day` có giờ làm việc không (không phải ngày nghỉ lễ, và thứ trong tuần có khung giờ cấu hình)."""
+	hours = hours if hours is not None else _hours()
+	holidays = holidays if holidays is not None else _holidays()
+	return _window(day, hours, holidays) is not None
+
+
 MAX_SCAN_DAYS = 400  # chặn vòng lặp nếu cấu hình không có ngày làm việc nào
 
 
@@ -162,3 +169,61 @@ def business_minutes_between(
 ) -> float:
 	"""Số phút nằm trong giờ làm việc giữa `start` và `end` (0 nếu end <= start); dùng chung cho mọi hạn/đồng hồ phản hồi."""
 	return business_seconds_between(start, end, hours, holidays) / 60.0
+
+
+class BusinessClock:
+	"""Phút làm việc tích lũy theo ngày: tính hàng chục nghìn khoảng `[start, end]` trong O(1) mỗi khoảng.
+
+	Kết quả bằng `business_minutes_between` (cùng giờ làm việc, cùng ngày lễ) nhưng không lặp qua từng ngày cho từng khoảng.
+	Phủ các ngày từ `first_day` đến `last_day`; thời điểm ngoài khoảng được kẹp vào hai đầu.
+	"""
+
+	def __init__(
+		self,
+		first_day: date,
+		last_day: date,
+		hours: dict | None = None,
+		holidays: frozenset[date] | None = None,
+	):
+		hours = hours if hours is not None else _hours()
+		holidays = holidays if holidays is not None else _holidays()
+		self.first_day = first_day
+		self.last_day = max(last_day, first_day)
+		self._windows: list[tuple[time, time] | None] = []
+		self._before: list[float] = []  # giây làm việc tích lũy trước đầu mỗi ngày
+		total = 0.0
+		day = self.first_day
+		while day <= self.last_day:
+			window = _window(day, hours, holidays)
+			self._windows.append(window)
+			self._before.append(total)
+			if window:
+				total += (datetime.combine(day, window[1]) - datetime.combine(day, window[0])).total_seconds()
+			day += timedelta(days=1)
+
+	def upto(self, at: datetime) -> float:
+		"""Số giây làm việc từ đầu `first_day` tới `at`."""
+		day = at.date()
+		if day < self.first_day:
+			return 0.0
+		if day > self.last_day:
+			return self._before[-1] + self._day_seconds(len(self._before) - 1)
+		i = (day - self.first_day).days
+		window = self._windows[i]
+		if not window:
+			return self._before[i]
+		lo, hi = datetime.combine(day, window[0]), datetime.combine(day, window[1])
+		return self._before[i] + max(0.0, (min(at, hi) - lo).total_seconds())
+
+	def _day_seconds(self, i: int) -> float:
+		window = self._windows[i]
+		if not window:
+			return 0.0
+		day = self.first_day + timedelta(days=i)
+		return (datetime.combine(day, window[1]) - datetime.combine(day, window[0])).total_seconds()
+
+	def minutes_between(self, start: datetime, end: datetime) -> float:
+		"""Phút làm việc giữa `start` và `end` (0 nếu end <= start)."""
+		if end <= start:
+			return 0.0
+		return max(0.0, self.upto(end) - self.upto(start)) / 60.0

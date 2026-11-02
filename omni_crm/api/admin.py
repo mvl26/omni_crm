@@ -137,6 +137,9 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		where {where}""",
 		params,
 	)
+	# Nhật ký chăm sóc (V2-04): `summary` là trích tin khách đầu phiên (hoặc tóm tắt) -> xóa nội dung; giữ kết quả, hạn
+	frappe.db.sql("update `tabOmni Care Log` set `summary` = null where `lead` = %s", lead)
+	care_logs_n = frappe.db.sql("select row_count()")[0][0]
 	calls_n, call_logs_n = _erase_calls(lead)
 	contacts_n = _erase_contacts(lead, reason)
 	frappe.get_doc(
@@ -165,6 +168,7 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		"calls": calls_n,
 		"call_logs": call_logs_n,
 		"contacts": contacts_n,
+		"care_logs": care_logs_n,
 	}
 
 

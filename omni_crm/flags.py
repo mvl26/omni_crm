@@ -91,6 +91,48 @@ def prospect_import_enabled() -> bool:
 	return True if value is None else bool(cint(value))
 
 
+CARE_DEFAULTS = {
+	"dashboard_enabled": 1,
+	"care_log_enabled": 1,
+	"response_sla_minutes": 15,
+	"care_session_gap_hours": 4,
+	"team_lead_role": "Sales Manager",
+}
+
+
+def care_setting(fieldname: str):
+	"""Giá trị đã LƯU của cấu hình chăm sóc (V2-04); chưa từng lưu, trống hoặc <= 0 (với số) thì dùng mặc định.
+
+	Đọc `tabSingles` vì site migrate từ bản cũ chưa lưu các trường này (`get_single_value` trả 0 cho trường chưa lưu,
+	không phân biệt được với "đặt 0"). Công tắc (Check) là ngoại lệ: chưa từng lưu = bật, đã lưu 0 = tắt.
+	"""
+	default = CARE_DEFAULTS[fieldname]
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = %s", fieldname
+		)
+	except Exception:
+		return default
+	value = row[0][0] if row else None
+	if value is None or value == "":
+		return default
+	if fieldname in ("dashboard_enabled", "care_log_enabled"):
+		return cint(value)
+	if isinstance(default, int):
+		return cint(value) if cint(value) > 0 else default
+	return value
+
+
+def dashboard_enabled() -> bool:
+	"""Công tắc Dashboard CSKH (V2-04); chưa từng lưu = bật."""
+	return bool(care_setting("dashboard_enabled"))
+
+
+def care_log_enabled() -> bool:
+	"""Công tắc tự ghi nhật ký chăm sóc (V2-04); chưa từng lưu = bật."""
+	return bool(care_setting("care_log_enabled"))
+
+
 def _settings_flag(fieldname: str) -> bool:
 	try:
 		return bool(frappe.get_cached_doc("Omni Settings").get(fieldname))

@@ -26,6 +26,9 @@ required_apps = ["crm"]
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/omni_crm/css/omni_crm.css"
+app_include_css = (
+	"/assets/omni_crm/css/omni.css"  # V2-04: mọi luật nằm dưới .omni-ui (không đổi giao diện trang khác)
+)
 # app_include_js = "/assets/omni_crm/js/omni_crm.js"
 
 # include js, css files in header of web template
@@ -126,6 +129,7 @@ permission_query_conditions = {
 	"Omni Call": "omni_crm.permissions.call_conditions",  # D2-01
 	"Omni Bot Draft": "omni_crm.permissions.bot_draft_conditions",  # D3-01
 	"Omni Bid Award": "omni_crm.permissions.bid_award_conditions",  # V2-02
+	"Omni Care Log": "omni_crm.permissions.care_log_conditions",  # V2-04
 }
 
 has_permission = {
@@ -136,6 +140,7 @@ has_permission = {
 	"Omni Call": "omni_crm.permissions.has_lead_scoped_permission",  # D2-01
 	"Omni Bot Draft": "omni_crm.permissions.has_lead_scoped_permission",  # D3-01
 	"Omni Bid Award": "omni_crm.permissions.has_bid_award_permission",  # V2-02
+	"Omni Care Log": "omni_crm.permissions.has_lead_scoped_permission",  # V2-04
 }
 
 # DocType Class
@@ -175,6 +180,7 @@ scheduler_events = {
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
+		"45 17 * * *": ["omni_crm.crm_bridge.care_log.end_of_day_digest"],  # V2-04: phiên chưa ghi kết quả
 		"20 2 * * *": [
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
@@ -198,6 +204,8 @@ doc_events = {
 	"CRM Organization": {
 		"validate": "omni_crm.prospect.organization.validate",  # V2-02: chuẩn hóa + chặn trùng mã số thuế
 		"on_update": "omni_crm.prospect.fit.on_organization_update",  # V2-02: số mã hàng ước tính đổi -> tính lại điểm
+		"before_rename": "omni_crm.prospect.organization.before_rename",  # V2-04: chặn đổi tên kiểu gộp
+		"after_rename": "omni_crm.prospect.organization.after_rename",  # V2-04: đồng bộ Lead.organization, Contact.company_name
 	},
 	"Contact": {
 		"validate": "omni_crm.prospect.contacts.validate",  # V2-02: khóa SĐT/email chuẩn hóa để khớp định danh
@@ -212,6 +220,7 @@ doc_events = {
 			"omni_crm.bot.scoring.protect_score_fields",  # D2-06: điểm chỉ đọc với người dùng
 		],
 		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06
+		"on_trash": "omni_crm.crm_bridge.care_log.delete_for_lead",  # V2-04: nhật ký chăm sóc đi theo Lead
 	},
 }
 fixtures = [

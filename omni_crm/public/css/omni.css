@@ -1,0 +1,47 @@
+/* V2-04: giao diện Tổng quan CSKH / Chi tiết khách / Hộp thư (bộ nhận diện Miyano).
+   MỌI luật nằm dưới .omni-ui và biến CSS khai báo trên .omni-ui (không dùng :root, không đổi giao diện trang khác). */
+.omni-ui {
+	--omni-navy: #003366;
+	--omni-bg: #f3f7fa;
+	--omni-line: #d5e0e8;
+	--omni-text: #1d2b36;
+	--omni-muted: #5c6f7d;
+	--omni-red: #b42318;
+	--omni-green: #1a7f4b;
+	--omni-amber: #b7791f;
+	font-family: "Noto Sans", system-ui, sans-serif;
+	color: var(--omni-text);
+	background: var(--omni-bg);
+	padding: 12px;
+}
+.omni-ui .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.omni-ui .ou-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.omni-ui h2, .omni-ui h3 { color: var(--omni-navy); margin: 0 0 8px; }
+.omni-ui .ou-btn { border: 1px solid var(--omni-line); background: #fff; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+.omni-ui .ou-btn.primary { background: var(--omni-navy); color: #fff; border-color: var(--omni-navy); }
+.omni-ui .ou-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.omni-ui .ou-card { background: #fff; border: 1px solid var(--omni-line); border-radius: 8px; padding: 12px; }
+.omni-ui .ou-tile .v { font-size: 26px; font-weight: 700; color: var(--omni-navy); }
+.omni-ui .ou-tile .l, .omni-ui .muted { color: var(--omni-muted); font-size: 12px; }
+.omni-ui .good { color: var(--omni-green); } .omni-ui .bad { color: var(--omni-red); }
+.omni-ui table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.omni-ui th, .omni-ui td { border-bottom: 1px solid var(--omni-line); padding: 6px 8px; text-align: left; vertical-align: top; }
+.omni-ui th { color: var(--omni-muted); font-weight: 600; }
+.omni-ui .ou-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin: 12px 0; }
+.omni-ui .ou-grid3 { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr) minmax(220px, 1fr); gap: 10px; }
+@media (max-width: 900px) { .omni-ui .ou-grid3 { grid-template-columns: 1fr; } }
+.omni-ui .tag { display: inline-block; border-radius: 10px; padding: 1px 8px; font-size: 11px; border: 1px solid var(--omni-line); background: #fff; }
+.omni-ui .tag.red { color: var(--omni-red); border-color: var(--omni-red); }
+.omni-ui .tag.navy { color: var(--omni-navy); border-color: var(--omni-navy); }
+.omni-ui .tag.green { color: var(--omni-green); border-color: var(--omni-green); }
+.omni-ui .bar { height: 8px; background: var(--omni-line); border-radius: 4px; overflow: hidden; }
+.omni-ui .bar > span { display: block; height: 100%; background: var(--omni-navy); }
+.omni-ui .ou-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--omni-line); margin-bottom: 8px; flex-wrap: wrap; }
+.omni-ui .ou-tabs button { border: 0; background: none; padding: 6px 12px; cursor: pointer; color: var(--omni-muted); }
+.omni-ui .ou-tabs button.on { color: var(--omni-navy); border-bottom: 2px solid var(--omni-navy); font-weight: 700; }
+.omni-ui .stages { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+.omni-ui .stages span { padding: 3px 10px; border: 1px solid var(--omni-line); border-radius: 12px; background: #fff; font-size: 12px; }
+.omni-ui .stages span.on { background: var(--omni-navy); color: #fff; font-weight: 700; }
+.omni-ui .ev { border-left: 3px solid var(--omni-line); padding: 4px 8px; margin: 6px 0; }
+.omni-ui .ev.in { border-left-color: var(--omni-navy); }
+.omni-ui .ou-form input, .omni-ui .ou-form select, .omni-ui .ou-form textarea { width: 100%; margin: 3px 0 8px; padding: 5px 8px; border: 1px solid var(--omni-line); border-radius: 6px; }

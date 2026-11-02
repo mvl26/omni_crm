@@ -141,3 +141,15 @@ Dòng "Hệ thống" trong tab Hoạt động lấy từ: tạo Lead, Version c�
 | `response_sla_minutes` | Int | 15 |
 | `care_session_gap_hours` | Int | 4 |
 | `team_lead_role` | Link Role | Sales Manager |
+
+## 6. Ghi chú thi hành V2-04 (khác biệt so với văn bản trên)
+
+- Trường hợp 1: v1 chưa có D1-12 nên V2-04 làm trọn. Mã: `crm_bridge/care_log.py`, `dashboard/{access,priority,blocks}.py`, `api/dashboard.py`, `api/customer.py`, `prospect/fit_view.py`, trang `omni-dashboard`, `omni-customer`, `public/css/omni.css` (mọi luật dưới `.omni-ui`).
+- Công tắc: `dashboard_enabled`, `care_log_enabled` (docs/09). Khối Đợt 2-3 đăng ký bằng `@block(key, phase, enabled=…)`; khối tắt vắng mặt trong kết quả.
+- Phạm vi: truy vấn gộp với điều kiện quyền CRM Lead làm truy vấn con; `scope` ("mine"/"team") chỉ thu hẹp, không mở rộng. Cache 60 giây theo (người dùng, kỳ, phạm vi).
+- Phản hồi lần đầu / Lead mới chỉ tính Lead có `omni_first_channel`; delta so với kỳ liền trước cùng độ dài, chỉ hiện khi mốc so sánh khác 0.
+- "Chưa ghi kết quả": phiên do Sale xử lý, chưa có kết quả, im lặng >= 2 giờ.
+- Hạng "Phù hợp A/B, chưa liên hệ": nhà thầu hạng A/B có Lead (xem được, chưa chuyển Deal) mà không Lead nào có `omni_first_response_at` hoặc đã rời giai đoạn "Tiềm năng"/"New".
+- Hiệu năng (máy dev, dữ liệu tổng hợp, KHÔNG phải staging): xem `docs/11-van-hanh.md` mục "Lưu ý V2-04".
+- Chưa làm: ảnh chụp 5 màn hình trên staging; form ghi nhật ký ngay trong Hộp thư; giao diện chưa thử trên trình duyệt.
+

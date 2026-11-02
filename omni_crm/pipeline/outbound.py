@@ -23,7 +23,7 @@ from frappe.utils import add_to_date, cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
-from omni_crm.crm_bridge import first_response, timeline
+from omni_crm.crm_bridge import care_log, first_response, timeline
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline.retry import is_transient, mark_retry, redact
@@ -269,6 +269,9 @@ def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
 	)
 	frappe.db.commit()  # trạng thái Sent + mã tin phải bền trước các bước phụ bên dưới
 	first_response.on_outbound_sent({**row, "is_sandbox": 1 if sandbox else 0}, sent_at)  # V2-01; tự bắt lỗi
+	care_log.on_outbound_sent(
+		row, sent_at, sandbox
+	)  # V2-04: phiên chăm sóc (bỏ qua sandbox/System); tự bắt lỗi
 	frappe.db.commit()  # bền ngay: các bước phụ bên dưới có thể rollback (dọn echo lỗi)
 	if external_id and not sandbox:
 		try:
