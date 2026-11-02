@@ -131,7 +131,12 @@ def load_cases(case_filter: dict | None = None) -> list[dict]:
 def load_knowledge(kb_file: str | None = None, groups_file: str | None = None) -> dict[str, Any]:
 	"""Kho tri thức và nhóm câu hỏi dùng để chạy: từ DB site (mặc định) hoặc từ tệp CSV (không ghi DB)."""
 	if not kb_file and not groups_file:
-		groups = frappe.get_all(GROUP, fields=["name", "always_handoff", "description"], order_by="name asc")
+		groups = frappe.get_all(
+			GROUP,
+			filters={"active": 1},
+			fields=["name", "always_handoff", "description"],
+			order_by="name asc",
+		)
 		return {
 			"items": knowledge.kb_items(),
 			"groups": groups,
@@ -152,7 +157,12 @@ def load_knowledge(kb_file: str | None = None, groups_file: str | None = None) -
 			if r.get("group_name")
 		]
 	else:
-		groups = frappe.get_all(GROUP, fields=["name", "always_handoff", "description"], order_by="name asc")
+		groups = frappe.get_all(
+			GROUP,
+			filters={"active": 1},
+			fields=["name", "always_handoff", "description"],
+			order_by="name asc",
+		)
 	if kb_file:
 		path = knowledge._resolve(kb_file)
 		digest.update(path.read_bytes())
@@ -237,7 +247,7 @@ def analyze_case(case: dict, turns: list[dict], tag: str, mask: bool, settings: 
 		settings.get("analyze_model") or DEFAULT_ANALYZE_MODEL,
 		render(prompt),
 		[{"role": "user", "content": render_turns(turns, analyze.MAX_TURNS, analyze.MAX_CHARS, mask)}],
-		analyze.TOOL,
+		analyze.tool_for(prompt.version),
 		batch_id=batch_id,
 		prompt_version=prompt.version,
 		max_tokens=1200,

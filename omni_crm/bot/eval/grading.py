@@ -15,10 +15,18 @@ from omni_crm.identity.normalize import normalize_email, normalize_phone
 
 FUZZY_MIN = 0.8  # chuỗi tự do: so mờ >= 0.8
 MAX_DROP = 0.02  # đổi câu lệnh/mô hình: không chỉ số nào giảm quá 2 điểm phần trăm
-EXACT_FIELDS = ("intent", "urgency", "wants_human", "timeframe_within_30d")
+EXACT_FIELDS = (
+	"intent",
+	"urgency",
+	"wants_human",
+	"timeframe_within_30d",
+	"tax_id",
+	"decision_role",
+	"asks_proposal",
+)  # tax_id, decision_role, asks_proposal: trường B2B của schema v2 (V2-06)
 PHONE_FIELDS = ("phones",)
 EMAIL_FIELDS = ("emails",)
-LIST_FIELDS = ("products",)
+LIST_FIELDS = ("products", "hospitals_mentioned")
 METRICS = ("field_accuracy", "action_accuracy", "answer_pass_rate")
 # Cổng (eval/README.md mục 4). `min`: chỉ số phải >= ngưỡng; `max_critical`: số lỗi nghiêm trọng tối đa;
 # `regression`: so với lần chạy được chấp nhận gần nhất.

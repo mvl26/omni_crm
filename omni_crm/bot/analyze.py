@@ -6,6 +6,7 @@ ghi, và không bao giờ đè lên trường sale đã sửa tay. Lỗi AI khô
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from difflib import SequenceMatcher
@@ -25,6 +26,7 @@ from omni_crm.identity import duplicates, resolver
 from omni_crm.identity.extract import extract_contacts
 from omni_crm.identity.normalize import is_placeholder_name, normalize_email, normalize_phone, strip_accents
 from omni_crm.pipeline.retry import redact
+from omni_crm.prospect.normalize import InvalidTaxId, normalize_tax_id
 
 LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
@@ -54,9 +56,19 @@ LEAD_FIELDS = {
 	"timeframe": "omni_timeframe",
 	"urgency": "omni_urgency",
 	"intent": "omni_intent",
+	# V2-06 (docs/14 mục 7): trường B2B, chỉ có khi câu lệnh/schema v2 đòi bot trích
+	"tax_id": "omni_tax_id_stated",
+	"hospitals_mentioned": "omni_hospitals_mentioned",
+	"current_pain": "omni_current_pain",
+	"decision_role": "omni_decision_role",
 }
+DECISION_ROLES = ("Người quyết định", "Phụ trách đấu thầu", "Kế toán – công nợ", "Mua hàng", "Khác")  # noqa: RUF001
+SCHEMA_V1, SCHEMA_V2 = "analyze_schema_v1", "analyze_schema_v2"
+SCHEMA_VERSION = (
+	SCHEMA_V2  # phiên bản schema mới nhất; ghi vào kết quả phân tích (output_json) và báo cáo bộ đề
+)
 
-TOOL: dict[str, Any] = {
+TOOL_V1: dict[str, Any] = {
 	"name": "record_lead_signals",
 	"description": "Ghi lại thông tin về khách rút ra từ hội thoại, mỗi trường kèm trích dẫn nguyên văn làm căn cứ",
 	"input_schema": {
@@ -84,6 +96,27 @@ TOOL: dict[str, Any] = {
 		"required": ["intent", "wants_human", "summary", "evidence", "phones", "emails", "products"],
 	},
 }
+
+# Schema v2 = v1 + trường B2B tùy chọn (không bắt buộc, nên bản ghim v1 và bộ đề cũ vẫn hợp lệ).
+TOOL_V2: dict[str, Any] = copy.deepcopy(TOOL_V1)
+TOOL_V2["input_schema"]["properties"].update(
+	{
+		"tax_id": {
+			"type": ["string", "null"],
+			"description": "Mã số thuế doanh nghiệp khách nêu rõ (10 hoặc 13 số)",
+		},
+		"hospitals_mentioned": {"type": "array", "items": {"type": "string"}},
+		"current_pain": {"type": ["string", "null"], "maxLength": 300},
+		"decision_role": {"enum": [*DECISION_ROLES, None]},
+		"asks_proposal": {"type": ["boolean", "null"]},
+	}
+)
+TOOL = TOOL_V2
+
+
+def tool_for(prompt_version: str | None) -> dict[str, Any]:
+	"""Schema của tool theo phiên bản câu lệnh: v1 giữ schema v1 (đường chạy ghim không đổi), còn lại schema v2."""
+	return TOOL_V1 if (prompt_version or "v1") == "v1" else TOOL_V2
 
 
 # --- Kiểm căn cứ --------------------------------------------------------------------------------------------
@@ -167,6 +200,63 @@ def _clean(value: Any, limit: int) -> str:
 	return re.sub(r"\s+", " ", text).strip()[:limit]
 
 
+def tax_id_supported(tax: str, evidence: str | None) -> bool:
+	"""Mã số thuế đã chuẩn hóa có nằm (theo chữ số) trong trích dẫn không; chặn ca trích dẫn thật nhưng MST bịa."""
+	return bool(tax) and re.sub(r"\D", "", tax) in re.sub(r"\D", "", evidence or "")
+
+
+def _postprocess_b2b(
+	signals: dict, evidence: dict, text_of_customer: str, accepted: dict, dropped: list
+) -> None:
+	"""Trường B2B (docs/14 mục 7): MST chuẩn hóa, bệnh viện nhắc tới, vướng mắc, vai trò quyết định, yêu cầu đề xuất.
+
+	Mỗi trường cần `evidence` nằm trong lời khách như trường cũ; thiếu hoặc sai thì bỏ. Không ghi gì vào Lead ở đây.
+	"""
+
+	def supported(key: str) -> bool:
+		return evidence_supported(evidence.get(key), text_of_customer)
+
+	raw_tax = signals.get("tax_id")
+	if raw_tax not in (None, ""):
+		try:
+			tax = normalize_tax_id(_clean(raw_tax, 40))
+		except InvalidTaxId:
+			tax = None
+		if tax and supported("tax_id") and tax_id_supported(tax, evidence.get("tax_id")):
+			accepted["tax_id"] = tax
+		else:
+			dropped.append("tax_id")
+	hospitals = [h for h in (_clean(x, 140) for x in signals.get("hospitals_mentioned") or []) if h]
+	if hospitals:
+		if supported("hospitals_mentioned"):
+			ev = evidence.get("hospitals_mentioned")
+			kept = [h for h in hospitals if value_supported(h, ev)][:10]
+			if kept:
+				accepted["hospitals_mentioned"] = ", ".join(kept)[: FIELD_LIMITS["products"]]
+			if len(kept) < len(hospitals):
+				dropped.append(
+					"hospitals_mentioned" if not kept else f"hospitals_mentioned:{len(hospitals) - len(kept)}"
+				)
+		else:
+			dropped.append("hospitals_mentioned")
+	pain = _clean(signals.get("current_pain"), FIELD_LIMITS["need"])
+	if pain:
+		if supported("current_pain"):
+			accepted["current_pain"] = pain
+		else:
+			dropped.append("current_pain")
+	if signals.get("decision_role") not in (None, ""):
+		if signals["decision_role"] in DECISION_ROLES and supported("decision_role"):
+			accepted["decision_role"] = signals["decision_role"]
+		else:
+			dropped.append("decision_role")
+	if signals.get("asks_proposal") is True:
+		if supported("asks_proposal"):
+			accepted["asks_proposal"] = True
+		else:
+			dropped.append("asks_proposal")
+
+
 def postprocess(signals: dict, text_of_customer: str) -> dict:
 	"""Giữ lại trường có căn cứ trong lời khách; trả {"accepted": {...}, "dropped": [tên trường]}.
 
@@ -210,6 +300,8 @@ def postprocess(signals: dict, text_of_customer: str) -> dict:
 	if "timeframe" in accepted and isinstance(signals.get("timeframe_within_30d"), bool):
 		accepted["timeframe_within_30d"] = signals["timeframe_within_30d"]
 
+	_postprocess_b2b(signals, evidence, text_of_customer, accepted, dropped)
+
 	found = extract_contacts(text_of_customer)
 	for key, normalizer, known in (
 		("phones", normalize_phone, found["phones"]),
@@ -247,7 +339,16 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 	row = frappe.db.get_value(
 		LEAD,
 		lead,
-		["first_name", "last_name", "lead_name", "organization", "omni_manual_fields", *LEAD_FIELDS.values()],
+		[
+			"first_name",
+			"last_name",
+			"lead_name",
+			"organization",
+			"omni_phone_e164",
+			"omni_email_norm",
+			"omni_manual_fields",
+			*LEAD_FIELDS.values(),
+		],
 		as_dict=True,
 		for_update=True,  # khóa dòng tới commit: sale lưu cùng lúc phải chờ, không đọc `omni_manual_fields` cũ
 	)
@@ -273,8 +374,20 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 			skipped.append("first_name")
 		else:
 			values.update(first_name=name[:140], last_name=None, lead_name=name[:140])
-	if accepted.get("organization") and not row.organization:
-		put("organization", accepted["organization"][:140])
+	link = {"attached": None, "weak": None, "ambiguous": [], "unverified_name": None}
+	if not row.organization:
+		link = link_organization(lead, accepted, row, manual)
+		if link["attached"]:
+			values["organization"] = link["attached"]
+	if accepted.get("organization") and not row.organization and "organization" not in values:
+		claim = accepted["organization"][:140]
+		if organization_exists(
+			claim
+		):  # tên tự khai trùng nhà thầu thật: tín hiệu yếu, không gắn (bài học R1/Web Form)
+			link["unverified_name"] = claim
+			_note_weak_org(lead, claim)
+		else:
+			put("organization", claim)
 	if accepted.get("summary"):
 		values["omni_bot_summary"] = accepted["summary"]  # cập nhật mỗi lượt; trường chỉ đọc, sale không sửa
 	applied = sorted(values)  # trước set_value (nó thêm modified/modified_by vào dict)
@@ -283,7 +396,76 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 		with flags.omni_bot():
 			frappe.db.set_value(LEAD, lead, values)
 			_note_update(lead, sorted(set(values) - {"omni_bot_summary", "lead_name"}))
-	return {"applied": applied, "skipped_manual": sorted(set(skipped))}
+	return {
+		"applied": applied,
+		"skipped_manual": sorted(set(skipped)),
+		"org_link": {k: v for k, v in link.items() if v},
+	}
+
+
+def organization_exists(name: str | None) -> bool:
+	"""Có CRM Organization thật tên `name` không (so khớp không phân biệt hoa thường theo collation của DB)."""
+	return bool(name) and bool(frappe.db.exists("CRM Organization", name))
+
+
+def _note_weak_org(lead: str, org: str) -> None:
+	"""Comment "khách nêu nhà thầu X nhưng chưa xác minh" (một lần cho mỗi nhà thầu); không chứa MST hay nội dung tin."""
+	_note_once(
+		lead,
+		_("Bot: khách nêu mã số thuế/tên khớp nhà thầu «{0}» nhưng chưa xác minh, chưa gắn Lead").format(org),
+	)
+
+
+def _note_once(lead: str, content: str) -> None:
+	if frappe.db.exists(
+		"Comment",
+		{"reference_doctype": LEAD, "reference_name": lead, "comment_type": "Info", "content": content},
+	):
+		return
+	try:
+		frappe.get_doc(
+			{
+				"doctype": "Comment",
+				"comment_type": "Info",
+				"reference_doctype": LEAD,
+				"reference_name": lead,
+				"content": content,
+			}
+		).insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(title="Omni: không ghi được ghi chú tín hiệu về nhà thầu", message=f"lead={lead}")
+
+
+def link_organization(lead: str, accepted: dict, row: Any, manual: set[str]) -> dict:
+	"""Gắn Lead vào nhà thầu theo MST bot trích (docs/14 mục 7, ADR 0010); trả {attached, weak, ambiguous, unverified_name}.
+
+	Chỉ gắn khi MST khớp ĐÚNG MỘT Organization VÀ nguồn đáng tin: người nhắn đã là liên hệ (Contact) của chính
+	Organization đó theo SĐT/email của Lead. MST tự khai trong tin nhắn ở kênh công khai (Zalo, email, cuộc gọi) ai
+	cũng gõ được nên là tín hiệu YẾU (như MST trên Web Form, ADR 0013): chỉ ghi `omni_tax_id_stated` + ghi chú cho người
+	xử lý. Không bao giờ gắn khi `organization` nằm trong `omni_manual_fields`.
+	"""
+	out: dict[str, Any] = {"attached": None, "weak": None, "ambiguous": [], "unverified_name": None}
+	tax = accepted.get("tax_id")
+	if not tax or "organization" in manual:
+		return out
+	orgs = resolver._orgs_by_tax_id([tax])
+	if len(orgs) > 1:
+		out["ambiguous"] = orgs
+		_note_once(
+			lead, _("Bot: mã số thuế khách nêu khớp nhiều nhà thầu, chưa tự gắn: {0}").format(", ".join(orgs))
+		)
+		return out
+	if not orgs:
+		return out
+	org = orgs[0]
+	phones = [p for p in [row.get("omni_phone_e164")] if p]
+	emails = [e for e in [row.get("omni_email_norm")] if e]
+	if (phones or emails) and org in resolver._orgs_by_contacts(phones, emails):
+		out["attached"] = org
+	else:
+		out["weak"] = org
+		_note_weak_org(lead, org)
+	return out
 
 
 def _note_update(lead: str, fieldnames: list[str]) -> None:
@@ -366,7 +548,7 @@ def run_analysis(batch_id: str, lead: str) -> dict | None:
 		settings.get("analyze_model") or "claude-haiku-5-5",
 		render(prompt),
 		[{"role": "user", "content": build_conversation(lead, max_turns=MAX_TURNS, mask=mask)}],
-		TOOL,
+		tool_for(prompt.version),
 		lead=lead,
 		batch_id=batch_id,
 		prompt_version=prompt.version,
@@ -382,6 +564,7 @@ def run_analysis(batch_id: str, lead: str) -> dict | None:
 	written = apply_to_lead(lead, accepted)
 	candidates, cut = flag_duplicates(lead, accepted)
 	result = {
+		"schema_version": SCHEMA_V1 if tool_for(prompt.version) is TOOL_V1 else SCHEMA_V2,
 		"accepted": accepted,
 		"dropped": checked["dropped"] + ([f"candidates_truncated:{cut}"] if cut else []),
 		"applied": written["applied"],
