@@ -28,7 +28,7 @@ from typing import Any
 import frappe
 from dateutil.relativedelta import relativedelta
 from frappe import _
-from frappe.utils import cint, flt, getdate, now_datetime, strip_html
+from frappe.utils import cint, flt, get_datetime, getdate, now_datetime, strip_html
 
 from omni_crm import flags
 from omni_crm.flags import omni_bot
@@ -50,6 +50,7 @@ ALLOWED_ROLES = frozenset({"Omni Admin", "System Manager"})
 QUEUE = "omni"
 JOB_METHOD = "omni_crm.prospect.importer.run_job"
 JOB_TIMEOUT = 1800
+STALE_RUNNING_SECONDS = JOB_TIMEOUT + 600  # quá hạn này mà vẫn "Running" thì worker đã chết giữa chừng
 BATCH = 100
 MAX_ISSUES = 300  # số cảnh báo / mục cần xác nhận lưu trong báo cáo (đếm vẫn đủ)
 LEAD_SOURCE = "Danh sách mua sắm công"
@@ -120,6 +121,13 @@ def resolve_file(file_ref: str) -> tuple[str, str]:
 	return path, ""
 
 
+def is_stale_running(doc) -> bool:
+	"""Nhật ký còn "Running" quá hạn việc nền (worker bị tắt giữa chừng): được phép chạy lại, không kẹt mãi."""
+	if doc.status != "Running" or not doc.started_at:
+		return False
+	return (now_datetime() - get_datetime(doc.started_at)).total_seconds() > STALE_RUNNING_SECONDS
+
+
 def _repo_warning(path: str) -> str | None:
 	repo = os.path.realpath(os.path.join(frappe.get_app_path("omni_crm"), os.pardir))
 	if os.path.commonpath([repo, path]) == repo:
@@ -165,7 +173,7 @@ def start_log(
 	require_runner(user)
 	require_enabled()
 	doc = frappe.get_doc(LOG, log)
-	if doc.status in ("Queued", "Running"):
+	if doc.status in ("Queued", "Running") and not is_stale_running(doc):
 		frappe.throw(_("Lần nhập này đang chạy"))
 	if not (path or doc.file):
 		frappe.throw(_("Chưa đính kèm tệp danh sách"))

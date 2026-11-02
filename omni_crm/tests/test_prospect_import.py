@@ -8,12 +8,13 @@ import json
 import os
 import tempfile
 import zipfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import now_datetime
 from openpyxl import load_workbook
 
 from omni_crm.api import prospect as prospect_api
@@ -833,6 +834,22 @@ class TestExistingCrmData(ImportCase):
 			self.assertNotIn(secret, blob)
 		self.assertNotIn(b"Nguy", report["error_file"] or b"")
 
+	def test_erase_contact_clears_import_snapshot_with_name_and_title(self):
+		self.run_import(self.make(orgs=synth_orgs("A"), awards=[], contacts=synth_contacts("A")[:1]))
+		name = frappe.db.get_value(CONTACT, {"company_name": self.org_name("A")})
+		self.assertIn("Nguyễn", frappe.db.get_value(CONTACT, name, "omni_import_snapshot"))
+		contact_lib.erase_contact(name)
+		erased = frappe.db.sql(
+			"select * from `tabContact` where omni_erased_keys like '%%|%%' and company_name = %s",
+			(self.org_name("A"),),
+			as_dict=True,
+		)
+		self.assertEqual(len(erased), 1)
+		self.assertFalse(erased[0].omni_import_snapshot)
+		blob = json.dumps(erased, default=str, ensure_ascii=False)
+		self.assertNotIn("Nguy", blob)
+		self.assertNotIn("Giám đốc", blob)
+
 	def test_erased_person_is_matched_by_email_only_row_too(self):
 		contacts = [{**synth_contacts("A")[0], "phone": None}]
 		self.run_import(self.make(orgs=synth_orgs("A"), awards=[], contacts=contacts))
@@ -1050,6 +1067,27 @@ class TestJobAndAccess(ImportCase):
 		prospect_api.download_template()
 		self.assertEqual(frappe.response["filecontent"], TEMPLATE.read_bytes())
 		self.assertEqual(frappe.response["type"], "download")
+
+
+class TestStaleRunning(ImportCase):
+	def setUp(self):
+		super().setUp()
+		make_user(ADMIN2, "Omni Admin")
+
+	def test_log_stuck_in_running_can_be_restarted_only_after_the_job_deadline(self):
+		log = importer.create_log(source_name="x.xlsx", user=ADMIN2)
+		p = self.make(orgs=synth_orgs("A"), awards=[], contacts=[])
+		recent = now_datetime() - timedelta(seconds=importer.JOB_TIMEOUT // 2)
+		frappe.db.set_value(LOG, log, {"status": "Running", "started_at": recent})
+		with self.assertRaises(frappe.ValidationError):
+			importer.start_log(log, True, ADMIN2, now=True, commit=False, path=str(p))
+		old = now_datetime() - timedelta(seconds=importer.STALE_RUNNING_SECONDS + 60)
+		frappe.db.set_value(LOG, log, "started_at", old)
+		doc = frappe.get_doc(LOG, log)
+		doc.onload()
+		self.assertTrue(doc.get_onload("stale_running"))
+		importer.start_log(log, True, ADMIN2, now=True, commit=False, path=str(p))
+		self.assertEqual(frappe.db.get_value(LOG, log, "status"), "Done")
 
 
 class TestSources(ImportCase):

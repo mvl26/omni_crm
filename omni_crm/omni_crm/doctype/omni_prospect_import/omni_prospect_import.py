@@ -23,6 +23,9 @@ class OmniProspectImport(Document):
 
 	def onload(self) -> None:
 		self.set_onload("report_html", self.render_report())
+		from omni_crm.prospect.importer import is_stale_running
+
+		self.set_onload("stale_running", is_stale_running(self))
 
 	def render_report(self) -> str:
 		"""Bảng báo cáo (đã escape mọi giá trị) hiển thị trên form."""

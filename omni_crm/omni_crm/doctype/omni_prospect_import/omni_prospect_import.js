@@ -7,7 +7,8 @@ frappe.ui.form.on("Omni Prospect Import", {
 		frm.add_custom_button(__("Tải mẫu trống"), () => {
 			window.open("/api/method/omni_crm.api.prospect.download_template");
 		});
-		if (frm.is_new() || frm.doc.status === "Running" || frm.doc.status === "Queued") return;
+		const stale = frm.doc.__onload && frm.doc.__onload.stale_running; // Running quá hạn: worker đã chết, cho chạy lại
+		if (frm.is_new() || (!stale && (frm.doc.status === "Running" || frm.doc.status === "Queued"))) return;
 		if (!frm.doc.file) return;
 		const run = (dry_run) =>
 			frappe.call({
