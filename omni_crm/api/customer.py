@@ -188,7 +188,7 @@ def get_header(lead: str) -> dict[str, Any]:
 		"is_prospect": bool(org),
 		"organization": org_info,
 		"channels": [r.channel_type for r in identities],
-		"hot": bool(score_on and cint(row.omni_score) >= scoring.hot_threshold()),
+		"hot": bool(score_on and scoring.is_hot(row.omni_score, scoring.fit_tier_of(org))),
 		"score": cint(row.omni_score) if score_on else None,
 		"owner": row.lead_owner,
 		"stages": _stages(lead),

@@ -70,6 +70,9 @@ class Context:
 		default_factory=dict
 	)  # Lead -> thời điểm việc gọi lại mở sớm nhất
 	draft_leads: set[str] = field(default_factory=set)
+	blocked_orgs: frozenset[str] = (
+		frozenset()
+	)  # nhà thầu hạng phù hợp C: Lead của họ không tính là nóng (docs/14 mục 3.3)
 	clock: business_hours.BusinessClock | None = (
 		None  # có thì tính phút làm việc O(1) cho hàng nghìn Lead (Tổng quan)
 	)
@@ -98,7 +101,20 @@ def build_context(leads: list[str] | None = None, now: datetime | None = None) -
 		ctx.callback_leads = open_callbacks(leads)
 	if ctx.feats["draft"]:
 		ctx.draft_leads = pending_draft_leads(leads)
+	if ctx.feats["scoring"]:
+		ctx.blocked_orgs = blocked_orgs()
 	return ctx
+
+
+def blocked_orgs() -> frozenset[str]:
+	"""Tên nhà thầu hạng phù hợp C (rỗng khi công tắc `fit_scoring_enabled` tắt: giữ quy tắc nóng cũ)."""
+	from omni_crm.prospect import fit
+
+	if not fit.fit_enabled():
+		return frozenset()
+	return frozenset(
+		frappe.get_all("CRM Organization", filters={"omni_fit_tier": scoring.FIT_BLOCKED_TIER}, pluck="name")
+	)
 
 
 def open_callbacks(leads: list[str] | None = None) -> dict[str, datetime]:
@@ -134,6 +150,7 @@ def classify(
 	waiting_since: datetime | None,
 	intent: str | None = None,
 	score: int | None = None,
+	organization: str | None = None,
 ) -> tuple[str, float] | None:
 	"""(mã ưu tiên, phút làm việc đã chờ) của một Lead; None nếu không có gì cần xử lý.
 
@@ -148,7 +165,9 @@ def classify(
 		return (DRAFT, 0.0) if lead in ctx.draft_leads else None
 	if waited > ctx.sla:
 		return OVERDUE, waited
-	if ctx.feats.get("scoring") and cint(score) >= ctx.threshold:
+	if ctx.feats.get("scoring") and scoring.is_hot(
+		score, scoring.FIT_BLOCKED_TIER if organization in ctx.blocked_orgs else None, ctx.threshold
+	):
 		return HOT, waited
 	if lead in ctx.draft_leads:
 		return DRAFT, waited

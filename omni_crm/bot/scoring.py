@@ -39,11 +39,26 @@ SIGNALS = (
 	"repeat_contact",
 	"complaint",
 )
+# V2-06 (ADR 0010, docs/14 mục 3.2): tín hiệu điểm quan tâm B2B. Thêm vào enum, KHÔNG thay: tín hiệu v1 vẫn hợp lệ
+# (Lead không có nhà thầu, bảng điểm v1 cũ vẫn nhập được).
+B2B_SIGNALS = (
+	"known_org",
+	"replied",
+	"needs_discussed",
+	"intent_service_info",
+	"intent_fee",
+	"intent_proposal",
+	"decision_maker_engaged",
+	"pain_point_stated",
+)
+SIGNALS = SIGNALS + B2B_SIGNALS
 DEFAULT_THRESHOLD = 60  # docs/02 mục 2
 REPEAT_DAYS = 30
 REPEAT_MIN_CONTACTS = 2
 BOT_RUN_SCAN = 20  # số lần phân tích gần nhất xét khi tìm timeframe_within_30d
 SAMPLE_FILE = Path(__file__).resolve().parents[2] / "mau" / "bang-diem-lead-mau.csv"
+SAMPLE_FILE_B2B = Path(__file__).resolve().parents[2] / "mau" / "bang-diem-lead-b2b-mau.csv"
+FIT_BLOCKED_TIER = "C"  # docs/14 mục 3.3: hạng phù hợp C không được tính là Lead nóng
 HOT_REALTIME_EVENT = "omni_hot_lead"
 MAX_REASON_ROWS = 10
 
@@ -59,6 +74,8 @@ def load_rules() -> dict[str, dict]:
 		return {}
 	rules: dict[str, dict] = {}
 	for r in rows:
+		if r.get("active") in (0, "0", False):  # V2-06: quy tắc đã tắt (không xóa)
+			continue
 		if r.signal in SIGNALS and r.signal not in rules:
 			rules[r.signal] = {"points": cint(r.points), "note": (r.note or "").strip()}
 	return rules
@@ -76,6 +93,27 @@ def hot_threshold() -> int:
 def scoring_enabled() -> bool:
 	"""Công tắc chấm điểm; lỗi hoặc chưa cấu hình thì coi là tắt (an toàn)."""
 	return flags.lead_scoring_enabled()
+
+
+def fit_tier_of(organization: str | None) -> str | None:
+	"""Hạng phù hợp (A/B/C) của nhà thầu thật `organization`; None nếu Lead không có nhà thầu, nhà thầu không tồn tại,
+	chưa tính hạng, hoặc công tắc `fit_scoring_enabled` tắt (khi đó giữ quy tắc nóng cũ)."""
+	if not organization:
+		return None
+	from omni_crm.prospect import fit
+
+	if not fit.fit_enabled():
+		return None
+	return frappe.db.get_value("CRM Organization", organization, "omni_fit_tier") or None
+
+
+def is_hot(score: Any, fit_tier: str | None, threshold: int | None = None) -> bool:
+	"""Lead nóng = điểm quan tâm >= ngưỡng VÀ hạng phù hợp không phải C (docs/14 mục 3.3).
+
+	`fit_tier` None (Lead không có nhà thầu, chưa tính hạng, công tắc fit tắt) -> quy tắc cũ: chỉ cần điểm >= ngưỡng.
+	Một chỗ duy nhất; báo Lead nóng, nhãn ưu tiên, ô Lead nóng và Chi tiết khách đều gọi hàm này.
+	"""
+	return cint(score) >= (threshold or hot_threshold()) and fit_tier != FIT_BLOCKED_TIER
 
 
 # --- Tín hiệu ----------------------------------------------------------------------------------------------
@@ -125,17 +163,70 @@ def bot_timeframe_within_30d(lead: str) -> bool:
 	return False
 
 
+def recent_analyses(lead: str) -> list[dict]:
+	"""Kết quả `accepted` của các lượt phân tích thành công gần nhất của Lead (mới trước, tối đa BOT_RUN_SCAN lượt)."""
+	runs = frappe.get_all(
+		BOT_RUN,
+		filters={"lead": lead, "kind": "Analyze", "status": "Success"},
+		fields=["output_json"],
+		order_by="creation desc, name desc",
+		limit_page_length=BOT_RUN_SCAN,
+	)
+	out = []
+	for run in runs:
+		try:
+			accepted = (json.loads(run.output_json or "null") or {}).get("accepted") or {}
+		except (ValueError, AttributeError):
+			continue
+		if isinstance(accepted, dict):
+			out.append(accepted)
+	return out
+
+
+def customer_replied_after(lead: str, since: Any) -> bool:
+	"""Khách có tin (không bị bỏ qua) hoặc cuộc gọi vào SAU mốc `since` (phản hồi đầu tiên của Miyano) không."""
+	if not since:
+		return False
+	if frappe.db.exists(
+		INBOUND,
+		{"lead": lead, "event_type": "message", "status": ["!=", "Ignored"], "received_at": [">", since]},
+	):
+		return True
+	try:
+		return bool(
+			frappe.db.exists(
+				CALL, {"lead": lead, "direction": "Inbound", "status": ["!=", ""], "started_at": [">", since]}
+			)
+		)
+	except Exception:
+		return False
+
+
 def collect_signals(lead: str) -> dict[str, bool]:
 	"""Tín hiệu hiện có của Lead (True = đang thỏa); không ghi gì."""
 	row = frappe.db.get_value(
 		LEAD,
 		lead,
-		["mobile_no", "phone", "email", "organization", "omni_quantity", "omni_urgency", "omni_intent"],
+		[
+			"mobile_no",
+			"phone",
+			"email",
+			"organization",
+			"omni_quantity",
+			"omni_urgency",
+			"omni_intent",
+			"omni_need",
+			"omni_current_pain",
+			"omni_decision_role",
+			"omni_first_response_at",
+		],
 		as_dict=True,
 	)
 	if not row:
 		return dict.fromkeys(SIGNALS, False)
 	intent = row.omni_intent
+	analyses = recent_analyses(lead)
+	seen_intents = {a.get("intent") for a in analyses} | {intent}
 	return {
 		"has_phone": bool(normalize_phone(row.mobile_no) or normalize_phone(row.phone)),
 		"has_email": bool(normalize_email(row.email)),
@@ -147,6 +238,16 @@ def collect_signals(lead: str) -> dict[str, bool]:
 		"urgency_high": row.omni_urgency == "Cao",
 		"repeat_contact": recent_contacts(lead) >= REPEAT_MIN_CONTACTS,
 		"complaint": intent == "Khiếu nại",
+		# B2B (V2-06). Hỏi phí/gói/đề xuất tính theo MỌI lượt gần đây (khách đã hỏi thì vẫn là đã hỏi dù tin cuối là cảm ơn).
+		"known_org": bool((row.organization or "").strip())
+		and bool(frappe.db.exists("CRM Organization", row.organization)),
+		"replied": customer_replied_after(lead, row.omni_first_response_at),
+		"needs_discussed": bool((row.omni_need or "").strip()) and bool(row.omni_first_response_at),
+		"intent_service_info": "Tư vấn" in seen_intents,
+		"intent_fee": "Hỏi giá" in seen_intents,
+		"intent_proposal": any(a.get("asks_proposal") is True for a in analyses),
+		"decision_maker_engaged": row.omni_decision_role == "Người quyết định",
+		"pain_point_stated": bool((row.omni_current_pain or "").strip()),
 	}
 
 
@@ -254,9 +355,13 @@ def check_hot(lead: str) -> bool:
 	Lead đã chuyển thành Deal không báo. Caller commit.
 	"""
 	row = frappe.db.get_value(
-		LEAD, lead, ["omni_score", "omni_score_breakdown", "converted"], as_dict=True, for_update=True
+		LEAD,
+		lead,
+		["omni_score", "omni_score_breakdown", "converted", "organization"],
+		as_dict=True,
+		for_update=True,
 	)
-	if not row or cint(row.converted) or cint(row.omni_score) < hot_threshold():
+	if not row or cint(row.converted) or not is_hot(row.omni_score, fit_tier_of(row.organization)):
 		return False
 	breakdown = _parse(row.omni_score_breakdown)
 	if breakdown.get("hot_notified_at"):
@@ -402,30 +507,52 @@ def is_sample(rows: list[dict], path: str) -> bool:
 	"""Bảng nhập còn là giá trị mẫu chưa duyệt: trùng bản mẫu của repo (tín hiệu + điểm) hoặc tên tệp có 'mau'."""
 	if "mau" in Path(path).name.lower():
 		return True
-	try:
-		sample = {(r["signal"], r["points"]) for r in read_rules_csv(str(SAMPLE_FILE))}
-	except ValueError:
-		return False
-	return {(r["signal"], r["points"]) for r in rows} == sample
+	mine = {(r["signal"], r["points"]) for r in rows}
+	for sample_file in (SAMPLE_FILE, SAMPLE_FILE_B2B):
+		try:
+			if mine == {(r["signal"], r["points"]) for r in read_rules_csv(str(sample_file))}:
+				return True
+		except ValueError:
+			continue
+	return False
 
 
-def import_rules(path: str) -> dict:
-	"""Nhập bảng điểm từ CSV, thay toàn bộ `score_rules`; chạy bằng `bench execute omni_crm.bot.scoring.import_rules`.
+def import_rules(path: str, merge: bool = False) -> dict:
+	"""Nhập bảng điểm từ CSV; chạy bằng `bench execute omni_crm.bot.scoring.import_rules`.
 
-	Sai tín hiệu/điểm: ném ValueError và giữ nguyên bảng cũ. Giá trị mẫu chưa duyệt vẫn nhập, kèm cảnh báo.
+	Mặc định thay toàn bộ `score_rules` (hành vi v1). `merge=True` (V2-06, bảng B2B): cập nhật dòng cùng tín hiệu,
+	thêm dòng mới, và TẮT (`active = 0`, không xóa) dòng của tín hiệu không còn trong CSV; chạy lại không thay đổi gì
+	thêm. Sai tín hiệu/điểm: ném ValueError và giữ nguyên bảng cũ. Giá trị mẫu chưa duyệt vẫn nhập, kèm cảnh báo.
 	"""
+	if isinstance(merge, str):  # `--kwargs` của bench có thể đưa chuỗi
+		merge = merge.strip().lower() not in ("0", "false", "no", "")
 	rows = read_rules_csv(path)
 	warnings = []
 	if is_sample(rows, path):
 		warnings.append("CẢNH BÁO: đây là bảng điểm MẪU, chưa được Trưởng sale duyệt (docs/12 Q5).")
 	settings = frappe.get_doc(SETTINGS)
-	settings.set("score_rules", [])
-	for r in rows:
-		settings.append("score_rules", r)
+	disabled: list[str] = []
+	if merge:
+		wanted = {r["signal"]: r for r in rows}
+		for existing in settings.score_rules:
+			if existing.signal in wanted:
+				new = wanted.pop(existing.signal)
+				existing.update({"points": new["points"], "note": new["note"], "active": 1})
+			elif existing.get("active") not in (0, "0", False):
+				existing.active = 0
+				disabled.append(existing.signal)
+		for new in wanted.values():
+			settings.append("score_rules", {**new, "active": 1})
+	else:
+		settings.set("score_rules", [])
+		for r in rows:
+			settings.append("score_rules", {**r, "active": 1})
 	settings.flags.ignore_permissions = True
 	settings.save()
 	frappe.db.commit()
 	for w in warnings:
 		print(w)
-	print(f"Đã nhập {len(rows)} dòng vào bảng điểm.")
-	return {"imported": len(rows), "warnings": warnings}
+	print(
+		f"Đã nhập {len(rows)} dòng vào bảng điểm" + (f", tắt {len(disabled)} quy tắc cũ." if merge else ".")
+	)
+	return {"imported": len(rows), "disabled": disabled, "warnings": warnings}

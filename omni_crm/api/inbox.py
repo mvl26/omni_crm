@@ -232,7 +232,12 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 		if cint(f.get("has_draft")) and r.name not in pending:
 			continue
 		label = priority.classify(
-			r.name, ctx, get_datetime(ev["at"]) if unanswered else None, r.omni_intent, r.omni_score
+			r.name,
+			ctx,
+			get_datetime(ev["at"]) if unanswered else None,
+			r.omni_intent,
+			r.omni_score,
+			r.organization,
 		)
 		rows.append(
 			{

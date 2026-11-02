@@ -7,7 +7,8 @@
  "field_order": [
   "signal",
   "points",
-  "note"
+  "note",
+  "active"
  ],
  "fields": [
   {
@@ -15,7 +16,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Tín hiệu",
-   "options": "\nhas_phone\nhas_email\nhas_org\nintent_price\nintent_purchase\nquantity_given\ntimeframe_within_30d\nurgency_high\nrepeat_contact\ncomplaint",
+   "options": "\nhas_phone\nhas_email\nhas_org\nintent_price\nintent_purchase\nquantity_given\ntimeframe_within_30d\nurgency_high\nrepeat_contact\ncomplaint\nknown_org\nreplied\nneeds_discussed\nintent_service_info\nintent_fee\nintent_proposal\ndecision_maker_engaged\npain_point_stated",
    "reqd": 1
   },
   {
@@ -31,11 +32,19 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Ghi chú"
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Đang dùng",
+   "default": "1",
+   "in_list_view": 1,
+   "description": "V2-06: bỏ chọn = quy tắc tắt (không tính điểm), không xóa."
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-10-30 12:00:00.000000",
+ "modified": "2026-11-02 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Omni CRM",
  "name": "Omni Score Rule",
