@@ -299,6 +299,16 @@ class TestProfileAndEdit(CustomerCase):
 			customer.update_field(self.person, "organization", "Đơn vị mới")["field"], "organization"
 		)
 
+	def test_merged_lead_does_not_open_the_target_of_another_sale(self):
+		"""Reviewer V2-04: Lead đã gộp trỏ tới Lead của sale khác thì không đọc được dữ liệu Lead đích."""
+		target = make_lead("TD404 Dich cua B", owner=SALE2)
+		frappe.db.set_value("CRM Lead", self.lead, "omni_merged_into", target)
+		frappe.set_user(SALE1)
+		with self.assertRaises(frappe.PermissionError):
+			customer.get_header(self.lead)
+		with self.assertRaises(frappe.PermissionError):
+			customer.get_care_logs(self.lead)
+
 	def test_edit_denied_without_write_permission(self):
 		frappe.set_user(SALE2)
 		with self.assertRaises(frappe.PermissionError):

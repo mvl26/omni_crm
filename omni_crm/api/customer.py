@@ -57,7 +57,12 @@ NEED_FIELDS = ("omni_need", "omni_products", "omni_quantity", "omni_timeframe", 
 def _readable(lead: str) -> str:
 	"""Kiểm quyền ĐỌC Lead, trả tên Lead đích (theo Lead đã gộp)."""
 	inbox.check_lead_access(lead)
-	return lead_bridge.follow_merged(lead) or lead
+	target = lead_bridge.follow_merged(lead) or lead
+	if (
+		target != lead
+	):  # Lead đã gộp: người dùng phải xem được cả Lead đích, nếu không sẽ đọc được dữ liệu của sale khác
+		inbox.check_lead_access(target)
+	return target
 
 
 def _writable(lead: str) -> str:
