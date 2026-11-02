@@ -8,6 +8,7 @@
 HTTP 400 giả), hoặc `slow:<giây>`. Không bao giờ gọi AI thật.
 D3-06: biến môi trường `OMNI_LOAD_D3=1` cho bot trả lời đáp án thật theo kho tri thức tải (nhóm `LOAD Gio lam viec`, mục
 `KB-93001`; câu hỏi giá thì chuyển người qua nhóm `LOAD Hoi gia`), để đường Draft/Handoff chạy trọn qua worker thật.
+V2-08: `--fake-graph <URL>` trỏ client Graph API của kênh Meta vào máy chủ giả `fake_graph.py` (không gọi Meta thật).
 `OMNI_LOAD_AUTO_INFRA=1` mở khóa hạ tầng tự gửi CHỈ TRONG TIẾN TRÌNH worker này (vá `flags.auto_send_infra_allowed`);
 KHÔNG đụng site_config.json. Luôn đi cùng sandbox_mode bật (script không gửi gì ra ngoài).
 """
@@ -131,6 +132,10 @@ def main() -> None:
 	os.chdir(os.path.join(os.path.dirname(frappe.__file__), "..", "..", "..", "sites"))
 	frappe.init(site, sites_path=".")
 	qs = get_queue_list([q.strip() for q in queues.split(",")], build_queue_name=True)
+	if "--fake-graph" in sys.argv:
+		from omni_crm.channels.meta_leads import client as meta_client
+
+		meta_client.API_BASE = sys.argv[sys.argv.index("--fake-graph") + 1].rstrip("/")
 	if fake:
 		_install_fake_ai(fake)  # biến toàn cục của module, các tiến trình con của RQ kế thừa khi fork
 	if os.environ.get("OMNI_LOAD_AUTO_INFRA"):
