@@ -14,6 +14,12 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | Omni Inbound Message | Thường | 1 | Bảng tin gốc — mọi sự kiện vào |
 | Omni Outbound Message | Thường | 1 | Mọi tin gửi ra |
 | Omni Duplicate Candidate | Thường | 1 | Cặp Lead nghi trùng chờ người quyết |
+| Omni Bid Award | Thường | 1 (D1-13) | Gói thầu nhà thầu đã trúng — `docs/14` mục 1.2 |
+| Omni Hospital Alias | Thường | 1 (D1-13) | Gộp tên bệnh viện viết khác nhau — `docs/14` mục 2.2 |
+| Omni Prospect Import | Thường | 1 (D1-14) | Nhật ký mỗi lần nhập danh sách nhà thầu |
+| Omni Campaign | Thường | 1 (D1-15) | Chiến dịch marketing — `docs/15` mục 6 |
+| Omni Lead Form | Thường (+ bảng con Omni Lead Form Field) | 1 (D1-15) | Biểu mẫu Meta/Google/website và ánh xạ trường — `docs/15` mục 5 |
+| Omni Care Log | Thường | 1 (D1-12) | Nhật ký phiên chăm sóc: kết quả, bước tiếp theo, hạn — đặc tả đầy đủ ở `docs/13` mục 3.2 |
 | Omni Call | Thường | 2 | Cuộc gọi từ tổng đài |
 | Omni Agent Map | Bảng con của Omni Channel | 2 | Ánh xạ nhân viên tổng đài → User (xem `docs/07` mục 5) |
 | Omni Question Group | Thường | 2 | Nhóm câu hỏi, công tắc tự động theo nhóm |
@@ -35,12 +41,15 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | `stuck_after_minutes` | Int | 10 | Tin ở Processing quá lâu thì đưa lại hàng đợi |
 | `raw_payload_retention_days` | Int | 180 | Sau hạn này xóa `raw_payload`, giữ nội dung đã chuẩn hóa |
 | `recording_retention_days` | Int | 365 | Thời hạn giữ ghi âm (Đợt 3) |
-| `default_lead_source_map` | JSON | `{"Email":"Email","Zalo OA":"Zalo OA","Telephony":"Điện thoại"}` | Ánh xạ kênh → CRM Lead Source |
+| `default_lead_source_map` | JSON | `{"Email":"Email","Zalo OA":"Zalo OA","Telephony":"Điện thoại","Meta Lead Ads":"Quảng cáo Meta","Google Lead Form":"Quảng cáo Google","Web Form":"Website"}` | Ánh xạ kênh → CRM Lead Source |
 | `alert_recipients` | Small Text | | Email nhận cảnh báo, mỗi dòng một địa chỉ |
 | `business_hours` | JSON | `{"mon-fri":"08:00-17:30","sat":"08:00-12:00"}` | Giờ làm việc (hạn gọi lại, tin ngoài giờ) |
 | `missed_call_callback_minutes` | Int | 30 | Đợt 2: hạn gọi lại khách gọi nhỡ, tính trong giờ làm việc |
 | `callback_fallback_user` | Link User | | Đợt 2: người nhận việc gọi lại khi Lead chưa có người phụ trách |
-| `holidays` | JSON | `[]` | Đợt 2: danh sách ngày nghỉ lễ `["2027-01-01", …]` cho tính giờ làm việc |
+| `holidays` | JSON | `[]` | D1-12: danh sách ngày nghỉ lễ `["2027-01-01", …]` cho tính giờ làm việc |
+| `response_sla_minutes`, `care_session_gap_hours`, `team_lead_role` | Int, Int, Link Role | 15, 4, Sales Manager | D1-12: xem `docs/13` mục 5 |
+| `fit_*` (12 trường) | Int/Float/Small Text | xem `docs/14` mục 3.1 | D1-13: tham số điểm phù hợp, mặc định giống sheet ThamSo của mẫu Excel |
+| `prospect_import_enabled`, `fit_scoring_enabled` | Check | 1, 1 | D1-13/D1-14: công tắc nhập danh sách và tính điểm phù hợp |
 | `assignment_fallback_users` | Small Text | | Đợt 1: chỉ dùng nếu Assignment Rule của CRM không áp dụng được (G11) — mỗi dòng một user, chia vòng tròn |
 | `bot_active_hours` | JSON | để trống = 24/7 | Đợt 3: giờ bot được tự gửi (Q6); ngoài giờ chỉ soạn nháp |
 | `recording_enabled` | Check | 0 | Đợt 3: công tắc tải ghi âm và chuyển văn bản |
@@ -69,7 +78,7 @@ Mỗi bản ghi là một kênh cụ thể (một hộp thư, một OA, một t�
 | Trường | Kiểu | Options | Ghi chú |
 | --- | --- | --- | --- |
 | `channel_name` | Data | Bắt buộc, duy nhất | Đặt tên, làm `name` |
-| `channel_type` | Select | Email / Zalo OA / Telephony | |
+| `channel_type` | Select | Email / Zalo OA / Telephony / Meta Lead Ads / Google Lead Form / Web Form | Ba loại sau: D1-15 |
 | `enabled` | Check | | Công tắc kênh: tắt thì webhook trả 200 nhưng **chỉ lưu**, không enqueue |
 | `outbound_enabled` | Check | | Công tắc chiều ra |
 | `webhook_token` | Password | | Token bí mật trong URL webhook (tổng đài, lớp bảo vệ thêm) |
@@ -201,8 +210,8 @@ Ràng buộc duy nhất trên (`lead_a`, `lead_b`).
 
 | Trường | Kiểu | Ghi chú |
 | --- | --- | --- |
-| `group_name` | Data, duy nhất | Ví dụ: Giờ làm việc, Địa chỉ, Thông tin sản phẩm, Hỏi giá, Khiếu nại |
-| `always_handoff` | Check | Nhóm luôn chuyển người (Hỏi giá, Khiếu nại) |
+| `group_name` | Data, duy nhất | Ví dụ: Cách vận hành dịch vụ, Gói dịch vụ, Thanh toán back-to-back, Phí dịch vụ, Khiếu nại (danh sách mẫu: `mau/nhom-cau-hoi-mau.csv`) |
+| `always_handoff` | Check | Nhóm luôn chuyển người (Phí dịch vụ, Đàm phán hợp đồng, Khiếu nại) |
 | `auto_send_enabled` | Check, **chỉ đọc**, mặc định 0 | Đợt 3 (D3-05): bot tự gửi cho nhóm này. KHÔNG sửa tay được: `validate` từ chối 0->1 trừ khi do `bot.auto_send.enable_group` (Omni Admin, đạt điều kiện, khóa hạ tầng mở); tắt (1->0) thì ai có quyền ghi cũng tắt được. Nhóm `always_handoff` không bao giờ có cờ này (đặt `always_handoff` cho nhóm đang bật thì cờ tự tắt) |
 | `auto_send_enabled_at`, `auto_send_enabled_by` | Datetime, Link User (chỉ đọc) | Dấu vết ai bật, khi nào (xóa khi tắt; lịch sử bật/tắt nằm ở Version vì DocType bật `track_changes`, và ở Comment dấu `omni:auto_send:enable|disable|breaker:<mã>` trên nhóm) |
 | `description` | Small Text | Mô tả để bot phân loại |
@@ -226,7 +235,7 @@ Bật `track_changes`. Mỗi lần lưu, tăng `Omni Settings.kb_version` (Int, 
 
 | Trường | Kiểu | Ghi chú |
 | --- | --- | --- |
-| `signal` | Select | has_phone / has_email / has_org / intent_price / intent_purchase / quantity_given / timeframe_within_30d / urgency_high / repeat_contact / complaint |
+| `signal` | Select | has_phone / has_email / known_org (đã gắn nhà thầu) / replied / needs_discussed / intent_service_info / intent_fee / intent_proposal / decision_maker_engaged / pain_point_stated / repeat_contact / complaint (bảng tín hiệu điểm quan tâm B2B — `docs/14` mục 3.2) |
 | `points` | Int | Có thể âm |
 | `note` | Data | |
 
@@ -306,6 +315,8 @@ D3-01: ở `mode = Draft`, `decision` đi `Pending -> Sent As Is | Sent Edited |
 | `omni_score_breakdown` | JSON (ẩn) | Các tín hiệu đã cộng điểm và lúc đã báo Lead nóng |
 | `omni_bot_summary` | Small Text | Tóm tắt của bot |
 
+Custom Field trên `CRM Organization` và `Contact` (D1-13): xem `docs/14` mục 1.1 và 1.3. Thêm trên CRM Lead/Deal: `omni_lost_reason` (D1-13, `docs/14` mục 4). Trên CRM Lead: trường chiến dịch và quy kết `omni_campaign` … `omni_is_test` (D1-15, `docs/15` mục 6); trường bot B2B `omni_tax_id_stated`, `omni_hospitals_mentioned`, `omni_current_pain`, `omni_decision_role` (D2-05, `docs/14` mục 7).
+
 Custom Field trên `Communication` và `Comment` (Đợt 1):
 
 | fieldname | Kiểu | Ghi chú |
@@ -329,6 +340,11 @@ Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không tr�
 | Omni Knowledge Item, Omni Question Group | Đọc/Ghi | Đọc | Đọc/Ghi |
 | Omni Bot Draft | Đọc/Ghi | Đọc/Ghi theo Lead | Đọc |
 | Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
+| Omni Bid Award, Omni Hospital Alias | Đọc/Ghi | Đọc theo quyền xem Lead của nhà thầu (qua API) | — |
+| Omni Prospect Import | Đọc/Ghi (chạy nhập) | — | — |
+| Omni Campaign | Đọc/Ghi | Đọc | — |
+| Omni Lead Form | Đọc/Ghi (khóa bí mật chỉ Omni Admin) | — | — |
+| Omni Care Log | Đọc/Ghi | Đọc/ghi kết quả qua API theo quyền Lead | — |
 
 "Theo Lead xem được": kiểm tra quyền bằng `frappe.has_permission("CRM Lead", doc=lead)` trong API, không chỉ dựa vào quyền DocType.
 

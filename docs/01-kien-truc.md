@@ -115,7 +115,12 @@ omni_crm/
 │   │   ├── registry.py               # get_adapter(channel_type)
 │   │   ├── email/{adapter.py, clean.py}
 │   │   ├── zalo/{adapter.py, client.py, signature.py, token.py, errors.py}
-│   │   └── telephony/{base.py, adapter.py, registry.py, fake.py, stringee.py, recording.py}
+│   │   ├── telephony/{base.py, adapter.py, registry.py, fake.py, stringee.py, recording.py}
+│   │   ├── meta_leads/, google_leads/, web_form/   # D1-15: Lead từ quảng cáo và website
+│   ├── prospect/                     # D1-13, D1-14: nhà thầu B2B
+│   │   ├── fit.py                    # compute_fit(), recompute_all_fit()
+│   │   ├── importer.py               # import_workbook()
+│   │   └── sources/{base.py, excel.py}   # nguồn cào/API: chờ V2-Q13
 │   ├── crm_bridge/
 │   │   ├── lead.py                   # create_lead_for_identity(), track_manual_edits()
 │   │   ├── timeline.py               # append(), append_outbound(), conversation_turns()

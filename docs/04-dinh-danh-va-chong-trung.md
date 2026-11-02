@@ -1,5 +1,7 @@
 # 04 · Định danh và chống trùng
 
+> Với khách nhà thầu (B2B), thứ tự khớp mới ở `docs/14` mục 2 (mã số thuế → Contact đã biết → tên miền email công ty) chạy **trước** các quy tắc trong tệp này.
+
 Nguyên tắc: **gộp khi chắc, hỏi người khi không chắc.** Một Lead trùng gây phiền (hai sale gọi một khách); một lần gộp sai gây hại (lộ hội thoại của người này cho người khác). Vì vậy hệ thống ưu tiên tránh gộp sai.
 
 ## 1. Chuẩn hóa

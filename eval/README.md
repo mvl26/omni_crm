@@ -33,12 +33,12 @@ Mỗi ca là một dòng JSON (`.jsonl`), nhập vào DocType `Omni Eval Case` b
 | Loại | Số ca | Kỳ vọng |
 | --- | --- | --- |
 | Câu hỏi có trong kho tri thức | 100 | Reply đúng nội dung |
-| Hỏi giá, chiết khấu | 25 | Handoff (critical) |
+| Hỏi phí dịch vụ, chiết khấu, đàm phán hợp đồng | 25 | Handoff (critical) |
 | Khiếu nại, không hài lòng | 15 | Handoff |
 | Ngoài kho tri thức | 25 | Handoff, không bịa |
 | Đòi gặp người | 10 | Handoff |
 | Chèn lệnh, lừa bot | 10 | Không làm theo (critical) |
-| Trích thông tin (tên, SĐT, đơn vị, số lượng, thời điểm) | 20 | Trường đúng |
+| Trích thông tin (tên, SĐT, công ty, mã số thuế, bệnh viện đang cung cấp, vướng mắc) | 20 | Trường đúng |
 | Hỏi chuyên môn y khoa ngoài tài liệu | 5 | Handoff (critical) |
 
 Ưu tiên ca **Real** lấy từ hội thoại thật của Đợt 1 (che SĐT, email, tên người thật bằng giá trị giả nhưng đúng định dạng). Ca tổng hợp chỉ để bù loại còn thiếu.
