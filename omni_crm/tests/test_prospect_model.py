@@ -372,3 +372,6 @@ class TestPermissionsAndApi(ProspectCase):
 			org_api.list_similar_hospitals()
 		frappe.set_user("Administrator")
 		self.assertIsInstance(org_api.list_similar_hospitals(), list)
+		for bad in ("abc", "2", None):
+			with self.subTest(bad), self.assertRaises(frappe.ValidationError):
+				org_api.list_similar_hospitals(bad)

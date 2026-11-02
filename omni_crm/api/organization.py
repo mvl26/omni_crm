@@ -120,7 +120,13 @@ def get_awards(lead: str) -> list[dict[str, Any]]:
 def list_similar_hospitals(threshold: float | str = hospital.SIMILAR_FROM) -> list[dict]:
 	"""Cặp tên bệnh viện giống nhau >= ngưỡng để gộp bằng Omni Hospital Alias (chỉ Omni Admin)."""
 	require_omni_admin()
-	return hospital.similar_hospital_names(float(threshold))
+	try:
+		value = float(threshold)
+	except (TypeError, ValueError):
+		frappe.throw(_("Ngưỡng giống nhau phải là số từ 0 đến 1"))
+	if not 0 <= value <= 1:
+		frappe.throw(_("Ngưỡng giống nhau phải là số từ 0 đến 1"))
+	return hospital.similar_hospital_names(value)
 
 
 @frappe.whitelist(methods=["POST"])
