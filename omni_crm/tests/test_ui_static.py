@@ -31,3 +31,19 @@ class TestUiStatic(FrappeTestCase):
 			self.assertTrue({"Sales User", "Omni Admin"} <= roles, page)
 			self.assertTrue((base / f"{page}.js").exists())
 			self.assertNotIn("Guest", roles)
+
+
+class TestOmniUtmScript(FrappeTestCase):
+	"""V2-05: kiểm tĩnh `omni_utm.js` (CHƯA thử trên trình duyệt)."""
+
+	def test_script_only_uses_session_storage_and_has_no_network_or_cookie(self):
+		js = (APP / "public/js/omni_utm.js").read_text(encoding="utf-8")
+		code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+		self.assertIn("sessionStorage", code)
+		for banned in ("document.cookie", "fetch(", "XMLHttpRequest", "localStorage", "eval(", "innerHTML"):
+			self.assertNotIn(banned, code)
+
+	def test_website_guide_exists_and_has_no_secret(self):
+		guide = (APP.parent / "docs/huong-dan/gan-form-website.md").read_text(encoding="utf-8")
+		self.assertIn("omni_crm.api.webhooks.web_form", guide)
+		self.assertNotRegex(guide, r"(?i)(secret|token)\s*[:=]\s*['\"][A-Za-z0-9]{12,}")
