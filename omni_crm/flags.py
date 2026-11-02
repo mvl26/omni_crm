@@ -77,6 +77,20 @@ def lead_scoring_enabled() -> bool:
 	return _settings_flag("lead_scoring_enabled")
 
 
+def prospect_import_enabled() -> bool:
+	"""Công tắc nhập danh sách nhà thầu (V2-02/V2-03); chưa từng lưu (site cũ) coi là bật, đọc lỗi coi là tắt."""
+	try:
+		rows = dict(
+			frappe.db.sql(
+				"select field, value from `tabSingles` where doctype = 'Omni Settings' and field = 'prospect_import_enabled'"
+			)
+		)
+	except Exception:
+		return False
+	value = rows.get("prospect_import_enabled")
+	return True if value is None else bool(cint(value))
+
+
 def _settings_flag(fieldname: str) -> bool:
 	try:
 		return bool(frappe.get_cached_doc("Omni Settings").get(fieldname))

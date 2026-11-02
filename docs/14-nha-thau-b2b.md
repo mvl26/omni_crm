@@ -182,3 +182,14 @@ Agent xác nhận cách CRM lưu trạng thái và cách chuyển Lead → Deal 
 - **Chi tiết Lead → Chi tiết nhà thầu**: tiêu đề là tên công ty + mã số thuế; cột trái thêm danh sách người liên hệ (vai trò, đồng ý nhận liên hệ); tab mới **Gói thầu đã trúng** (bảng: bệnh viện, số TBMT, loại hàng, ngày, giá trị, mã hàng, còn hiệu lực); cột phải thêm khối **Mức phù hợp** (đạt/chưa đạt từng tiêu chí, điểm, hạng, cách tính) bên cạnh **Điểm quan tâm**; khối **Gói đề xuất**.
 - **Tổng quan**: thêm phễu theo giai đoạn mục 4, danh sách "Phù hợp A/B, chưa liên hệ", số nhà thầu theo hạng và khu vực.
 - **Hộp thư**: hiển thị tên công ty và hạng phù hợp cạnh tên người nhắn.
+
+## 9. Ghi chú thi hành V2-02 (khác biệt so với văn bản trên)
+
+- **Liên kết Lead - nhà thầu** = ghi tên Organization vào `CRM Lead.organization` (Data, không phải Link; docs/12 G14). Contact - nhà thầu = `Contact.company_name`.
+- **Lý do "Không phù hợp"**: dùng `CRM Lost Reason` có sẵn (ĐQ-8), không tạo `omni_lost_reason`; thêm 4 bản ghi dữ liệu, "Khác" = `Other`.
+- **`omni_tax_id`, `omni_info_source` không `reqd`** ở DocType (CRM tự tạo Organization/Contact khi chuyển Lead -> Deal); MST duy nhất bằng chỉ mục UNIQUE + NULL khi trống; "bắt buộc khi nhập" do importer (V2-03). Xem ADR 0011.
+- **Contact thêm 3 trường kỹ thuật ẩn** (`omni_phones_e164`, `omni_emails_norm`, `omni_erased_keys`), ADR 0011.
+- **Mục 2 bước 3** (tên miền): khi tên người nhắn mâu thuẫn với Contact của nhà thầu, KHÔNG tạo nghi trùng (Lead là cấp nhà thầu, nhiều người cùng một Lead); khi khớp nhiều Organization thì không liên kết (ĐQ-4, ADR 0008). MST chỉ lấy từ hồ sơ có cấu trúc của kênh, không từ văn bản.
+- **Mục 3.2**: bảng điểm B2B chưa nối vào `bot/scoring.py` (V2-06, ADR 0010).
+- **Mục 4**: giai đoạn B2B được thêm bằng patch `add_b2b_sales_stages`; bảng ánh xạ trạng thái cũ -> mới chỉ in ra (`prospect/stages.py::mapping_table`), chưa áp dụng.
+- **Gộp Organization trùng** (`identity/merge.py::merge_organizations`): chuyển Contact, gói thầu, Lead, Deal; từ chối gộp nếu hai bên có mã số thuế khác nhau; xóa Organization phụ sau khi hết tham chiếu; nếu còn nhiều Lead đang mở thì tạo nghi trùng.

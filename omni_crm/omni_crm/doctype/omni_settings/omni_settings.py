@@ -28,6 +28,38 @@ class OmniSettings(Document):
 		self.validate_score_rules()
 		self.validate_handoff()
 		self.validate_prompt_pins()
+		self.validate_fit_params()
+
+	def validate_fit_params(self) -> None:
+		"""Tham số điểm phù hợp (V2-02): mức tối đa và kỳ xét phải dương, trọng số/ngưỡng không âm, có ít nhất một loại hàng.
+
+		Trường chưa từng được lưu (site migrate từ bản cũ, tabSingles chưa có dòng) mà đang trống/0 thì điền mặc định
+		của sheet ThamSo thay vì lưu 0 làm hỏng cách tính.
+		"""
+		from omni_crm.prospect.fit import FIT_DEFAULTS, SWITCH_FIELDS, _stored
+
+		stored = _stored([*FIT_DEFAULTS, *SWITCH_FIELDS])
+		for fieldname, default in {**FIT_DEFAULTS, **dict.fromkeys(SWITCH_FIELDS, 1)}.items():
+			if fieldname not in stored and not self.get(fieldname):
+				self.set(fieldname, default)
+		positive = ("fit_period_months", "fit_max_hospitals", "fit_max_items", "fit_max_value_bn")
+		non_negative = (
+			"fit_min_hospitals",
+			"fit_min_items",
+			"fit_w_hospitals",
+			"fit_w_items",
+			"fit_w_value",
+			"fit_w_active",
+			"fit_tier_a",
+		)
+		for fieldname in positive:
+			if (self.get(fieldname) or 0) <= 0:
+				frappe.throw(_("{0} phải lớn hơn 0").format(self.meta.get_label(fieldname)))
+		for fieldname in non_negative:
+			if (self.get(fieldname) or 0) < 0:
+				frappe.throw(_("{0} không được âm").format(self.meta.get_label(fieldname)))
+		if not [x for x in (self.get("fit_categories") or "").splitlines() if x.strip()]:
+			frappe.throw(_("Phải có ít nhất một loại hàng được tính điểm"))
 
 	def validate_prompt_pins(self) -> None:
 		"""Phiên bản câu lệnh ghim phải có dạng v<N> và có tệp tương ứng (V2-01)."""

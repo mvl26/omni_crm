@@ -42,6 +42,22 @@
   "reply_prompt_version",
   "summarize_prompt_version",
   "kb_version",
+  "sec_prospect",
+  "fit_scoring_enabled",
+  "prospect_import_enabled",
+  "fit_period_months",
+  "fit_min_hospitals",
+  "fit_min_items",
+  "fit_max_hospitals",
+  "fit_max_items",
+  "fit_max_value_bn",
+  "col_fit",
+  "fit_w_hospitals",
+  "fit_w_items",
+  "fit_w_value",
+  "fit_w_active",
+  "fit_tier_a",
+  "fit_categories",
   "sec_score",
   "lead_scoring_enabled",
   "hot_lead_threshold",
@@ -327,6 +343,104 @@
    "label": "Câu giữ chân ngoài giờ làm việc",
    "default": "Cảm ơn anh/chị đã liên hệ Miyano. Nhân viên sẽ phản hồi anh/chị vào {gio_lam_viec_ke_tiep}.",
    "description": "{gio_lam_viec_ke_tiep} được thay bằng thời điểm mở cửa kế tiếp"
+  },
+  {
+   "fieldname": "sec_prospect",
+   "fieldtype": "Section Break",
+   "label": "Nhà thầu B2B (V2-02)"
+  },
+  {
+   "fieldname": "fit_scoring_enabled",
+   "fieldtype": "Check",
+   "label": "Bật tính điểm phù hợp",
+   "default": "1",
+   "description": "Tắt: không tính lại điểm phù hợp của nhà thầu (giữ giá trị cũ). Điểm tính bằng code, không dùng AI."
+  },
+  {
+   "fieldname": "prospect_import_enabled",
+   "fieldtype": "Check",
+   "label": "Bật nhập danh sách nhà thầu",
+   "default": "1",
+   "description": "Tắt: không chạy được nhập danh sách nhà thầu (V2-03)."
+  },
+  {
+   "fieldname": "fit_period_months",
+   "fieldtype": "Int",
+   "label": "Khoảng thời gian xét gói thầu (tháng)",
+   "default": "24"
+  },
+  {
+   "fieldname": "fit_min_hospitals",
+   "fieldtype": "Int",
+   "label": "Tiêu chí: số bệnh viện tối thiểu",
+   "default": "5"
+  },
+  {
+   "fieldname": "fit_min_items",
+   "fieldtype": "Int",
+   "label": "Tiêu chí: số mã hàng tối thiểu",
+   "default": "200"
+  },
+  {
+   "fieldname": "fit_max_hospitals",
+   "fieldtype": "Int",
+   "label": "Số bệnh viện đạt điểm tối đa",
+   "default": "10"
+  },
+  {
+   "fieldname": "fit_max_items",
+   "fieldtype": "Int",
+   "label": "Số mã hàng đạt điểm tối đa",
+   "default": "500"
+  },
+  {
+   "fieldname": "fit_max_value_bn",
+   "fieldtype": "Float",
+   "label": "Tổng giá trị đạt điểm tối đa (tỷ đồng)",
+   "default": "20"
+  },
+  {
+   "fieldname": "col_fit",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fit_w_hospitals",
+   "fieldtype": "Int",
+   "label": "Trọng số: số bệnh viện",
+   "default": "40"
+  },
+  {
+   "fieldname": "fit_w_items",
+   "fieldtype": "Int",
+   "label": "Trọng số: số mã hàng",
+   "default": "30"
+  },
+  {
+   "fieldname": "fit_w_value",
+   "fieldtype": "Int",
+   "label": "Trọng số: tổng giá trị",
+   "default": "20"
+  },
+  {
+   "fieldname": "fit_w_active",
+   "fieldtype": "Int",
+   "label": "Trọng số: còn hợp đồng đang thực hiện",
+   "default": "10",
+   "description": "Tổng 4 trọng số nên bằng 100"
+  },
+  {
+   "fieldname": "fit_tier_a",
+   "fieldtype": "Int",
+   "label": "Ngưỡng hạng A",
+   "default": "70",
+   "description": "A: đạt tiêu chí và điểm >= ngưỡng; B: đạt tiêu chí; C: chưa đạt"
+  },
+  {
+   "fieldname": "fit_categories",
+   "fieldtype": "Small Text",
+   "label": "Loại hàng được tính điểm",
+   "default": "VTYT tiêu hao\nHóa chất – sinh phẩm",
+   "description": "Mỗi dòng một loại hàng"
   }
  ],
  "permissions": [

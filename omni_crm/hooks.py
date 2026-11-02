@@ -125,6 +125,7 @@ permission_query_conditions = {
 	"Omni Duplicate Candidate": "omni_crm.permissions.candidate_conditions",
 	"Omni Call": "omni_crm.permissions.call_conditions",  # D2-01
 	"Omni Bot Draft": "omni_crm.permissions.bot_draft_conditions",  # D3-01
+	"Omni Bid Award": "omni_crm.permissions.bid_award_conditions",  # V2-02
 }
 
 has_permission = {
@@ -134,6 +135,7 @@ has_permission = {
 	"Omni Duplicate Candidate": "omni_crm.permissions.has_candidate_permission",
 	"Omni Call": "omni_crm.permissions.has_lead_scoped_permission",  # D2-01
 	"Omni Bot Draft": "omni_crm.permissions.has_lead_scoped_permission",  # D3-01
+	"Omni Bid Award": "omni_crm.permissions.has_bid_award_permission",  # V2-02
 }
 
 # DocType Class
@@ -173,6 +175,9 @@ scheduler_events = {
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
+		"20 2 * * *": [
+			"omni_crm.prospect.fit.recompute_all_fit"
+		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
 	},
 	"hourly": ["omni_crm.bot.auto_send.run_breaker_checks"],  # D3-05: ngắt mạch Handoff gấp đôi
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
@@ -189,6 +194,17 @@ doc_events = {
 	},
 	"Omni Outbound Message": {
 		"after_insert": "omni_crm.crm_bridge.first_response.on_outbound_insert",  # V2-01: tin Sent tạo sẵn (oa_echo)
+	},
+	"CRM Organization": {
+		"validate": "omni_crm.prospect.organization.validate",  # V2-02: chuẩn hóa + chặn trùng mã số thuế
+		"on_update": "omni_crm.prospect.fit.on_organization_update",  # V2-02: số mã hàng ước tính đổi -> tính lại điểm
+	},
+	"Contact": {
+		"validate": "omni_crm.prospect.contacts.validate",  # V2-02: khóa SĐT/email chuẩn hóa để khớp định danh
+	},
+	"Omni Bid Award": {
+		"on_update": "omni_crm.prospect.fit.on_award_change",  # V2-02: thêm/sửa gói -> tính lại điểm phù hợp
+		"after_delete": "omni_crm.prospect.fit.on_award_change",
 	},
 	"CRM Lead": {
 		"validate": [

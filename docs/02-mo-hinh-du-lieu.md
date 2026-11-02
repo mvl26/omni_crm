@@ -319,7 +319,7 @@ D3-01: ở `mode = Draft`, `decision` đi `Pending -> Sent As Is | Sent Edited |
 | `omni_score_breakdown` | JSON (ẩn) | Các tín hiệu đã cộng điểm và lúc đã báo Lead nóng |
 | `omni_bot_summary` | Small Text | Tóm tắt của bot |
 
-Custom Field trên `CRM Organization` và `Contact` (D1-13): xem `docs/14` mục 1.1 và 1.3. Thêm trên CRM Lead/Deal: `omni_lost_reason` (D1-13, `docs/14` mục 4). Trên CRM Lead: trường chiến dịch và quy kết `omni_campaign` … `omni_is_test` (D1-15, `docs/15` mục 6); trường bot B2B `omni_tax_id_stated`, `omni_hospitals_mentioned`, `omni_current_pain`, `omni_decision_role` (D2-05, `docs/14` mục 7).
+Custom Field trên `CRM Organization` và `Contact` (D1-13, V2-02): xem `docs/14` mục 1.1 và 1.3. V2-02 thêm 3 trường kỹ thuật ẩn trên Contact (`omni_phones_e164`, `omni_emails_norm`, `omni_erased_keys`, ADR 0011). Omni Settings thêm 12 trường `fit_*` + `fit_scoring_enabled` + `prospect_import_enabled`. Lý do "Không phù hợp": dùng `CRM Lost Reason` có sẵn (ĐQ-8), không thêm `omni_lost_reason`. Trên CRM Lead: trường chiến dịch và quy kết `omni_campaign` … `omni_is_test` (D1-15, `docs/15` mục 6); trường bot B2B `omni_tax_id_stated`, `omni_hospitals_mentioned`, `omni_current_pain`, `omni_decision_role` (D2-05, `docs/14` mục 7).
 
 Custom Field trên `Communication` và `Comment` (Đợt 1):
 
@@ -344,7 +344,7 @@ Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không tr�
 | Omni Knowledge Item, Omni Question Group | Đọc/Ghi | Đọc | Đọc/Ghi |
 | Omni Bot Draft | Đọc/Ghi | Đọc/Ghi theo Lead | Đọc |
 | Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
-| Omni Bid Award, Omni Hospital Alias | Đọc/Ghi | Đọc theo quyền xem Lead của nhà thầu (qua API) | — |
+| Omni Bid Award, Omni Hospital Alias | Đọc/Ghi | Đọc theo quyền xem Lead của nhà thầu (V2-02: Bid Award có `permission_query_conditions` + `has_permission` theo Lead có `organization` = nhà thầu, và API `api/organization.py`; Hospital Alias chỉ Omni Admin) | — |
 | Omni Prospect Import | Đọc/Ghi (chạy nhập) | — | — |
 | Omni Campaign | Đọc/Ghi | Đọc | — |
 | Omni Lead Form | Đọc/Ghi (khóa bí mật chỉ Omni Admin) | — | — |

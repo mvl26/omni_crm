@@ -1,7 +1,12 @@
 """Khớp định danh với Lead (tạo, khớp, nghi trùng) theo docs/04 mục 3.
 
 Nguyên tắc: gộp khi chắc, hỏi người khi không chắc. Tín hiệu mạnh mới được dùng để gắn Lead;
-tín hiệu trung bình chỉ gắn khi duy nhất và tên không mâu thuẫn; tên giống nhau chỉ tạo nghi trùng.
+tín hiệu trung bình chỉ gắn khi duy nhất và tên HAI BÊN đều đủ thông tin và giống nhau (R1, ADR 0008); tên giống
+nhau chỉ tạo nghi trùng.
+
+V2-02 (docs/14 mục 2): trước khi tìm Lead theo SĐT/email, thử khớp NHÀ THẦU: mã số thuế (khách tự khai trong hồ sơ
+kênh) -> Contact đã biết -> tên miền email công ty. Chỉ gắn Lead của Organization khi khớp ĐÚNG MỘT Organization
+(ĐQ-4); mơ hồ thì không tự liên kết mà tạo Lead mới + nghi trùng với Lead của từng Organization ứng viên.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.identity import duplicates
 from omni_crm.identity.extract import extract_contacts
 from omni_crm.identity.normalize import (
+	informative_tokens,
 	is_informative_name,
 	is_system_email,
 	name_similarity,
@@ -28,6 +34,15 @@ from omni_crm.identity.normalize import (
 )
 from omni_crm.pipeline.locks import LockBusy, identity_lock
 from omni_crm.pipeline.retry import TransientError
+from omni_crm.prospect import contacts as prospect_contacts
+from omni_crm.prospect.normalize import (
+	SOCIAL_DOMAINS,
+	InvalidTaxId,
+	corporate_domain,
+	normalize_tax_id,
+	tax_id_base,
+	website_domain,
+)
 
 IDENTITY = "Omni Identity"
 LEAD = "CRM Lead"
@@ -40,7 +55,16 @@ SIGNAL_LOCK_WAIT = 20
 
 SCORE_STRONG_SHARED = 100
 SCORE_MEDIUM_NAME_CONFLICT = 60
+SCORE_MEDIUM_NAME_UNKNOWN = (
+	55  # R1: một Lead trùng SĐT/email trong nội dung nhưng tên thiếu/một từ/chưa đủ giống
+)
 SCORE_MEDIUM_AMBIGUOUS = 50
+SCORE_ORG_AMBIGUOUS = 50  # nhiều Organization cùng khớp một tín hiệu (docs/14 mục 2)
+SCORE_ORG_OTHER_LEAD = 70  # định danh đã có Lead khác với Lead của Organization khớp
+NAME_ATTACH_FROM = 0.5  # R1: ngưỡng độ giống tên để gắn bằng tín hiệu trung bình
+ORGANIZATION = "CRM Organization"
+OPEN_STATUS_TYPES = ("Open", "Ongoing", "On Hold")
+PROSPECT_STATUS = "Tiềm năng"  # trạng thái Lead B2B đầu tiên (docs/14 mục 4); thiếu thì dùng mặc định của CRM
 
 
 @dataclass
@@ -51,12 +75,21 @@ class Signals:
 	strong_emails: list[str] = field(default_factory=list)
 	medium_phones: list[str] = field(default_factory=list)
 	medium_emails: list[str] = field(default_factory=list)
+	email_channel_emails: list[str] = field(
+		default_factory=list
+	)  # chỉ email người gửi của kênh Email (tin được tên miền)
+	tax_ids: list[str] = field(
+		default_factory=list
+	)  # MST khách tự khai trong hồ sơ kênh (không trích từ văn bản)
 	display_name: str | None = None
 	last_inbound_at: datetime | None = None
 
 	def lock_values(self) -> list[str]:
 		"""Mọi SĐT/email liên quan, đã sắp xếp (thứ tự cố định để không deadlock)."""
-		return sorted(set(self.strong_phones + self.strong_emails + self.medium_phones + self.medium_emails))
+		return sorted(
+			set(self.strong_phones + self.strong_emails + self.medium_phones + self.medium_emails)
+			| {f"tax:{t}" for t in self.tax_ids}
+		)
 
 
 @dataclass
@@ -66,7 +99,7 @@ class Resolution:
 	identity: str
 	lead: str | None
 	created_lead: bool = False
-	matched_by: str = "new"  # identity | thread | strong | medium | new
+	matched_by: str = "new"  # identity | thread | org_tax | org_contact | org_domain | strong | medium | new
 	deal: str | None = None  # CRM Deal nếu Lead đã chuyển (docs/04 mục 3.2)
 	candidates: list[str] = field(default_factory=list)
 
@@ -103,11 +136,17 @@ def collect_signals(msgs: list[Any]) -> Signals:
 			email = normalize_email(m.external_sender_id)
 			if email and not is_system_email(email):
 				_add(sig.strong_emails, email)
+				_add(sig.email_channel_emails, email)
 		# Kênh cung cấp SĐT/email (vd form thông tin Zalo, event_type = user_info): mạnh.
 		_add(sig.strong_phones, normalize_phone(profile.get("phone") or profile.get("mobile")))
 		email = normalize_email(profile.get("email"))
 		if email and not is_system_email(email):
 			_add(sig.strong_emails, email)
+		try:  # MST chỉ lấy từ hồ sơ có cấu trúc (form kênh), không bao giờ từ văn bản: 10 số dễ lẫn với SĐT
+			tax = normalize_tax_id(profile.get("tax_id"))
+		except InvalidTaxId:
+			tax = None
+		_add(sig.tax_ids, tax)
 		name = (profile.get("display_name") or profile.get("name") or "").strip()
 		if name:
 			sig.display_name = name
@@ -265,6 +304,20 @@ def _name_conflict(name_a: str | None, name_b: str | None) -> bool:
 	)
 
 
+def _names_compatible(name_a: str | None, name_b: str | None) -> bool:
+	"""R1: cả hai tên đủ thông tin (>= 2 từ riêng), độ giống >= 0,5 VÀ tên riêng (từ cuối) của mỗi bên có mặt ở bên kia.
+
+	Điều kiện tên riêng chặn "Nguyễn Văn Nam" ~ "Nguyễn Văn Hùng" (chung họ và đệm); vẫn cho đổi thứ tự họ/tên
+	("Phạm Quốc Nam" ~ "Quốc Nam Phạm") và khác dấu.
+	"""
+	if not (is_informative_name(name_a) and is_informative_name(name_b)):
+		return False
+	ta, tb = informative_tokens(name_a), informative_tokens(name_b)
+	if ta[-1] not in tb or tb[-1] not in ta:
+		return False
+	return name_similarity(name_a, name_b) >= NAME_ATTACH_FROM
+
+
 def _flag_name_duplicates(lead: str) -> list[str]:
 	"""Bước 6: Lead khác có tên giống >= 0.9 trong 90 ngày -> nghi trùng (không gộp)."""
 	name = frappe.db.get_value(LEAD, lead, "lead_name")
@@ -293,6 +346,145 @@ def _flag_name_duplicates(lead: str) -> list[str]:
 	return created
 
 
+@dataclass
+class OrgMatch:
+	"""Kết quả khớp nhà thầu: `org` khi khớp đúng một; `ambiguous` là các Organization ứng viên khi khớp nhiều."""
+
+	org: str | None = None
+	via: str | None = None  # tax | contact | domain
+	ambiguous: list[str] = field(default_factory=list)
+
+
+def _existing_orgs(names: set[str]) -> list[str]:
+	"""Giữ lại tên Organization còn tồn tại (Contact.company_name là Data tự do), sắp xếp để kết quả ổn định."""
+	if not names:
+		return []
+	return sorted(frappe.get_all(ORGANIZATION, filters={"name": ["in", sorted(names)]}, pluck="name"))
+
+
+def _orgs_by_tax_id(tax_ids: list[str]) -> list[str]:
+	"""Organization có đúng mã số thuế; MST 10 số khớp thêm các chi nhánh `<10 số>-xxx` (nhiều hơn một -> mơ hồ)."""
+	found: set[str] = set()
+	for tax in tax_ids:
+		rows = frappe.get_all(ORGANIZATION, filters={"omni_tax_id": tax}, pluck="name")
+		if not rows and "-" not in tax:
+			rows = frappe.get_all(ORGANIZATION, filters={"omni_tax_id": ["like", f"{tax}-%"]}, pluck="name")
+		if not rows and "-" in tax:  # khách nêu MST chi nhánh, hệ thống chỉ có trụ sở
+			rows = frappe.get_all(ORGANIZATION, filters={"omni_tax_id": tax_id_base(tax)}, pluck="name")
+		found.update(rows)
+	return sorted(found)
+
+
+def _orgs_by_contacts(phones: list[str], emails: list[str]) -> list[str]:
+	return _existing_orgs({c.company_name for c in prospect_contacts.contacts_matching(phones, emails)})
+
+
+def _orgs_by_domain(emails: list[str]) -> list[str]:
+	"""Organization có website hoặc email công ty cùng tên miền công ty với email (bỏ tên miền thư miễn phí)."""
+	found: set[str] = set()
+	for domain in {d for d in (corporate_domain(e) for e in emails) if d}:
+		rows = frappe.get_all(
+			ORGANIZATION,
+			or_filters=[["website", "like", f"%{domain}%"], ["omni_company_email", "like", f"%@{domain}%"]],
+			fields=["name", "website", "omni_company_email"],
+			limit_page_length=200,
+		)
+		for r in rows:  # LIKE chỉ lọc thô; so khớp chính xác tên miền ở đây
+			mail_domain = (r.omni_company_email or "").rsplit("@", 1)[-1].strip().lower()
+			site = website_domain(r.website)
+			if (site == domain and site not in SOCIAL_DOMAINS) or mail_domain == domain:
+				found.add(r.name)
+	return sorted(found)
+
+
+def match_organization(sig: Signals) -> OrgMatch:
+	"""Thứ tự docs/14 mục 2: MST -> Contact đã biết -> tên miền email công ty. Bước đầu tiên có ứng viên quyết định.
+
+	Một Organization -> khớp; nhiều -> mơ hồ (KHÔNG tự liên kết, ĐQ-4). Contact chỉ tính theo SĐT/email MẠNH
+	(do kênh xác thực); SĐT/email trong nội dung (trung bình) không dùng ở bước này.
+	"""
+	steps = (
+		("tax", lambda: _orgs_by_tax_id(sig.tax_ids)),
+		("contact", lambda: _orgs_by_contacts(sig.strong_phones, sig.strong_emails)),
+		(
+			"domain",
+			lambda: _orgs_by_domain(sig.email_channel_emails),
+		),  # email tự khai ở kênh khác không đáng tin
+	)
+	for via, finder in steps:
+		orgs = finder()
+		if len(orgs) == 1:
+			return OrgMatch(orgs[0], via)
+		if len(orgs) > 1:
+			return OrgMatch(None, via, orgs)
+	return OrgMatch()
+
+
+def _lead_status_types(leads: list[str]) -> dict[str, str]:
+	if not leads:
+		return {}
+	rows = frappe.db.sql(
+		"""select l.name, s.type from `tabCRM Lead` l left join `tabCRM Lead Status` s on s.name = l.status
+		where l.name in %s""",
+		(tuple(leads),),
+	)
+	return dict(rows)
+
+
+def organization_leads(org: str) -> list[str]:
+	"""Lead chính (chưa bị gộp) của Organization: đang mở trước, rồi đã chuyển Deal (Won); hoạt động gần nhất trước.
+	Lead đã mất (Lost) không trả về."""
+	names = frappe.get_all(
+		LEAD,
+		filters={"organization": org, "omni_merged_into": ["is", "not set"]},
+		pluck="name",
+		limit_page_length=200,
+	)
+	types = _lead_status_types(names)
+	rank = {t: 0 for t in OPEN_STATUS_TYPES} | {"Won": 1}
+	usable = [n for n in names if types.get(n) in rank]
+	return sorted(usable, key=lambda n: (rank[types[n]], tuple(-x.timestamp() for x in _activity_key(n))))
+
+
+def _lead_for_organization(org: str, identity: Any, sig: Signals, name: str | None) -> tuple[str, bool]:
+	"""Lead đang mở của Organization (tạo Lead Tiềm năng mới nếu chưa có); trả (lead, đã_tạo)."""
+	existing = organization_leads(org)
+	if existing:
+		return existing[0], False
+	lead = lead_bridge.create_lead_for_identity(
+		identity.name,
+		{
+			"phone": sig.strong_phones[0] if sig.strong_phones else None,
+			"email": sig.strong_emails[0] if sig.strong_emails else None,
+			"display_name": name,
+			"last_inbound_at": sig.last_inbound_at,
+		},
+	)
+	values: dict[str, Any] = {"organization": org}
+	if frappe.db.exists("CRM Lead Status", PROSPECT_STATUS):
+		values["status"] = PROSPECT_STATUS
+	frappe.db.set_value(LEAD, lead, values, update_modified=False)
+	return lead, True
+
+
+def _flag_org_ambiguity(lead: str, orgs: list[str], via: str, out: list[str]) -> None:
+	"""Mơ hồ: nghi trùng giữa Lead mới và Lead của từng Organization ứng viên + ghi chú liệt kê, cho người xử lý."""
+	label = {"tax": _("mã số thuế"), "contact": _("người liên hệ"), "domain": _("tên miền email")}[via]
+	for org in orgs:
+		others = organization_leads(org)
+		if others:
+			_flag_shared(
+				lead,
+				[others[0]],
+				_("Khớp nhiều nhà thầu theo {0} ({1}): chưa tự liên kết").format(label, ", ".join(orgs)),
+				SCORE_ORG_AMBIGUOUS,
+				out,
+			)
+	frappe.get_doc(LEAD, lead).add_comment(
+		"Comment", _("Khớp nhiều nhà thầu theo {0}, chưa tự liên kết: {1}").format(label, ", ".join(orgs))
+	)
+
+
 def _flag_shared(lead: str, others: list[str], reason: str, score: int, out: list[str]) -> None:
 	for other in others:
 		cand = duplicates.create_candidate(lead, other, reason, score)
@@ -309,8 +501,23 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 
 	# Bước 2: đã gắn Lead (đi theo Lead đã gộp)
 	lead = lead_bridge.follow_merged(identity.lead) if identity.lead else None
+	if not lead and not thread and all(getattr(m, "event_type", None) == "oa_echo" for m in msgs):
+		# 04.08 (ADR 0008): lô chỉ có tin nhân viên trả lời ngoài hệ thống (oa_echo) và khách chưa từng nhắn -> không có
+		# tín hiệu nào của khách: ghi Identity, không tạo Lead rỗng tên. Tin được ghi khi khách nhắn (lô sau).
+		frappe.db.commit()
+		return res
 	if lead:
 		res.matched_by = "identity"
+		org = match_organization(sig)
+		if org.org and frappe.db.get_value(LEAD, lead, "organization") != org.org:
+			# Định danh đã gắn Lead khác với Lead của nhà thầu khớp: KHÔNG gắn lại (đổi hành vi với khách), chỉ nghi trùng.
+			_flag_shared(
+				lead,
+				organization_leads(org.org)[:1],
+				_("Cùng nhà thầu «{0}» (khớp theo {1}) nhưng thuộc Lead khác").format(org.org, org.via),
+				SCORE_ORG_OTHER_LEAD,
+				res.candidates,
+			)
 		others = [x for x in find_leads(sig.strong_phones, sig.strong_emails, identity.name) if x != lead]
 		_flag_shared(
 			lead,
@@ -335,8 +542,25 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 	else:
 		# Bước 3-5
 		strong = find_leads(sig.strong_phones, sig.strong_emails, identity.name)
+		org_match = OrgMatch() if thread else match_organization(sig)
 		if thread:  # thư trả lời trong chuỗi đã gắn Lead: tín hiệu chắc chắn, đứng trước SĐT/email
 			lead, res.matched_by = thread, "thread"
+			_flag_shared(
+				lead,
+				[x for x in strong if x != lead],
+				_("Cùng SĐT/email do kênh cung cấp, nhưng thuộc Lead khác"),
+				SCORE_STRONG_SHARED,
+				res.candidates,
+			)
+			lead_bridge.fill_blank_contact(
+				lead,
+				sig.strong_phones[0] if sig.strong_phones else None,
+				sig.strong_emails[0] if sig.strong_emails else None,
+			)
+		elif org_match.org:
+			# V2-02: nhà thầu khớp đúng một -> Lead đang mở của nhà thầu (tạo Lead Tiềm năng nếu chưa có)
+			lead, res.created_lead = _lead_for_organization(org_match.org, identity, sig, identity_name)
+			res.matched_by = f"org_{org_match.via}"
 			_flag_shared(
 				lead,
 				[x for x in strong if x != lead],
@@ -365,9 +589,9 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 			)
 		else:
 			medium = find_leads(sig.medium_phones, sig.medium_emails, identity.name)
-			if len(medium) == 1 and not _name_conflict(
-				identity_name, frappe.db.get_value(LEAD, medium[0], "lead_name")
-			):
+			medium_name = frappe.db.get_value(LEAD, medium[0], "lead_name") if len(medium) == 1 else None
+			# R1 (ADR 0008): gắn bằng tín hiệu trung bình chỉ khi tên HAI BÊN đủ thông tin và giống nhau (>= 0,5)
+			if len(medium) == 1 and _names_compatible(identity_name, medium_name):
 				lead, res.matched_by = medium[0], "medium"
 			else:
 				lead = lead_bridge.create_lead_for_identity(
@@ -380,10 +604,17 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 					},
 				)
 				res.created_lead = True
-				if len(medium) == 1:
+				if len(medium) == 1 and _name_conflict(identity_name, medium_name):
 					reason, score = (
 						_("SĐT/email trong nội dung tin trùng một Lead nhưng tên khác hẳn"),
 						SCORE_MEDIUM_NAME_CONFLICT,
+					)
+				elif len(medium) == 1:
+					reason, score = (
+						_(
+							"SĐT/email trong nội dung tin trùng một Lead nhưng tên thiếu hoặc chưa đủ giống để gộp"
+						),
+						SCORE_MEDIUM_NAME_UNKNOWN,
 					)
 				else:
 					reason, score = (
@@ -391,6 +622,8 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 						SCORE_MEDIUM_AMBIGUOUS,
 					)
 				_flag_shared(lead, medium, reason, score, res.candidates)
+				if org_match.ambiguous:
+					_flag_org_ambiguity(lead, org_match.ambiguous, org_match.via or "", res.candidates)
 
 	# Bước 6: tên giống
 	res.candidates += _flag_name_duplicates(lead)

@@ -96,18 +96,53 @@ class TestResolverBasics(IdentityTestCase):
 		self.assertEqual(r.lead, nam)
 		self.assertEqual(r.matched_by, "medium")
 
-	def test_medium_signal_with_placeholder_sender_name_attaches_per_spec(self):
-		# ĐANG MỞ (docs/12 mục D, mức Cao): theo docs/04 mục 3 bước 5 + 3.1, tên không có thông tin thì
-		# "không mâu thuẫn" nên khách ẩn danh nhắc số của người khác bị gắn vào Lead của người đó.
-		# Test này ghim hành vi hiện tại; nếu người duyệt đổi quyết định, đổi test này cùng lúc.
+	def test_medium_signal_with_placeholder_sender_name_does_not_attach_r1(self):
+		# V2-02 (quyết định ĐQ-4/R1, ADR 0008): trước đây test này ghim hành vi đúng chữ docs/04 mục 3 bước 5 là gắn khi
+		# tên "không mâu thuẫn" kể cả khi tên khách rỗng/chung chung (khách ẩn danh nhắc số người khác bị gắn nhầm).
+		# Nay: chỉ gắn khi tên hai bên đủ thông tin và giống nhau; còn lại tạo Lead mới + nghi trùng để người quyết.
 		nam = self.make_lead("Phạm Quốc Nam", mobile=phone(17))
 		for uid, profile in (
 			("U1", None),
 			("U2", {"display_name": "Khách"}),
 			("U3", {"display_name": "Zalo user"}),
+			("U4", {"display_name": "Nam"}),  # một từ
 		):
 			r = self.resolve(zalo(uid, f"liên hệ anh Nam {phone(17)}", profile))
-			self.assertEqual((r.lead, r.matched_by), (nam, "medium"))
+			self.assertNotEqual(r.lead, nam, uid)
+			self.assertEqual((r.created_lead, r.matched_by), (True, "new"), uid)
+			pair = [c for c in self.candidates(nam) if r.lead in (c["lead_a"], c["lead_b"])]
+			self.assertEqual(len(pair), 1, uid)
+			self.assertEqual(pair[0]["status"], "Open")
+			self.assertEqual(pair[0]["score"], resolver.SCORE_MEDIUM_NAME_UNKNOWN)
+
+	def test_medium_signal_name_similarity_boundary_is_half(self):
+		hai = self.make_lead("Phạm Quốc Nam Hải", mobile=phone(18))
+		# độ giống đúng 0,5 (2 từ chung / 4 từ) và tên riêng hai bên có mặt ở bên kia: gắn
+		r = self.resolve(zalo("U1", f"số em {phone(18)}", {"display_name": "Hải Lê Văn Nam"}))
+		self.assertEqual((r.lead, r.matched_by), (hai, "medium"))
+		# dưới 0,5 (1/4): không gắn
+		other = self.make_lead("Trần Văn Bình An", mobile=phone(19))
+		r = self.resolve(zalo("U2", f"số em {phone(19)}", {"display_name": "Trần Quốc Lê Hùng"}))
+		self.assertNotEqual(r.lead, other)
+
+	def test_medium_signal_same_surname_different_given_name_never_attaches(self):
+		# R1 bổ sung (ADR 0008): chung họ/đệm nhưng tên riêng khác là hai người khác nhau
+		for i, (lead_name, sender) in enumerate(
+			(("Nguyễn Văn Nam", "Nguyễn Văn Hùng"), ("Nguyễn Hùng", "Nguyễn Nam")), start=40
+		):
+			old = self.make_lead(lead_name, mobile=phone(i))
+			r = self.resolve(zalo(f"U{i}", f"liên hệ {phone(i)}", {"display_name": sender}))
+			self.assertNotEqual(r.lead, old, lead_name)
+			self.assertEqual((r.created_lead, r.matched_by), (True, "new"))
+			self.assertEqual(len(self.candidates(old)), 1)
+
+	def test_medium_signal_same_given_name_other_accent_or_order_still_attaches(self):
+		old = self.make_lead("Nguyễn Văn Nam", mobile=phone(44))
+		r = self.resolve(zalo("U44", f"số em {phone(44)}", {"display_name": "nguyen van nam"}))
+		self.assertEqual((r.lead, r.matched_by), (old, "medium"))
+		old2 = self.make_lead("Trần Thị Lan", mobile=phone(45))
+		r = self.resolve(zalo("U45", f"số em {phone(45)}", {"display_name": "Lan Trần Thị"}))
+		self.assertEqual((r.lead, r.matched_by), (old2, "medium"))
 
 	def test_medium_signal_ambiguous_between_two_leads_never_attaches(self):
 		a = self.make_lead("Phạm Quốc Nam", mobile=phone(6))

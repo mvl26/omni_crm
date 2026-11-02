@@ -100,3 +100,46 @@ def has_candidate_permission(doc: Any, ptype: str | None = None, user: str | Non
 	if not all(leads):
 		return False
 	return all(frappe.has_permission(LEAD, "read", doc=x, user=user) for x in leads)
+
+
+def bid_award_conditions(user: str | None = None) -> str:
+	"""permission_query_conditions của Omni Bid Award (V2-02): chỉ gói của nhà thầu mà người dùng xem được ít nhất một Lead.
+
+	`CRM Lead.organization` là Data chứa tên CRM Organization (docs/12 G14), nên so khớp theo tên.
+	"""
+	user = user or frappe.session.user
+	if _full_access(user):
+		return ""
+	cond = _lead_condition(user)
+	if not cond:  # CRM cho thấy mọi Lead
+		return ""
+	return (
+		"`tabOmni Bid Award`.`organization` in (select `organization` from `tabCRM Lead` "
+		f"where ifnull(`organization`, '') != '' and ({cond}))"
+	)
+
+
+def organization_leads_readable(organization: str | None, user: str | None = None) -> bool:
+	"""Người dùng có đọc được ít nhất một Lead (chưa bị gộp) của Organization này không."""
+	if not organization:
+		return False
+	user = user or frappe.session.user
+	if _full_access(user):
+		return True
+	leads = frappe.get_all(
+		LEAD,
+		filters={"organization": organization, "omni_merged_into": ["is", "not set"]},
+		pluck="name",
+		limit_page_length=200,
+	)
+	return any(frappe.has_permission(LEAD, "read", doc=lead, user=user) for lead in leads)
+
+
+def has_bid_award_permission(doc: Any, ptype: str | None = None, user: str | None = None) -> bool | None:
+	"""has_permission của Omni Bid Award: người ngoài nhóm toàn quyền chỉ đọc gói của nhà thầu có Lead xem được."""
+	user = user or frappe.session.user
+	if _full_access(user):
+		return None
+	if ptype and ptype not in ("read", "select"):
+		return False
+	return organization_leads_readable(doc.get("organization"), user)

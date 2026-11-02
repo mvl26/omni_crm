@@ -17,3 +17,16 @@ Mỗi prompt v2 một mục: ngày, nhánh, số test trước/sau, quyết đ�
 - **Lưu ý môi trường:** `omni.test` đã được `migrate` sang lược đồ của nhánh này (Custom Field mới, bản ghi Patch Log `backfill_lead_first_response`, hai trường phiên bản câu lệnh nay sửa được); ai chạy lại `develop` trên site này nên `migrate` lại. Test được viết cùng lúc với bản sửa chứ không chụp trạng thái đỏ trước (ngoại lệ: hai test đỏ ở baseline).
 - **Gộp commit (đã biết):** commit "omni_first_response_at" gồm cả `business_minutes_between` và đo lại chỉ số; commit "test Guest…" gồm cảnh báo Facebook, công tắc mặc định và giờ làm việc dùng chung; commit ADR gồm sửa chữ tài liệu và khai báo `openpyxl`.
 - **Gap-report:** các dòng V2-01 đã chuyển "Có-đúng"/"Không áp dụng" kèm tên test, hoặc "Có-lệch (ADR … chờ quyết định)" (03.11, 04.06–04.08, 09.06).
+
+## V2-02 — Mô hình nhà thầu trên codebase đã có
+
+- **Ngày:** 2026-11-02. **Nhánh:** `v2/02-mo-hinh-nha-thau` (từ `develop`, tag `v2-01`). Chưa merge, chưa gắn tag. Làm trong `git worktree` `/home/hoangvietyeuem/wt-v2-02` (PYTHONPATH trỏ worktree; `omni_crm.__file__` đã kiểm).
+- **Môi trường:** site `omni.test`; Redis tạm cổng 11998 (đã tắt); ruff 0.8.1; `bench migrate` đã chạy (Custom Field mới, 2 DocType mới, 2 patch đăng ký).
+- **Quyết định đã dùng (từ anh):** ĐQ-4 (chỉ liên kết khi đúng một Organization), ĐQ-5 (chỉ ADR 0010, không đổi `bot/scoring.py`), ĐQ-8 (CRM Lost Reason), ĐQ-11 (không dùng đồng bộ Facebook của crm), ADR 0008 chấp nhận, Q11 giữ, D3-04 bỏ qua.
+- **Quyết định nhỏ do agent đưa ra (anh có thể đảo):** xem ADR 0011 và docs/12 mục D (danh sách tên miền miễn phí, Organization tên = tên miền, trường kỹ thuật Contact, patch liên kết KHÔNG đăng ký trong `patches.txt`, mặc định dry run).
+- **Điểm dừng:** KHÔNG đổi trạng thái Lead/Deal nào; bảng ánh xạ chỉ in. Patch liên kết chỉ chạy thật trên `omni.test`, bên trong test, với dữ liệu tổng hợp (các Lead còn lại bị bỏ qua vì không có thông tin tổ chức); chưa chạy thật trên staging/production và không đăng ký trong `patches.txt`. Dry run mới chạy trên `omni.test` và dữ liệu tổng hợp; **chưa chạy trên staging thật**.
+- **Test cũ phải đổi:** `test_resolver::test_medium_signal_with_placeholder_sender_name_attaches_per_spec` -> `..._does_not_attach_r1` (mâu thuẫn trực tiếp với R1).
+- **Test trước/sau:** 1087 -> **1202 test, 0 lỗi, 0 bỏ qua** (+115). `bench migrate` sạch.
+- **Lưu ý môi trường:** `omni.test` nay ở lược đồ v2-02 (2 DocType mới, Custom Field Organization/Contact, trạng thái B2B + lý do mất đã chèn, 2 patch trong Patch Log); ai chạy lại `develop` trên site này nên `migrate` lại.
+- **Gộp commit (đã biết):** commit ADR còn chứa phần ép kiểu `load_params` và test của nó; commit mô hình dữ liệu gồm Custom Field, hook, Bid Award, Alias, fit, công tắc và quyền.
+- **Sửa theo reviewer V2-02:** R1 bắt buộc tên riêng trùng (ca Nguyễn Văn Nam/Hùng, Nguyễn Hùng/Nam không còn gắn); tên miền chỉ tin email kênh Email; thêm fpt.vn/vnpt.vn/viettel.com.vn và loại website mạng xã hội; `list_similar_hospitals` lỗi tiếng Việt; ánh xạ Deal Qualification/Demo -> Đã trao đổi nhu cầu, Lost ghi chú; ghi phát hiện docs/12. Commit mục 1 và 2 (và test mục 3) gộp trong một commit resolver. Test `test_medium_signal_name_similarity_boundary_is_half` đổi dữ liệu tên (vẫn kiểm ngưỡng 0,5).
