@@ -109,6 +109,19 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				),
 			)
 		)
+	if cint(
+		snap["switches"].get("crm_lead_sync_sources_enabled")
+	):  # ĐQ-11: chỉ dùng kênh Meta Lead Ads của Omni
+		out.append(
+			Alert(
+				"dong_bo_lead_crm_dang_bat",
+				"",
+				_("Đồng bộ lead Facebook có sẵn của CRM đang bật"),
+				_(
+					"Có {0} Lead Sync Source đang bật: lead tạo ngoài bộ định danh Omni (không chống trùng, không quy kết). Hãy tắt và dùng kênh Meta Lead Ads của Omni."
+				).format(cint(snap["switches"]["crm_lead_sync_sources_enabled"])),
+			)
+		)
 	bot = snap.get("bot") or {}
 	if bot.get("usage_pct") is not None and bot["usage_pct"] > BOT_USAGE_WARN_PCT:
 		out.append(

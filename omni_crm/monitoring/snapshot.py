@@ -177,6 +177,14 @@ def _bot(now) -> dict[str, Any]:
 	}
 
 
+def _crm_lead_sync_enabled() -> int:
+	"""Số `Lead Sync Source` (đồng bộ lead Facebook có sẵn của app crm) đang bật; 0 nếu app crm không có DocType này (V2-01, ĐQ-11)."""
+	try:
+		return cint(frappe.db.count("Lead Sync Source", {"enabled": 1}))
+	except Exception:
+		return 0
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -215,6 +223,7 @@ def build_snapshot() -> dict[str, Any]:
 			"raw_payload_retention_days": cint(settings.raw_payload_retention_days),
 			"bot_analyze_enabled": cint(settings.get("bot_analyze_enabled")),
 			"bot_reply_mode": settings.get("bot_reply_mode") or "Off",
+			"crm_lead_sync_sources_enabled": _crm_lead_sync_enabled(),
 		},
 		"channels": _channel_rows(now),
 		"queue": {
