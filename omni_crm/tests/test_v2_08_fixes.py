@@ -256,3 +256,24 @@ class TestSendReplyBlockedForRefusedPerson(OutboundTestCase):
 		self.sandbox(True)
 		self.as_user(SALE1)
 		self.assertEqual(self._reply()["status"], "Queued")
+
+
+class TestRepeatSubmissionKeepsExistingOwner(WebCase):
+	def test_lead_that_already_has_an_owner_is_not_reassigned_or_announced_as_new_again(self):
+		from omni_crm.crm_bridge import form_lead
+		from omni_crm.tests.ads_helpers import SALE
+
+		self.addCleanup(TestOrphanLeadGetsOwnerOnRetry._drop_identities)
+		lead = self.submit().lead
+		frappe.local.request = None
+		todo_before = frappe.db.count("ToDo", {"reference_name": lead, "status": "Open"})
+		again = self.submit(submission_id="td808-lan-hai-0002")
+		self.assertEqual(again.lead, lead)
+		self.assertEqual(form_lead.recipients(lead), [SALE])
+		self.assertEqual(frappe.db.count("ToDo", {"reference_name": lead, "status": "Open"}), todo_before)
+		self.assertEqual(
+			frappe.db.count(
+				"Notification Log", {"document_name": lead, "subject": ["like", "Lead mới từ quảng cáo%"]}
+			),
+			1,
+		)
