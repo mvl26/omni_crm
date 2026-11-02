@@ -459,7 +459,7 @@
    "fieldtype": "Check",
    "label": "Bật Dashboard CSKH",
    "default": "1",
-   "description": "Tắt: trang Tổng quan và Chi tiết khách không trả số liệu; Hộp thư vẫn dùng bình thường. Không mất dữ liệu."
+   "description": "Tắt: API Tổng quan (snapshot) trả enabled=false không số liệu và việc ghi nhật ký chăm sóc (save_care_log) bị từ chối; Chi tiết khách vẫn đọc được, Hộp thư vẫn dùng bình thường. Không mất dữ liệu."
   },
   {
    "fieldname": "care_log_enabled",
