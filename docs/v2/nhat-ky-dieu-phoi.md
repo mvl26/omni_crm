@@ -48,3 +48,16 @@ Mỗi prompt v2 một mục: ngày, nhánh, số test trước/sau, quyết đ�
 - **Lưu ý môi trường:** lần chạy đầu của một test hạ tầng (`import_workbook` với tệp riêng tư) làm lộ lỗi của chính tôi (biến `path` bị ghi đè khiến việc chạy đồng bộ commit giữa test); đã sửa trước khi commit, và dọn dữ liệu bị commit (User `td303_*`, nhật ký, File). `omni.test` nay ở lược đồ V2-03 (DocType mới, 2 Custom Field); chạy `bench migrate` khi đổi nhánh.
 - **Gộp commit (đã biết):** commit "DocType Omni Prospect Import" gồm Custom Field `omni_import_snapshot` và API; commit "importer" gồm đối chiếu/chuyển Deal; commit test gồm hai dòng đăng ký; commit docs gồm ADR 0012, docs/02, 09, 11, 12, 14 và gap-report.
 - **Lệnh anh chạy khi có tệp:** xem báo cáo cuối và docs/11 mục "Lưu ý V2-03".
+
+## V2-04 — Dashboard CSKH, Chi tiết nhà thầu, nhật ký chăm sóc (làm trọn D1-12: trường hợp 1)
+
+- **Ngày:** 2026-11-02. **Nhánh:** `v2/04-dashboard-chi-tiet-nha-thau` (từ `develop`, tag `v2-03`). Chưa merge, chưa gắn tag. Làm trong `git worktree` `/home/hoangvietyeuem/wt-v2-04` (PYTHONPATH trỏ worktree, `omni_crm.__file__` đã kiểm).
+- **Môi trường:** site `omni.test`; Redis tạm cổng 11996 (đã tắt); ruff 0.8.1; `bench migrate` đã chạy (DocType Omni Care Log, trường Omni Settings, 2 trang, patch chỉ mục).
+- **Nền đo lại trên `develop`:** 1282 test, 1 lỗi (`test_email_channel::test_all_ignored_fixtures_saved_ignored_without_lead`) do 63 Lead "TD204 Xoa" bị `test_ai_client` rò trên `omni.test` (docs/12 Phát hiện). Đã dọn 63 Lead rò (đúng lead_name đó) và test xanh. Số reviewer 1282 OK / agent 1280 khác nhau do dữ liệu rò này.
+- **Quyết định đã dùng:** Q11 (không gửi hội thoại thật sang AI; V2-04 không gọi AI); CRM Lost Reason có sẵn; không sửa crm/frappe; không DocType ngoài docs/02 (Omni Care Log nằm trong docs/02); không đường gửi tin tự động (registry API được cập nhật, `TestNoBulkSend` xanh); Sales User theo quyền Lead, trưởng nhóm thấy toàn đội; ẩn nút gọi/nhắn khi từ chối/đã xóa; đổi tên Organization: đồng bộ + chặn gộp; nhật ký chăm sóc tính vào `omni_first_response_at` (chỉ khi sale GHI).
+- **Quyết định nhỏ do agent đưa ra (anh có thể đảo):** xem docs/12 mục D (V2-04): cách hiểu "Chưa ghi kết quả", chỉ tính Lead có kênh vào, số liên hệ theo định danh, nút ghi nhật ký mở trang hồ sơ, Lead chuyển "Đã liên hệ" khi ghi kết quả (trừ "Không liên lạc được"). Lead trong phễu: Lead chưa chuyển Deal + Deal theo quyền.
+- **Test trước/sau:** xem báo cáo cuối (số đo thật của suite đầy đủ).
+- **Hiệu năng:** snapshot lạnh p95 507/541/632 ms (hôm nay/7/30 ngày) trên 25.000 Lead + 100.000 tin tổng hợp; chưa đo trên staging.
+- **Chưa làm được:** 5 ảnh chụp màn hình trên staging và so sánh với canvas (không có staging/trình duyệt, UI chưa thử trên trình duyệt); form ghi nhật ký ngay trong Hộp thư; tóm tắt cuộc gọi (D3-04 bỏ qua); bảng điểm B2B nối bot (V2-06).
+- **Gộp commit (đã biết):** commit "API Chi tiết khách" gồm hook đổi tên Organization và phần sửa quyền người dùng bị xóa dữ liệu; commit perf gồm kênh theo định danh.
+

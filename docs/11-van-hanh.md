@@ -147,3 +147,14 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
 
 - `reply.reply_batch` giữ khóa Redis `omni:lock:reply:<batch_id>` (timeout bằng `JOB_TIMEOUT`, 600 giây) trong lúc soạn, để hai job cùng một lượt không ghi hai nháp (và ở nhóm Auto không gửi hai tin Bot, E12). Khóa tự hết sau 150 giây nếu tiến trình chết; job cùng lượt chờ tối đa 100 giây rồi ghi Error Log "Omni: bot trả lời bỏ qua vì khóa lượt" và bỏ lượt đó. Nhóm Auto còn chốt thứ hai trong `try_auto_send` (không gửi nếu lượt đã có tin Bot). Redis lỗi thì job chạy không khóa.
 - Đo tải Đợt 3 trên máy dev: Redis tạm cho queue (`FRAPPE_REDIS_QUEUE=redis://127.0.0.1:<cổng riêng>`) và cache (`FRAPPE_REDIS_CACHE`), gunicorn nhiều worker, `tests/load/rq_worker.py` (biến `OMNI_LOAD_D3=1` cho đáp án kho tri thức tải; `OMNI_LOAD_AUTO_INFRA=1` mở khóa hạ tầng tự gửi chỉ trong tiến trình worker, vẫn phải `sandbox_mode` bật), báo cáo `verify_calls.d3_report`, dọn `cleanup_bot` + `verify_burst.cleanup` + `cleanup_d3`. Không bao giờ đặt `omni_auto_send_allowed` trong site_config để đo.
+
+## Lưu ý V2-04: Tổng quan CSKH, nhật ký chăm sóc
+
+- **Bật/tắt**: `Omni Settings.dashboard_enabled`, `care_log_enabled` (docs/09). Tắt không mất dữ liệu; bật lại dùng tiếp.
+- **Chỉ mục mới**: `Omni Inbound Message (lead, event_type, status, received_at)` — thêm bằng `on_doctype_update` và patch `omni_crm.patches.v2.add_dashboard_indexes` (chạy lại được; `bench migrate` trên site cũ cần patch này vì JSON DocType không đổi). Migration chỉ thêm.
+- **Tác vụ 17:45** (`care_log.end_of_day_digest`): một Notification Log cho mỗi sale có phiên "Chưa ghi kết quả" trong 7 ngày; bỏ qua ngày nghỉ/lễ (`business_hours.is_working_day`).
+- **Đo hiệu năng** (không phải test, không dùng dữ liệu thật; nạp dữ liệu tổng hợp tiền tố `TD404P`, đo lạnh, dọn sạch):
+  `bench --site omni.test execute omni_crm.tests.acceptance.measure_v204_dashboard.run --kwargs '{"leads": 25000, "messages": 100000, "repeats": 5}'`
+  Kết quả trên máy dev `omni.test` (25.000 Lead, 100.000 tin vào, tất cả Lead đều đang chờ trả lời = tình huống xấu, mọi tính năng Đợt 2-3 bật), p95 mili giây: trưởng nhóm hôm nay 507, 7 ngày 541, 30 ngày 632; Sales User (1/10 Lead) hôm nay 200, 30 ngày 215. Mục tiêu docs/13 mục 4 (p95 < 800 ms) đạt trên dữ liệu tổng hợp; **chưa đo trên staging**. Trước khi thêm chỉ mục, 30 ngày là 882 ms.
+- **Đổi tên nhà thầu** (CRM Organization): `Lead.organization` và `Contact.company_name` tự theo; đổi tên kiểu "gộp" bị chặn, dùng `merge_organizations`.
+- **Quay lui**: tắt hai công tắc; DocType Omni Care Log chỉ thêm, không ảnh hưởng luồng cũ.
