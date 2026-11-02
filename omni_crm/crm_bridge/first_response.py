@@ -1,7 +1,8 @@
 """`CRM Lead.omni_first_response_at`: thời điểm phản hồi đầu tiên (docs/15 mục 7 bước 4, docs/13 mục 1.2).
 
 Tính là phản hồi: tin ra đầu tiên KHÔNG sandbox do Sale hoặc Bot gửi (đã `Sent`), thư gửi đi từ CRM tới Lead,
-cuộc gọi đi được nghe máy. Chưa tính "nhật ký chăm sóc" (`Omni Care Log` làm ở V2-04, sẽ gọi `mark` tại đó).
+cuộc gọi đi được nghe máy, và nhật ký chăm sóc đầu tiên do sale GHI (V2-04: `care_log.save_outcome` gọi `mark`).
+Phiên chăm sóc TỰ TẠO từ tin khách không tính (nếu tính thì phản hồi = lúc khách nhắn).
 Tin `System` (câu giữ chân khi chuyển người) và tin sandbox KHÔNG tính. Luôn giữ giá trị SỚM NHẤT.
 """
 
@@ -122,6 +123,12 @@ def earliest_responses() -> dict[str, datetime]:
 		frappe.db.sql(
 			"""select lead, min(coalesce(answered_at, started_at)) from `tabOmni Call`
 			where direction = 'Outbound' and status = 'Answered' and ifnull(lead, '') != '' group by lead"""
+		)
+	)
+	take(
+		frappe.db.sql(
+			"""select lead, min(if(auto_created = 0, started_at, outcome_at)) from `tabOmni Care Log`
+			where ifnull(outcome_by, '') != '' and ifnull(lead, '') != '' group by lead"""
 		)
 	)
 	return found

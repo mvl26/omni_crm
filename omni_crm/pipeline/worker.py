@@ -13,8 +13,8 @@ from redis.lock import Lock
 
 from omni_crm import flags
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
+from omni_crm.crm_bridge import care_log, timeline
 from omni_crm.crm_bridge import lead as lead_bridge
-from omni_crm.crm_bridge import timeline
 from omni_crm.identity import resolver
 from omni_crm.ingest.gateway import enqueue_identity
 from omni_crm.pipeline.locks import LockBusy, identity_lock
@@ -168,6 +168,7 @@ def _process_batch(identity_key: str, msgs: list[Any], batch_id: str) -> str | N
 	)
 	if identity and last_inbound:
 		frappe.db.set_value("Omni Identity", identity, "last_inbound_at", last_inbound, update_modified=False)
+	care_log.on_inbound_batch(lead, msgs)  # V2-04: phiên chăm sóc (tự bắt lỗi, không làm hỏng lô)
 	return lead
 
 

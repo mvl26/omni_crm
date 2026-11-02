@@ -64,6 +64,11 @@ def bot_draft_conditions(user: str | None = None) -> str:
 	return lead_scoped_condition("Omni Bot Draft", user)
 
 
+def care_log_conditions(user: str | None = None) -> str:
+	"""permission_query_conditions của Omni Care Log (V2-04): chỉ nhật ký của Lead người dùng xem được."""
+	return lead_scoped_condition("Omni Care Log", user)
+
+
 def has_lead_scoped_permission(doc: Any, ptype: str | None = None, user: str | None = None) -> bool | None:
 	"""has_permission cho ba DocType trên: người ngoài nhóm toàn quyền chỉ đọc bản ghi có Lead xem được."""
 	user = user or frappe.session.user

@@ -1,0 +1,186 @@
+{
+ "actions": [],
+ "autoname": "OCL-.YYYY.-.#######",
+ "naming_rule": "Expression (old style)",
+ "creation": "2026-11-02 12:00:00.000000",
+ "modified": "2026-11-02 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Care Log",
+ "field_order": [
+  "lead",
+  "channel",
+  "started_at",
+  "last_activity_at",
+  "col_a",
+  "handled_by",
+  "handled_kind",
+  "auto_created",
+  "call",
+  "sec_result",
+  "summary",
+  "outcome",
+  "next_action",
+  "next_due",
+  "crm_task",
+  "col_b",
+  "outcome_by",
+  "outcome_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Select",
+   "label": "Kênh",
+   "options": "Điện thoại\nZalo OA\nEmail\nGặp trực tiếp\nKhác",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Bắt đầu",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "last_activity_at",
+   "fieldtype": "Datetime",
+   "label": "Hoạt động gần nhất",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "handled_by",
+   "fieldtype": "Link",
+   "label": "Người xử lý chính",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "handled_kind",
+   "fieldtype": "Select",
+   "label": "Xử lý bởi",
+   "options": "Sale\nBot\nKhách\nHệ thống",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "auto_created",
+   "fieldtype": "Check",
+   "label": "Hệ thống tự tạo",
+   "read_only": 1
+  },
+  {
+   "fieldname": "call",
+   "fieldtype": "Link",
+   "label": "Cuộc gọi",
+   "options": "Omni Call",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_result",
+   "fieldtype": "Section Break",
+   "label": "Kết quả chăm sóc"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Tóm tắt"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Kết quả",
+   "options": "\nĐã tư vấn\nĐã gửi tài liệu\nĐã gửi báo giá\nHẹn gọi lại\nChờ khách phản hồi\nĐã chốt đơn\nKhông có nhu cầu\nKhông liên lạc được\nĐã xử lý khiếu nại",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "next_action",
+   "fieldtype": "Data",
+   "label": "Bước tiếp theo"
+  },
+  {
+   "fieldname": "next_due",
+   "fieldtype": "Datetime",
+   "label": "Hạn"
+  },
+  {
+   "fieldname": "crm_task",
+   "fieldtype": "Link",
+   "label": "Việc trong CRM",
+   "options": "CRM Task",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_b",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "outcome_by",
+   "fieldtype": "Link",
+   "label": "Người ghi kết quả",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_at",
+   "fieldtype": "Datetime",
+   "label": "Ghi kết quả lúc",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "states": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 0,
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}

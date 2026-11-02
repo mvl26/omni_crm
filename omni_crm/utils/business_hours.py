@@ -91,6 +91,13 @@ def is_business_time(
 	return bool(window and window[0] <= dt.time() <= window[1])
 
 
+def is_working_day(day: date, hours: dict | None = None, holidays: frozenset[date] | None = None) -> bool:
+	"""`day` có giờ làm việc không (không phải ngày nghỉ lễ, và thứ trong tuần có khung giờ cấu hình)."""
+	hours = hours if hours is not None else _hours()
+	holidays = holidays if holidays is not None else _holidays()
+	return _window(day, hours, holidays) is not None
+
+
 MAX_SCAN_DAYS = 400  # chặn vòng lặp nếu cấu hình không có ngày làm việc nào
 
 

@@ -126,6 +126,7 @@ permission_query_conditions = {
 	"Omni Call": "omni_crm.permissions.call_conditions",  # D2-01
 	"Omni Bot Draft": "omni_crm.permissions.bot_draft_conditions",  # D3-01
 	"Omni Bid Award": "omni_crm.permissions.bid_award_conditions",  # V2-02
+	"Omni Care Log": "omni_crm.permissions.care_log_conditions",  # V2-04
 }
 
 has_permission = {
@@ -136,6 +137,7 @@ has_permission = {
 	"Omni Call": "omni_crm.permissions.has_lead_scoped_permission",  # D2-01
 	"Omni Bot Draft": "omni_crm.permissions.has_lead_scoped_permission",  # D3-01
 	"Omni Bid Award": "omni_crm.permissions.has_bid_award_permission",  # V2-02
+	"Omni Care Log": "omni_crm.permissions.has_lead_scoped_permission",  # V2-04
 }
 
 # DocType Class
@@ -175,6 +177,7 @@ scheduler_events = {
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
+		"45 17 * * *": ["omni_crm.crm_bridge.care_log.end_of_day_digest"],  # V2-04: phiên chưa ghi kết quả
 		"20 2 * * *": [
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi

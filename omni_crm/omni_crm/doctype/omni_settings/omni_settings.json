@@ -68,7 +68,14 @@
   "bot_active_hours",
   "col_handoff",
   "handoff_message_in_hours",
-  "handoff_message_after_hours"
+  "handoff_message_after_hours",
+  "sec_care",
+  "dashboard_enabled",
+  "care_log_enabled",
+  "response_sla_minutes",
+  "col_care",
+  "care_session_gap_hours",
+  "team_lead_role"
  ],
  "fields": [
   {
@@ -441,6 +448,49 @@
    "label": "Loại hàng được tính điểm",
    "default": "VTYT tiêu hao\nHóa chất – sinh phẩm",
    "description": "Mỗi dòng một loại hàng"
+  },
+  {
+   "fieldname": "sec_care",
+   "fieldtype": "Section Break",
+   "label": "Chăm sóc khách (Dashboard CSKH, nhật ký chăm sóc)"
+  },
+  {
+   "fieldname": "dashboard_enabled",
+   "fieldtype": "Check",
+   "label": "Bật Dashboard CSKH",
+   "default": "1",
+   "description": "Tắt: trang Tổng quan và Chi tiết khách không trả số liệu; Hộp thư vẫn dùng bình thường. Không mất dữ liệu."
+  },
+  {
+   "fieldname": "care_log_enabled",
+   "fieldtype": "Check",
+   "label": "Tự ghi nhật ký chăm sóc",
+   "default": "1",
+   "description": "Tắt: worker không tạo/cập nhật phiên chăm sóc tự động; sale vẫn ghi tay được."
+  },
+  {
+   "fieldname": "response_sla_minutes",
+   "fieldtype": "Int",
+   "label": "Ngưỡng quá hạn phản hồi (phút làm việc)",
+   "default": "15"
+  },
+  {
+   "fieldname": "col_care",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "care_session_gap_hours",
+   "fieldtype": "Int",
+   "label": "Khoảng im lặng kết thúc một phiên (giờ)",
+   "default": "4"
+  },
+  {
+   "fieldname": "team_lead_role",
+   "fieldtype": "Link",
+   "label": "Vai trò trưởng nhóm",
+   "options": "Role",
+   "default": "Sales Manager"
   }
  ],
  "permissions": [
