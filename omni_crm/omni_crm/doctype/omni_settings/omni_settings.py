@@ -26,6 +26,20 @@ class OmniSettings(Document):
 		self.validate_positive_numbers()
 		self.validate_score_rules()
 		self.validate_handoff()
+		self.validate_prompt_pins()
+
+	def validate_prompt_pins(self) -> None:
+		"""Phiên bản câu lệnh ghim phải có dạng v<N> và có tệp tương ứng (V2-01)."""
+		from omni_crm.bot.prompts.loader import load_prompt
+
+		for name, fieldname in (("analyze", "analyze_prompt_version"), ("reply", "reply_prompt_version")):
+			value = (self.get(fieldname) or "").strip()
+			if not value:
+				continue
+			try:
+				load_prompt(name, value)
+			except FileNotFoundError:
+				frappe.throw(_("Không có tệp câu lệnh {0} phiên bản {1}").format(name, value))
 
 	def validate_backoff(self) -> None:
 		try:

@@ -1,4 +1,6 @@
-"""Nạp câu lệnh hệ thống theo phiên bản: tệp `bot/prompts/<tên>_v<N>.md`, dòng đầu `version: v<N>`."""
+"""Nạp câu lệnh hệ thống theo phiên bản: tệp `bot/prompts/<tên>_v<N>.md`, dòng đầu `version: v<N>`.
+
+V2-01: đường chạy thật chỉ nạp phiên bản được GHIM (Omni Settings hoặc `PINNED_DEFAULTS`), tệp mới thả vào thư mục không tự có hiệu lực."""
 
 from __future__ import annotations
 
@@ -11,6 +13,10 @@ import frappe
 PROMPT_DIR = Path(__file__).parent
 VERSION_FILE_RE = re.compile(r"^(?P<name>[a-z_]+)_v(?P<n>\d+)\.md$")
 VERSION_LINE_RE = re.compile(r"^version:\s*(?P<v>\S+)\s*$")
+# Phiên bản câu lệnh dùng cho đường chạy thật khi Omni Settings chưa ghim. Đổi sang bản mới chỉ qua Omni Settings
+# (sau khi bộ đề đạt cổng `doi_cau_lenh`) hoặc sửa hằng này trong một commit có duyệt. Giám khảo không có trường Settings.
+PINNED_DEFAULTS = {"analyze": "v1", "reply": "v1", "judge": "v1"}
+LATEST = "latest"  # giá trị `version` đặc biệt của load_prompt: bản mới nhất (bộ đề so sánh hai bản)
 SETTINGS_FIELD = {
 	"analyze": "analyze_prompt_version",
 	"reply": "reply_prompt_version",
@@ -44,16 +50,40 @@ def _parse(name: str, path: Path) -> Prompt:
 	return Prompt(name, m["v"], "\n".join(lines[1:]).strip())
 
 
-def active_version(name: str) -> str | None:
-	"""Phiên bản mới nhất có tệp của câu lệnh `name` (vd `v1`); không có tệp thì None."""
+def latest_version(name: str) -> str | None:
+	"""Phiên bản có số lớn nhất trong thư mục câu lệnh (CHỈ để so sánh/tham khảo, không dùng cho đường chạy thật)."""
 	found = _versions(name)
 	return _parse(name, found[max(found)]).version if found else None
 
 
+def pinned_version(name: str) -> str | None:
+	"""Phiên bản được GHIM của câu lệnh `name` (V2-01, ĐQ-6): Omni Settings nếu có giá trị, không thì hằng `PINNED_DEFAULTS`.
+
+	Tên không có ghim (không nằm trong Settings lẫn hằng) trả None. Không bao giờ tự chọn số cao nhất.
+	"""
+	value = None
+	field = SETTINGS_FIELD.get(name)
+	if field:
+		try:
+			value = (frappe.db.get_single_value("Omni Settings", field) or "").strip()
+		except Exception:  # chưa có bảng/trường (cài mới, migrate dở): rơi về hằng
+			value = None
+	return value or PINNED_DEFAULTS.get(name)
+
+
+def active_version(name: str) -> str | None:
+	"""Phiên bản đang chạy thật = phiên bản ghim; câu lệnh không có ghim thì None."""
+	return pinned_version(name)
+
+
 def load_prompt(name: str, version: str | None = None) -> Prompt:
-	"""Nạp câu lệnh `name` ở phiên bản `version` (mặc định mới nhất); không có thì FileNotFoundError."""
+	"""Nạp câu lệnh `name`: `version` mặc định là bản GHIM; `LATEST` nạp bản mới nhất (so sánh). Thiếu tệp -> FileNotFoundError."""
 	found = _versions(name)
 	if version is None:
+		version = pinned_version(name)
+		if version is None:
+			raise FileNotFoundError(f"Câu lệnh {name} chưa được ghim phiên bản")
+	if version == LATEST:
 		if not found:
 			raise FileNotFoundError(f"Không có câu lệnh {name}")
 		return _parse(name, found[max(found)])
@@ -72,11 +102,13 @@ def render(prompt: Prompt, **variables: str) -> str:
 
 
 def sync_settings() -> dict[str, str]:
-	"""Ghi phiên bản mới nhất của từng câu lệnh vào Omni Settings (trường chỉ đọc); trả về {tên: phiên bản}."""
+	"""Điền phiên bản ghim mặc định vào Omni Settings khi trường còn TRỐNG; KHÔNG ghi đè bản đã ghim. Trả {tên: phiên bản}."""
 	written: dict[str, str] = {}
 	for name, fieldname in SETTINGS_FIELD.items():
-		version = active_version(name)
-		if version and frappe.db.get_single_value("Omni Settings", fieldname) != version:
-			frappe.db.set_single_value("Omni Settings", fieldname, version)
-			written[name] = version
+		default = PINNED_DEFAULTS.get(name)
+		if not default or frappe.db.get_single_value("Omni Settings", fieldname):
+			continue
+		if int(default[1:]) in _versions(name):
+			frappe.db.set_single_value("Omni Settings", fieldname, default)
+			written[name] = default
 	return written
