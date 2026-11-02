@@ -173,7 +173,29 @@ class TestMetrics(DashCase):
 		)
 
 	def test_channels_block_counts_contacts_and_new_leads(self):
-		self.build_core()
+		a = self.build_core()
+		for n, key in enumerate(("A3", "A4", "A5", "A7", "A8")):  # định danh Zalo có liên hệ hôm nay
+			frappe.get_doc(
+				{
+					"doctype": "Omni Identity",
+					"identity_key": f"Zalo OA:TD404C{n}",
+					"channel_type": "Zalo OA",
+					"external_id": f"TD404C{n}",
+					"lead": a[key],
+					"last_inbound_at": at(4, 9),
+				}
+			).insert(ignore_permissions=True)
+		old = frappe.get_doc(
+			{
+				"doctype": "Omni Identity",
+				"identity_key": "Email:td404old@example.com",
+				"channel_type": "Email",
+				"external_id": "td404old@example.com",
+				"lead": a["A1"],
+				"last_inbound_at": at(2, 9),  # liên hệ từ thứ hai: ngoài kỳ "hôm nay"
+			}
+		).insert(ignore_permissions=True)
+		self.assertTrue(old.name)
 		rows = {r["channel"]: r for r in self.snap(SALE_A, keys=["channels"])["channels"]["rows"]}
 		self.assertEqual(rows["Zalo OA"]["contacts"], 5)  # A3, A4, A5, A7, A8 nhắn hôm nay
 		self.assertEqual(rows["Zalo OA"]["new_leads"], 6)
@@ -474,3 +496,23 @@ class TestB2B(DashCase):
 		self.assertNotIn("prospects_ab", out)
 		self.assertNotIn("tier_region", out)
 		self.assertIn("funnel", out)
+
+
+class TestBusinessClock(FrappeTestCase):
+	def test_clock_equals_loop_implementation_for_many_pairs(self):
+		import random
+
+		rnd = random.Random(7)
+		holidays = frozenset({datetime(2026, 11, 11).date()})
+		clock = business_hours.BusinessClock(
+			datetime(2026, 10, 20).date(), datetime(2026, 12, 5).date(), HOURS, holidays
+		)
+		for _ in range(300):
+			a = datetime(2026, 10, 20) + timedelta(minutes=rnd.randint(0, 31 * 24 * 60))
+			b = a + timedelta(minutes=rnd.randint(-60, 9 * 24 * 60))
+			self.assertAlmostEqual(
+				clock.minutes_between(a, b),
+				business_hours.business_minutes_between(a, b, HOURS, holidays),
+				places=6,
+				msg=f"{a} -> {b}",
+			)

@@ -70,12 +70,17 @@ class Context:
 		default_factory=dict
 	)  # Lead -> thời điểm việc gọi lại mở sớm nhất
 	draft_leads: set[str] = field(default_factory=set)
+	clock: business_hours.BusinessClock | None = (
+		None  # có thì tính phút làm việc O(1) cho hàng nghìn Lead (Tổng quan)
+	)
 
 	def business_minutes(self, since: datetime) -> float:
 		"""Phút trong giờ làm việc từ `since` tới bây giờ (đi tắt khi chưa đủ SLA theo đồng hồ treo tường)."""
 		wall = (self.now - since).total_seconds() / 60.0
 		if wall <= 0:
 			return 0.0
+		if self.clock:
+			return self.clock.minutes_between(since, self.now)
 		if wall <= self.sla:
 			return wall  # phút làm việc không thể vượt phút treo tường; đủ để biết chưa quá hạn
 		return business_hours.business_minutes_between(since, self.now, self.hours, self.holidays)

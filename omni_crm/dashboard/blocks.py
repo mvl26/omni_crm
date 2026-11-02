@@ -176,6 +176,13 @@ def _context(q: Query) -> priority.Context:
 
 def _first_response_rows(q: Query, start: datetime, end: datetime) -> list[dict]:
 	"""Lead vào qua kênh (có `omni_first_channel`), tạo trong [start, end), đã có `omni_first_response_at`."""
+	key = f"fr:{start}:{end}"
+	if key not in q.memo:
+		q.memo[key] = _first_response_query(q, start, end)
+	return q.memo[key]
+
+
+def _first_response_query(q: Query, start: datetime, end: datetime) -> list[dict]:
 	return _sql(
 		q,
 		f"""select `tabCRM Lead`.`name`, `tabCRM Lead`.`lead_owner`, `tabCRM Lead`.`creation`,
@@ -187,13 +194,18 @@ def _first_response_rows(q: Query, start: datetime, end: datetime) -> list[dict]
 
 
 def _avg_minutes(q: Query, rows: list[dict]) -> float | None:
+	rows = [r for r in rows if r.omni_first_response_at]
+	if not rows:
+		return None
 	ctx = _context(q)
+	clock = business_hours.BusinessClock(
+		min(get_datetime(r.creation) for r in rows).date(),
+		max(get_datetime(r.omni_first_response_at) for r in rows).date(),
+		ctx.hours,
+		ctx.holidays,
+	)
 	values = [
-		business_hours.business_minutes_between(
-			get_datetime(r.creation), get_datetime(r.omni_first_response_at), ctx.hours, ctx.holidays
-		)
-		for r in rows
-		if r.omni_first_response_at
+		clock.minutes_between(get_datetime(r.creation), get_datetime(r.omni_first_response_at)) for r in rows
 	]
 	return round(sum(values) / len(values), 1) if values else None
 
@@ -304,6 +316,10 @@ def attention(q: Query) -> dict:
 
 	ctx = _context(q)
 	waiting = {r.lead: r for r in waiting_leads(q)}
+	starts = [get_datetime(r.last_in) for r in waiting.values() if r.get("last_in")]
+	starts += list(ctx.callback_leads.values())
+	if starts:  # tính phút làm việc O(1) cho từng Lead thay vì lặp qua từng ngày
+		ctx.clock = business_hours.BusinessClock(min(starts).date(), q.now.date(), ctx.hours, ctx.holidays)
 	extra = set(ctx.callback_leads) | ctx.draft_leads
 	extra -= set(waiting)
 	if extra:  # Lead có việc gọi lại/nháp mở nhưng không có tin chờ: vẫn phải qua quyền xem
@@ -350,14 +366,18 @@ def attention(q: Query) -> dict:
 
 @block("channels", 1)
 def channels(q: Query) -> dict:
-	"""Theo kênh: số khách liên hệ trong kỳ và Lead mới theo kênh đầu vào (Email, Zalo OA; Điện thoại khi có tổng đài)."""
+	"""Theo kênh: số khách liên hệ trong kỳ và Lead mới theo kênh đầu vào (Email, Zalo OA; Điện thoại khi có tổng đài).
+
+	"Liên hệ" = số định danh (khách trên kênh đó) có `last_inbound_at` trong kỳ; kỳ kết thúc ở hiện tại nên đó chính là
+	khách có liên hệ trong kỳ. Đọc bảng định danh (nhỏ) thay vì quét mọi tin vào.
+	"""
 	contacts = {
 		r.channel_type: cint(r.n)
 		for r in _sql(
 			q,
-			f"""select `channel_type`, count(distinct `lead`) as n from `tab{INBOUND}`
-			where `received_at` >= %(s)s and `received_at` < %(e)s and `event_type` in ('message', 'user_info')
-				and `status` != 'Ignored' and `lead` in ({q.lead_filter()}) group by `channel_type`""",
+			f"""select `channel_type`, count(*) as n from `tabOmni Identity`
+			where `last_inbound_at` >= %(s)s and `last_inbound_at` < %(e)s and `lead` in ({q.lead_filter()})
+			group by `channel_type`""",
 			{"s": q.start, "e": q.end},
 		)
 	}
@@ -374,13 +394,6 @@ def channels(q: Query) -> dict:
 	types = ["Email", "Zalo OA"]
 	if q.feats["telephony"]:
 		types.append("Telephony")
-		calls = _sql(
-			q,
-			f"""select count(distinct `lead`) as n from `tabOmni Call` where `started_at` >= %(s)s and `started_at` < %(e)s
-			and `lead` in ({q.lead_filter()})""",
-			{"s": q.start, "e": q.end},
-		)
-		contacts["Telephony"] = cint(calls[0].n)
 	biggest = max([contacts.get(t, 0) for t in types] + [1])
 	return {
 		"rows": [
