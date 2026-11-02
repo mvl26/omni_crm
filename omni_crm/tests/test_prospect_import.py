@@ -634,6 +634,62 @@ class TestImport(ImportCase):
 		self.assertEqual(commit.call_count, 0)
 
 
+class TestTemplateExpectation(ImportCase):
+	"""Số liệu mà Excel đã tính sẵn trong dòng ví dụ của mẫu là kỳ vọng độc lập duy nhất không suy ra từ fit_cases.json."""
+
+	def template_row3(self, sheet: str) -> dict:
+		ws = load_workbook(TEMPLATE, data_only=True)[sheet]
+		codes = [c.value for c in ws[2]]
+		return {code: ws.cell(row=3, column=i + 1).value for i, code in enumerate(codes) if code}
+
+	def test_excel_cached_example_row_matches_crm_fit_after_import(self):
+		org, award = self.template_row3("NhaThau"), self.template_row3("GoiThau")
+		self.assertEqual(
+			(org["calc_hospitals"], org["calc_fit_score"], org["calc_tier"]), (1, 29, "C")
+		)  # Excel tính sẵn
+		path = self.make(
+			orgs=[org], awards=[award], contacts=[]
+		)  # đặt dòng ví dụ xuống dòng 4 (dữ liệu thật)
+		dry = self.run_import(path, dry_run=True)
+		self.assertEqual((dry["reconcile"]["compared"], dry["reconcile"]["mismatches"]), (1, []))
+		self.run_import(path)
+		self.assertEqual(self.last["reconcile"]["mismatches"], [])
+		crm = frappe.db.get_value(
+			ORG,
+			{"omni_tax_id": parsing.EXAMPLE_TAX_ID},
+			[
+				"omni_fit_score",
+				"omni_fit_tier",
+				"omni_hospital_count",
+				"omni_items_for_scoring",
+				"omni_award_value_bn",
+				"omni_active_awards",
+			],
+			as_dict=True,
+		)
+		self.assertEqual(
+			(crm.omni_fit_score, crm.omni_fit_tier, crm.omni_hospital_count), (29, "C", 1)
+		)  # 4 + 10,8 + 4,5 + 10 = 29,3
+		self.assertEqual(
+			(crm.omni_items_for_scoring, float(crm.omni_award_value_bn), crm.omni_active_awards),
+			(180, 4.5, 1),
+		)
+
+	def test_cli_report_text_for_a_log(self):
+		log = importer.import_workbook(
+			str(self.make()), dry_run=True, user="Administrator", now=True, commit=False
+		)
+		text = importer.format_log_report(log)
+		for fragment in (
+			"CHẠY THỬ",
+			"NhaThau: 3 dòng",
+			"Cần xác nhận: 0",
+			"Top 10 trong CRM",
+			"TD303 Nhà thầu A",
+		):
+			self.assertIn(fragment, text)
+
+
 class TestExistingCrmData(ImportCase):
 	def test_org_with_same_name_and_no_tax_id_is_not_given_a_tax_id(self):
 		existing = make_org("TD303 Nhà thầu A")  # từ dữ liệu v1 (V2-02): chưa có MST

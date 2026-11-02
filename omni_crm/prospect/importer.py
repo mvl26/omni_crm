@@ -275,6 +275,50 @@ def _attach_error_file(doc, report: dict) -> str | None:
 	return f.file_url
 
 
+def format_log_report(log: str) -> str:
+	"""Báo cáo chữ của một nhật ký nhập (đọc từ dòng lệnh): số dòng, cần xác nhận, đối chiếu, cảnh báo."""
+	require_runner()
+	doc = frappe.get_doc(LOG, log)
+	summary = json.loads(doc.summary_json or "{}")
+	confirm = json.loads(doc.confirm_json or "[]")
+	rc = json.loads(doc.reconcile_json or "{}")
+	lines = [
+		f"{doc.name} · {doc.status} · {'CHẠY THỬ' if doc.dry_run else 'NHẬP THẬT'} · {doc.duration_seconds or 0}s"
+	]
+	if doc.message:
+		lines.append(f"Thông báo: {doc.message}")
+	for sheet, st in (summary.get("sheets") or {}).items():
+		lines.append(
+			f"{sheet}: {st['rows']} dòng · tạo {st['created']} · cập nhật {st['updated']} · bỏ qua {st['skipped']} · lỗi {st['errors']}"
+		)
+	lines.append(f"Cần xác nhận: {len(confirm)}")
+	for c in confirm:
+		lines.append(f"  - [{c['kind']}] {c['message']}")
+		lines.extend(f"      {json.dumps(r, ensure_ascii=False)}" for r in c.get("records") or [])
+	if rc:
+		lines.append(
+			f"Đối chiếu ({rc.get('date')}, {rc.get('date_source')}): so {rc.get('compared')} nhà thầu, "
+			f"{len(rc.get('mismatches') or [])} chênh lệch, top 10 khớp: {rc.get('top10_match')}, "
+			f"TongHop khớp: {(rc.get('tonghop') or {}).get('match')}"
+		)
+		lines.extend(f"  - chênh: {json.dumps(m, ensure_ascii=False)}" for m in rc.get("mismatches") or [])
+		lines.extend(
+			f"  - tham số lệch: {json.dumps(d, ensure_ascii=False)}" for d in rc.get("param_diffs") or []
+		)
+		lines.append("Top 10 trong CRM:")
+		lines.extend(
+			f"  {r['score']:>3} {r['tier']} {r['tax']} {r['name']}" for r in rc.get("top10_crm") or []
+		)
+	lines.extend(f"Cảnh báo: {w}" for w in (doc.warnings or "").splitlines())
+	lines.append(f"Tệp lỗi: {doc.error_file or '(không có)'}")
+	return "\n".join(lines)
+
+
+def print_log_report(log: str) -> None:
+	"""In báo cáo chữ của một nhật ký ra terminal (bench execute không hiện được xuống dòng của chuỗi trả về)."""
+	print(format_log_report(log))
+
+
 def _reason(e: BaseException) -> str:
 	"""Lý do gọn từ ngoại lệ của Frappe (thông điệp người dùng); dọn hàng đợi thông điệp."""
 	log = list(getattr(frappe.local, "message_log", None) or [])
