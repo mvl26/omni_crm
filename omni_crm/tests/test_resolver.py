@@ -117,13 +117,32 @@ class TestResolverBasics(IdentityTestCase):
 
 	def test_medium_signal_name_similarity_boundary_is_half(self):
 		hai = self.make_lead("Phạm Quốc Nam Hải", mobile=phone(18))
-		# độ giống đúng 0,5 (2 từ chung / 4 từ): gắn
-		r = self.resolve(zalo("U1", f"số em {phone(18)}", {"display_name": "Phạm Quốc Lê Văn"}))
+		# độ giống đúng 0,5 (2 từ chung / 4 từ) và tên riêng hai bên có mặt ở bên kia: gắn
+		r = self.resolve(zalo("U1", f"số em {phone(18)}", {"display_name": "Hải Lê Văn Nam"}))
 		self.assertEqual((r.lead, r.matched_by), (hai, "medium"))
 		# dưới 0,5 (1/4): không gắn
 		other = self.make_lead("Trần Văn Bình An", mobile=phone(19))
 		r = self.resolve(zalo("U2", f"số em {phone(19)}", {"display_name": "Trần Quốc Lê Hùng"}))
 		self.assertNotEqual(r.lead, other)
+
+	def test_medium_signal_same_surname_different_given_name_never_attaches(self):
+		# R1 bổ sung (ADR 0008): chung họ/đệm nhưng tên riêng khác là hai người khác nhau
+		for i, (lead_name, sender) in enumerate(
+			(("Nguyễn Văn Nam", "Nguyễn Văn Hùng"), ("Nguyễn Hùng", "Nguyễn Nam")), start=40
+		):
+			old = self.make_lead(lead_name, mobile=phone(i))
+			r = self.resolve(zalo(f"U{i}", f"liên hệ {phone(i)}", {"display_name": sender}))
+			self.assertNotEqual(r.lead, old, lead_name)
+			self.assertEqual((r.created_lead, r.matched_by), (True, "new"))
+			self.assertEqual(len(self.candidates(old)), 1)
+
+	def test_medium_signal_same_given_name_other_accent_or_order_still_attaches(self):
+		old = self.make_lead("Nguyễn Văn Nam", mobile=phone(44))
+		r = self.resolve(zalo("U44", f"số em {phone(44)}", {"display_name": "nguyen van nam"}))
+		self.assertEqual((r.lead, r.matched_by), (old, "medium"))
+		old2 = self.make_lead("Trần Thị Lan", mobile=phone(45))
+		r = self.resolve(zalo("U45", f"số em {phone(45)}", {"display_name": "Lan Trần Thị"}))
+		self.assertEqual((r.lead, r.matched_by), (old2, "medium"))
 
 	def test_medium_signal_ambiguous_between_two_leads_never_attaches(self):
 		a = self.make_lead("Phạm Quốc Nam", mobile=phone(6))

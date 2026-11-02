@@ -25,6 +25,7 @@ from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.identity import duplicates
 from omni_crm.identity.extract import extract_contacts
 from omni_crm.identity.normalize import (
+	informative_tokens,
 	is_informative_name,
 	is_system_email,
 	name_similarity,
@@ -35,6 +36,7 @@ from omni_crm.pipeline.locks import LockBusy, identity_lock
 from omni_crm.pipeline.retry import TransientError
 from omni_crm.prospect import contacts as prospect_contacts
 from omni_crm.prospect.normalize import (
+	SOCIAL_DOMAINS,
 	InvalidTaxId,
 	corporate_domain,
 	normalize_tax_id,
@@ -73,6 +75,9 @@ class Signals:
 	strong_emails: list[str] = field(default_factory=list)
 	medium_phones: list[str] = field(default_factory=list)
 	medium_emails: list[str] = field(default_factory=list)
+	email_channel_emails: list[str] = field(
+		default_factory=list
+	)  # chỉ email người gửi của kênh Email (tin được tên miền)
 	tax_ids: list[str] = field(
 		default_factory=list
 	)  # MST khách tự khai trong hồ sơ kênh (không trích từ văn bản)
@@ -131,6 +136,7 @@ def collect_signals(msgs: list[Any]) -> Signals:
 			email = normalize_email(m.external_sender_id)
 			if email and not is_system_email(email):
 				_add(sig.strong_emails, email)
+				_add(sig.email_channel_emails, email)
 		# Kênh cung cấp SĐT/email (vd form thông tin Zalo, event_type = user_info): mạnh.
 		_add(sig.strong_phones, normalize_phone(profile.get("phone") or profile.get("mobile")))
 		email = normalize_email(profile.get("email"))
@@ -299,12 +305,17 @@ def _name_conflict(name_a: str | None, name_b: str | None) -> bool:
 
 
 def _names_compatible(name_a: str | None, name_b: str | None) -> bool:
-	"""R1: cả hai tên đủ thông tin (>= 2 từ riêng) và độ giống >= 0,5 — điều kiện để gắn bằng tín hiệu trung bình."""
-	return (
-		is_informative_name(name_a)
-		and is_informative_name(name_b)
-		and name_similarity(name_a, name_b) >= NAME_ATTACH_FROM
-	)
+	"""R1: cả hai tên đủ thông tin (>= 2 từ riêng), độ giống >= 0,5 VÀ tên riêng (từ cuối) của mỗi bên có mặt ở bên kia.
+
+	Điều kiện tên riêng chặn "Nguyễn Văn Nam" ~ "Nguyễn Văn Hùng" (chung họ và đệm); vẫn cho đổi thứ tự họ/tên
+	("Phạm Quốc Nam" ~ "Quốc Nam Phạm") và khác dấu.
+	"""
+	if not (is_informative_name(name_a) and is_informative_name(name_b)):
+		return False
+	ta, tb = informative_tokens(name_a), informative_tokens(name_b)
+	if ta[-1] not in tb or tb[-1] not in ta:
+		return False
+	return name_similarity(name_a, name_b) >= NAME_ATTACH_FROM
 
 
 def _flag_name_duplicates(lead: str) -> list[str]:
@@ -380,7 +391,8 @@ def _orgs_by_domain(emails: list[str]) -> list[str]:
 		)
 		for r in rows:  # LIKE chỉ lọc thô; so khớp chính xác tên miền ở đây
 			mail_domain = (r.omni_company_email or "").rsplit("@", 1)[-1].strip().lower()
-			if website_domain(r.website) == domain or mail_domain == domain:
+			site = website_domain(r.website)
+			if (site == domain and site not in SOCIAL_DOMAINS) or mail_domain == domain:
 				found.add(r.name)
 	return sorted(found)
 
@@ -394,7 +406,10 @@ def match_organization(sig: Signals) -> OrgMatch:
 	steps = (
 		("tax", lambda: _orgs_by_tax_id(sig.tax_ids)),
 		("contact", lambda: _orgs_by_contacts(sig.strong_phones, sig.strong_emails)),
-		("domain", lambda: _orgs_by_domain(sig.strong_emails)),
+		(
+			"domain",
+			lambda: _orgs_by_domain(sig.email_channel_emails),
+		),  # email tự khai ở kênh khác không đáng tin
 	)
 	for via, finder in steps:
 		orgs = finder()

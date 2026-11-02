@@ -199,6 +199,33 @@ class TestDomainMatch(OrgResolverCase):
 		self.assertEqual((r.matched_by, r.created_lead), ("new", True))
 		self.assertIsNone(frappe.db.get_value("CRM Lead", r.lead, "organization"))
 
+	def test_email_given_on_non_email_channel_is_not_used_for_domain(self):
+		org = make_org("TD213R Công ty P", "0100213428", website=DOMAIN)
+		self.org_lead(org)
+		r = self.resolve(
+			zalo(
+				"U1",
+				"hi",
+				{"display_name": "Phạm Thu Hà", "email": f"ai-do@{DOMAIN}"},
+				event_type="user_info",
+			)
+		)
+		self.assertEqual((r.matched_by, r.created_lead), ("new", True))
+		r = self.resolve(make_msg("Telephony", "0903105795", "gọi", {"email": f"x@{DOMAIN}"}))
+		self.assertEqual(r.matched_by, "new")
+
+	def test_social_media_website_is_never_a_domain(self):
+		org = make_org("TD213R Công ty Q", "0100213429", website="https://www.facebook.com/congtyq")
+		self.org_lead(org)
+		r = self.resolve(make_msg("Email", "ai-do@facebook.com", "Chào"))
+		self.assertEqual(r.matched_by, "new")
+
+	def test_vn_isp_and_public_mail_domains_are_free(self):
+		from omni_crm.prospect.normalize import corporate_domain
+
+		for d in ("fpt.vn", "vnpt.vn", "viettel.com.vn"):
+			self.assertIsNone(corporate_domain(f"a@{d}"), d)
+
 	def test_domain_substring_is_not_a_match(self):
 		org = make_org("TD213R Công ty M", "0100213425", website=f"not-{DOMAIN}")
 		self.org_lead(org)
