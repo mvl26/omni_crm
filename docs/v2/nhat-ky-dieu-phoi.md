@@ -24,6 +24,8 @@ Mỗi prompt v2 một mục: ngày, nhánh, số test trước/sau, quyết đ�
 - **Môi trường:** site `omni.test`; Redis tạm cổng 11998 (đã tắt); ruff 0.8.1; `bench migrate` đã chạy (Custom Field mới, 2 DocType mới, 2 patch đăng ký).
 - **Quyết định đã dùng (từ anh):** ĐQ-4 (chỉ liên kết khi đúng một Organization), ĐQ-5 (chỉ ADR 0010, không đổi `bot/scoring.py`), ĐQ-8 (CRM Lost Reason), ĐQ-11 (không dùng đồng bộ Facebook của crm), ADR 0008 chấp nhận, Q11 giữ, D3-04 bỏ qua.
 - **Quyết định nhỏ do agent đưa ra (anh có thể đảo):** xem ADR 0011 và docs/12 mục D (danh sách tên miền miễn phí, Organization tên = tên miền, trường kỹ thuật Contact, patch liên kết KHÔNG đăng ký trong `patches.txt`, mặc định dry run).
-- **Điểm dừng:** KHÔNG đổi trạng thái Lead/Deal nào; bảng ánh xạ chỉ in. Patch liên kết chưa chạy thật ở đâu cả. Dry run mới chạy trên `omni.test` và dữ liệu tổng hợp; **chưa chạy trên staging thật**.
+- **Điểm dừng:** KHÔNG đổi trạng thái Lead/Deal nào; bảng ánh xạ chỉ in. Patch liên kết chỉ chạy thật trên `omni.test`, bên trong test, với dữ liệu tổng hợp (các Lead còn lại bị bỏ qua vì không có thông tin tổ chức); chưa chạy thật trên staging/production và không đăng ký trong `patches.txt`. Dry run mới chạy trên `omni.test` và dữ liệu tổng hợp; **chưa chạy trên staging thật**.
 - **Test cũ phải đổi:** `test_resolver::test_medium_signal_with_placeholder_sender_name_attaches_per_spec` -> `..._does_not_attach_r1` (mâu thuẫn trực tiếp với R1).
-- **Gộp commit (đã biết):** commit mô hình dữ liệu gồm Custom Field, hook, Bid Award, Alias, fit, công tắc và quyền.
+- **Test trước/sau:** 1087 -> **1202 test, 0 lỗi, 0 bỏ qua** (+115). `bench migrate` sạch.
+- **Lưu ý môi trường:** `omni.test` nay ở lược đồ v2-02 (2 DocType mới, Custom Field Organization/Contact, trạng thái B2B + lý do mất đã chèn, 2 patch trong Patch Log); ai chạy lại `develop` trên site này nên `migrate` lại.
+- **Gộp commit (đã biết):** commit ADR còn chứa phần ép kiểu `load_params` và test của nó; commit mô hình dữ liệu gồm Custom Field, hook, Bid Award, Alias, fit, công tắc và quyền.
