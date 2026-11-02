@@ -871,6 +871,13 @@ class Importer:
 			field = meta.get_field("omni_ad_platform")
 			if AD_PLATFORM in (field.options or "").split("\n"):
 				values["omni_ad_platform"] = AD_PLATFORM
+		if meta.has_field("omni_campaign") and frappe.db.exists("DocType", "Omni Campaign"):
+			from omni_crm.crm_bridge import campaign as campaign_bridge
+
+			camp = campaign_bridge.ensure_proactive_campaign(
+				frappe.utils.now_datetime()
+			)  # V2-05: "Liên hệ chủ động – <tháng>"
+			values["omni_campaign"] = values["omni_last_campaign"] = camp
 		doc = frappe.get_doc(values)
 		doc.flags.ignore_permissions = True
 		doc.insert()
