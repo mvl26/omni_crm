@@ -636,6 +636,7 @@ def save_care_log(
 	if not flags.dashboard_enabled():
 		frappe.throw(_("Dashboard CSKH đang tắt"))
 	care_log.validate_outcome(outcome, next_action, next_due)
+	at = care_log.clamp_contact_time(lead, at)  # V2-05: không để `at` làm đẹp "Phản hồi lần đầu"
 	if log:
 		log_lead = frappe.db.get_value(LOG, log, "lead")
 		if not log_lead or (lead_bridge.follow_merged(log_lead) or log_lead) != lead:

@@ -283,6 +283,19 @@ def _advance_stage(lead: str) -> bool:
 	return True
 
 
+def clamp_contact_time(lead: str, at: Any) -> datetime | None:
+	"""Kẹp thời điểm tiếp xúc `at` vào [thời điểm tạo Lead, bây giờ]; None/rỗng giữ None (dùng "bây giờ")."""
+	if not at:
+		return None
+	lead = lead_bridge.follow_merged(lead) or lead
+	when = get_datetime(at)
+	now = now_datetime()
+	created = frappe.db.get_value("CRM Lead", lead, "creation")
+	if created and when < get_datetime(created):
+		return get_datetime(created)
+	return min(when, now)
+
+
 def save_outcome(
 	log: str,
 	outcome: str,
