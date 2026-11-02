@@ -9,6 +9,7 @@ CHƯA THỬ VỚI NỀN TẢNG THẬT: tên trường theo tài liệu Meta (ki�
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 
@@ -25,6 +26,7 @@ RETRIES = 2
 LEAD_FIELDS = "id,created_time,ad_id,form_id,field_data"
 PAGE_LIMIT = 100
 MAX_PAGES = 10
+_SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,100}")
 
 
 def graph_version() -> str:
@@ -33,6 +35,13 @@ def graph_version() -> str:
 
 	version = str(frappe.conf.get("omni_meta_graph_version") or DEFAULT_VERSION)
 	return version if re.fullmatch(r"v\d{1,3}\.\d{1,2}", version) else DEFAULT_VERSION
+
+
+def _check_id(value: str) -> str:
+	"""Mã lead/quảng cáo/biểu mẫu lấy từ payload chỉ gồm chữ, số, `_`, `-`: không cho `/`, `..`, `?`, `#` đổi đường dẫn Graph."""
+	if not _SAFE_ID.fullmatch(str(value or "")):
+		raise MetaError(PERMANENT, _("Mã Meta không hợp lệ"))
+	return str(value)
 
 
 class MetaClient:
@@ -78,6 +87,7 @@ class MetaClient:
 
 	def get_lead(self, leadgen_id: str) -> dict[str, Any]:
 		"""Lead theo leadgen_id: {id, created_time, ad_id, form_id, field_data, custom_disclaimer_responses?}."""
+		leadgen_id = _check_id(leadgen_id)
 		lead = self._get(leadgen_id, {"fields": LEAD_FIELDS})
 		try:  # ô đồng ý tùy chỉnh không nằm trong field_data (tài liệu Meta): lấy riêng, lỗi không làm hỏng lead
 			extra = self._get(leadgen_id, {"fields": "custom_disclaimer_responses"})
@@ -90,6 +100,8 @@ class MetaClient:
 		"""{campaign_id, campaign_name, adset_id, adset_name, ad_name}; cache theo ngày, lỗi thì trả {}."""
 		if not ad_id:
 			return {}
+		if not _SAFE_ID.fullmatch(str(ad_id)):
+			return {}  # mã quảng cáo lạ: bỏ qua thông tin quảng cáo, không làm hỏng lead
 		cache = frappe.cache()
 		key = cache.make_key(f"omni:meta:ad:{ad_id}:{frappe.utils.today()}")
 		hit = cache.get(key)
@@ -118,7 +130,7 @@ class MetaClient:
 				[{"field": "time_created", "operator": "GREATER_THAN", "value": int(since_ts)}]
 			)
 		leads: list[dict[str, Any]] = []
-		path = f"{form_id}/leads"
+		path = f"{_check_id(form_id)}/leads"
 		for _page in range(MAX_PAGES):
 			data = self._get(path, params)
 			leads += [x for x in data.get("data") or [] if isinstance(x, dict)]

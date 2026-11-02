@@ -13,6 +13,7 @@ Dữ liệu từ biểu mẫu là DỮ LIỆU: không nội dung nào được d
 from __future__ import annotations
 
 import json
+import re
 from contextlib import contextmanager
 from typing import Any
 
@@ -39,6 +40,7 @@ SOURCE_FIELDS = ("omni_ad_id", "omni_adset_id", "omni_form_id", "omni_click_id",
 DATA_SOURCE = "Biểu mẫu quảng cáo"
 CONSENT_METHOD = "Biểu mẫu {0} «{1}»"
 PROSPECT_STATUS = "Tiềm năng"
+DATA_LEN = 140
 
 
 # --- tra cứu ------------------------------------------------------------------------------------------------------
@@ -204,6 +206,16 @@ def resolve_campaign(form: dict, form_doc) -> str | None:
 	return form_doc.campaign if form_doc and form_doc.campaign else None
 
 
+def _data(value: Any) -> str | None:
+	"""Giá trị cho trường Data (varchar 140) của Lead: cắt 140 ký tự, vì UTM/click id từ người lạ có thể dài hơn (lỗi "Data too long" làm hỏng cả lô)."""
+	return (str(value or "").strip()[:DATA_LEN]) or None
+
+
+def _plain_name(value: Any) -> str:
+	"""Tên do khách tự khai dùng làm tên Organization/trường Lead: bỏ `<` `>` (Frappe từ chối tên chứa chúng), gọn khoảng trắng, tối đa 140."""
+	return re.sub(r"\s+", " ", re.sub(r"[<>]", " ", str(value or ""))).strip()[:DATA_LEN]
+
+
 def _attribution_values(form: dict, campaign: str | None, row: Any, created: bool) -> tuple[dict, str | None]:
 	"""(giá trị cần ghi vào Lead, tên chiến dịch cũ nếu khách quay lại qua chiến dịch KHÁC)."""
 	values: dict[str, Any] = {}
@@ -215,14 +227,14 @@ def _attribution_values(form: dict, campaign: str | None, row: Any, created: boo
 			values["omni_campaign"] = campaign
 		utm = form.get("utm") or {}
 		values.update(
-			omni_ad_id=form.get("ad_id") or None,
-			omni_adset_id=form.get("adset_id") or None,
-			omni_form_id=form.get("form_id") or None,
-			omni_click_id=form.get("click_id") or None,
+			omni_ad_id=_data(form.get("ad_id")),
+			omni_adset_id=_data(form.get("adset_id")),
+			omni_form_id=_data(form.get("form_id")),
+			omni_click_id=_data(form.get("click_id")),
 			omni_landing_page=(form.get("landing_page") or None),
 		)
 		for key in ("source", "medium", "campaign", "content", "term"):
-			values[f"omni_utm_{key}"] = utm.get(f"utm_{key}") or None
+			values[f"omni_utm_{key}"] = _data(utm.get(f"utm_{key}"))
 	elif campaign and row.get("omni_campaign") and campaign != row.get("omni_campaign"):
 		returned_from = row.get("omni_campaign")
 	if campaign:
@@ -236,10 +248,13 @@ def _attribution_values(form: dict, campaign: str | None, row: Any, created: boo
 def _fill_lead(lead: str, mapped: dict, row: Any, created: bool) -> dict:
 	"""Điền (không ghi đè) tên đơn vị/chức danh; Lead mới còn được đặt tên từ họ tên biểu mẫu."""
 	values: dict[str, Any] = {}
-	if mapped.get("job_title") and not row.get("job_title"):
-		values["job_title"] = mapped["job_title"][:140]
-	if mapped.get("company_name") and not row.get("organization"):
-		values["organization"] = mapped["company_name"][:140]
+	if _plain_name(mapped.get("job_title")) and not row.get("job_title"):
+		values["job_title"] = _plain_name(mapped["job_title"])
+	company = _plain_name(mapped.get("company_name"))
+	# Tên đơn vị người lạ khai trùng tên một Organization THẬT: không ghi vào `organization` của Lead (trường này là khóa nối
+	# tới Organization; ghi vào sẽ gắn nhầm Lead vào nhà thầu khác). Muốn gắn phải qua MST (khớp đúng một, resolver).
+	if company and not row.get("organization") and not frappe.db.exists(ORG, company):
+		values["organization"] = company
 	return values
 
 
@@ -259,7 +274,7 @@ def _ensure_organization(lead: str, mapped: dict, row: Any, matched_by: str) -> 
 	existing = frappe.db.get_value(ORG, {"omni_tax_id": tax}, "name")
 	if existing:
 		return existing
-	company = (mapped.get("company_name") or "").strip()[:140] or f"MST {tax}"
+	company = _plain_name(mapped.get("company_name")) or f"MST {tax}"
 	if frappe.db.exists(ORG, company):
 		company = f"{company} ({tax})"[:140]
 	doc = frappe.get_doc(

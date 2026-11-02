@@ -11,6 +11,7 @@ from omni_crm.api import webhooks
 from omni_crm.channels.meta_leads import adapter as meta_adapter
 from omni_crm.channels.meta_leads import reconcile
 from omni_crm.channels.meta_leads.client import MetaClient
+from omni_crm.channels.meta_leads.errors import MetaError
 from omni_crm.tests.ads_helpers import (
 	APP_SECRET,
 	PAGE_TOKEN,
@@ -485,3 +486,14 @@ class TestHostileInput(MetaCase):
 		self.assertNotIn("<", frappe.db.get_value(LEAD, lead, "first_name"))
 		content = frappe.get_all("Communication", filters={"reference_name": lead}, pluck="content")[0]
 		self.assertNotIn("<script>", content)
+
+
+class TestGraphPathInjection(MetaCase):
+	def test_ids_with_path_or_query_characters_never_reach_graph(self):
+		client = MetaClient(self.channel.name)
+		calls = []
+		with mock.patch("requests.get", side_effect=graph_router(calls=calls)):
+			for bad in ("../me/accounts?access_token=x#", "a/b", "a?b=1", "a b", "", "..", "x" * 200):
+				with self.assertRaises(MetaError, msg=bad):
+					client.get_lead(bad)
+		self.assertEqual(calls, [])

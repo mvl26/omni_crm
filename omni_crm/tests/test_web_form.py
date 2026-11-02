@@ -317,3 +317,45 @@ class TestWorker(WebCase):
 		frappe.db.commit()
 		row, lead = self.process()
 		self.assertEqual((row.status, lead), ("Done", None))
+
+
+class TestPublicInputHardening(WebCase):
+	"""Review V2-05: giá trị dài/ký tự lạ từ người lạ không được làm hỏng lô, và tên đơn vị không gắn nhầm vào Organization thật."""
+
+	def test_long_utm_and_click_id_are_clipped_not_fatal(self):
+		row, lead = self.process(
+			payload(utm_source="s" * 200, utm_content="c" * 200, gclid="g" * 200, utm_campaign="m" * 200)
+		)
+		self.assertEqual(row.status, "Done", row.last_error)
+		d = frappe.get_doc(LEAD, lead)
+		self.assertEqual((len(d.omni_utm_source), len(d.omni_utm_content), len(d.omni_click_id)), (140,) * 3)
+
+	def test_angle_brackets_in_company_name_do_not_break_the_batch(self):
+		row, lead = self.process(
+			payload(company_name=f"<img src=x onerror=alert(1)> {PREFIX} Công ty", tax_id="0505050597")
+		)
+		self.assertEqual(row.status, "Done", row.last_error)
+		org = frappe.db.get_value(LEAD, lead, "organization")
+		self.assertTrue(org)
+		self.assertNotIn("<", org)
+		self.assertNotIn(">", org)
+
+	def test_company_name_equal_to_real_organization_does_not_attach_lead(self):
+		org = frappe.get_doc(
+			{
+				"doctype": "CRM Organization",
+				"organization_name": f"{PREFIX} Nhà thầu thật",
+				"omni_tax_id": "0505050599",
+				"omni_verified": 1,
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+		_row, lead = self.process(payload(tax_id="", company_name=org.name))
+		self.assertNotEqual(frappe.db.get_value(LEAD, lead, "organization"), org.name)
+		self.assertNotIn(lead, resolver_organization_leads(org.name))
+
+
+def resolver_organization_leads(org):
+	from omni_crm.identity import resolver
+
+	return resolver.organization_leads(org)
