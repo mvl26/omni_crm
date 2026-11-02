@@ -264,8 +264,13 @@ def cleanup() -> None:
 	frappe.db.delete("Notification Log", {"document_name": ["in", refs]})
 	n["crm_notification"] = frappe.db.count("CRM Notification", {"reference_name": ["in", refs]})
 	frappe.db.delete("CRM Notification", {"reference_name": ["in", refs]})
-	for dt in ("Omni Care Log",):
+	for dt in (
+		"Omni Care Log",
+		"Omni Bot Draft",
+		"Omni Bot Run",
+	):  # tải Zalo có bot Draft/Handoff (FakeAIClient)
 		frappe.db.delete(dt, {"lead": ["in", ll]})
+	n["bot_runs_and_drafts_deleted_by_lead"] = True
 	frappe.db.delete("Communication Link", {"link_doctype": LEAD, "link_name": ["in", ll]})
 	frappe.db.delete("Omni Inbound Message", {"channel": ["in", chs or [""]]})
 	frappe.db.delete("Omni Outbound Message", {"channel": ["in", chs or [""]]})
