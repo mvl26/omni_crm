@@ -9,7 +9,7 @@ import uuid
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import cint, now_datetime
 
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.ingest import gateway
@@ -18,6 +18,8 @@ from omni_crm.ingest.events import InboundEvent
 MAX_BODY_BYTES = 1024 * 1024  # 1 MB
 LAST_SUCCESS_TTL = 60  # giây: tối đa 1 lần ghi last_success_at mỗi phút mỗi kênh
 ERROR_LOG_TTL = 60  # giây: chống tràn Error Log khi bị gọi sai liên tục
+LOCK_WAIT_CONF = "omni_webhook_lock_wait_seconds"  # site_config; docs/10 mục 5: webhook không treo quá 5 giây
+DEFAULT_LOCK_WAIT = 5
 
 
 def _respond(status: int, message: str, **extra) -> dict:
@@ -46,10 +48,34 @@ def _touch_last_success(channel_name: str) -> None:
 	key = f"omni:last_success:{channel_name}"
 	if cache.get_value(key, expires=True):
 		return
-	cache.set_value(key, 1, expires_in_sec=LAST_SUCCESS_TTL)
 	frappe.db.set_value(
 		"Omni Channel", channel_name, "last_success_at", now_datetime(), update_modified=False
 	)
+	cache.set_value(
+		key, 1, expires_in_sec=LAST_SUCCESS_TTL
+	)  # đặt sau khi ghi được: ghi lỗi thì lần sau thử lại
+
+
+def _set_lock_wait(seconds: int) -> int | None:
+	"""Đặt `innodb_lock_wait_timeout` của phiên (mặc định MariaDB 50 giây); trả giá trị cũ để khôi phục, None nếu không đặt được."""
+	try:
+		old = frappe.db.sql("select @@session.innodb_lock_wait_timeout")[0][0]
+		frappe.db.sql(f"set session innodb_lock_wait_timeout = {int(seconds)}")
+		return int(old)
+	except Exception:
+		return None
+
+
+def _is_lock_trouble(e: BaseException) -> bool:
+	"""Hết hạn chờ khóa hoặc deadlock của DB: tạm thời, nhà cung cấp nên gửi lại."""
+	if isinstance(
+		e, frappe.QueryTimeoutError | frappe.QueryDeadlockError
+	):  # Frappe bọc lỗi 1205/1213 của MariaDB
+		return True
+	try:
+		return bool(frappe.db.is_timedout(e) or frappe.db.is_deadlocked(e))
+	except Exception:
+		return False
 
 
 def _read_body(request) -> bytes:
@@ -123,19 +149,38 @@ def _handle_webhook(channel_type: str) -> dict:
 		_log_short("parse_that_bai", channel_doc.name, len(raw))
 		events = [_unparsed_event(channel_doc, raw)]
 
-	# 6. lưu từng sự kiện
-	saved = 0
-	saved_real = 0  # sự kiện thật được lưu (không tính trùng, không tính unparsed)
-	for event in events:
-		if gateway.save_inbound(event):
-			saved += 1
-			if event.event_type != "unparsed":
-				saved_real += 1
-
-	# 7. ghi dấu thành công (chỉ khi có sự kiện thật được lưu), commit, trả 200
-	if saved_real:
-		_touch_last_success(channel_doc.name)
-	frappe.db.commit()
+	# 6-7. lưu từng sự kiện rồi commit NGAY để tin đã lưu bền; ghi dấu thành công (chỉ để giám sát) làm sau, riêng.
+	# Chờ khóa DB tối đa vài giây (V2-01, 03.10): lưu tin hết hạn chờ thì rollback và trả 503 để nhà cung cấp gửi lại
+	# (chưa xác nhận nhà cung cấp có gửi lại khi 5xx: docs/12 mục B); ghi dấu hết hạn chờ thì vẫn trả 200, tin đã lưu.
+	previous_wait = _set_lock_wait(cint(frappe.conf.get(LOCK_WAIT_CONF)) or DEFAULT_LOCK_WAIT)
+	try:
+		saved = 0
+		saved_real = 0  # sự kiện thật được lưu (không tính trùng, không tính unparsed)
+		try:
+			for event in events:
+				if gateway.save_inbound(event):
+					saved += 1
+					if event.event_type != "unparsed":
+						saved_real += 1
+			frappe.db.commit()
+		except Exception as e:
+			if not _is_lock_trouble(e):
+				raise
+			frappe.db.rollback()
+			_log_short("cho_khoa_db_qua_han", channel_doc.name, len(raw))
+			return _respond(503, _("Hệ thống đang bận, vui lòng gửi lại sau"))
+		if saved_real:  # chỉ ghi dấu khi có sự kiện thật được lưu
+			try:
+				_touch_last_success(channel_doc.name)
+				frappe.db.commit()
+			except Exception as e:
+				if not _is_lock_trouble(e):
+					raise
+				frappe.db.rollback()  # chỉ bỏ dấu giám sát; tin đã commit ở trên
+				_log_short("cho_khoa_db_ghi_dau_thanh_cong", channel_doc.name, len(raw))
+	finally:
+		if previous_wait is not None:
+			_set_lock_wait(previous_wait)
 	return _respond(200, "ok", received=len(events), saved=saved)
 
 
