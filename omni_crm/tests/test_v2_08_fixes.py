@@ -1,12 +1,17 @@
 # ruff: noqa: RUF001
 """V2-08: hồi quy cho các việc sửa nhỏ tồn từ review (chốt chặn gập ký tự, kho tri thức theo nhóm, MST/SĐT, dọn thông báo)."""
 
+from unittest import mock
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from omni_crm.bot import analyze, guards, knowledge
 from omni_crm.tests.bridge_helpers import BridgeTestCase
+from omni_crm.api import inbox
 from omni_crm.tests.test_ads_pipeline import WebCase
+from omni_crm.tests.test_inbox import SALE1
+from omni_crm.tests.test_outbound import OUT, OutboundTestCase
 
 GROUP, ITEM = "Omni Question Group", "Omni Knowledge Item"
 
@@ -199,3 +204,46 @@ class TestCampaignBlockForSalesUser(WebCase):
 		q = blocks.make_query("7d", "mine", SALE)
 		rows = blocks.campaigns(q)["rows"]  # trước đây: OperationalError 1052 "Column 'name' is ambiguous"
 		self.assertEqual(sum(r["leads"] for r in rows), 1)
+
+
+class TestSendReplyBlockedForRefusedPerson(OutboundTestCase):
+	"""Reviewer V2-08 (N-2): `inbox.send_reply` không gửi cho người đã từ chối nhận liên hệ / đã bị xóa dữ liệu."""
+
+	EMAIL = "td808.tuchoi@example.com"
+
+	def _link_contact(self, consent):
+		self.contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "TD808 Tuchoi",
+				"omni_info_source": "TD808 test",
+				"omni_consent": consent,
+				"email_ids": [{"email_id": self.EMAIL, "is_primary": 1}],
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(self._drop_contact)
+		frappe.db.set_value("CRM Lead", self.lead1, "email", self.EMAIL)
+		frappe.db.commit()
+
+	def _drop_contact(self):
+		frappe.delete_doc("Contact", self.contact.name, force=True, ignore_permissions=True)
+		frappe.db.commit()
+
+	def _reply(self):
+		with mock.patch("frappe.enqueue"):
+			return inbox.send_reply(self.lead1, "Zalo OA", "Dạ em chào anh")
+
+	def test_refused_contact_blocks_the_reply_with_vietnamese_error_and_queues_nothing(self):
+		self._link_contact("Từ chối")
+		self.sandbox(True)
+		self.as_user(SALE1)
+		with self.assertRaises(frappe.ValidationError) as cm:
+			self._reply()
+		self.assertIn("từ chối nhận liên hệ", str(cm.exception))
+		self.assertFalse(frappe.db.exists(OUT, {"lead": self.lead1}))
+
+	def test_contact_that_did_not_refuse_can_still_be_answered(self):
+		self._link_contact("Chưa hỏi")
+		self.sandbox(True)
+		self.as_user(SALE1)
+		self.assertEqual(self._reply()["status"], "Queued")
