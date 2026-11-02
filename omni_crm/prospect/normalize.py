@@ -38,6 +38,40 @@ FREE_EMAIL_DOMAINS = frozenset(
 		"hcm.vnn.vn",
 		"email.vn",
 		"mail.ru",
+		"fpt.vn",
+		"vnpt.vn",
+		"viettel.com.vn",
+		"viettel.vn",
+		"yahoo.vn",
+		"live.com.vn",
+		"hotmail.co.uk",
+		"gmail.com.vn",
+		"zing.vn",
+		"mail.vn",
+	}
+)
+
+# Website của Organization là mạng xã hội/nền tảng chung: không phải tên miền công ty, không dùng để khớp email.
+SOCIAL_DOMAINS = frozenset(
+	{
+		"facebook.com",
+		"fb.com",
+		"m.facebook.com",
+		"zalo.me",
+		"chat.zalo.me",
+		"linkedin.com",
+		"youtube.com",
+		"youtu.be",
+		"tiktok.com",
+		"twitter.com",
+		"x.com",
+		"instagram.com",
+		"shopee.vn",
+		"lazada.vn",
+		"sites.google.com",
+		"wordpress.com",
+		"blogspot.com",
+		"wixsite.com",
 	}
 )
 
