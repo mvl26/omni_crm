@@ -1,0 +1,23 @@
+item_id,question_group,question,answer,source,owner_email
+KB-91001,Giờ làm việc,"Bên mình làm việc mấy giờ?
+Giờ mở cửa của công ty là mấy giờ?",Miyano làm việc từ 8 giờ đến 17 giờ 30 các ngày từ thứ Hai đến thứ Sáu.,Tổng hợp thử nghiệm,
+KB-91002,Địa chỉ và liên hệ,"Văn phòng Miyano ở đâu?
+Cho xin địa chỉ công ty",Văn phòng Miyano đặt tại số 1 đường Ví Dụ quận Mẫu Hà Nội (địa chỉ thử nghiệm). Email liên hệ là lienhe@example.com.,Tổng hợp thử nghiệm,
+KB-91003,Cách vận hành dịch vụ,"Dịch vụ vận hành hợp đồng làm những việc gì?
+Bên mình hỗ trợ nhà thầu cụ thể những gì?",Miyano tiếp nhận đơn gọi hàng của bệnh viện và mua hàng từ nhà cung cấp. Miyano thanh toán nhà cung cấp và quản lý công nợ thay cho nhà thầu theo hợp đồng đã ký.,Tổng hợp thử nghiệm,
+KB-91004,Cách vận hành dịch vụ,"Khi bệnh viện gọi hàng thì bên mình xử lý thế nào?
+Quy trình nhận đơn của bệnh viện ra sao?",Khi bệnh viện gọi hàng nhà thầu chuyển đơn cho Miyano. Miyano kiểm tra đơn rồi đặt hàng với nhà cung cấp và theo dõi giao hàng đến bệnh viện.,Tổng hợp thử nghiệm,
+KB-91005,Cách vận hành dịch vụ,"Công nợ được quản lý ra sao?
+Bên mình theo dõi công nợ với bệnh viện thế nào?",Miyano theo dõi công nợ với bệnh viện và nhà cung cấp trên một hệ thống. Miyano gửi nhà thầu báo cáo công nợ để đối chiếu.,Tổng hợp thử nghiệm,
+KB-91006,Gói dịch vụ,"Gói Điều phối gồm những gì?
+Gói Điều phối làm những việc nào?",Gói Điều phối gồm tiếp nhận đơn gọi hàng và điều phối nhà cung cấp. Gói này cũng theo dõi giao hàng. Nhân viên tư vấn sẽ gửi nội dung chi tiết khi anh/chị yêu cầu.,Tổng hợp thử nghiệm,
+KB-91007,Gói dịch vụ,"Gói Trọn gói khác Gói Điều phối thế nào?
+Gói Trọn gói có những gì?",Gói Trọn gói gồm toàn bộ phạm vi của Gói Điều phối. Gói này bổ sung mua hàng và thanh toán nhà cung cấp. Gói này cũng bổ sung quản lý công nợ.,Tổng hợp thử nghiệm,
+KB-91008,Thanh toán back-to-back,"Thanh toán back-to-back nghĩa là gì?
+Back-to-back là thế nào?",Thanh toán back-to-back nghĩa là Miyano thanh toán cho nhà cung cấp theo điều khoản của hợp đồng giữa nhà thầu và bệnh viện.,Tổng hợp thử nghiệm,
+KB-91009,Thanh toán back-to-back,"Bên em có phải ứng trước vốn không?
+Nhà thầu có phải bỏ vốn trước cho nhà cung cấp không?",Với thanh toán back-to-back nhà thầu không cần ứng trước vốn cho nhà cung cấp. Việc thanh toán diễn ra theo điều khoản đã thỏa thuận trong hợp đồng dịch vụ.,Tổng hợp thử nghiệm,
+KB-91010,Kết quả triển khai,"Bên mình đã làm cho ai chưa?
+Có kết quả triển khai cụ thể không?",Miyano đang vận hành hợp đồng cung ứng vật tư y tế cho một số nhà thầu tại các bệnh viện. Nhân viên sẽ gửi case study đã được duyệt công bố khi anh/chị yêu cầu.,Tổng hợp thử nghiệm,
+KB-91011,Hồ sơ năng lực,"Cho xin hồ sơ năng lực
+Gửi giúp hồ sơ năng lực của Miyano",Hồ sơ năng lực của Miyano do nhân viên kinh doanh gửi qua email khi anh/chị để lại thông tin liên hệ.,Tổng hợp thử nghiệm,
