@@ -259,23 +259,29 @@ def _folded(text: str | None) -> str:
 
 
 _SEP = r"[-_.·•*~'\u2019`|/\\]+"
+_INVISIBLE = re.compile(
+	"[\u200b-\u200f\u2060\ufeff\u00ad]"
+)  # ký tự không hiển thị chèn giữa chữ (V2-08 review)
 
 
 def _folded_variants(text: str | None) -> str:
 	"""Văn bản đã gập ở nhiều dạng nối bằng " | ": gốc, ký tự chèn giữa chữ thành khoảng trắng / bị xóa, chữ cách từng ký tự được nối lại.
 
-	Để "đàm-phán", "p h í dịch vụ", "phí d.ịch vụ" không né được so khớp từ khóa (V2-08).
+	Để "đàm-phán", "p h í dịch vụ", "phí d.ịch vụ", "đàm" + ký tự rộng bằng không + "phán" không né được so khớp từ khóa (V2-08).
 	"""
-	base = _folded(text)
-	spaced = re.sub(rf"(?<=[a-z]){_SEP}(?=[a-z])", " ", base)
-	joined = re.sub(rf"(?<=[a-z]){_SEP}(?=[a-z])", "", base)
+	raw = text or ""
+	parts: list[str] = []
+	# ký tự không hiển thị: bị xóa (chèn giữa chữ) hoặc thay bằng khoảng trắng (đứng ở chỗ dấu cách)
+	for base in (_folded(_INVISIBLE.sub("", raw)), _folded(_INVISIBLE.sub(" ", raw))):
+		spaced = re.sub(rf"(?<=[a-z])\s*{_SEP}\s*(?=[a-z])", " ", base)
+		joined = re.sub(rf"(?<=[a-z])\s*{_SEP}\s*(?=[a-z])", "", base)
+		parts += [base, spaced, joined, _collapse(spaced), _collapse(joined)]
+	return " | ".join(dict.fromkeys(v for v in parts if v))
 
-	def collapse(s: str) -> str:
-		return re.sub(r"\b(?:[a-z] ){2,}[a-z]\b", lambda m: m.group(0).replace(" ", ""), s)
 
-	return " | ".join(
-		dict.fromkeys(v for v in (base, spaced, joined, collapse(spaced), collapse(joined)) if v)
-	)
+def _collapse(s: str) -> str:
+	"""Nối lại chữ bị cách từng ký tự ("p h i" -> "phi")."""
+	return re.sub(r"\b(?:[a-z] ){2,}[a-z]\b", lambda m: m.group(0).replace(" ", ""), s)
 
 
 def sensitive_topics(customer_text: str | None) -> list[str]:
