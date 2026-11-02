@@ -121,3 +121,12 @@ def list_similar_hospitals(threshold: float | str = hospital.SIMILAR_FROM) -> li
 	"""Cặp tên bệnh viện giống nhau >= ngưỡng để gộp bằng Omni Hospital Alias (chỉ Omni Admin)."""
 	require_omni_admin()
 	return hospital.similar_hospital_names(float(threshold))
+
+
+@frappe.whitelist(methods=["POST"])
+def merge_organizations(primary: str, secondary: str) -> dict[str, Any]:
+	"""Gộp nhà thầu trùng (nhập tay): chuyển Contact, gói thầu, Lead, Deal sang nhà thầu chính (chỉ Omni Admin)."""
+	require_omni_admin()
+	from omni_crm.identity.merge import merge_organizations as _merge
+
+	return _merge(primary, secondary, frappe.session.user)

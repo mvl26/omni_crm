@@ -49,6 +49,7 @@ def cleanup_orgs() -> None:
 		frappe.db.delete("Comment", {"reference_name": lead})
 		frappe.delete_doc("CRM Lead", lead, force=True, ignore_permissions=True, delete_permanently=True)
 	for org in frappe.get_all("CRM Organization", filters={"name": ["like", ORGS]}, pluck="name"):
+		frappe.db.delete("Omni Bid Award", {"organization": org})
 		frappe.delete_doc("CRM Organization", org, force=True, ignore_permissions=True)
 	frappe.db.commit()
 
