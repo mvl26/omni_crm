@@ -821,6 +821,9 @@ class TestRun(RunTestCase):
 	def test_budget_stops_remaining_cases(self):
 		self.add_cases(self.good_set(4))
 		set_settings(daily_token_budget=1)
+		# Hạn mức đã dùng hết từ đầu (V2-01): trước đây test chỉ qua khi DB còn Bot Run của hôm nay (đếm lại từ DB khi
+		# cache trống); DB sạch thì 0 token < hạn mức 1 nên lần gọi đầu vẫn chạy. Gieo số đã dùng để không phụ thuộc thứ tự.
+		ai_client._add_tokens(10)
 		_, data = self.go()
 		self.assertEqual(data["metrics"]["unmeasured_cases"], 4)
 		self.assertTrue(
