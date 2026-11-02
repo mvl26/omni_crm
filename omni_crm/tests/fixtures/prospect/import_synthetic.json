@@ -1,0 +1,14 @@
+{
+ "note": "Dữ liệu TỔNG HỢP cho test nhập danh sách nhà thầu (V2-03): không phải khách thật. Tên có tiền tố TD303, số điện thoại 0900 0000 xx, email example.com. Gói thầu lấy từ fit_cases.json (đổi mã số thuế).",
+ "today": "2026-10-30",
+ "orgs": [
+  {"key": "A", "tax_id": "0903030011", "name": "TD303 Nhà thầu A", "short_name": "TD303-A", "address": "Số 1 Đường Thử, Hà Nội", "province": "Hà Nội", "region": "Miền Bắc", "website": "td303-a.example.com", "company_phone": "024 0000 0001", "company_email": "lienhe@td303-a.example.com", "annual_revenue_bn": 90, "revenue_year": 2025, "accounting_software": "MISA", "est_item_count": 0, "data_source": "Tổng hợp", "collected_on": "2026-10-30", "owner_email": "td303_sale1@example.com", "stage": "Tiềm năng", "interested_package": "Chưa rõ", "notes": "Ghi chú tổng hợp A", "fit_case": "A"},
+  {"key": "B", "tax_id": "0903030028", "name": "TD303 Nhà thầu B", "province": "TP. Hồ Chí Minh", "region": "Miền Nam", "est_item_count": 300, "data_source": "Tổng hợp", "stage": "Đã liên hệ", "fit_case": "B"},
+  {"key": "C", "tax_id": "0903030035", "name": "TD303 Nhà thầu C", "province": "Đà Nẵng", "region": "Miền Trung", "data_source": "Tổng hợp", "fit_case": "C"}
+ ],
+ "contacts": [
+  {"org": "A", "full_name": "Nguyễn Văn Thử", "title": "Giám đốc", "contact_role": "Người quyết định", "phone": "0900 000 001", "email": "thu.a@td303-a.example.com", "has_zalo": "Có", "info_source": "Website nhà thầu", "consent": "Chưa hỏi", "notes": "Gặp ở hội thảo"},
+  {"org": "A", "full_name": "Trần Thị Mẫu", "title": "Kế toán", "contact_role": "Kế toán – công nợ", "phone": "0900000002", "email": "", "has_zalo": "Chưa rõ", "info_source": "DauThau.info", "consent": "Có", "consent_date": "2026-10-01", "consent_method": "Email xác nhận"},
+  {"org": "B", "full_name": "Lê Mẫu", "phone": "0900000003", "info_source": "Giới thiệu"}
+ ]
+}

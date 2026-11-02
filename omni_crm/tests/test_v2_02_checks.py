@@ -37,6 +37,10 @@ EXPECTED_WHITELISTED = {
 	"api/bot_control.py": {"pause_bot", "resume_bot"},
 	"api/drafts.py": {"get_draft_kb_item", "send_draft", "discard_draft", "rate_draft"},
 	"api/inbox.py": {"list_conversations", "get_thread", "send_reply", "request_phone", "system_status"},
+	"api/prospect.py": {
+		"run_import",
+		"download_template",
+	},  # V2-03: nhập danh sách (một nhật ký/lần), chỉ Omni Admin
 	"api/organization.py": {
 		"get_organization",
 		"get_contacts",

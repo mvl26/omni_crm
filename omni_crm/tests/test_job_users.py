@@ -26,6 +26,7 @@ ENQUEUE_SITES = {
 	"omni_crm/bot/analyze.py": 1,  # bot.analyze.analyze_batch
 	"omni_crm/bot/reply.py": 1,  # bot.reply.reply_batch
 	"omni_crm/channels/telephony/callbacks.py": 1,  # channels.telephony.callbacks.process_missed_call
+	"omni_crm/prospect/importer.py": 1,  # prospect.importer.run_job (V2-03; test Guest: test_prospect_import::TestJobAndAccess)
 }
 
 
