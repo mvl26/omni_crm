@@ -18,6 +18,9 @@ _LAZY_MODULES: dict[str, str] = {
 	"Email": "omni_crm.channels.email.adapter",
 	"Zalo OA": "omni_crm.channels.zalo.adapter",
 	"Telephony": "omni_crm.channels.telephony.adapter",
+	"Meta Lead Ads": "omni_crm.channels.meta_leads.adapter",  # V2-05
+	"Google Lead Form": "omni_crm.channels.google_leads.adapter",  # V2-05
+	"Web Form": "omni_crm.channels.web_form.adapter",  # V2-05
 }
 
 

@@ -402,12 +402,17 @@ class TestApiAndPermissions(CareCase):
 		self.assertFalse(frappe.has_permission(LOG, "write", doc=log))  # chỉ ghi qua API
 
 	def test_save_care_log_api_creates_manual_log_and_marks_response(self):
+		# V2-05: `at` phải nằm trong [tạo Lead, bây giờ] nên đặt Lead tạo sớm và dùng giờ quá khứ (trước đây T0 ở tương lai)
+		past = now_datetime().replace(microsecond=0) - timedelta(hours=2)
+		frappe.db.set_value(
+			"CRM Lead", self.lead, "creation", past - timedelta(days=1), update_modified=False
+		)
 		frappe.set_user(SALE1)
 		res = customer.save_care_log(
 			self.lead,
 			"Hẹn gọi lại",
 			channel="Điện thoại",
-			at=str(T0),
+			at=str(past),
 			summary="Gọi giới thiệu, hẹn gọi lại",
 			next_action="TD404 gọi lại",
 			next_due=str(T0 + timedelta(days=1)),
@@ -416,7 +421,7 @@ class TestApiAndPermissions(CareCase):
 			LOG, res["log"], ["auto_created", "channel", "handled_by", "summary"], as_dict=True
 		)
 		self.assertEqual((row.auto_created, row.channel, row.handled_by), (0, "Điện thoại", SALE1))
-		self.assertEqual(frappe.db.get_value("CRM Lead", self.lead, first_response.FIELD), T0)
+		self.assertEqual(frappe.db.get_value("CRM Lead", self.lead, first_response.FIELD), past)
 		self.assertTrue(res["task"])
 		# kết quả sai không để lại phiên rỗng
 		before = frappe.db.count(LOG, {"lead": self.lead})
@@ -488,3 +493,32 @@ class TestSettingsAndSwitches(FrappeTestCase):
 			self.assertEqual(flags.care_setting("response_sla_minutes"), 30)
 		finally:
 			frappe.db.rollback()
+
+
+class TestSaveCareLogClampsContactTime(CareCase):
+	"""V2-05: `at` do người dùng nhập bị kẹp vào [tạo Lead, bây giờ] nên không làm đẹp "Phản hồi lần đầu"."""
+
+	def save(self, at):
+		frappe.set_user(SALE1)
+		customer.save_care_log(
+			self.lead,
+			"Đã tư vấn",
+			channel="Gặp trực tiếp",
+			at=str(at),
+			next_action="TD404 x",
+			next_due=str(now_datetime() + timedelta(days=1)),
+		)
+		frappe.set_user("Administrator")
+		return frappe.db.get_value("CRM Lead", self.lead, ["creation", first_response.FIELD], as_dict=True)
+
+	def test_at_before_lead_creation_is_clamped_to_creation(self):
+		created = frappe.db.get_value("CRM Lead", self.lead, "creation")
+		row = self.save(created - timedelta(days=3))
+		self.assertEqual(row.omni_first_response_at, row.creation)
+		self.assertEqual(self.logs()[0].started_at, row.creation)  # backfill đọc started_at: cũng phải đúng
+
+	def test_at_in_future_is_clamped_to_now(self):
+		before = now_datetime()
+		row = self.save(before + timedelta(days=5))
+		self.assertLessEqual(row.omni_first_response_at, now_datetime())
+		self.assertGreaterEqual(row.omni_first_response_at, before - timedelta(seconds=1))

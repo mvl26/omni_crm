@@ -1,0 +1,20 @@
+{
+ "lead_id": "TD505GL1",
+ "api_version": "1.0",
+ "form_id": "TD505GFORM",
+ "campaign_id": "TD505GCAMP",
+ "gcl_id": "TD505GCLID",
+ "adgroup_id": "TD505GADG",
+ "creative_id": "TD505GCRE",
+ "is_test": false,
+ "google_key": "td505-google-key-khong-that",
+ "lead_submit_time": "2026-11-02T03:00:00.000Z",
+ "user_column_data": [
+  {"column_id": "FULL_NAME", "column_name": "Full Name", "string_value": "TD505 Trần Thị Bích"},
+  {"column_id": "EMAIL", "string_value": "td505.bich@congty-td505.vn"},
+  {"column_id": "PHONE_NUMBER", "string_value": "0912345602"},
+  {"column_id": "COMPANY_NAME", "string_value": "Công ty TD505 Dược"},
+  {"column_id": "TD505_TAX", "string_value": "0505050502"},
+  {"column_id": "TD505_CONSENT", "string_value": "Đồng ý"}
+ ]
+}

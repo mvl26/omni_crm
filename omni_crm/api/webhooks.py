@@ -78,14 +78,14 @@ def _is_lock_trouble(e: BaseException) -> bool:
 		return False
 
 
-def _read_body(request) -> bytes:
+def _read_body(request, limit: int = MAX_BODY_BYTES) -> bytes:
 	"""Đọc body có giới hạn MAX_BODY_BYTES + 1 byte để request chunked không bị đọc hết vào RAM."""
 	cached = getattr(request, "_cached_data", None)  # werkzeug đã đọc (ví dụ make_form_dict của Frappe)
 	if cached is not None:
 		return cached
 	stream = getattr(request, "stream", None)
 	if stream is not None:
-		return stream.read(MAX_BODY_BYTES + 1) or b""
+		return stream.read(limit + 1) or b""
 	return request.get_data() or b""
 
 
@@ -103,19 +103,27 @@ def _unparsed_event(channel_doc, raw: bytes) -> InboundEvent:
 	)
 
 
-def _handle_webhook(channel_type: str) -> dict:
-	"""Khung xử lý chung 7 bước của mọi webhook (docs/03 mục 1)."""
+def _handle_webhook(channel_type: str, *, max_bytes: int = MAX_BODY_BYTES, guard=None) -> dict:
+	"""Khung xử lý chung 7 bước của mọi webhook (docs/03 mục 1).
+
+	`max_bytes`: giới hạn kích thước riêng của kênh (form website nhỏ hơn). `guard(channel_doc)`: kiểm tra thêm sau khi tải
+	kênh (giới hạn tần suất của form website); trả dict phản hồi để dừng, hoặc None để đi tiếp.
+	"""
 	request = frappe.local.request
 	# 1. đúng method, giới hạn kích thước
 	if request.method != "POST":
 		return _respond(405, _("Chỉ nhận POST"))
-	if (request.content_length or 0) > MAX_BODY_BYTES:
+	if (request.content_length or 0) > max_bytes:
 		return _respond(413, _("Nội dung quá lớn"))
 
 	# 2. đọc raw body trước khi parse
-	raw = _read_body(request)
-	if len(raw) > MAX_BODY_BYTES:
+	raw = _read_body(request, max_bytes)
+	if len(raw) > max_bytes:
 		return _respond(413, _("Nội dung quá lớn"))
+	if channel_type == "Web Form" and not raw and frappe.form_dict:  # form-data đã được werkzeug đọc hết
+		raw = json.dumps(
+			{k: v for k, v in frappe.form_dict.items() if k != "cmd"}, ensure_ascii=False
+		).encode()
 
 	# 3. tải kênh theo ch
 	# Frappe bỏ tham số query khi thân là JSON (Zalo luôn gửi JSON), nên đọc `ch` từ query string trước
@@ -126,6 +134,8 @@ def _handle_webhook(channel_type: str) -> dict:
 		channel_doc = frappe.get_cached_doc("Omni Channel", channel_name)
 	if not channel_doc or channel_doc.channel_type != channel_type:
 		return _respond(404, _("Không tìm thấy kênh"))
+	if guard is not None and (blocked := guard(channel_doc)) is not None:
+		return blocked
 	try:
 		adapter = get_adapter(channel_type)
 	except AdapterNotFoundError:
@@ -189,6 +199,102 @@ def zalo() -> dict:
 	"""Webhook Zalo OA: POST /api/method/omni_crm.api.webhooks.zalo?ch=<tên kênh>."""
 	# Không dùng methods=["POST"] của decorator vì nó trả 403; đặc tả yêu cầu 405 (kiểm trong khung chung).
 	return _handle_webhook("Zalo OA")
+
+
+def _query_arg(name: str) -> str:
+	args = getattr(frappe.local.request, "args", None)
+	return str((args.get(name) if args is not None else None) or frappe.form_dict.get(name) or "")
+
+
+def _enabled_guard(channel_doc) -> dict | None:
+	"""Kênh quảng cáo đã TẮT: bỏ qua có log, KHÔNG lưu gì (trả 200 để nền tảng không thử lại hay hủy đăng ký)."""
+	if channel_doc.enabled:
+		return None
+	_log_short("kenh_tat", channel_doc.name, 0)
+	return _respond(200, "ok", received=0, saved=0)
+
+
+@frappe.whitelist(allow_guest=True)
+def meta_leads() -> dict | None:
+	"""Webhook Meta Lead Ads: GET = handshake (hub.mode/hub.verify_token/hub.challenge), POST = sự kiện leadgen có chữ ký.
+
+	POST /api/method/omni_crm.api.webhooks.meta_leads?ch=<tên kênh>. Chưa thử với nền tảng thật.
+	"""
+	import re
+
+	from omni_crm.channels.meta_leads.adapter import verify_token
+
+	if frappe.local.request.method != "GET":
+		return _handle_webhook("Meta Lead Ads", guard=_enabled_guard)
+	name = _query_arg("ch")
+	channel_doc = (
+		frappe.get_cached_doc("Omni Channel", name)
+		if name and frappe.db.exists("Omni Channel", name)
+		else None
+	)
+	challenge = _query_arg("hub.challenge")
+	ok = (
+		channel_doc is not None
+		and channel_doc.channel_type == "Meta Lead Ads"
+		and _query_arg("hub.mode") == "subscribe"
+		and verify_token(channel_doc, _query_arg("hub.verify_token"))
+		and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", challenge) is not None
+	)
+	if not ok:
+		return _respond(403, _("Xác minh thất bại"))
+	frappe.local.response["http_status_code"] = 200
+	return _send_raw(challenge)
+
+
+@frappe.whitelist(allow_guest=True)
+def google_leads() -> dict | None:
+	"""Webhook Google Ads lead form: POST JSON có `google_key`. 200 + `{}` khi đã lưu, 4xx sai khóa, 503 khi lỗi tạm thời."""
+	result = _handle_webhook("Google Lead Form", guard=_enabled_guard)
+	if frappe.local.response.get("http_status_code") == 200:
+		return _send_raw({})
+	return result
+
+
+WEB_FORM_MAX_BYTES = 64 * 1024
+
+
+def _web_form_guard(channel_doc) -> dict | None:
+	"""Kênh đang bật và chưa quá giới hạn tần suất theo IP (Redis, TTL = cửa sổ); quá thì 429."""
+	from omni_crm import flags
+
+	if not channel_doc.enabled:
+		return _respond(404, _("Không tìm thấy kênh"))
+	limit, window = (
+		flags.ads_setting("webform_rate_limit"),
+		flags.ads_setting("webform_rate_window_minutes") * 60,
+	)
+	ip = str(getattr(frappe.local, "request_ip", None) or "unknown")[:64]
+	cache = frappe.cache()
+	key = cache.make_key(f"omni:webform:rl:{channel_doc.name}:{ip}")
+	count = cache.incr(key)
+	if count == 1 or cache.ttl(key) < 0:
+		cache.expire(key, window)
+	if count > limit:
+		return _respond(429, _("Bạn gửi quá nhanh, vui lòng thử lại sau"))
+	# trần toàn kênh theo giờ (chống tấn công xoay IP): vượt thì 429 cho mọi người và ghi dấu để giám sát cảnh báo
+	gkey = cache.make_key(f"omni:webform:global:{channel_doc.name}")
+	total = cache.incr(gkey)
+	if total == 1 or cache.ttl(gkey) < 0:
+		cache.expire(gkey, 3600)
+	if total > flags.ads_setting("webform_global_rate_per_hour"):
+		cache.set(cache.make_key(f"omni:webform:global_hit:{channel_doc.name}"), 1, ex=3600)
+		return _respond(429, _("Hệ thống đang bận, vui lòng thử lại sau"))
+	return None
+
+
+@frappe.whitelist(allow_guest=True)
+def web_form() -> dict:
+	"""Form website/landing page: POST JSON hoặc form-data tới ?ch=<tên kênh Web Form>; trả `submission_id` để trang cảm ơn."""
+	result = _handle_webhook("Web Form", max_bytes=WEB_FORM_MAX_BYTES, guard=_web_form_guard)
+	if frappe.local.response.get("http_status_code") == 200:
+		# chỉ trả mã gửi; không trả thông tin nội bộ (số sự kiện, trùng hay không, honeypot)
+		return {"message": "ok", "submission_id": frappe.flags.get("omni_web_submission")}
+	return result
 
 
 def _require_omni_admin() -> None:

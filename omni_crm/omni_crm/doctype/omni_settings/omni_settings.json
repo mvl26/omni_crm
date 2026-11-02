@@ -75,7 +75,13 @@
   "response_sla_minutes",
   "col_care",
   "care_session_gap_hours",
-  "team_lead_role"
+  "team_lead_role",
+  "sec_ads",
+  "ads_silence_hours",
+  "webform_rate_limit",
+  "webform_rate_window_minutes",
+  "webform_global_rate_per_hour",
+  "webform_accept_unknown_form"
  ],
  "fields": [
   {
@@ -152,7 +158,7 @@
    "fieldname": "default_lead_source_map",
    "fieldtype": "JSON",
    "label": "Ánh xạ kênh sang nguồn Lead",
-   "default": "{\"Email\":\"Email\",\"Zalo OA\":\"Zalo OA\",\"Telephony\":\"Điện thoại\"}"
+   "default": "{\"Email\":\"Email\",\"Zalo OA\":\"Zalo OA\",\"Telephony\":\"Điện thoại\",\"Meta Lead Ads\":\"Quảng cáo Meta\",\"Google Lead Form\":\"Quảng cáo Google\",\"Web Form\":\"Website\"}"
   },
   {
    "fieldname": "business_hours",
@@ -459,7 +465,7 @@
    "fieldtype": "Check",
    "label": "Bật Dashboard CSKH",
    "default": "1",
-   "description": "Tắt: trang Tổng quan và Chi tiết khách không trả số liệu; Hộp thư vẫn dùng bình thường. Không mất dữ liệu."
+   "description": "Tắt: API Tổng quan (snapshot) trả enabled=false không số liệu và việc ghi nhật ký chăm sóc (save_care_log) bị từ chối; Chi tiết khách vẫn đọc được, Hộp thư vẫn dùng bình thường. Không mất dữ liệu."
   },
   {
    "fieldname": "care_log_enabled",
@@ -491,6 +497,45 @@
    "label": "Vai trò trưởng nhóm",
    "options": "Role",
    "default": "Sales Manager"
+  },
+  {
+   "fieldname": "sec_ads",
+   "fieldtype": "Section Break",
+   "label": "Lead quảng cáo (V2-05)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "ads_silence_hours",
+   "fieldtype": "Int",
+   "label": "Cảnh báo im lặng: số giờ",
+   "default": "6",
+   "description": "Cảnh báo nếu không có lead quảng cáo nào trong N giờ (chỉ trong giờ làm việc) khi có chiến dịch Đang chạy và kênh bật. Chưa từng lưu = 6."
+  },
+  {
+   "fieldname": "webform_rate_limit",
+   "fieldtype": "Int",
+   "label": "Web Form: số lần gửi tối đa mỗi IP",
+   "default": "5"
+  },
+  {
+   "fieldname": "webform_rate_window_minutes",
+   "fieldtype": "Int",
+   "label": "Web Form: cửa sổ giới hạn (phút)",
+   "default": "10"
+  },
+  {
+   "fieldname": "webform_global_rate_per_hour",
+   "fieldtype": "Int",
+   "label": "Web Form: trần toàn kênh mỗi giờ",
+   "default": "300",
+   "description": "Vượt trần: 429 cho mọi IP và cảnh báo giám sát. Chưa từng lưu = 300."
+  },
+  {
+   "fieldname": "webform_accept_unknown_form",
+   "fieldtype": "Check",
+   "label": "Web Form: nhận biểu mẫu chưa cấu hình",
+   "default": "0",
+   "description": "Tắt (mặc định): form có mã chưa cấu hình Omni Lead Form bị bỏ qua và trả thành công giả. Bật: nhận, ghi chú 'biểu mẫu chưa cấu hình' và KHÔNG tự giao sale."
   }
  ],
  "permissions": [

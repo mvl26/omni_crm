@@ -37,15 +37,16 @@ class OmniSettings(Document):
 		Single không áp `default` của JSON cho trường chưa có dòng trong tabSingles, nên lần lưu đầu sẽ ghi 0 vào hai công tắc
 		`dashboard_enabled`, `care_log_enabled` và các ngưỡng; xem `flags.care_setting`.
 		"""
-		from omni_crm.flags import CARE_DEFAULTS
+		from omni_crm.flags import ADS_DEFAULTS, CARE_DEFAULTS
 
+		defaults = {**CARE_DEFAULTS, **ADS_DEFAULTS}  # V2-05: cùng lỗi 0-làm-tắt với cấu hình lead quảng cáo
 		stored = dict(
 			frappe.db.sql(
 				"select field, value from `tabSingles` where doctype = 'Omni Settings' and field in %s",
-				(tuple(CARE_DEFAULTS),),
+				(tuple(defaults),),
 			)
 		)
-		for fieldname, default in CARE_DEFAULTS.items():
+		for fieldname, default in defaults.items():
 			if fieldname not in stored and not self.get(fieldname):
 				self.set(fieldname, default)
 

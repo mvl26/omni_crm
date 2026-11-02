@@ -7,6 +7,7 @@ from typing import Any
 import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime, today
 
+from omni_crm import flags
 from omni_crm.channels.telephony.registry import reconcile_key
 from omni_crm.channels.telephony.worker_hooks import UNVERIFIED_COUNTER_KEY
 from omni_crm.pipeline.retry import redact
@@ -185,6 +186,39 @@ def _crm_lead_sync_enabled() -> int:
 		return 0
 
 
+AD_CHANNEL_TYPES = ("Meta Lead Ads", "Google Lead Form", "Web Form")
+
+
+def _webform_limit_hit() -> int:
+	"""Số kênh Web Form đang bật vừa chạm trần toàn kênh trong giờ qua (dấu Redis TTL 1 giờ)."""
+	cache = frappe.cache()
+	names = frappe.get_all("Omni Channel", filters={"channel_type": "Web Form", "enabled": 1}, pluck="name")
+	return sum(1 for n in names if cache.get(cache.make_key(f"omni:webform:global_hit:{n}")))
+
+
+def _ads(now) -> dict[str, Any]:
+	"""Lead quảng cáo (V2-05): số chiến dịch đang chạy, kênh quảng cáo đang bật, lead thật gần nhất (không tính lead thử nghiệm)."""
+	running = frappe.db.sql(
+		"""select count(*), min(creation) from `tabOmni Campaign`
+		where status = 'Đang chạy' and platform in ('Meta', 'Google', 'Website')"""
+	)[0]
+	channels = cint(
+		frappe.db.count("Omni Channel", {"channel_type": ["in", list(AD_CHANNEL_TYPES)], "enabled": 1})
+	)
+	last = frappe.db.sql(
+		"""select max(m.received_at) from `tabOmni Inbound Message` m left join `tabCRM Lead` l on l.name = m.lead
+		where m.event_type = 'form_lead' and m.status != 'Ignored' and ifnull(l.omni_is_test, 0) = 0"""
+	)[0][0]
+	return {
+		"campaigns_running": cint(running[0]),
+		"first_campaign_created": str(running[1]) if running[1] else None,
+		"channels_enabled": channels,
+		"last_lead_at": str(last) if last else None,
+		"silence_hours": flags.ads_setting("ads_silence_hours"),
+		"webform_global_limit_hit": _webform_limit_hit(),
+	}
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -239,6 +273,7 @@ def build_snapshot() -> dict[str, Any]:
 		},
 		"duplicates": {"open": cint(frappe.db.count(CANDIDATE, {"status": "Open"}))},
 		"telephony": _telephony(now),
+		"ads": _ads(now),
 		"bot": _bot(now),
 		"sweeper": {
 			"last_run_age_seconds": sweep_age,

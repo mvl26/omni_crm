@@ -70,6 +70,9 @@ EXPECTED_WHITELISTED = {
 		"zalo_oauth_callback",
 		"telephony_event",
 		"telephony_lookup",
+		"meta_leads",  # V2-05
+		"google_leads",
+		"web_form",
 	},
 	"identity/duplicates.py": {"dismiss", "merge"},
 }

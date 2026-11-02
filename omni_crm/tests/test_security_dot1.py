@@ -122,8 +122,11 @@ class TestWebhookExposure(PipelineTestCase):
 		self.assertEqual(
 			sorted(allow),
 			[
+				"omni_crm.api.webhooks.google_leads",  # V2-05: có google_key theo biểu mẫu
+				"omni_crm.api.webhooks.meta_leads",  # V2-05: chữ ký X-Hub-Signature-256 / verify token
 				"omni_crm.api.webhooks.telephony_event",
 				"omni_crm.api.webhooks.telephony_lookup",
+				"omni_crm.api.webhooks.web_form",  # V2-05: form website, honeypot + giới hạn tần suất
 				"omni_crm.api.webhooks.zalo",
 			],
 		)

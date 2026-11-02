@@ -613,11 +613,20 @@ class TestImport(ImportCase):
 			):
 				self.assertNotIn(banned, text, f"{f.name}: {banned}")
 
-	def test_campaign_fields_only_filled_when_they_exist(self):
+	def test_campaign_fields_are_filled_since_v2_05(self):
+		# V2-05: trường chiến dịch đã tồn tại; Lead mới từ danh sách có nền tảng "Danh sách mua sắm công" và chiến dịch tháng
 		meta = frappe.get_meta(LEAD)
-		self.assertFalse(meta.has_field("omni_campaign"))  # V2-05 chưa chạy: importer không được lỗi
+		self.assertTrue(meta.has_field("omni_campaign"))
 		self.run_import(self.make(orgs=synth_orgs("A"), awards=[], contacts=[]))
-		self.assertEqual(frappe.db.count(LEAD, {"organization": self.org_name("A")}), 1)
+		rows = frappe.get_all(
+			LEAD,
+			filters={"organization": self.org_name("A")},
+			fields=["omni_ad_platform", "omni_campaign", "omni_last_campaign"],
+		)
+		self.assertEqual(len(rows), 1)
+		self.assertEqual(rows[0].omni_ad_platform, "Danh sách mua sắm công")
+		self.assertTrue(rows[0].omni_campaign.startswith("Liên hệ chủ động"))
+		self.assertEqual(rows[0].omni_campaign, rows[0].omni_last_campaign)
 
 	def test_batch_commit_every_100_rows_in_real_runs_only(self):
 		orgs = [
