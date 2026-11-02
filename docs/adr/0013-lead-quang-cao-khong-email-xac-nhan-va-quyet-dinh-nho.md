@@ -17,3 +17,5 @@
 ## Hệ quả
 - Anh quyết nếu muốn email xác nhận (kèm nhà cung cấp gửi thư và lời văn); chưa có việc nào trong code phụ thuộc.
 - Nếu Miyano có nhiều đội, cần danh sách trưởng nhóm theo đội cho bước 5.
+6. **(Review độc lập, siết)** Web Form: MST là tín hiệu yếu, không gắn Lead/Organization có sẵn; không nâng đồng ý của Contact; mã biểu mẫu chưa cấu hình bị bỏ qua (công tắc `webform_accept_unknown_form`); trần toàn kênh theo giờ + cảnh báo. Kênh Meta/Google tắt thì không lưu.
+

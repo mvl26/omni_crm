@@ -14,8 +14,10 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `sandbox_mode` — tổng đài | Omni Settings | (Bật) đối soát đêm bỏ qua, không xác minh cuộc gọi nhỡ qua API nhà cung cấp | 2 |
 | `missed_call_callback_minutes`, `callback_fallback_user`, `business_hours`, `holidays` | Omni Settings | Hạn gọi lại (phút làm việc), người nhận dự phòng, giờ làm việc, ngày nghỉ lễ (JSON `["2027-01-01", …]`, mặc định rỗng — việc cần người phụ trách điền) | 2 |
 | `enabled` | Omni Lead Form | Biểu mẫu quảng cáo/website đó chỉ lưu, không tạo Lead | 1 (D1-15) |
-| `enabled` (kênh Meta Lead Ads / Google Lead Form / Web Form) | Omni Channel | V2-05: webhook trả 200 và LƯU, không xử lý, không gọi Graph API; Web Form tắt trả 404 (không nhận từ người lạ); đối soát Meta hằng giờ bỏ qua kênh tắt | 1 (D1-15) |
+| `enabled` (kênh Meta Lead Ads / Google Lead Form / Web Form) | Omni Channel | V2-05 (sửa theo review): kênh Meta/Google TẮT thì webhook trả 200, ghi log `kenh_tat` và KHÔNG lưu gì (khác kênh Email/Zalo/tổng đài vẫn lưu); Web Form tắt trả 404; đối soát Meta hằng giờ bỏ qua kênh tắt | 1 (D1-15) |
 | `ads_silence_hours` | Omni Settings | V2-05: ngưỡng (giờ làm việc, mặc định 6) cảnh báo `khong_co_lead_quang_cao` khi có chiến dịch `Đang chạy` + kênh quảng cáo bật mà không có lead thật nào. Chưa từng lưu = 6. Tắt cảnh báo: chuyển hết chiến dịch khỏi `Đang chạy` hoặc tắt kênh | 1 (D1-15) |
+| `webform_global_rate_per_hour` | Omni Settings | V2-05: trần toàn kênh Web Form mỗi giờ (mặc định 300, chưa lưu = 300); vượt thì 429 cho mọi IP và cảnh báo `web_form_vuot_tran` |
+| `webform_accept_unknown_form` | Omni Settings | V2-05: 0 (mặc định) = form có mã chưa cấu hình Omni Lead Form bị bỏ qua, trả thành công giả; 1 = nhận, ghi chú "chưa cấu hình", KHÔNG tự giao sale |
 | `webform_rate_limit`, `webform_rate_window_minutes` | Omni Settings | V2-05: giới hạn Web Form theo IP (mặc định 5 lần/10 phút; quá thì 429). Chưa từng lưu = mặc định | 1 (D1-15) |
 | `webform_captcha_provider` | Omni Channel (Web Form) | V2-05: để trống = không kiểm tra chống bot (mặc định); Turnstile/reCAPTCHA = từ chối khi token sai hoặc nhà cung cấp lỗi | 1 (D1-15) |
 | Nhắc quá hạn phản hồi lead quảng cáo | `dashboard_enabled` | V2-05: tác vụ 5 phút `response_sla.run` thoát ngay khi `dashboard_enabled` tắt; ngưỡng là `response_sla_minutes` | 1 (D1-15) |
