@@ -225,6 +225,14 @@ Quy tắc bắt buộc:
 Gọi công cụ propose_reply để trả kết quả.
 ```
 
+### 8.3 Phiên bản v2 cho nhà thầu (V2-06)
+
+`bot/prompts/analyze_v2.md`, `reply_v2.md` (dòng đầu `version: v2`, theo quy ước `v<N>` của loader; kit viết `analyze_v2` nhưng loader và bộ test ghim dùng `v<N>`, xem docs/12). **Chưa có hiệu lực**: `PINNED_DEFAULTS` vẫn là v1; v2 chỉ chạy khi có chủ ý ghim (`analyze_prompt_version`/`reply_prompt_version` trong Omni Settings) hoặc trong bộ đề (`prompt_versions`). Schema tool theo phiên bản câu lệnh: `analyze.tool_for("v1")` = schema v1 (đường chạy ghim không đổi), còn lại schema v2 (v1 + `tax_id`, `hospitals_mentioned`, `current_pain`, `decision_role`, `asks_proposal`, đều tùy chọn). Kết quả phân tích ghi `schema_version`. Mọi trường B2B cần `evidence` như trường cũ. Đổi sang v2 chỉ sau khi cổng `doi_cau_lenh` đo bằng AI thật (V2-07, Q11).
+
+**Mã số thuế (R1/Web Form):** `tax_id` được chuẩn hóa và ghi `omni_tax_id_stated`. Chỉ GẮN Lead vào Organization khi MST khớp đúng một Organization VÀ người nhắn đã là Contact của Organization đó (SĐT/email của Lead); mọi trường hợp khác (kênh công khai ai cũng gõ được MST) là tín hiệu yếu: chỉ ghi trường và Comment cho người xử lý, không gắn, không ghi đè `omni_manual_fields`. Tên công ty tự khai trùng một Organization thật cũng không được ghi vào `organization`. **Giới hạn:** khi che SĐT/email (mặc định tới khi Q11 chốt) MST bị che nên bot không trích được MST.
+
+**Nhóm câu hỏi:** `active` (nhóm không còn trong CSV bị tắt, không xóa; bot không thấy, AI chọn thì thành chuyển người) và `shadow_only` (nháp TRẢ LỜI của nhóm luôn Shadow dù chế độ chung là Draft; chuyển người vẫn báo sale). Chốt chặn 1 thêm từ khóa "phí dịch vụ/tỷ lệ phí/mức phí/bao nhiêu phần trăm/hoa hồng" và nhóm `dieu_khoan_hop_dong` (điều khoản, đàm phán, thương lượng, bảo lãnh, chỉnh sửa hợp đồng); không dùng "hợp đồng" trơn.
+
 ## 9. Tóm tắt cuộc gọi (Đợt 3)
 
 - Interface `stt/base.py`: `transcribe(audio: bytes, mime: str, *, stereo: bool) -> Transcript(text, segments[{speaker, start, end, text}], confidence)`.
@@ -241,6 +249,8 @@ Xem `eval/README.md`. Tóm tắt các ngưỡng cổng:
 | Hành động đúng (trả lời/chuyển người) | — | ≥ 90% |
 | Câu trả lời đạt | — | ≥ 85% |
 | Lỗi nghiêm trọng (ca `critical`) | — | 0 |
+
+**V2-06: cổng `phan_tich`/`nhap`/`doi_cau_lenh` cho bộ đề B2B (144 ca) vẫn CHƯA ĐO** (Q11: không gửi hội thoại sang AI; chỉ chạy client giả, `eval/reports/2026-11-02-*-fake.md`). Câu lệnh đang dùng: analyze_v1 / reply_v1 / judge_v1.
 
 **Trạng thái cổng `nhap` (D3-01): CHƯA ĐO.** Môi trường phát triển không có khóa AI và bộ đề (220 ca) đều `Synthetic`, chưa duyệt, 0 ca Real; lần chạy `gate='nhap'` không client ghi 220/220 ca "chưa đo" (`EVR-2026-00415`, `eval/reports/2026-10-30-analyze-v1_reply-v1_judge-v1-EVR-2026-00415.md`). Con số 100% của client Fake không phải điểm của bot. **Bật Draft ở môi trường thật chỉ sau khi cổng `nhap` được đo bằng AI thật trên bộ đề đã duyệt và đạt.** `bot_reply_mode` mặc định Off.
 

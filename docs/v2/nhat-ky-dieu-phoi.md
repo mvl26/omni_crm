@@ -84,3 +84,12 @@ Mỗi prompt v2 một mục: ngày, nhánh, số test trước/sau, quyết đ�
 - **Test cũ đổi có chủ đích:** `test_web_form`: `test_existing_organization_by_tax_id_attaches_lead` và `test_open_contractor_lead_is_reused...` thay bằng probe MST yếu; `test_existing_contact_gets_consent...` -> `test_web_form_never_raises_consent...`; `test_meta_leads::test_channel_off_stores...` -> `test_disabled_channel_ignores_with_200_and_stores_nothing`; `test_ads_pipeline` tập khóa `ads` thêm `webform_global_limit_hit`. Số test không giảm: 1501 -> 1509 (reviewer thêm 4 ở 82bb0a0). Chạy trọn bộ: Ran 1509 tests, OK.
 - **Còn mở (không đổi):** Q4; nginx ghi đè `X-Forwarded-For`; `allow_cors`; nhãn Test lead tự ẩn lead (anh quyết); mọi kênh vẫn chưa thử nền tảng thật; giao diện chưa thử trình duyệt.
 
+## V2-06 — Bot phân tích/trả lời cho nhà thầu
+
+- **Ngày:** 2026-11-02. **Nhánh:** `v2/06-bot-cho-nha-thau` (từ `develop`, tag `v2-05`). Chưa merge, chưa tag. Worktree `/home/hoangvietyeuem/wt-v2-06` (PYTHONPATH trỏ worktree, `omni_crm.__file__` đã kiểm), dọn sau khi xong.
+- **Nền đo lại trên `develop`:** 1509 test, OK (khớp).
+- **Quyết định đã dùng:** Q11 = không gửi hội thoại thật sang AI: chỉ chạy `OracleClient`/ca tổng hợp, báo cáo ghi "cổng chưa đo", bước 7 KHÔNG thực hiện, **câu lệnh đang dùng vẫn analyze_v1 / reply_v1 / judge_v1**. ADR 0010 chuyển sang Chấp nhận (ĐQ-5), enum đổi tương thích ngược. Kho tri thức mẫu = dữ liệu chưa duyệt, nhập không hoạt động. Không sửa crm/frappe, không DocType mới, bot không tự gửi (`omni_auto_send_allowed` không đụng).
+- **Quyết định nhỏ do agent đưa ra:** xem docs/12 mục D (V2-06): `version: v2`, thêm `active`/`shadow_only`, MST yếu ở kênh công khai, định nghĩa tín hiệu, hạng chưa có = quy tắc cũ.
+- **Test:** 1509 → số cuối ghi ở báo cáo cuối; file mới `test_v2_06_bot_b2b`.
+- **Chưa làm được / giả định chưa xác nhận:** cổng chưa đo (V2-07); bước 7 không thực hiện; kho tri thức chờ phòng kinh doanh; MST bị che bởi mask_pii; điểm/ngưỡng chưa duyệt; `import_b2b` và patch chấm lại chưa chạy trên staging; giao diện chưa thử trình duyệt.
+- **Lệnh anh chạy sau khi duyệt:** `bench --site <site> execute omni_crm.bot.knowledge.import_b2b`; `execute omni_crm.bot.scoring.import_rules --kwargs "{'path': 'mau/bang-diem-lead-b2b-mau.csv', 'merge': True}"`; patch: `execute omni_crm.patches.v2.rescore_open_leads.execute` (dry run) rồi `--kwargs "{'dry_run': False}"`.

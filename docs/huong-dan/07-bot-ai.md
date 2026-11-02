@@ -230,3 +230,11 @@ Nháp Pending đã tạo trước đó không gửi được khi bot đã Off. B
 - [ ] Tuần chạy thử Draft với sale thật; `measure_dot3` cho thấy nháp đúng ≥ 85%, nghiêm trọng = 0.
 - [ ] Chỉ khi Q1 chốt: `omni_auto_send_allowed` được người vận hành đặt; từng nhóm Auto được bật bằng nút sau khi đủ điều kiện số liệu; mỗi nhóm mới bật có người theo dõi báo cáo "Bot tự gửi".
 - [ ] Cả nhóm biết cách tắt khẩn (mục 12) và ai có quyền làm.
+
+## 15. Bot cho nhà thầu (V2-06)
+
+- Câu lệnh v2 đã có trong kho mã nhưng **chưa dùng**; bản đang chạy là v1. Muốn thử v2 chỉ trong bộ đề: `prompt_versions={"analyze": "v2", "reply": "v2"}`. Ghim v2 cho production chỉ sau khi cổng `doi_cau_lenh` đo bằng AI thật (V2-07).
+- Nhập nhóm + kho tri thức mẫu: `bench --site <site> execute omni_crm.bot.knowledge.import_b2b`. Nhóm vào chế độ Shadow; kho mẫu vào **không hoạt động**, chờ phòng kinh doanh điền, duyệt rồi bật từng mục trong Omni Knowledge Item (nhập lại không bật/tắt mục nào).
+- Bảng điểm B2B: `import_rules` với `merge=True` (quy tắc cũ bị tắt, không xóa). Chấm lại Lead đang mở: patch `rescore_open_leads` (dry run mặc định, không báo Lead nóng).
+- Trường mới trên Lead: MST khách nêu (chưa xác minh), bệnh viện, vướng mắc, vai trò. MST bot trích không tự gắn nhà thầu ở kênh công khai; sale xác nhận rồi gắn tay.
+- Tắt khẩn: `bot_analyze_enabled = 0`, `bot_reply_mode = Off`, `lead_scoring_enabled = 0` như v1; nhóm có thể tắt riêng bằng `active = 0`.

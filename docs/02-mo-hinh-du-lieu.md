@@ -215,6 +215,8 @@ Ràng buộc duy nhất trên (`lead_a`, `lead_b`).
 | `always_handoff` | Check | Nhóm luôn chuyển người (Phí dịch vụ, Đàm phán hợp đồng, Khiếu nại) |
 | `auto_send_enabled` | Check, **chỉ đọc**, mặc định 0 | Đợt 3 (D3-05): bot tự gửi cho nhóm này. KHÔNG sửa tay được: `validate` từ chối 0->1 trừ khi do `bot.auto_send.enable_group` (Omni Admin, đạt điều kiện, khóa hạ tầng mở); tắt (1->0) thì ai có quyền ghi cũng tắt được. Nhóm `always_handoff` không bao giờ có cờ này (đặt `always_handoff` cho nhóm đang bật thì cờ tự tắt) |
 | `auto_send_enabled_at`, `auto_send_enabled_by` | Datetime, Link User (chỉ đọc) | Dấu vết ai bật, khi nào (xóa khi tắt; lịch sử bật/tắt nằm ở Version vì DocType bật `track_changes`, và ở Comment dấu `omni:auto_send:enable|disable|breaker:<mã>` trên nhóm) |
+| `active` | Check, mặc định 1 | V2-06: 0 = nhóm ngừng hoạt động (không xóa, giữ lịch sử) |
+| `shadow_only` | Check, mặc định 0 | V2-06: nháp trả lời của nhóm luôn Shadow |
 | `description` | Small Text | Mô tả để bot phân loại |
 
 ## 10. Omni Knowledge Item (Đợt 2)
@@ -238,6 +240,7 @@ Bật `track_changes`. Mỗi lần lưu, tăng `Omni Settings.kb_version` (Int, 
 | --- | --- | --- |
 | `signal` | Select | has_phone / has_email / known_org (đã gắn nhà thầu) / replied / needs_discussed / intent_service_info / intent_fee / intent_proposal / decision_maker_engaged / pain_point_stated / repeat_contact / complaint (bảng tín hiệu điểm quan tâm B2B — `docs/14` mục 3.2) |
 | `points` | Int | Có thể âm |
+| `active` | Check, mặc định 1 | V2-06: 0 = quy tắc tắt (không xóa) |
 | `note` | Data | |
 
 ## 12. Omni Bot Run (Đợt 2)
