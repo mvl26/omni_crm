@@ -6,6 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from omni_crm.bot import analyze, guards, knowledge
 from omni_crm.tests.bridge_helpers import BridgeTestCase
+from omni_crm.tests.test_ads_pipeline import WebCase
 
 GROUP, ITEM = "Omni Question Group", "Omni Knowledge Item"
 
@@ -155,3 +156,26 @@ class TestCampaignCreateRace(FrappeTestCase):
 		):
 			second = form_lead.resolve_campaign(form, None)
 		self.assertEqual(second, first)
+
+
+class TestOrphanLeadGetsOwnerOnRetry(WebCase):
+	def test_existing_lead_without_owner_is_assigned_when_the_form_is_processed_again(self):
+		from omni_crm.crm_bridge import form_lead
+		from omni_crm.tests.ads_helpers import SALE
+
+		first = self.submit()
+		lead = first.lead
+		self.assertEqual(form_lead.recipients(lead), [SALE])
+		frappe.local.request = None  # request giả của webhook trước không có host
+		form_lead.unassign(lead)  # như lượt xử lý đầu dừng giữa chừng: Lead có, người phụ trách chưa
+		frappe.db.commit()
+		self.assertEqual(form_lead.recipients(lead), [])
+		second = self.submit(submission_id="td808-lan-hai-0001")
+		self.assertEqual(second.lead, lead)
+		self.assertEqual(form_lead.recipients(lead), [SALE])
+		self.assertEqual(
+			frappe.db.count(
+				"Notification Log", {"document_name": lead, "subject": ["like", "Lead mới từ quảng cáo%"]}
+			),
+			1,
+		)

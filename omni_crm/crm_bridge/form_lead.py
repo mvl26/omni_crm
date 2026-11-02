@@ -517,6 +517,18 @@ def _apply(res: Any, msg: Any) -> None:
 				form.get("form_name") or form.get("form_id") or ""
 			),
 		)
+	elif not recipients(lead) and not form.get("is_test"):
+		# V2-08: Lead đã có nhưng CHƯA có người phụ trách (lượt xử lý trước dừng giữa chừng, ví dụ Redis chết sau khi Lead được tạo):
+		# giao như Lead mới, nếu không Lead mồ côi không ai được báo
+		users = assign(lead, form_doc)
+		notify_users(
+			lead,
+			users,
+			_("Lead mới từ quảng cáo: {0}").format(name),
+			_("Lead mới từ biểu mẫu {0}. Hãy liên hệ trong thời hạn phản hồi.").format(
+				form.get("form_name") or form.get("form_id") or ""
+			),
+		)
 	else:  # khách đã có Lead: giữ người phụ trách và chiến dịch đầu, chỉ báo
 		notify_users(
 			lead,
