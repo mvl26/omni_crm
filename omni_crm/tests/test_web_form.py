@@ -232,7 +232,8 @@ class TestWorker(WebCase):
 		self.assertEqual(frappe.db.get_value("Contact", contact.name, "omni_consent"), "Chưa hỏi")
 		self.assertEqual((frappe.db.count("Omni Outbound Message"), frappe.db.count("Email Queue")), before)
 
-	def test_existing_contact_gets_consent_and_no_new_contact(self):
+	def test_web_form_never_raises_consent_of_existing_contact(self):
+		# V2-05 (review): đồng ý từ form ẩn danh không nâng Contact "Chưa hỏi" -> "Có"; chỉ nằm trên dòng thời gian của Lead mới
 		contact = frappe.get_doc(
 			{
 				"doctype": "Contact",
@@ -243,10 +244,19 @@ class TestWorker(WebCase):
 		).insert(ignore_permissions=True)
 		frappe.db.commit()
 		n = frappe.db.count("Contact")
-		self.process()
+		_row, lead = self.process()
 		self.assertEqual(frappe.db.count("Contact"), n)
-		self.assertEqual(frappe.db.get_value("Contact", contact.name, "omni_consent"), "Có")
-		self.assertIn("Website", frappe.db.get_value("Contact", contact.name, "omni_consent_method"))
+		c = frappe.db.get_value(
+			"Contact",
+			contact.name,
+			["omni_consent", "omni_consent_date", "omni_consent_method"],
+			as_dict=True,
+		)
+		self.assertEqual(
+			(c.omni_consent, c.omni_consent_date, c.omni_consent_method), ("Chưa hỏi", None, None)
+		)
+		content = frappe.get_all("Communication", filters={"reference_name": lead}, pluck="content")[0]
+		self.assertIn("Đồng ý nhận liên hệ: Có", content)
 
 	def test_unverified_tax_id_creates_organization_with_verified_zero(self):
 		_row, lead = self.process()

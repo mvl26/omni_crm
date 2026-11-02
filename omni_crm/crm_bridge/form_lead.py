@@ -300,10 +300,11 @@ def record_consent(form: dict, phone: str | None, email: str | None) -> list[str
 	"""Ghi đồng ý nhận liên hệ lên Contact ĐÃ CÓ khớp SĐT/email (không tạo Contact mới); trả tên Contact đã cập nhật.
 
 	Chỉ nâng "Chưa hỏi" -> "Có"; không bao giờ ghi đè "Từ chối" hay đụng Contact đã xóa dữ liệu. Không có đồng ý thì không ghi gì.
+	Chỉ cho Meta/Google (đã xác thực nền tảng); Web Form không bao giờ ghi lên Contact có sẵn.
 	"""
 	consent = form.get("consent") or {}
-	if not consent.get("contact"):
-		return []
+	if not consent.get("contact") or form.get("platform") == "Website":
+		return []  # Web Form ẩn danh: tích ô đồng ý không đủ giá trị pháp lý để nâng Contact có sẵn; chỉ nằm trên dòng thời gian
 	phones = [p for p in [normalize_phone(phone)] if p]
 	emails = [e for e in [normalize_email(email)] if e]
 	updated: list[str] = []
