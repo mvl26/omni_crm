@@ -542,6 +542,30 @@ class TestImport(ImportCase):
 			any("thư mục mã nguồn" in w for w in report["warnings"])
 		)  # mẫu nằm trong repo: nhắc dữ liệu thật để ngoài
 
+	def test_failure_after_saving_org_rolls_back_row_and_dependents_do_not_trust_it(self):
+		real = importer.Importer._create_lead
+		tax_a = self.tax("A")
+
+		def fail_for_a(inst, org, *args, **kwargs):
+			if org["omni_tax_id"] == tax_a:
+				frappe.throw("lỗi giả lập khi tạo Lead")
+			return real(inst, org, *args, **kwargs)
+
+		with mock.patch.object(importer.Importer, "_create_lead", fail_for_a):
+			report = self.run_import(self.make())
+		self.assertEqual(report["sheets"]["NhaThau"]["errors"], 1)
+		self.assertIn("lỗi giả lập", self.errors("NhaThau")[0][1])
+		self.assertEqual(report["sheets"]["NhaThau"]["created"], 2)
+		self.assertIsNone(
+			frappe.db.exists(ORG, {"omni_tax_id": tax_a})
+		)  # nhà thầu của dòng lỗi được hoàn tác
+		self.assertEqual(frappe.db.count(AWARD, {"tax_id": tax_a}), 0)
+		self.assertEqual(report["sheets"]["GoiThau"]["errors"], 9)  # gói thầu của A: nhà thầu không tồn tại
+		self.assertEqual(report["sheets"]["GoiThau"]["created"], 7)
+		self.assertEqual(
+			(report["sheets"]["NguoiLienHe"]["errors"], report["sheets"]["NguoiLienHe"]["created"]), (2, 1)
+		)
+
 	def test_fit_is_computed_once_per_organization_with_defer_flag(self):
 		calls: list[str] = []
 		real = fit.apply_fit

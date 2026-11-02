@@ -561,6 +561,25 @@ class Importer:
 				self._hold_name_clash(row, tax, name, clash)
 				return self._skip("NhaThau", "Chờ xác nhận (xem mục Cần xác nhận)")
 		self.file_orgs[tax] = {**parsed, "row": row.number}
+		backup = dict(existing) if existing else None
+		try:
+			return self._org_apply(row, parsed, existing)
+		except Exception:
+			# savepoint của dòng sẽ rollback DB; trả trạng thái trong bộ nhớ về như cũ để các dòng sau không tin vào bản ghi ảo
+			self.file_orgs.pop(tax, None)
+			if existing is None:
+				created = self.org.pop(tax, None)
+				if created:
+					self.tax_by_name.pop(created["name"], None)
+					key = company_name_key(created["name"])
+					self.name_index[key] = [x for x in self.name_index.get(key, []) if x[1] != tax]
+			elif backup is not None:
+				existing.clear()
+				existing.update(backup)
+			raise
+
+	def _org_apply(self, row: SheetRow, parsed: dict[str, Any], existing: dict[str, Any] | None) -> str:
+		tax = parsed["tax_id"]
 		outcome = self._upsert_org(row, parsed, existing)
 		if outcome != "skipped" or self.org[tax].get("omni_fit_computed_at") is None:
 			self.touched.add(
@@ -914,10 +933,9 @@ class Importer:
 		match = self._match_contact(row, org, p, phones, emails)
 		if match == "held":
 			return self._skip("NguoiLienHe", "Chờ xác nhận (xem mục Cần xác nhận)")
-		self.seen_contacts.add((org["name"], key))
-		if match:
-			return self._update_contact(match, org, p)
-		return self._create_contact(org, p)
+		outcome = self._update_contact(match, org, p) if match else self._create_contact(org, p)
+		self.seen_contacts.add((org["name"], key))  # chỉ ghi nhớ khi đã nhập được
+		return outcome
 
 	def _match_contact(
 		self, row: SheetRow, org: dict[str, Any], p: dict[str, Any], phones: list[str], emails: list[str]
