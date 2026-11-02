@@ -120,6 +120,7 @@ class TestFitPure(unittest.TestCase):
 class TestFitCases(FrappeTestCase):
 	def setUp(self):
 		frappe.db.savepoint("td213_fit")
+		self.addCleanup(frappe.clear_document_cache, "Omni Settings", "Omni Settings")
 		self.addCleanup(frappe.db.rollback, save_point="td213_fit")
 
 	def test_cases_match_excel_expectations(self):

@@ -71,6 +71,7 @@ def make_award(org: str, hospital_name: str, notice: str = "N1", **kw) -> str:
 class ProspectCase(FrappeTestCase):
 	def setUp(self):
 		frappe.db.savepoint("td213_model")
+		self.addCleanup(frappe.clear_document_cache, "Omni Settings", "Omni Settings")
 		self.addCleanup(frappe.db.rollback, save_point="td213_model")
 		self.addCleanup(frappe.set_user, "Administrator")
 
@@ -253,7 +254,36 @@ class TestSettings(ProspectCase):
 		self.assertEqual(meta.get_field("fit_scoring_enabled").default, "1")
 		self.assertEqual(meta.get_field("prospect_import_enabled").default, "1")
 
+	def test_prospect_import_switch_default_on_and_can_be_turned_off(self):
+		from omni_crm import flags
+
+		frappe.db.delete("Singles", {"doctype": "Omni Settings", "field": "prospect_import_enabled"})
+		self.assertTrue(flags.prospect_import_enabled())  # chưa từng lưu = bật
+		frappe.db.set_single_value("Omni Settings", "prospect_import_enabled", 0)
+		self.assertFalse(flags.prospect_import_enabled())
+		frappe.db.set_single_value("Omni Settings", "prospect_import_enabled", 1)
+		self.assertTrue(flags.prospect_import_enabled())
+
+	def test_first_save_fills_defaults_for_never_stored_fit_fields(self):
+		frappe.db.delete(
+			"Singles", {"doctype": "Omni Settings", "field": ["in", ["fit_max_items", "fit_w_items"]]}
+		)
+		doc = frappe.get_doc("Omni Settings")
+		doc.fit_max_items = 0
+		doc.fit_w_items = 0
+		doc.validate_fit_params()  # không lỗi: trường chưa từng lưu được điền mặc định thay vì lưu 0
+		self.assertEqual((doc.fit_max_items, doc.fit_w_items), (500, 30))
+
+	def test_explicit_zero_weight_is_kept_once_stored(self):
+		frappe.db.set_single_value("Omni Settings", "fit_w_active", 0)
+		doc = frappe.get_doc("Omni Settings")
+		doc.validate_fit_params()
+		self.assertEqual(doc.fit_w_active, 0)
+
 	def test_bad_fit_params_rejected(self):
+		frappe.db.set_single_value(
+			"Omni Settings", "fit_max_items", 500
+		)  # đã lưu: số 0 là lựa chọn thật -> bị từ chối
 		doc = frappe.get_doc("Omni Settings")
 		doc.fit_max_items = 0
 		with self.assertRaises(frappe.ValidationError):
