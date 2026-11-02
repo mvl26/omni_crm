@@ -5,6 +5,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from omni_crm.bot import analyze, guards, knowledge
+from omni_crm.tests.bridge_helpers import BridgeTestCase
 
 GROUP, ITEM = "Omni Question Group", "Omni Knowledge Item"
 
@@ -99,3 +100,26 @@ class TestFakeEvalReportWording(FrappeTestCase):
 			with self.subTest(path.name):
 				self.assertNotIn("Ca đo được", text)
 				self.assertIn("bot THẬT chưa được đo ca nào", text)
+
+
+class TestBridgeCleanupLeavesNoOrphanNotifications(BridgeTestCase):
+	def test_assigning_a_lead_then_cleanup_leaves_no_crm_notification_behind(self):
+		from omni_crm.tests import bridge_helpers
+
+		bridge_helpers.make_users()
+		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "TD106 Thong bao"}).insert(
+			ignore_permissions=True
+		)
+		frappe.db.commit()
+		from frappe.desk.form import assign_to
+
+		assign_to.add(
+			{"assign_to": [bridge_helpers.USERS[0]], "doctype": "CRM Lead", "name": lead.name},
+			ignore_permissions=True,
+		)
+		frappe.db.commit()
+		self.assertTrue(frappe.db.count("CRM Notification", {"reference_name": lead.name}))
+		bridge_helpers.cleanup()
+		self.assertFalse(frappe.db.exists("CRM Lead", lead.name))
+		self.assertEqual(frappe.db.count("CRM Notification", {"reference_name": lead.name}), 0)
+		self.assertEqual(frappe.db.count("CRM Notification", {"to_user": ["in", bridge_helpers.USERS]}), 0)
