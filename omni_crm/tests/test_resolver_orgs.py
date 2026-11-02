@@ -217,7 +217,7 @@ class TestDomainMatch(OrgResolverCase):
 	def test_social_media_website_is_never_a_domain(self):
 		org = make_org("TD213R Công ty Q", "0100213429", website="https://www.facebook.com/congtyq")
 		self.org_lead(org)
-		r = self.resolve(make_msg("Email", "ai-do@facebook.com", "Chào"))
+		r = self.resolve(make_msg("Email", "td105x@facebook.com", "Chào"))
 		self.assertEqual(r.matched_by, "new")
 
 	def test_vn_isp_and_public_mail_domains_are_free(self):
