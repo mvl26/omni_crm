@@ -93,3 +93,31 @@ Mỗi prompt v2 một mục: ngày, nhánh, số test trước/sau, quyết đ�
 - **Test:** 1509 → **1575 test, OK** (+66, file mới `test_v2_06_bot_b2b`; 1 test cũ đổi có chủ đích: `test_ai_client::test_newer_file_is_not_loaded_until_pinned` dùng `analyze_v9.md`). Bộ đề B2B 237 ca nhập vào `omni.test` (457 ca tổng).
 - **Chưa làm được / giả định chưa xác nhận:** cổng chưa đo (V2-07); bước 7 không thực hiện; kho tri thức chờ phòng kinh doanh; MST bị che bởi mask_pii; điểm/ngưỡng chưa duyệt; `import_b2b` và patch chấm lại chưa chạy trên staging; giao diện chưa thử trình duyệt.
 - **Lệnh anh chạy sau khi duyệt:** `bench --site <site> execute omni_crm.bot.knowledge.import_b2b`; `execute omni_crm.bot.scoring.import_rules --kwargs "{'path': 'mau/bang-diem-lead-b2b-mau.csv', 'merge': True}"`; patch: `execute omni_crm.patches.v2.rescore_open_leads.execute` (dry run) rồi `--kwargs "{'dry_run': False}"`.
+
+## V2-08 — Hồi quy, tải và nghiệm thu sẵn sàng chiến dịch
+
+- **Ngày:** 2026-11-02 đến 2026-11-03. **Nhánh:** `v2/08-nghiem-thu` (từ `develop`, tag `v2-06`). Chưa merge, chưa gắn tag. Worktree `/home/hoangvietyeuem/frappe-bench/wt-v208` (PYTHONPATH trỏ worktree, `omni_crm.__file__` đã kiểm), dọn sau khi xong.
+- **Hoàn cảnh:** KHÔNG staging, KHÔNG credential Meta/Google/Zalo/Stringee/AI thật, KHÔNG tuần chạy thử; Q11 = không gửi hội thoại thật sang AI nên V2-07 bỏ qua (cổng `phan_tich`/`nhap`/`doi_cau_lenh` chưa đo, nhóm câu hỏi ở Shadow). Mọi số đo là **trên site test, chưa trên staging**; cột "Đo được" của chỉ số chiến dịch để trống; mục checklist cần hệ thống thật ghi "chưa kiểm — cần <ai>", không tick.
+- **Môi trường:** site `omni.test`; Redis tạm cổng 11999 (đã tắt); ruff 0.8.1; gunicorn 8 worker cổng 8099 và 8 worker RQ chạy từ script, máy chủ Graph GIẢ cổng 8777 (đã tắt, đã dọn).
+- **Nền đo lại trên `develop`:** 1.576 test, OK (khớp kỳ vọng), 1.029 giây.
+- **Kết luận nghiệm thu:** **Sẵn sàng sau khi sửa/làm** (không phải "Sẵn sàng chạy chiến dịch"). Lỗi chặn còn mở: C-1 (chưa thử Meta/Google/website thật), C-2 (giao diện chưa mở trình duyệt). Chi tiết `docs/nghiem-thu/v2.md` mục 9.
+- **Việc tồn từ review đã làm (mỗi việc một commit `fix(v2-08)` + test):** chốt chặn gập ký tự chèn + "thỏa thuận"/"phần trăm"; `kb_items` theo nhóm hoạt động; MST vs SĐT; câu "Ca đo được 237/237; chưa đo: 0" trong báo cáo eval giả lập (sửa mã + sinh lại báo cáo); nguồn ~57.000 `CRM Notification` mồ côi (bộ TD106, sửa `bridge_helpers.cleanup`, dọn đúng các dòng mồ côi: 57.859 → 1 dòng hợp lệ); bảng quyết định cho 6 ADR "Đề xuất" (`docs/nghiem-thu/v2.md` mục 11).
+- **Lỗi thật tìm thấy khi tải/thăm dò và đã sửa (commit riêng + test đỏ-rồi-xanh):** (1) `dashboard.snapshot` 500 với mọi Sales User khi có Lead quảng cáo (JOIN làm cột `name` mơ hồ); (2) Lead quảng cáo đã tạo nhưng chưa giao không được giao khi thử lại (lộ ra khi Redis chết giữa đợt); (3) hai worker cùng tạo Omni Campaign mới lỗi trùng khóa.
+- **Test cũ đổi:** KHÔNG có (V2-08 không sửa assertion của test cũ nào). Chỉ sửa hàm dọn `bridge_helpers.cleanup` (helper).
+- **Công cụ mới:** `tests/load/send_ads_burst.py`, `fake_graph.py`, `ads_setup.py`, `rq_worker.py --fake-graph`; `tests/acceptance/measure_campaign.py`, `scenario_map.py`; test `test_v2_08_fixes`, `test_v2_08_acceptance`.
+- **Sự cố dữ liệu của chính tôi:** lần chạy trọn bộ đầu tiên đỏ 2 test (`test_draft`, `test_handoff`) vì tải chat để lại 385 `Omni Bot Draft` và 784 `Omni Bot Run` mồ côi; đã dọn đúng các dòng đó (tạo sau thời điểm bắt đầu tải, Lead không còn), sửa `ads_setup.cleanup` để dọn cả hai, chạy lại.
+- **Test cuối:** 1.576 → **1.593 test, OK, 0 lỗi, 0 bỏ qua** (+17: 13 hồi quy `fixes` + 4 `acceptance`); `bench migrate` sạch; ruff 0.8.1 sạch; Omni Settings sau test: sandbox=1/Draft/analyze=1, ghim v1, 0 mục KB hoạt động, 0 nhóm tự gửi; `site_config.json` không có `developer_mode`/`omni_auto_send_allowed`.
+
+### Tổng kết toàn bộ v2 (V2-00 … V2-08)
+
+| Bước | Tag | Số test (cuối bước) | ADR | Việc chưa đo / chưa làm |
+| --- | --- | --- | --- | --- |
+| V2-00 kiểm kê | `v2-00` | 1.045 (1 lỗi do chép `mau/`) | — | dữ liệu staging, Zalo/Stringee thật |
+| V2-01 sửa nợ v1 | `v2-01` | 1.086 | 0006–0009 (Đề xuất) | dry run backfill trên staging, Z1–Z9, Z10/S8 |
+| V2-02 mô hình nhà thầu | `v2-02` | 1.202 | 0008 (chấp nhận), 0010 (chấp nhận), 0011 (Đề xuất) | patch liên kết chưa chạy thật, ánh xạ trạng thái chờ duyệt |
+| V2-03 nhập danh sách | `v2-03` | 1.280 | 0012 (Đề xuất) | chưa có tệp thật/staging, đối chiếu TongHop thật |
+| V2-04 dashboard/chi tiết | `v2-04` | 1.385 | — | giao diện chưa mở trình duyệt, ảnh chụp, đo staging |
+| V2-05 lead quảng cáo | `v2-05` | 1.509 | 0013 (Đề xuất) | Meta/Google/website thật, Q4, nginx `X-Forwarded-For` |
+| V2-06 bot nhà thầu | `v2-06` | 1.575 (đo lại 1.576) | 0010 thi hành | cổng bot chưa đo (Q11), kho tri thức chờ duyệt |
+| V2-07 đo cổng AI thật | — | BỎ QUA (Q11) | — | toàn bộ |
+| V2-08 nghiệm thu | chưa gắn | 1.593 | — | Meta/Google/website thật, staging, trình duyệt, tuần chạy thử, kill -9 worker |
