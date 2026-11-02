@@ -159,10 +159,17 @@ class TestCampaignCreateRace(FrappeTestCase):
 
 
 class TestOrphanLeadGetsOwnerOnRetry(WebCase):
+	@staticmethod
+	def _drop_identities():
+		"""`ads_helpers.cleanup` chỉ dọn định danh có TD505: mã gửi riêng của test này để lại định danh mồ côi."""
+		frappe.db.delete("Omni Identity", {"identity_key": ["like", "Web Form:td808-%"]})
+		frappe.db.commit()
+
 	def test_existing_lead_without_owner_is_assigned_when_the_form_is_processed_again(self):
 		from omni_crm.crm_bridge import form_lead
 		from omni_crm.tests.ads_helpers import SALE
 
+		self.addCleanup(self._drop_identities)
 		first = self.submit()
 		lead = first.lead
 		self.assertEqual(form_lead.recipients(lead), [SALE])
