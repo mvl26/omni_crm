@@ -179,15 +179,17 @@ class TestSignatureAndGateway(MetaCase):
 		_res, status = call_webhook(webhooks.meta_leads, big, sign(big), args={"ch": self.channel.name})
 		self.assertEqual(status, 413)
 
-	def test_channel_off_stores_but_does_not_enqueue_or_process(self):
+	def test_disabled_channel_ignores_with_200_and_stores_nothing(self):
+		# V2-05 (review): kênh tắt thì bỏ qua có log, KHÔNG lưu (trước đây vẫn lưu tin New)
 		frappe.db.set_value("Omni Channel", self.channel.name, "enabled", 0)
 		frappe.db.commit()
 		frappe.clear_document_cache("Omni Channel", self.channel.name)
-		self.post()
-		row = inbound(self.channel.name)[0]
+		_res, status = self.post()
+		self.assertEqual(status, 200)
+		self.assertEqual(inbound(self.channel.name), [])
 		with mock.patch(GET, side_effect=AssertionError("kênh tắt không được gọi Graph API")):
-			work(row.identity_key)
-		self.assertEqual(inbound(self.channel.name)[0].status, "New")
+			reconcile_run = reconcile.run()
+		self.assertEqual(reconcile_run["created"], 0)
 
 
 class TestWorkerCreatesLead(MetaCase):

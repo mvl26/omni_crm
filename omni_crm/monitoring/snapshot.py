@@ -189,6 +189,13 @@ def _crm_lead_sync_enabled() -> int:
 AD_CHANNEL_TYPES = ("Meta Lead Ads", "Google Lead Form", "Web Form")
 
 
+def _webform_limit_hit() -> int:
+	"""Số kênh Web Form đang bật vừa chạm trần toàn kênh trong giờ qua (dấu Redis TTL 1 giờ)."""
+	cache = frappe.cache()
+	names = frappe.get_all("Omni Channel", filters={"channel_type": "Web Form", "enabled": 1}, pluck="name")
+	return sum(1 for n in names if cache.get(cache.make_key(f"omni:webform:global_hit:{n}")))
+
+
 def _ads(now) -> dict[str, Any]:
 	"""Lead quảng cáo (V2-05): số chiến dịch đang chạy, kênh quảng cáo đang bật, lead thật gần nhất (không tính lead thử nghiệm)."""
 	running = frappe.db.sql(
@@ -208,6 +215,7 @@ def _ads(now) -> dict[str, Any]:
 		"channels_enabled": channels,
 		"last_lead_at": str(last) if last else None,
 		"silence_hours": flags.ads_setting("ads_silence_hours"),
+		"webform_global_limit_hit": _webform_limit_hit(),
 	}
 
 

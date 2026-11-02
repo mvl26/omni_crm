@@ -192,6 +192,17 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 					).format(int(silent // 3600), hours, ads["campaigns_running"]),
 				)
 			)
+	if cint(ads.get("webform_global_limit_hit")):
+		out.append(
+			Alert(
+				"web_form_vuot_tran",
+				"",
+				_("Web Form chạm trần toàn kênh"),
+				_(
+					"Form website vượt trần số lượt gửi mỗi giờ (webform_global_rate_per_hour): có thể đang bị tấn công xoay IP. Người dùng thật cũng bị 429 cho tới khi hết giờ."
+				),
+			)
+		)
 	sandbox = cint(snap["switches"]["sandbox_mode"])
 	business_now = is_business_time(now)
 	for ch in snap["channels"]:

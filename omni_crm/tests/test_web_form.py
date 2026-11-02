@@ -150,6 +150,49 @@ class TestEndpoint(WebCase):
 		_res, status = call_webhook(webhooks.web_form, body(payload()), args={"ch": g.name})
 		self.assertEqual(status, 404)
 
+	def test_unknown_form_id_is_dropped_with_fake_success_by_default(self):
+		res, status = self.post(payload(form="TD505KHONGCO"))
+		self.assertEqual((status, res["message"]), (200, "ok"))
+		self.assertEqual(inbound(self.channel.name), [])
+		res, status = self.post(payload(form=""))
+		self.assertEqual(status, 200)
+		self.assertEqual(inbound(self.channel.name), [])
+
+	def test_unknown_form_accepted_by_switch_is_flagged_and_not_auto_assigned(self):
+		with mock.patch("omni_crm.flags.webform_accept_unknown_form", return_value=True):
+			self.post(payload(form="TD505KHONGCO"))
+		row = inbound(self.channel.name)[0]
+		work(row.identity_key)
+		lead = inbound(self.channel.name)[0].lead
+		self.assertTrue(lead)
+		d = frappe.get_doc(LEAD, lead)
+		self.assertFalse(d.lead_owner)
+		self.assertEqual(frappe.db.count("ToDo", {"reference_name": lead, "status": "Open"}), 0)
+		self.assertTrue(
+			frappe.db.exists(
+				"Comment", {"reference_name": lead, "content": ["like", "%chưa cấu hình Omni Lead Form%"]}
+			)
+		)
+
+	def test_global_hourly_cap_returns_429_for_every_ip_and_marks_monitor(self):
+		from omni_crm import flags
+
+		real = flags.ads_setting
+		with mock.patch(
+			"omni_crm.flags.ads_setting",
+			side_effect=lambda f: 3 if f == "webform_global_rate_per_hour" else real(f),
+		):
+			codes = [
+				self.post(payload(submission_id=f"td505-sub-g{i:03d}"), ip=f"10.8.0.{i}")[1] for i in range(5)
+			]
+		self.assertEqual(codes, [200, 200, 200, 429, 429])
+		self.assertEqual(len(inbound(self.channel.name)), 3)
+		from omni_crm.monitoring import alerts, snapshot
+
+		snap = snapshot.build_snapshot()
+		self.assertEqual(snap["ads"]["webform_global_limit_hit"], 1)
+		self.assertIn("web_form_vuot_tran", [a.kind for a in alerts.evaluate(snap)])
+
 	def test_form_data_body_is_accepted(self):
 		args = {"ch": self.channel.name, **{k: v for k, v in payload().items()}}
 		_res, status = call_webhook(webhooks.web_form, b"", args=args)

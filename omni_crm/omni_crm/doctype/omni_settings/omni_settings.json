@@ -79,7 +79,9 @@
   "sec_ads",
   "ads_silence_hours",
   "webform_rate_limit",
-  "webform_rate_window_minutes"
+  "webform_rate_window_minutes",
+  "webform_global_rate_per_hour",
+  "webform_accept_unknown_form"
  ],
  "fields": [
   {
@@ -520,6 +522,20 @@
    "fieldtype": "Int",
    "label": "Web Form: cửa sổ giới hạn (phút)",
    "default": "10"
+  },
+  {
+   "fieldname": "webform_global_rate_per_hour",
+   "fieldtype": "Int",
+   "label": "Web Form: trần toàn kênh mỗi giờ",
+   "default": "300",
+   "description": "Vượt trần: 429 cho mọi IP và cảnh báo giám sát. Chưa từng lưu = 300."
+  },
+  {
+   "fieldname": "webform_accept_unknown_form",
+   "fieldtype": "Check",
+   "label": "Web Form: nhận biểu mẫu chưa cấu hình",
+   "default": "0",
+   "description": "Tắt (mặc định): form có mã chưa cấu hình Omni Lead Form bị bỏ qua và trả thành công giả. Bật: nhận, ghi chú 'biểu mẫu chưa cấu hình' và KHÔNG tự giao sale."
   }
  ],
  "permissions": [

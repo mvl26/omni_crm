@@ -206,6 +206,14 @@ def _query_arg(name: str) -> str:
 	return str((args.get(name) if args is not None else None) or frappe.form_dict.get(name) or "")
 
 
+def _enabled_guard(channel_doc) -> dict | None:
+	"""Kênh quảng cáo đã TẮT: bỏ qua có log, KHÔNG lưu gì (trả 200 để nền tảng không thử lại hay hủy đăng ký)."""
+	if channel_doc.enabled:
+		return None
+	_log_short("kenh_tat", channel_doc.name, 0)
+	return _respond(200, "ok", received=0, saved=0)
+
+
 @frappe.whitelist(allow_guest=True)
 def meta_leads() -> dict | None:
 	"""Webhook Meta Lead Ads: GET = handshake (hub.mode/hub.verify_token/hub.challenge), POST = sự kiện leadgen có chữ ký.
@@ -217,7 +225,7 @@ def meta_leads() -> dict | None:
 	from omni_crm.channels.meta_leads.adapter import verify_token
 
 	if frappe.local.request.method != "GET":
-		return _handle_webhook("Meta Lead Ads")
+		return _handle_webhook("Meta Lead Ads", guard=_enabled_guard)
 	name = _query_arg("ch")
 	channel_doc = (
 		frappe.get_cached_doc("Omni Channel", name)
@@ -241,7 +249,7 @@ def meta_leads() -> dict | None:
 @frappe.whitelist(allow_guest=True)
 def google_leads() -> dict | None:
 	"""Webhook Google Ads lead form: POST JSON có `google_key`. 200 + `{}` khi đã lưu, 4xx sai khóa, 503 khi lỗi tạm thời."""
-	result = _handle_webhook("Google Lead Form")
+	result = _handle_webhook("Google Lead Form", guard=_enabled_guard)
 	if frappe.local.response.get("http_status_code") == 200:
 		return _send_raw({})
 	return result
@@ -268,6 +276,14 @@ def _web_form_guard(channel_doc) -> dict | None:
 		cache.expire(key, window)
 	if count > limit:
 		return _respond(429, _("Bạn gửi quá nhanh, vui lòng thử lại sau"))
+	# trần toàn kênh theo giờ (chống tấn công xoay IP): vượt thì 429 cho mọi người và ghi dấu để giám sát cảnh báo
+	gkey = cache.make_key(f"omni:webform:global:{channel_doc.name}")
+	total = cache.incr(gkey)
+	if total == 1 or cache.ttl(gkey) < 0:
+		cache.expire(gkey, 3600)
+	if total > flags.ads_setting("webform_global_rate_per_hour"):
+		cache.set(cache.make_key(f"omni:webform:global_hit:{channel_doc.name}"), 1, ex=3600)
+		return _respond(429, _("Hệ thống đang bận, vui lòng thử lại sau"))
 	return None
 
 

@@ -489,7 +489,16 @@ def _apply(res: Any, msg: Any) -> None:
 	if not has_contact and res.created_lead:
 		_comment(lead, _("Thiếu thông tin liên hệ: biểu mẫu không có SĐT hay email hợp lệ"))
 	name = frappe.db.get_value(LEAD, lead, "lead_name") or lead
-	if res.created_lead:
+	unknown_web = form_doc is None and form.get("platform") == "Website"
+	if unknown_web and res.created_lead:  # biểu mẫu chưa cấu hình: không giao tự động, để người xử lý quyết
+		unassign(lead)
+		_comment(
+			lead,
+			_("Biểu mẫu «{0}» chưa cấu hình Omni Lead Form: chưa giao sale tự động").format(
+				form.get("form_id")
+			),
+		)
+	elif res.created_lead:
 		users = assign(lead, form_doc)
 		notify_users(
 			lead,

@@ -480,6 +480,7 @@ class TestSilenceAlert(AdsCase):
 				"channels_enabled",
 				"last_lead_at",
 				"silence_hours",
+				"webform_global_limit_hit",
 			},
 		)
 		self.assertEqual(snapshot.build_snapshot()["ads"]["silence_hours"], 6)

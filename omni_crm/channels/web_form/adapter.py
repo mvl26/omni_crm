@@ -13,6 +13,7 @@ from urllib.parse import parse_qs
 
 from frappe import _
 
+from omni_crm import flags
 from omni_crm.channels import form_common
 from omni_crm.channels.registry import register_adapter
 from omni_crm.ingest.events import InboundEvent, OutboundRequest
@@ -99,6 +100,8 @@ class WebFormAdapter:
 			return []
 		form_id = str(data.get("form") or data.get("form_id") or "")
 		form_doc = get_form("Website", form_id)
+		if form_doc is None and not flags.webform_accept_unknown_form():
+			return []  # mã biểu mẫu chưa cấu hình: bỏ qua, trả thành công giả như honeypot (không lộ cấu hình)
 		answers = {k: v for k, v in data.items() if k not in META_KEYS}
 		utm = {
 			k: form_common.clean(data.get(k), 200)

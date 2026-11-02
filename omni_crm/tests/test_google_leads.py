@@ -103,6 +103,14 @@ class TestWebhook(GoogleCase):
 		self.assertEqual(status, 200)
 		self.assertEqual(len(inbound(self.channel.name)), 1)
 
+	def test_disabled_channel_ignores_with_200_and_stores_nothing(self):
+		frappe.db.set_value("Omni Channel", self.channel.name, "enabled", 0)
+		frappe.db.commit()
+		frappe.clear_document_cache("Omni Channel", self.channel.name)
+		_res, status = self.post()
+		self.assertEqual(status, 200)
+		self.assertEqual(inbound(self.channel.name), [])
+
 	def test_get_is_405(self):
 		_res, status = call_webhook(webhooks.google_leads, b"", method="GET", args={"ch": self.channel.name})
 		self.assertEqual(status, 405)

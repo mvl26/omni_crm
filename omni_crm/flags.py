@@ -123,7 +123,23 @@ def care_setting(fieldname: str):
 	return value
 
 
-ADS_DEFAULTS = {"ads_silence_hours": 6, "webform_rate_limit": 5, "webform_rate_window_minutes": 10}
+ADS_DEFAULTS = {
+	"ads_silence_hours": 6,
+	"webform_rate_limit": 5,
+	"webform_rate_window_minutes": 10,
+	"webform_global_rate_per_hour": 300,
+}
+
+
+def webform_accept_unknown_form() -> bool:
+	"""Có nhận form website có mã chưa cấu hình Omni Lead Form không; chưa từng lưu hoặc lỗi = không (an toàn)."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'webform_accept_unknown_form'"
+		)
+	except Exception:
+		return False
+	return bool(row and cint(row[0][0]))
 
 
 def ads_setting(fieldname: str) -> int:
