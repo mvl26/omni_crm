@@ -352,7 +352,7 @@ class TestFormSwitchAndUnknownForm(MetaCase):
 		self.assertEqual((row.status, row.lead), ("Done", None))
 
 	def test_unknown_form_still_creates_lead_with_default_mapping(self):
-		frappe.db.delete("Omni Lead Form", {"name": self.form.name})
+		frappe.delete_doc("Omni Lead Form", self.form.name, force=True, ignore_permissions=True)
 		frappe.db.commit()
 		row, lead = self.process()
 		self.assertEqual(row.status, "Done")
