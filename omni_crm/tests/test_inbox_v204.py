@@ -94,3 +94,16 @@ class TestInboxV204(InboxTestCase):
 		profile = inbox.get_thread(self.lead1)["profile"]
 		self.assertEqual((profile["organization"], profile["fit_tier"]), (self.org, "A"))
 		self.assertIn("next_step", profile)
+
+	def test_thread_api_hides_phone_and_email_of_person_who_refused_contact(self):
+		"""Reviewer V2-04: ẩn SĐT/email ở API, không chỉ ở giao diện (docs/14 mục 6)."""
+		from omni_crm.prospect import contacts as contacts_mod
+		from omni_crm.tests.test_customer import make_contact
+
+		make_contact(self.org, "TD404 Tuchoi", phone="0900404888", email="td404inb@example.com")
+		frappe.db.set_value("Contact", {"company_name": self.org}, "omni_consent", contacts_mod.REFUSED)
+		frappe.set_user(SALE1)
+		data = inbox.get_thread(self.lead1)
+		self.assertTrue(data["profile"]["person_refused"])
+		self.assertIsNone(data["lead"]["mobile_no"])
+		self.assertIsNone(data["lead"]["email"])

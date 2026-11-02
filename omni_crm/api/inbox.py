@@ -428,6 +428,11 @@ def get_thread(lead: str) -> dict:
 	info.pop("omni_score_breakdown", None)  # JSON thô không đưa ra giao diện
 	info["omni_score"] = score["score"] if score else None
 	deal = frappe.db.get_value("CRM Deal", {"lead": lead}, "name") if info.converted else None
+	profile = customer_api.get_mini_profile(lead)  # V2-04: hồ sơ rút gọn (đơn vị, hạng, bước tiếp theo)
+	if profile[
+		"person_refused"
+	]:  # từ chối/đã xóa dữ liệu: SĐT/email không ra khỏi API (không chỉ ẩn ở giao diện)
+		info["mobile_no"] = info["email"] = None
 	return {
 		"lead": info,
 		"score": score,  # {score, reasons, hot} hoặc None khi chưa chấm (D2-06)
@@ -441,7 +446,7 @@ def get_thread(lead: str) -> dict:
 		"bot": bot_control.state(lead, bool(frappe.has_permission(LEAD, "write", doc=lead))),  # D3-02
 		"truncated": max(len(inbound), len(outbound), len(call_rows)) >= THREAD_LIMIT,
 		"compose": compose_state(lead),
-		"profile": customer_api.get_mini_profile(lead),  # V2-04: hồ sơ rút gọn (đơn vị, hạng, bước tiếp theo)
+		"profile": profile,
 	}
 
 
