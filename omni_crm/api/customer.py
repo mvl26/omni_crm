@@ -40,7 +40,6 @@ FILTERS = {
 }
 EDITABLE = {
 	"first_name",
-	"last_name",
 	"job_title",
 	"mobile_no",
 	"phone",
@@ -324,6 +323,10 @@ def update_field(lead: str, field: str, value: str | None = None) -> dict[str, A
 		frappe.throw(_("Mức gấp không hợp lệ"))
 	doc = frappe.get_doc(LEAD, lead)
 	doc.set(field, (value or "").strip() or None)
+	if (
+		field == "first_name"
+	):  # "Họ tên" hiển thị là lead_name = ghép first + middle + last: ghi cả tên vào first_name
+		doc.middle_name = doc.last_name = None
 	doc.save()  # qua quyền của người dùng; hook track_manual_edits ghi omni_manual_fields
 	return {
 		"lead": lead,
@@ -418,7 +421,8 @@ def get_side(lead: str) -> dict[str, Any]:
 		limit_page_length=30,
 	)
 	names = _names([t.assigned_to for t in tasks])
-	candidates = frappe.get_all(
+	# get_list (áp permission_query_conditions): chỉ cặp mà người dùng đọc được CẢ hai Lead, vì `reason` có thể lộ SĐT/tên Lead kia
+	candidates = frappe.get_list(
 		"Omni Duplicate Candidate",
 		or_filters=[["lead_a", "=", lead], ["lead_b", "=", lead]],
 		filters={"status": "Open"},

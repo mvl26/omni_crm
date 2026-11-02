@@ -305,6 +305,47 @@ class TestProfileAndEdit(CustomerCase):
 			customer.update_field(self.lead, "omni_need", "x")
 
 
+class TestDuplicatesPrivacy(CustomerCase):
+	def test_pair_with_a_colleagues_lead_is_hidden_from_a_sales_user(self):
+		other = make_lead("TD404 Dong nghiep", owner=SALE2)
+		mine2 = make_lead("TD404 Cung toi", owner=SALE1)
+		secret = frappe.get_doc(
+			{
+				"doctype": "Omni Duplicate Candidate",
+				"lead_a": min(self.lead, other),
+				"lead_b": max(self.lead, other),
+				"reason": "Trùng SĐT 0900404999 của khách đồng nghiệp",
+				"score": 80,
+				"status": "Open",
+			}
+		).insert(ignore_permissions=True)
+		visible = frappe.get_doc(
+			{
+				"doctype": "Omni Duplicate Candidate",
+				"lead_a": min(self.lead, mine2),
+				"lead_b": max(self.lead, mine2),
+				"reason": "Cùng email",
+				"score": 70,
+				"status": "Open",
+			}
+		).insert(ignore_permissions=True)
+		frappe.set_user(SALE1)
+		names = [d["name"] for d in customer.get_side(self.lead)["duplicates"]]
+		self.assertEqual(names, [visible.name])
+		self.assertNotIn(secret.name, names)
+		frappe.set_user("Administrator")
+		self.assertEqual(
+			{d["name"] for d in customer.get_side(self.lead)["duplicates"]}, {secret.name, visible.name}
+		)
+
+	def test_inline_edit_of_full_name_does_not_duplicate_parts(self):
+		frappe.db.set_value("CRM Lead", self.lead, {"first_name": "An", "last_name": "Nguyễn"})
+		frappe.set_user(SALE1)
+		customer.update_field(self.lead, "first_name", "Nguyễn Văn An")
+		row = frappe.db.get_value("CRM Lead", self.lead, ["lead_name", "last_name"], as_dict=True)
+		self.assertEqual((row.lead_name, row.last_name), ("Nguyễn Văn An", None))
+
+
 class TestActivity(CustomerCase):
 	def setUp(self):
 		super().setUp()
