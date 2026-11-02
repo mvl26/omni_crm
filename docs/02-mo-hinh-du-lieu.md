@@ -332,6 +332,25 @@ Chỉ tạo trên DocType mà ADR "Cách hiển thị hội thoại" (D1-06) th�
 
 Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không trùng trường có sẵn (ví dụ `mobile_no`, `email`, `organization`, `source`, `lead_owner`, `status`); (2) chọn `insert_after` hợp lý. Ghi kết quả đọc vào `docs/12-quyet-dinh-mo.md`.
 
+### 15.1 Omni Prospect Import (V2-03)
+
+Nhật ký mỗi lần nhập danh sách nhà thầu. Đặt tên `NHAP-.YYYY.-.#####`. Chỉ Omni Admin và System Manager đọc/ghi. Việc chạy do `omni_crm.prospect.importer` (việc nền, hàng đợi `omni`); form chỉ có nút **Chạy thử**, **Nhập thật**, **Tải mẫu trống**.
+
+| Trường | Kiểu | Ghi chú |
+| --- | --- | --- |
+| `file` | Attach | Tệp `.xlsx` đúng mẫu; **bắt buộc riêng tư** (`/private/files/…`), để ngoài repo |
+| `source_name`, `file_hash` | Data | Tên tệp, SHA-256 (nhận ra tệp đã nhập) |
+| `dry_run` | Check | Bật: chỉ lập kế hoạch, không ghi gì vào CRM |
+| `status` | Select | Draft / Queued / Running / Done / Failed / Refused |
+| `run_by` | Link User | Người bấm nhập; quyền kiểm theo người này cả trong việc nền |
+| `started_at`, `finished_at`, `duration_seconds` | | |
+| `nt_*`, `gt_*`, `lh_*` | Int | Tạo mới / cập nhật / bỏ qua / lỗi của NhaThau, GoiThau, NguoiLienHe |
+| `confirm_count` | Int | Số mục "cần xác nhận" |
+| `error_file` | Attach (riêng tư) | `.xlsx` cùng định dạng mẫu: dòng 1-3 như mẫu, các dòng lỗi từ dòng 4 kèm cột `error_reason`, sheet `CanXacNhan`; sửa rồi nhập lại được |
+| `summary_json`, `confirm_json`, `reconcile_json`, `warnings` | Code / Long Text | Báo cáo số dòng, danh sách cần xác nhận, đối chiếu với TongHop/`calc_*`/ThamSo, cảnh báo |
+
+Trường ẩn `omni_import_snapshot` (Long Text) trên CRM Organization và Contact: giá trị importer đã ghi lần cuối (ADR 0012).
+
 ## 16. Quyền
 
 | DocType | Omni Admin | Sales User | Omni Knowledge Editor |
@@ -345,7 +364,7 @@ Trước khi tạo, đọc `crm_lead.json` của app `crm` để: (1) không tr�
 | Omni Bot Draft | Đọc/Ghi | Đọc/Ghi theo Lead | Đọc |
 | Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
 | Omni Bid Award, Omni Hospital Alias | Đọc/Ghi | Đọc theo quyền xem Lead của nhà thầu (V2-02: Bid Award có `permission_query_conditions` + `has_permission` theo Lead có `organization` = nhà thầu, và API `api/organization.py`; Hospital Alias chỉ Omni Admin) | — |
-| Omni Prospect Import | Đọc/Ghi (chạy nhập) | — | — |
+| Omni Prospect Import | Đọc/Ghi (chạy nhập); System Manager cũng được. Không có vai trò "CRM Manager" trên site; Sales Manager KHÔNG được nhập | — | — |
 | Omni Campaign | Đọc/Ghi | Đọc | — |
 | Omni Lead Form | Đọc/Ghi (khóa bí mật chỉ Omni Admin) | — | — |
 | Omni Care Log | Đọc/Ghi | Đọc/ghi kết quả qua API theo quyền Lead | — |

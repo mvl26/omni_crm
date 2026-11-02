@@ -1,0 +1,308 @@
+{
+ "actions": [],
+ "autoname": "NHAP-.YYYY.-.#####",
+ "creation": "2026-11-02 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sec_file",
+  "file",
+  "source_name",
+  "dry_run",
+  "col1",
+  "status",
+  "run_by",
+  "file_hash",
+  "message",
+  "sec_time",
+  "started_at",
+  "finished_at",
+  "duration_seconds",
+  "sec_counts",
+  "nt_created",
+  "nt_updated",
+  "nt_skipped",
+  "nt_errors",
+  "cb_nt",
+  "gt_created",
+  "gt_updated",
+  "gt_skipped",
+  "gt_errors",
+  "cb_gt",
+  "lh_created",
+  "lh_updated",
+  "lh_skipped",
+  "lh_errors",
+  "cb_lh",
+  "confirm_count",
+  "sec_report",
+  "error_file",
+  "report_html",
+  "warnings",
+  "summary_json",
+  "confirm_json",
+  "reconcile_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "sec_file",
+   "fieldtype": "Section Break",
+   "label": "Tệp danh sách"
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "Tệp .xlsx (đúng mẫu danh sách nhà thầu)",
+   "description": "Tệp chứa dữ liệu cá nhân: chỉ nhận tệp riêng tư, để NGOÀI repo, không commit"
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Data",
+   "label": "Tên tệp",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dry_run",
+   "fieldtype": "Check",
+   "label": "Chạy thử (không ghi gì vào CRM)",
+   "default": "1"
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Draft\nQueued\nRunning\nDone\nFailed\nRefused",
+   "default": "Draft",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "run_by",
+   "fieldtype": "Link",
+   "label": "Người nhập",
+   "options": "User",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "file_hash",
+   "fieldtype": "Data",
+   "label": "SHA-256 của tệp",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Small Text",
+   "label": "Thông báo",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_time",
+   "fieldtype": "Section Break",
+   "label": "Thời gian"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Bắt đầu",
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Kết thúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Float",
+   "label": "Thời gian chạy (giây)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_counts",
+   "fieldtype": "Section Break",
+   "label": "Số dòng theo sheet"
+  },
+  {
+   "fieldname": "nt_created",
+   "fieldtype": "Int",
+   "label": "NhaThau: tạo mới",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nt_updated",
+   "fieldtype": "Int",
+   "label": "NhaThau: cập nhật",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nt_skipped",
+   "fieldtype": "Int",
+   "label": "NhaThau: bỏ qua",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nt_errors",
+   "fieldtype": "Int",
+   "label": "NhaThau: lỗi",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_nt",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "gt_created",
+   "fieldtype": "Int",
+   "label": "GoiThau: tạo mới",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gt_updated",
+   "fieldtype": "Int",
+   "label": "GoiThau: cập nhật",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gt_skipped",
+   "fieldtype": "Int",
+   "label": "GoiThau: bỏ qua",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gt_errors",
+   "fieldtype": "Int",
+   "label": "GoiThau: lỗi",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_gt",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "lh_created",
+   "fieldtype": "Int",
+   "label": "NguoiLienHe: tạo mới",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lh_updated",
+   "fieldtype": "Int",
+   "label": "NguoiLienHe: cập nhật",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lh_skipped",
+   "fieldtype": "Int",
+   "label": "NguoiLienHe: bỏ qua",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lh_errors",
+   "fieldtype": "Int",
+   "label": "NguoiLienHe: lỗi",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_lh",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "confirm_count",
+   "fieldtype": "Int",
+   "label": "Số mục cần xác nhận",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_report",
+   "fieldtype": "Section Break",
+   "label": "Báo cáo"
+  },
+  {
+   "fieldname": "error_file",
+   "fieldtype": "Attach",
+   "label": "Tệp lỗi (sửa rồi nhập lại)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "report_html",
+   "fieldtype": "HTML",
+   "label": "Báo cáo"
+  },
+  {
+   "fieldname": "warnings",
+   "fieldtype": "Long Text",
+   "label": "Cảnh báo",
+   "read_only": 1
+  },
+  {
+   "fieldname": "summary_json",
+   "fieldtype": "Code",
+   "label": "Tóm tắt (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confirm_json",
+   "fieldtype": "Code",
+   "label": "Cần xác nhận (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconcile_json",
+   "fieldtype": "Code",
+   "label": "Đối chiếu với tệp (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-02 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Prospect Import",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "email": 0,
+   "print": 0,
+   "share": 0
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0,
+   "report": 1,
+   "export": 0,
+   "email": 0,
+   "print": 0,
+   "share": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "source_name",
+ "track_changes": 1
+}

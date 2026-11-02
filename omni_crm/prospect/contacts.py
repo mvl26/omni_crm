@@ -163,6 +163,7 @@ def erase_contact(contact: str, reason: str = "") -> bool:
 			"omni_phones_e164": "",
 			"omni_emails_norm": "",
 			"omni_erased_keys": _wrap(merged_keys),
+			"omni_import_snapshot": None,  # ảnh chụp lần nhập chứa họ tên, chức danh đã nhập: xóa cùng dữ liệu cá nhân
 			"omni_consent": REFUSED,
 			"omni_consent_method": ERASED_NAME_PREFIX + (f": {reason}"[:120] if reason else ""),
 		},
