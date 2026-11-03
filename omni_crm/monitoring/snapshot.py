@@ -8,6 +8,7 @@ import frappe
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime, today
 
 from omni_crm import flags
+from omni_crm.channels.meta_leads.errors import TOKEN_NOTE_NEVER, TOKEN_NOTE_OK
 from omni_crm.channels.telephony.registry import reconcile_key
 from omni_crm.channels.telephony.worker_hooks import UNVERIFIED_COUNTER_KEY
 from omni_crm.pipeline.retry import redact
@@ -55,6 +56,12 @@ def _channel_rows(now) -> list[dict[str, Any]]:
 			"last_success_at",
 			"last_error",
 			"zalo_token_expires_at",
+			"meta_token_checked_at",
+			"meta_token_valid",
+			"meta_token_never_expires",
+			"meta_token_expires_at",
+			"meta_token_data_expires_at",
+			"meta_token_note",
 			"zalo_skip_signature",
 			"creation",
 		],
@@ -87,9 +94,27 @@ def _channel_rows(now) -> list[dict[str, Any]]:
 				"last_error": redact(c.last_error or "")[:300] or None,
 				"token_expires_at": expires,
 				"token_seconds_left": int((get_datetime(expires) - now).total_seconds()) if expires else None,
+				"meta_token": _meta_token(c, now) if c.channel_type == "Meta Lead Ads" else None,
 			}
 		)
 	return rows
+
+
+def _meta_token(c, now) -> dict[str, Any]:
+	"""Kết quả kiểm token Page Meta gần nhất (V21-02); chưa kiểm thì `checked_at` là None. Ghi chú đã làm sạch, không chứa token."""
+	left = lambda v: int((get_datetime(v) - now).total_seconds()) if v else None  # noqa: E731
+	return {
+		"checked_at": c.meta_token_checked_at,
+		"valid": None if not c.meta_token_checked_at else bool(cint(c.meta_token_valid)),
+		"never_expires": bool(cint(c.meta_token_never_expires)),
+		"expires_at": c.meta_token_expires_at,
+		"seconds_left": left(c.meta_token_expires_at),
+		"data_expires_at": c.meta_token_data_expires_at,
+		"data_seconds_left": left(c.meta_token_data_expires_at),
+		"note": redact(c.meta_token_note or "")[:300] or None,
+		"problem": bool(c.meta_token_checked_at)
+		and (c.meta_token_note or "") not in (TOKEN_NOTE_OK, TOKEN_NOTE_NEVER),
+	}
 
 
 def _telephony(now) -> dict[str, Any]:
