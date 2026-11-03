@@ -31,7 +31,10 @@
   "next_attempt_at",
   "last_error",
   "processing_started_at",
-  "batch_id"
+  "batch_id",
+  "error_kind",
+  "requeue_count",
+  "error_alerted"
  ],
  "fields": [
   {
@@ -178,6 +181,33 @@
    "fieldtype": "Data",
    "label": "Mã lượt xử lý",
    "search_index": 1
+  },
+  {
+   "fieldname": "error_kind",
+   "fieldtype": "Select",
+   "label": "Loại lỗi",
+   "options": "\ntam_thoi\nvinh_vien",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "V21-03: loại lỗi lần thất bại gần nhất (tạm thời: mạng, timeout, 5xx, giới hạn tần suất; vĩnh viễn: token, quyền, lead không tồn tại, lỗi dữ liệu)."
+  },
+  {
+   "fieldname": "requeue_count",
+   "fieldtype": "Int",
+   "label": "Số lần kéo lại",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "V21-03: số lần đối soát Meta tự đưa tin Manual (lỗi tạm thời) về hàng đợi. Quá 3 thì dừng và cảnh báo."
+  },
+  {
+   "fieldname": "error_alerted",
+   "fieldtype": "Check",
+   "label": "Đã cảnh báo lỗi",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "V21-03: đã nằm trong một cảnh báo gộp của đối soát Meta (không cảnh báo lại mỗi giờ)."
   }
  ],
  "permissions": [
