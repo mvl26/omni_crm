@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from omni_crm.bot import intents
 from omni_crm.bot.context import normalize_text
 from omni_crm.identity.normalize import strip_accents
 
@@ -145,7 +146,7 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 	),
 }
 PRICE_WORD_ACCENTED = r"(?<!\w)giá(?!\w)(?!\s+(?:treo|đỡ|trị|kệ|thể|như))"
-INTENTS_HANDOFF = ("Hỏi giá", "Khiếu nại")
+# Ý định luôn chuyển người: quyết ở bot/intents.py (F6, V21-06), hiểu cả giá trị cũ của câu lệnh v1 (Hỏi giá, Đặt hàng).
 # Chèn lệnh từ khách (so khớp trên văn bản đã bỏ dấu).
 INJECTION_PATTERNS = (
 	r"\bbo qua (?:moi |tat ca |cac |het )?(?:huong dan|chi dan|quy tac|lenh|cau lenh|chi thi)",
@@ -303,10 +304,10 @@ def guard_handoff_topic(
 	wants_human: bool = False,
 	customer_text: str | None = None,
 ) -> GuardResult:
-	"""Chốt chặn 1: nhóm luôn chuyển người, ý định Hỏi giá/Khiếu nại, khách muốn gặp người, hoặc lời khách nhạy cảm."""
+	"""Chốt chặn 1: nhóm luôn chuyển người, ý định Hỏi phí/Yêu cầu đề xuất/Khiếu nại (và tên cũ), khách muốn gặp người, lời khách nhạy cảm."""
 	if group_always_handoff:
 		return True, "handoff_topic:nhom_luon_chuyen_nguoi"
-	if intent in INTENTS_HANDOFF:
+	if intents.always_handoff(intent):  # độc lập nhóm câu hỏi và độc lập việc AI đã trả action reply
 		return True, f"handoff_topic:y_dinh_{_folded(intent).replace(' ', '_')}"
 	if wants_human:
 		return True, "handoff_topic:khach_muon_gap_nguoi"
