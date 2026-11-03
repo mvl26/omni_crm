@@ -10,8 +10,10 @@ Mở **`/app/omni-monitor`** ("Giám sát Omni"; chỉ Omni Admin). Tự làm m�
 
 | Khối | Cho biết | Dấu hiệu xấu (đỏ) |
 | --- | --- | --- |
-| Công tắc | `sandbox_mode`, `developer_mode`, đã đặt `alert_recipients` chưa, số ngày giữ `raw_payload`; từng kênh bật nhận/gửi và có "bỏ qua chữ ký" không | `developer_mode` bật; `alert_recipients` chưa đặt; kênh có "bỏ qua chữ ký" |
-| Kênh | Mỗi kênh: lần nhận/gửi thành công gần nhất, hạn token Zalo, lỗi gần nhất; nút **Làm mới token Zalo** | Token còn < 1 giờ; có lỗi gần nhất |
+| Công tắc | `sandbox_mode`, `developer_mode`, đã đặt `alert_recipients` chưa, số ngày giữ `raw_payload`; dòng "Chẩn đoán chữ ký Zalo ĐANG BẬT tới ..." nếu đang bật; từng kênh bật nhận/gửi và có "bỏ qua chữ ký" không | `developer_mode` bật; `alert_recipients` chưa đặt; kênh có "bỏ qua chữ ký"; chẩn đoán chữ ký còn bật (chỉ dùng tạm trên staging) |
+| Kênh | Mỗi kênh: lần nhận/gửi thành công gần nhất, lỗi gần nhất. Kênh Zalo OA: hạn token Zalo, dòng **Gói OA**, nút **Làm mới token Zalo**. Kênh Meta Lead Ads: dòng **Hạn token Meta** (hạn token, hạn quyền dữ liệu, ghi chú kết quả kiểm, hoặc "chưa kiểm") | Token Zalo còn < 1 giờ; gói OA là Chưa xác nhận/Cơ bản/Tiêu chuẩn ("Gói OA có thể chưa cho kết nối API"); token Meta có vấn đề; có lỗi gần nhất |
+| Hàng dự phòng webhook (**chỉ hiện khi có tin hoặc từng hỏng**) | Số tin đang chờ chèn lại, tin cũ nhất, dung lượng, lần cuối DB và hàng dự phòng cùng hỏng | Có tin chờ lâu; có "lần cuối cùng hỏng" |
+| Kéo lại lead Meta (**chỉ hiện khi đã có số liệu**) | Lượt đối soát gần nhất (tạo mới, kéo lại), tổng số lần đã kéo lại, tin Manual lỗi tạm thời đang đợi kéo lại, tin Manual lỗi vĩnh viễn, tin dừng kéo lại sau 3 lần | Lỗi vĩnh viễn > 0; dừng kéo lại > 0 |
 | Hàng đợi | Số tin New, Processing, Retry, **Manual**; tuổi tin New lâu nhất; lần quét gần nhất | Manual > 0; tin New cũ nhất > 5 phút; lần quét cũ (scheduler dừng) |
 | Thời gian xử lý (24 giờ) | Số tin Done, p50, p95 từ nhận tin đến Done | p95 > 2 phút |
 | Chiều ra (hôm nay) | Queued, Sent, Failed, Blocked; Failed trong 1 giờ | Failed trong 1 giờ > 5 |
@@ -29,7 +31,7 @@ Nút:
 
 ## 2. Cảnh báo
 
-Cứ mỗi 5 phút hệ thống kiểm các luật và gửi cảnh báo qua **Notification Log cho Omni Admin** và **email tới `alert_recipients`** (để trống `alert_recipients` thì không có thư, Notification Log vẫn tạo). Mỗi loại tối đa 1 lần / 30 phút (mỗi kênh với luật theo kênh). Cảnh báo không chứa bí mật hay nội dung tin khách.
+Cứ mỗi 5 phút hệ thống kiểm các luật (riêng cảnh báo token Meta và lead Meta không kéo lại được gửi ngay lúc phát hiện, theo tác vụ kiểm token và đối soát) và gửi cảnh báo qua **Notification Log cho Omni Admin** và **email tới `alert_recipients`** (để trống `alert_recipients` thì không có thư, Notification Log vẫn tạo). Mỗi loại tối đa 1 lần / 30 phút (mỗi kênh với luật theo kênh). Cảnh báo không chứa bí mật hay nội dung tin khách.
 
 | Tiêu đề cảnh báo | Nghĩa là | Việc đầu tiên |
 | --- | --- | --- |
@@ -48,6 +50,15 @@ Cứ mỗi 5 phút hệ thống kiểm các luật và gửi cảnh báo qua **N
 | Bot AI tạm ngừng vì lỗi liên tiếp | Ngắt mạch mở (5 lần lỗi liên tiếp, 5 phút) | Kiểm khóa/mạng/nhà cung cấp AI |
 | Bot AI lỗi nhiều | > 5% lần gọi lỗi/sai định dạng (từ 20 lần) | Xem `Omni Bot Run` |
 | Bot tự gửi nhóm X đã tự tắt: <lý do> | Ngắt mạch Auto ([07](07-bot-ai.md) mục 9) | Xem nguyên nhân, sửa kho trước khi bật lại |
+| Hàng đợi omni_leads có việc nhưng không có worker (V21-01) | Hàng đợi riêng của lead quảng cáo đang có việc chờ mà không worker nào lắng nghe: lead nằm im | Thêm chương trình `bench worker --queue omni_leads` vào supervisor ([01](01-cai-dat-va-ha-tang.md) mục 3) hoặc bỏ khai báo `omni_leads` khỏi `workers` |
+| Tin nằm lâu trong hàng dự phòng webhook (V21-04) | Có tin trong hàng dự phòng quá 10 phút: DB không ghi được hoặc tác vụ quét mỗi phút không chèn lại được | Bật scheduler; kiểm DB; chạy tay `bench --site <site> execute omni_crm.ingest.spool.drain` ([01](01-cai-dat-va-ha-tang.md) mục 12) |
+| Webhook từng không lưu được tin: DB và hàng dự phòng đều hỏng (V21-04) | Có lúc webhook phải trả lỗi 5xx vì cả hai nơi đều không ghi được; tin đó có thể mất nếu nhà cung cấp không gửi lại | Kiểm DB và thư mục `private/omni_spool` (quyền, dung lượng); với Meta, đối soát hằng giờ sẽ bù lead sót |
+| Token Meta cần xử lý (V21-02) | Kiểm hằng ngày thấy token Page không hợp lệ, còn ≤ 7 ngày (hoặc quyền dữ liệu sắp hết), hoặc thiếu quyền `leads_retrieval` | Cấp lại token (khuyến nghị token System User không hết hạn, [12](12-lead-quang-cao.md) mục 6) rồi nhập vào kênh |
+| Có lead Meta không tự kéo lại được (V21-03) | Có tin Meta ở Manual do lỗi vĩnh viễn (token sai, thiếu quyền, lead đã xóa) hoặc đã kéo lại 3 lần vẫn lỗi | Sửa token/quyền rồi bấm **Xử lý lại** ở khối Tin Manual; [12](12-lead-quang-cao.md) mục 6 |
+| Không có lead quảng cáo (V2-05) | Có chiến dịch **Đang chạy** và kênh quảng cáo bật mà không có lead thật nào trong `ads_silence_hours` giờ làm việc | Webhook Meta/Google, token, biểu mẫu bật; [12](12-lead-quang-cao.md) mục 8 |
+| Web Form chạm trần toàn kênh (V2-05) | Form website vượt `webform_global_rate_per_hour` mỗi giờ: có thể bị tấn công; người thật cũng bị từ chối tới hết giờ | Xem nginx và nguồn gửi; chỉ nâng trần khi chắc là lưu lượng thật |
+| Đồng bộ lead Facebook có sẵn của CRM đang bật | Tính năng Lead Sync Source của CRM đang bật, tạo Lead ngoài hệ thống chống trùng của Omni | Tắt nguồn đồng bộ đó; lead Meta chỉ nên vào qua kênh Meta Lead Ads của Omni |
+| Quá hạn phản hồi / Quá 2 lần hạn phản hồi (V2-05) | Thông báo (chuông) cho sale (và trưởng nhóm) khi lead quảng cáo chưa được phản hồi trong `response_sla_minutes` phút làm việc | Sale liên hệ khách; trưởng nhóm đôn đốc ([13](13-dashboard-va-cham-soc.md)) |
 
 Muốn gửi lại ngay một cảnh báo đang bị chống lặp: xóa khóa Redis `omni:alert:<loại>:<kênh>` hoặc `bench --site <site> clear-cache` (chạy trong `<bench-dir>`; xóa toàn bộ cache, chỉ khi cần). Nếu Redis cache lỗi, cảnh báo vẫn gửi (có thể lặp).
 
@@ -105,6 +116,11 @@ Error Log được thiết kế để không chứa bí mật hay nội dung kh�
 | Redis queue chết | Webhook vẫn trả 200, tin ở New | Khởi động lại Redis; tác vụ quét đẩy lại sau 2 phút; bấm **Quét ngay**; worker do supervisor khởi động lại |
 | Worker bị kill / máy mất điện | Không mất tin, phục hồi chậm (~15 phút đo được) | Chờ hoặc **Quét ngay** sau khi kho đăng ký RQ dọn |
 | Nghi trùng tăng bất thường | Độ trễ DB (khóa tín hiệu bận) | Xem [06](06-chong-trung-va-lead.md) mục 6 |
+| Lead quảng cáo vào chậm (nhiều phút) khi chat đông | `omni_leads` chưa khai báo hoặc chưa có worker: lead đi chung hàng đợi `omni` với chat | [01](01-cai-dat-va-ha-tang.md) mục 3: khai báo `omni_leads`, chạy từ 2 worker (đề xuất 3 đến 4 ở production) |
+| Webhook trả 5xx / có tin trong hàng dự phòng | DB khóa hoặc mất kết nối | Xem cảnh báo "Tin nằm lâu trong hàng dự phòng webhook" ở mục 2; chạy tay `omni_crm.ingest.spool.drain` |
+| Meta không còn gửi lead, Graph báo lỗi quyền | Token Page hết hạn hoặc bị thu quyền | Cảnh báo "Token Meta cần xử lý"; cấp token mới ([12](12-lead-quang-cao.md) mục 6) |
+| Graph Meta chết một lúc rồi sống lại, có tin Manual | Tin Manual lỗi tạm thời | Không cần làm gì: lượt đối soát hằng giờ kéo lại (tối đa 3 lần/tin, trong 72 giờ). Tin lỗi vĩnh viễn thì xử lý theo cảnh báo |
+| Phát hành / nghi cấu hình sao chép nhầm từ site thử | Bot bật, sandbox sai, khóa tự gửi còn | Chạy lệnh kiểm trước phát hành (mục 7), sửa mọi mục `KHONG_DAT` |
 
 ## 5. Quay lui
 
@@ -137,7 +153,16 @@ bench restart
 | Hằng tuần | Xem nháp bị sửa/bỏ ở báo cáo "Bot nháp"; cập nhật kho tri thức; **chạy lại bộ đề**; xem `Omni Bot Run` lỗi | Phụ trách kho tri thức |
 | Hằng tháng | Báo cáo kênh, chi phí AI, rà quyền vai trò (Omni Admin, Omni Knowledge Editor), cập nhật `holidays` khi cần | Chủ dự án / quản trị |
 | Hằng quý | Kiểm khôi phục sao lưu; xem lại bảng điểm Lead theo tỉ lệ chốt thực tế | Quản trị / trưởng sale |
-| Mỗi lần phát hành | Kiểm tra: `developer_mode` tắt, `zalo_skip_signature` tắt, `sandbox_mode` đúng, `omni_auto_send_allowed` đúng, scheduler bật, worker chạy | Quản trị |
+| Mỗi lần phát hành | Chạy **lệnh kiểm trước phát hành** (xem dưới bảng này) và xử lý mọi mục `KHONG_DAT`; đọc từng mục `CAN_NGUOI_KIEM` | Quản trị |
+| Hằng ngày khi có chiến dịch chạy | Thẻ Kéo lại lead Meta và hạn token Meta ở `/app/omni-monitor`; số lead mới theo chiến dịch ở Tổng quan ([13](13-dashboard-va-cham-soc.md)) | Quản trị / trưởng sale |
+
+**Lệnh kiểm trước phát hành** (chỉ đọc, V21-08), chạy trong `<bench-dir>`:
+
+```bash
+bench --site <site> execute omni_crm.ops.preflight.run --kwargs "{'target': 'production'}"
+```
+
+Bảng kết quả `DAT` / `KHONG_DAT` / `CAN_NGUOI_KIEM`; thoát mã 1 khi còn `KHONG_DAT`. Danh sách mục nó kiểm ở [02](02-cau-hinh-omni-settings.md) mục 11B. Lệnh không gọi Meta, Google, Zalo hay nginx thật nên `DAT` không thay cho việc thử trên hệ thống thật; nó cũng không đo scheduler có thật sự chạy.
 
 Số liệu mục tiêu theo dõi (từ `docs/00-tong-quan.md`): không mất tin; Lead trùng < 3%; tin vào đến Lead < 1 phút; phản hồi lần đầu giờ hành chính < 15 phút; nháp đúng ≥ 85%; trường trích xuất đúng ≥ 90%; tin xử lý tay < 1%; gọi nhỡ gọi lại đúng hạn ≥ 80%. Các script đo (`measure_dot1/2/3.py`, chạy bằng `bench --site <site> execute omni_crm.tests.acceptance.measure_dot1.run --kwargs '{"start": "...", "end": "..."}'`; giờ theo múi giờ của site) đã có; **chưa đo trên khách thật** (xem [10](10-quy-trinh-len-san-xuat.md)).
 
@@ -149,3 +174,5 @@ Số liệu mục tiêu theo dõi (từ `docs/00-tong-quan.md`): không mất ti
 - [ ] Người vận hành biết quay lui mức 1 và 2 (tắt bot, tắt nhóm, tắt kênh) và đã thử một lần trên staging.
 - [ ] Sao lưu hằng ngày chạy; đã khôi phục thử một lần.
 - [ ] Lịch kiểm hằng ngày/tuần/tháng/quý đã giao người.
+- [ ] Người nhận cảnh báo biết các cảnh báo mới của mục 2 (hàng đợi `omni_leads`, hàng dự phòng webhook, token Meta, lead Meta không kéo lại được, không có lead quảng cáo) và việc đầu tiên cần làm với từng cái.
+- [ ] Đã chạy lệnh kiểm trước phát hành ở mục 7 và lưu kết quả cùng ngày giờ.
