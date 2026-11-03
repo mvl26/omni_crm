@@ -2,17 +2,18 @@
 
 Dành cho: quản trị hệ thống (Omni Admin), phụ trách kho tri thức (Omni Knowledge Editor), trưởng sale. Đặc tả: `docs/08-bot-ai.md`, bộ đề: `eval/README.md`, cổng nghiệm thu: `docs/nghiem-thu/dot-3.md`.
 
-> **Hiện trạng: không có số liệu nào về chất lượng bot thật.** Khi viết tài liệu này, chưa chạy lần nào với AI thật hay khách thật: không có khóa AI, 220 ca bộ đề đều là ca tổng hợp chưa duyệt (0 ca thật), Q11 chưa chốt. Mọi con số 100% trong báo cáo `-fake.md` là của client giả, chỉ chứng minh hạ tầng chấm điểm chạy, **không phải điểm của bot**. Cổng `nhap` ở trạng thái **CHƯA ĐO** (= không qua). Vì vậy mặc định: `bot_analyze_enabled = 0`, `bot_reply_mode = Off`, mọi nhóm `auto_send_enabled = 0`, không đặt `omni_auto_send_allowed`.
+> **Hiện trạng: không có số liệu nào về chất lượng bot thật.** Khi viết tài liệu này, chưa chạy lần nào với AI thật hay khách thật: không có khóa AI, 457 ca bộ đề (220 ca khách lẻ của v1 và 237 ca nhà thầu) đều là ca tổng hợp chưa duyệt (0 ca thật), Q11 chưa chốt. Từ v2.1 có thêm các sửa chuẩn bị (ý định theo nhà thầu, chốt chặn chống lách, lệnh kiểm trước phát hành), nhưng **chúng không làm chất lượng bot thật được đo**: bot thật vẫn chưa chạy lần nào. Mọi con số 100% trong báo cáo `-fake.md` là của client giả, chỉ chứng minh hạ tầng chấm điểm chạy, **không phải điểm của bot**. Cổng `nhap` ở trạng thái **CHƯA ĐO** (= không qua). Vì vậy mặc định: `bot_analyze_enabled = 0`, `bot_reply_mode = Off`, mọi nhóm `auto_send_enabled = 0`, không đặt `omni_auto_send_allowed`.
 
 Bot làm 4 việc theo thứ tự rủi ro tăng dần: **phân tích** (trích thông tin vào Lead, sai thì sale sửa) → **chấm điểm Lead** (luật cố định, không do AI) → **soạn trả lời** (Shadow/Draft/tự gửi) → tóm tắt cuộc gọi (**chưa có**, [02](02-cau-hinh-omni-settings.md) mục 10).
 
-Mục lục: [0. Nguyên tắc](#0-nguyên-tắc-an-toàn) · [1. Khóa AI và Q11](#1-khóa-ai-và-cổng-q11) · [2. Kho tri thức](#2-kho-tri-thức) · [3. Nhóm câu hỏi](#3-nhóm-câu-hỏi) · [4. Bảng điểm](#4-bảng-điểm-lead) · [5. Bộ đề](#5-chạy-bộ-đề-và-các-cổng) · [6. Bật phân tích/chấm điểm](#6-bật-phân-tích-và-chấm-điểm) · [7. Shadow](#7-shadow-bot-chạy-ngầm) · [8. Draft](#8-draft-nháp-cho-sale-duyệt) · [9. Auto](#9-auto-tự-gửi-theo-nhóm-cuối-cùng) · [10. Đọc báo cáo](#10-đọc-các-báo-cáo) · [11. Ngân sách và ngắt mạch](#11-ngân-sách-và-ngắt-mạch) · [12. Tắt khẩn](#12-tắt-khẩn-cấp) · [13. Sự cố](#13-sự-cố-thường-gặp) · [14. Đã xong khi](#14-đã-xong-khi)
+Mục lục: [0. Nguyên tắc](#0-nguyên-tắc-an-toàn) · [1. Khóa AI và Q11](#1-khóa-ai-và-cổng-q11) · [2. Kho tri thức](#2-kho-tri-thức) · [3. Nhóm câu hỏi](#3-nhóm-câu-hỏi) · [3A. Ý định](#3a-ý-định-của-khách) · [3B. Chốt chặn chủ đề](#3b-chốt-chặn-chủ-đề-phí-và-đàm-phán) · [4. Bảng điểm](#4-bảng-điểm-lead) · [5. Bộ đề](#5-chạy-bộ-đề-và-các-cổng) · [6. Bật phân tích/chấm điểm](#6-bật-phân-tích-và-chấm-điểm) · [7. Shadow](#7-shadow-bot-chạy-ngầm) · [8. Draft](#8-draft-nháp-cho-sale-duyệt) · [9. Auto](#9-auto-tự-gửi-theo-nhóm-cuối-cùng) · [10. Đọc báo cáo](#10-đọc-các-báo-cáo) · [11. Ngân sách và ngắt mạch](#11-ngân-sách-và-ngắt-mạch) · [12. Tắt khẩn](#12-tắt-khẩn-cấp) · [13. Sự cố](#13-sự-cố-thường-gặp) · [14. Đã xong khi](#14-đã-xong-khi) · [15. Bot cho nhà thầu](#15-bot-cho-nhà-thầu-v2-06)
 
 ## 0. Nguyên tắc an toàn
 
 - **Nội dung khách là dữ liệu, không phải lệnh.** Bot được thiết kế bọc lời khách trong thẻ dữ liệu; kiểm bằng 10 ca "chèn lệnh" trong bộ đề (chỉ kiểm được với AI thật).
 - Bot **chỉ nói được điều có trong kho tri thức**. Giá, chiết khấu, thời hạn giao, bảo hành, cam kết: nếu không ghi nguyên văn trong kho thì bị chốt chặn bằng mã đổi thành "chuyển người".
-- Nhóm câu hỏi "Hỏi giá", "Đặt hàng", "Khiếu nại", "Khác" đặt **luôn chuyển người** (`always_handoff`).
+- Các nhóm "Phí dịch vụ", "Đàm phán hợp đồng", "Khiếu nại", "Khác" đặt **luôn chuyển người** (`always_handoff`). Ngoài ra ba ý định **Hỏi phí, Yêu cầu đề xuất, Khiếu nại** luôn chuyển người **bằng mã**, không phụ thuộc nhóm và không phụ thuộc AI nói gì (mục 3A).
+- **Chốt chặn chủ đề phí và đàm phán không bị lách bằng cách viết** (mục 3B). Chốt chặn chỉ có một tác dụng: bắt chuyển người; không bao giờ là lý do để gửi tin.
 - **Mỗi bước dưới đây có điều kiện vào; không nhảy bước.** Bật bước sau khi chưa đủ điều kiện bước trước là cách làm bot nói sai với khách thật.
 - Tắt từng phần được ngay, không mất dữ liệu (mục 12).
 
@@ -21,7 +22,7 @@ Mục lục: [0. Nguyên tắc](#0-nguyên-tắc-an-toàn) · [1. Khóa AI và Q
 **Q11** (chính sách gửi dữ liệu hội thoại khách sang dịch vụ AI) là quyết định của chủ dự án, **chưa chốt**; nó chặn mọi lần chạy AI với dữ liệu khách thật.
 
 1. Nhập khóa: **Omni Settings > Khóa Claude API** (`ai_api_key`), chỉ trên máy chủ, không dán vào chat/log.
-2. Khi Q11 đã được chốt cho phép: đặt `omni_ai_allow_customer_data = 1` trong `sites/<site>/site_config.json` của đúng site ([01](01-cai-dat-va-ha-tang.md) mục 10). Cân nhắc kỹ `omni_ai_unmask_pii`: mặc định SĐT/email được che trước khi gửi AI.
+2. Khi Q11 đã được chốt cho phép: đặt `omni_ai_allow_customer_data = 1` trong `sites/<site>/site_config.json` của đúng site ([01](01-cai-dat-va-ha-tang.md) mục 10) **và** tích `q11_allowed` ở Omni Settings ([02](02-cau-hinh-omni-settings.md) mục 9A) để lệnh kiểm trước phát hành thấy hai nơi khớp nhau. Cân nhắc kỹ `omni_ai_unmask_pii`: mặc định SĐT/email được che trước khi gửi AI.
 3. Đặt `daily_token_budget` thấp khi thử ([02](02-cau-hinh-omni-settings.md) mục 7).
 4. Kiểm tra khóa bằng **hội thoại tổng hợp** (không dữ liệu khách; cổng Q11 không chặn vì tổng hợp). Chạy trong `<bench-dir>`:
 
@@ -59,17 +60,70 @@ Vòng việc hằng tuần của biên tập viên: xem báo cáo (mục 10) đ�
 
 ## 3. Nhóm câu hỏi
 
-Mỗi mục kho thuộc một **Omni Question Group**. Bot phân loại câu khách vào một nhóm; nhóm quyết định có được tự gửi không (mục 9).
+Mỗi mục kho thuộc một **Omni Question Group**. Bot phân loại câu khách vào một nhóm; nhóm quyết định có được tự gửi không (mục 9). Khách của Miyano là **nhà thầu** đã trúng gói cung cấp vật tư y tế cho bệnh viện, nên các nhóm hỏi về **dịch vụ vận hành hợp đồng** (Gói Điều phối và Gói Trọn gói), không phải bán lẻ.
 
-Nhập mẫu (8 nhóm: Giờ làm việc, Địa chỉ và liên hệ, Thông tin sản phẩm, Thủ tục mua hàng, **Hỏi giá**, **Đặt hàng**, **Khiếu nại**, **Khác**; bốn nhóm cuối `always_handoff = 1`). Chạy trong `<bench-dir>`:
+Bộ nhóm mẫu (`mau/nhom-cau-hoi-mau.csv`, 11 nhóm; bốn nhóm cuối `always_handoff = 1`):
+
+| Nhóm | Dùng cho | Luôn chuyển người |
+| --- | --- | --- |
+| Giờ làm việc | Giờ làm việc, ngày nghỉ | Không |
+| Địa chỉ và liên hệ | Văn phòng, kho, hotline, email | Không |
+| Cách vận hành dịch vụ | Miyano nhận đơn gọi hàng của bệnh viện, mua hàng, thanh toán nhà cung cấp, quản lý công nợ thế nào | Không |
+| Gói dịch vụ | Phạm vi Gói Điều phối và Gói Trọn gói (không gồm phí) | Không |
+| Thanh toán back-to-back | Cơ chế thanh toán theo điều khoản hợp đồng giữa nhà thầu và bệnh viện | Không |
+| Kết quả triển khai | Ví dụ đã ẩn danh, đã duyệt công bố | Không |
+| Hồ sơ năng lực | Khách xin hồ sơ năng lực, giới thiệu công ty | Không |
+| **Phí dịch vụ** | Khách hỏi phí, tỷ lệ %, báo giá dịch vụ | **Có** |
+| **Đàm phán hợp đồng** | Điều khoản, cam kết, hợp đồng, bảo lãnh | **Có** |
+| **Khiếu nại** | Phàn nàn về dịch vụ đang dùng | **Có** |
+| **Khác** | Không thuộc nhóm nào ở trên | **Có** |
+
+Nhập bộ nhóm **và** kho mẫu B2B một lần (chạy trong `<bench-dir>`; tệp mẫu lấy từ thư mục `mau/` của app; nhập lại được):
+
+```bash
+bench --site <site> execute omni_crm.bot.knowledge.import_b2b
+```
+
+Lệnh này đặt các nhóm vào chế độ **Shadow** (cột "Chỉ chạy ngầm"), ngừng (không xóa) nhóm cũ không còn trong tệp, và nhập kho mẫu ở trạng thái **không hoạt động** để phòng kinh doanh điền, duyệt rồi bật từng mục. In dòng "CHỜ PHÒNG KINH DOANH DUYỆT". Chỉ nhập nhóm riêng (tệp của bạn): 
 
 ```bash
 bench --site <site> execute omni_crm.bot.knowledge.import_groups --kwargs "{'path': '/duong/dan/tuyet/doi/nhom-cau-hoi.csv'}"
 ```
 
-Cột: `group_name, always_handoff (0/1), description`. Mô tả giúp bot phân loại. Nhóm `always_handoff` luôn thành "chuyển người", kể cả khi bot đề xuất trả lời, và **không bao giờ** bật tự gửi được.
+Cột: `group_name, always_handoff (0/1), description`. Mô tả giúp bot phân loại. Nhóm `always_handoff` luôn thành "chuyển người", kể cả khi bot đề xuất trả lời, và **không bao giờ** bật tự gửi được. Tắt riêng một nhóm: bỏ tích **Đang dùng** (`active`) trên form nhóm; giữ nháp của nhóm ở Shadow: tích **Chỉ chạy ngầm** (`shadow_only`).
 
-Trưởng sale rà danh sách nhóm trước khi nhập (tên nhóm và mô tả là cách công ty phân loại câu hỏi của khách).
+Trưởng sale rà danh sách nhóm trước khi nhập (tên nhóm và mô tả là cách công ty phân loại câu hỏi của khách). Bộ nhóm bán lẻ của v1 (hỏi sản phẩm, thủ tục mua bán) không còn dùng cho khách nhà thầu.
+
+## 3A. Ý định của khách
+
+Sau mỗi lượt, bot phân tích gán cho tin của khách **một ý định**, lưu vào trường "Ý định gần nhất" của Lead (`omni_intent`). Với nhà thầu có sáu ý định:
+
+| Ý định | Cộng điểm quan tâm | Chuyển người |
+| --- | --- | --- |
+| Hỏi cách vận hành | tín hiệu `intent_service_info` | Không |
+| Hỏi gói dịch vụ | `intent_service_info` | Không |
+| Hỏi phí | `intent_fee` | **Luôn** |
+| Yêu cầu đề xuất | `intent_proposal` | **Luôn** |
+| Khiếu nại | `complaint` (thường trừ điểm) | **Luôn** |
+| Khác | không có | Theo nhóm câu hỏi |
+
+"Luôn chuyển người" do **mã** quyết định, độc lập với nhóm câu hỏi và độc lập với việc AI có soạn trả lời hay không.
+
+**Bản câu lệnh đang chạy vẫn là v1 và còn trả nhãn cũ của khách lẻ** (năm nhãn: "Tư vấn", "Hỏi giá", "Khiếu nại", "Khác" và một nhãn đề nghị mua). Hệ thống hiểu cả nhãn cũ lẫn mới và tự đổi sang ý định mới trước khi lấy điểm hay quyết định chuyển người (bảng ánh xạ nằm ở `omni_crm/bot/intents.py`, tên `LEGACY_TO_B2B`): "Hỏi giá" thành Hỏi phí, nhãn đề nghị mua thành Yêu cầu đề xuất, "Tư vấn" thành Hỏi cách vận hành. Hệ quả cần biết: nhãn đề nghị mua cũ **cũng bắt chuyển người** từ V21-06 (an toàn hơn trước, ghi ở `docs/12` G-V21-06-1). Câu lệnh `analyze_v2` (dùng sáu ý định mới, không còn hỏi sản phẩm, số lượng, thời điểm mua) **đã có trong mã nhưng chưa dùng** vì chưa ghim (mục 15). Các cột cũ trên Lead (Sản phẩm quan tâm, Số lượng, Thời điểm mua dự kiến) vẫn còn, bot v2 chỉ không điền nữa.
+
+Đổi ý định cũ của các Lead đang mở sang ý định mới (không bắt buộc; điểm không đổi trước và sau). Lệnh này **không** nằm trong danh sách patch tự chạy khi `migrate`, bạn tự chạy; mặc định chỉ **chạy thử**, in số Lead sẽ đổi:
+
+```bash
+bench --site <site> execute omni_crm.patches.v21.map_old_intents.execute
+# xem kết quả chạy thử, thấy ổn mới đổi thật:
+bench --site <site> execute omni_crm.patches.v21.map_old_intents.execute --kwargs "{'dry_run': False}"
+```
+
+Lead mà sale đã sửa tay ý định thì lệnh bỏ qua.
+
+## 3B. Chốt chặn chủ đề phí và đàm phán
+
+Bot không được nói về **phí dịch vụ, tỷ lệ phí hay phần trăm, hoa hồng, chiết khấu, giảm giá, báo giá, bảng giá, điều khoản, đàm phán, thương lượng, thỏa thuận, bảo lãnh, sửa hay đổi hợp đồng**. Chốt chặn bằng mã kiểm tin của khách (và cả nháp của bot); gặp chủ đề đó thì chuyển người. Cùng cơ chế bắt cả câu chèn lệnh kiểu "bỏ qua hướng dẫn". Từ V21-07 chốt chặn không còn bị lách bằng cách viết: chữ có dấu hay không dấu, viết hoa, cách từng chữ ("đ à m p h á n"), số thay chữ ("ph1 dich vu"), ký hiệu xen giữa, emoji, chữ lặp, viết liền, và một số từ tiếng Anh (fee, discount, commission, negotiate). Cụm lành tính như "100 phần trăm hài lòng" hay "thỏa thuận lịch hẹn" không bị chặn nhầm nữa. Đo trên bộ ca của repo (ca tổng hợp do người viết mã soạn): 46/46 ca lách bị chặn, 24/24 câu thường qua. Con số này chỉ chứng minh các kiểu lách **đã biết**, không chứng minh với tin thật. Còn lọt (ví dụ đảo thứ tự chữ trong từ, chữ ngoài bảng chữ Latin) được ghi ở `docs/12` G-V21-07-1; thấy bot lọt chủ đề phí, báo nhà phát triển kèm ví dụ (là lỗi nghiêm trọng).
 
 ## 4. Bảng điểm Lead
 
@@ -79,7 +133,7 @@ Xem [02](02-cau-hinh-omni-settings.md) mục 8. Trưởng sale duyệt bảng đ
 
 **Bộ đề** (`eval/README.md`) trả lời câu hỏi "bot đã đủ tốt để bật chưa". Mỗi ca là một dòng JSON (`.jsonl`) vào DocType **Omni Eval Case**. Thành phần tối thiểu 200 ca: 100 ca có trong kho (Reply đúng), 25 hỏi giá, 15 khiếu nại, 25 ngoài kho (Handoff, không bịa), 10 đòi gặp người, 10 chèn lệnh, 20 trích thông tin, 5 y khoa ngoài tài liệu.
 
-Hiện có sẵn 220 ca **tổng hợp** (`eval/cases/synthetic-2026-10-30.jsonl`, bịa, chưa duyệt) kèm kho bịa `eval/kb-tong-hop.csv`. Chúng chỉ kiểm hạ tầng; **cổng chỉ tính khi chạy AI thật trên bộ đề đã được người duyệt.** Ca thật (từ hội thoại thật Đợt 1, che SĐT/email/tên) lấy bằng `omni_crm.bot.eval.builder.build_from_real` (cần Q11) và phải được người duyệt trước khi dùng (importer từ chối ca chưa duyệt).
+Hiện có sẵn 457 ca **tổng hợp** (`eval/cases/synthetic-2026-10-30.jsonl` 220 ca khách lẻ, `eval/cases/b2b-2026-11-02.jsonl` 237 ca nhà thầu; bịa, chưa duyệt) kèm kho bịa `eval/kb-tong-hop.csv` và `eval/kb-b2b-tong-hop.csv`. Chúng chỉ kiểm hạ tầng; **cổng chỉ tính khi chạy AI thật trên bộ đề đã được người duyệt.** Ca thật (từ hội thoại thật Đợt 1, che SĐT/email/tên) lấy bằng `omni_crm.bot.eval.builder.build_from_real` (cần Q11) và phải được người duyệt trước khi dùng (importer từ chối ca chưa duyệt).
 
 Lệnh (chạy trong `<bench-dir>`, đường dẫn tuyệt đối):
 
@@ -102,14 +156,16 @@ bench --site <site> execute omni_crm.bot.eval.run.run_cli --kwargs "{'gate': 'ph
 | `nhap` | Trường đúng ≥ 90%, hành động đúng ≥ 90%, trả lời đạt ≥ 85%, **lỗi nghiêm trọng = 0**, không còn ca "chưa đo", đã chấm lại đủ mẫu 20% | Bật Draft (mục 8) |
 | `doi_cau_lenh` | Không chỉ số nào giảm quá 2 điểm phần trăm so với lần được chấp nhận gần nhất, lỗi nghiêm trọng = 0 | Đổi câu lệnh hoặc mô hình khi đang chạy |
 
-**Trạng thái hiện tại:** cả ba cổng **chưa đo**. Lần chạy `nhap` không client ghi 220/220 ca "chưa đo" (`EVR-2026-00415`).
+**Khi một cổng đã được đo bằng AI thật và đạt**, người phụ trách ghi thời điểm vào ô tương ứng của Omni Settings (`gate_phan_tich_passed_at`, `gate_nhap_passed_at`, [02](02-cau-hinh-omni-settings.md) mục 9A). Hệ thống không tự điền và không kiểm chứng; lệnh kiểm trước phát hành chỉ đọc hai ô này.
+
+**Trạng thái hiện tại:** cả ba cổng **chưa đo**, hai ô `gate_*` để trống. Lần chạy `nhap` không client ghi 220/220 ca "chưa đo" (`EVR-2026-00415`).
 
 ## 6. Bật phân tích và chấm điểm
 
 Điều kiện: mục 1 xong, kho và nhóm đã nhập, **cổng `phan_tich` đạt** bằng AI thật trên bộ đề đã duyệt.
 
 1. Đặt `bot_analyze_enabled = 1`. (Với `sandbox_mode` bật thì lời gọi AI vẫn xảy ra: sandbox chỉ chặn chiều gửi.)
-2. Sau mỗi lượt có tin khách, bot trích: tên, đơn vị, SĐT, email, nhu cầu, sản phẩm, số lượng, thời điểm, mức gấp, ý định, tóm tắt. Mỗi trường phải có **trích dẫn nguyên văn** từ lời khách làm căn cứ, không có căn cứ thì bỏ. Kết quả ghi vào các trường `omni_*` của Lead (Nhu cầu, Sản phẩm quan tâm, Số lượng, Thời điểm mua dự kiến, Mức gấp, Ý định gần nhất, Tóm tắt của bot). **Không ghi đè** trường sale đã sửa tay, và không ghi đè SĐT/email đã có.
+2. Sau mỗi lượt có tin khách, bot trích: tên, đơn vị, SĐT, email, nhu cầu, mức gấp, **ý định** (mục 3A), tóm tắt. Câu lệnh v1 đang chạy còn trích thêm sản phẩm, số lượng, thời điểm mua (khách lẻ); câu lệnh v2 cho nhà thầu thì không, mà trích mã số thuế khách nêu, bệnh viện, vướng mắc và vai trò của người nhắn (mục 15). Mỗi trường phải có **trích dẫn nguyên văn** từ lời khách làm căn cứ, không có căn cứ thì bỏ. Kết quả ghi vào các trường `omni_*` của Lead (Nhu cầu, Mức gấp, Ý định gần nhất, Tóm tắt của bot; với v1 còn Sản phẩm quan tâm, Số lượng, Thời điểm mua dự kiến). **Không ghi đè** trường sale đã sửa tay, và không ghi đè SĐT/email đã có.
 3. Hộp thư hiện tóm tắt bot và nhãn ý định (kèm câu "Tóm tắt do bot, có thể chưa chính xác").
 4. Khi sẵn sàng chấm điểm (bảng điểm đã duyệt): `lead_scoring_enabled = 1`. Vượt `hot_lead_threshold` thì người phụ trách nhận thông báo "Lead nóng: ..., điểm ...".
 
@@ -151,7 +207,7 @@ Auto là mức rủi ro cao nhất: bot nói thẳng với khách không qua ng�
 
 1. **Q1 được chủ dự án chốt** (cho phép bot tự gửi). Hiện chưa chốt.
 2. Cổng `nhap` đạt, đã chạy Draft với sale thật.
-3. Người **vận hành** đặt `omni_auto_send_allowed = 1` trong `sites/<site>/site_config.json` của site production được phép ([01](01-cai-dat-va-ha-tang.md) mục 10). Không ở dev/staging khi chưa cho phép.
+3. Người **vận hành** đặt `omni_auto_send_allowed = 1` trong `sites/<site>/site_config.json` của site production được phép ([01](01-cai-dat-va-ha-tang.md) mục 10) và tích `q1_allowed` ở Omni Settings ([02](02-cau-hinh-omni-settings.md) mục 9A); không tích thì lệnh kiểm trước phát hành báo KHÔNG ĐẠT. Không ở dev/staging khi chưa cho phép.
 4. Nhóm câu hỏi đủ **điều kiện số liệu 14 ngày gần nhất**: ≥ 30 nháp đã quyết định (gửi nguyên văn + sửa rồi gửi + bỏ), ≥ 95% trong đó là gửi nguyên văn hoặc sửa nhẹ (độ khác biệt ≤ 0,1), **0** nháp bị đánh dấu nghiêm trọng hoặc chấm "Sai" kèm ghi chú, và nhóm không phải `always_handoff`.
 
 **Cách bật cho một nhóm** (chỉ **Omni Admin**; chưa kiểm trên giao diện thật):
@@ -230,11 +286,13 @@ Nháp Pending đã tạo trước đó không gửi được khi bot đã Off. B
 - [ ] Tuần chạy thử Draft với sale thật; `measure_dot3` cho thấy nháp đúng ≥ 85%, nghiêm trọng = 0.
 - [ ] Chỉ khi Q1 chốt: `omni_auto_send_allowed` được người vận hành đặt; từng nhóm Auto được bật bằng nút sau khi đủ điều kiện số liệu; mỗi nhóm mới bật có người theo dõi báo cáo "Bot tự gửi".
 - [ ] Cả nhóm biết cách tắt khẩn (mục 12) và ai có quyền làm.
+- [ ] `q1_allowed`, `q11_allowed`, `gate_*` ở Omni Settings phản ánh đúng quyết định và kết quả đo thật; lệnh kiểm trước phát hành ([02](02-cau-hinh-omni-settings.md) mục 11B) không còn `KHONG_DAT` ở các mục bot.
 
-## 15. Bot cho nhà thầu (V2-06)
+## 15. Bot cho nhà thầu (V2-06, V21-06)
 
-- Câu lệnh v2 đã có trong kho mã nhưng **chưa dùng**; bản đang chạy là v1. Muốn thử v2 chỉ trong bộ đề: `prompt_versions={"analyze": "v2", "reply": "v2"}`. Ghim v2 cho production chỉ sau khi cổng `doi_cau_lenh` đo bằng AI thật (V2-07).
-- Nhập nhóm + kho tri thức mẫu: `bench --site <site> execute omni_crm.bot.knowledge.import_b2b`. Nhóm vào chế độ Shadow; kho mẫu vào **không hoạt động**, chờ phòng kinh doanh điền, duyệt rồi bật từng mục trong Omni Knowledge Item (nhập lại không bật/tắt mục nào).
-- Bảng điểm B2B: `import_rules` với `merge=True` (quy tắc cũ bị tắt, không xóa). Chấm lại Lead đang mở: patch `rescore_open_leads` (dry run mặc định, không báo Lead nóng).
-- Trường mới trên Lead: MST khách nêu (chưa xác minh), bệnh viện, vướng mắc, vai trò. MST bot trích không tự gắn nhà thầu ở kênh công khai; sale xác nhận rồi gắn tay.
-- Tắt khẩn: `bot_analyze_enabled = 0`, `bot_reply_mode = Off`, `lead_scoring_enabled = 0` như v1; nhóm có thể tắt riêng bằng `active = 0`.
+- **Câu lệnh v2 đã có trong mã nhưng chưa dùng; bản đang chạy là v1.** Hai ô `analyze_prompt_version` và `reply_prompt_version` ([02](02-cau-hinh-omni-settings.md) mục 7) quyết định bản chạy; để trống = v1. Muốn thử v2 chỉ trong bộ đề: `prompt_versions={"analyze": "v2", "reply": "v2"}`. Ghim v2 cho thật chỉ sau khi cổng `doi_cau_lenh` đo bằng AI thật. Quay lui: đặt hai ô về `v1`.
+- Nhập nhóm + kho tri thức mẫu: mục 3 (`import_b2b`). Kho mẫu **không hoạt động** cho tới khi phòng kinh doanh điền, duyệt và bật từng mục trong Omni Knowledge Item (nhập lại không bật hay tắt mục nào). Mọi nhóm B2B ở Shadow.
+- Bảng điểm B2B: `import_rules` có `'merge': True` ([02](02-cau-hinh-omni-settings.md) mục 8). Chấm lại Lead đang mở: `omni_crm.patches.v2.rescore_open_leads.execute` (chạy thử mặc định, không báo "Lead nóng").
+- Trường mới trên Lead (chỉ bot v2 điền): mã số thuế khách nêu (chưa xác minh), bệnh viện, vướng mắc, vai trò của người nhắn. Mã số thuế bot trích **không** tự gắn nhà thầu ở kênh công khai; sale xác nhận rồi gắn tay. Mã số thuế còn bị che khi `omni_ai_unmask_pii` chưa bật nên bot có thể không trích được.
+- Lead từ biểu mẫu quảng cáo (Meta, Google, website) **không đi qua bot**: hệ thống chỉ tạo Lead, giao sale và đếm hạn phản hồi ([12](12-lead-quang-cao.md)).
+- Tắt khẩn: `bot_analyze_enabled = 0`, `bot_reply_mode = Off`, `lead_scoring_enabled = 0` như v1; từng nhóm tắt riêng bằng bỏ tích **Đang dùng**.
