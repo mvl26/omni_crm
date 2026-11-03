@@ -29,7 +29,27 @@ def cleanup() -> None:
 	frappe.db.delete("Omni Channel", {"channel_name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("__Auth", {"doctype": "Omni Channel", "name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("Error Log", {"method": ["like", "%kiểm token Meta%"]})
+	frappe.db.sql(
+		"delete from tabSingles where doctype='Omni Settings' and field in ('meta_token_warn_days', 'meta_token_check_enabled')"
+	)
 	frappe.db.commit()
+
+
+def set_single(case, field: str, value: str) -> None:
+	"""Đặt giá trị Omni Settings trong tabSingles, COMMIT, và đăng ký dọn (xóa + commit) chạy TRƯỚC cleanup chung."""
+	frappe.db.sql(
+		"""insert into tabSingles (doctype, field, value) values ('Omni Settings', %s, %s)
+		on duplicate key update value = %s""",
+		(field, value, value),
+	)
+	frappe.db.commit()
+
+	def undo():
+		frappe.db.rollback()
+		frappe.db.sql("delete from tabSingles where doctype='Omni Settings' and field=%s", field)
+		frappe.db.commit()
+
+	case.addCleanup(undo)
 
 
 def make_channel(name: str, **kw):
@@ -112,15 +132,7 @@ class TestTokenMeta(FrappeTestCase):
 		self.assertIn("Quyền dữ liệu", self.alerts[0].detail)
 
 	def test_ngưỡng_đặt_được(self):
-		frappe.db.sql(
-			"""insert into tabSingles (doctype, field, value) values ('Omni Settings', 'meta_token_warn_days', '30')
-			on duplicate key update value = '30'"""
-		)
-		self.addCleanup(
-			lambda: frappe.db.sql(
-				"delete from tabSingles where doctype='Omni Settings' and field='meta_token_warn_days'"
-			)
-		)
+		set_single(self, "meta_token_warn_days", "30")
 		self.assertEqual(flags.ads_setting("meta_token_warn_days"), 30)
 		_, out, _r = self.check("n30", data(expires_at=int(time.time()) + 20 * DAY))
 		self.assertEqual(out["status"], "alert")
@@ -192,15 +204,7 @@ class TestTokenMeta(FrappeTestCase):
 
 	def test_cong_tac_tat(self):
 		ch = make_channel("off")
-		frappe.db.sql(
-			"""insert into tabSingles (doctype, field, value) values ('Omni Settings', 'meta_token_check_enabled', '0')
-			on duplicate key update value = '0'"""
-		)
-		self.addCleanup(
-			lambda: frappe.db.sql(
-				"delete from tabSingles where doctype='Omni Settings' and field='meta_token_check_enabled'"
-			)
-		)
+		set_single(self, "meta_token_check_enabled", "0")
 		with mock.patch.object(token_check, "MetaClient") as client:
 			self.assertEqual(token_check.run()["channels"], 0)
 		client.assert_not_called()
