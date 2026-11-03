@@ -229,3 +229,17 @@ Số đo đầy đủ ở `docs/nghiem-thu/v2.md`; **chưa đo trên staging**.
 - **Nguyên nhân phải chờ khóa trước đây:** bộ đếm `tabSeries` của tên `OIN-.YYYY.-.########` (khóa ghi tới commit) làm mọi webhook ghi tin xếp hàng sau bất kỳ giao dịch nào giữ dòng đó; thêm khóa duy nhất `dedupe_key` của sự kiện cùng mã đang chèn dở và khoảng khóa của `cleanup_raw_payloads`. Đã bỏ bộ đếm (tên theo thời gian) nên webhook chỉ còn chờ khi trùng chính sự kiện.
 - **Màn giám sát:** thẻ "Hàng dự phòng webhook" (số tin, tin cũ nhất, byte; chưa thử trên trình duyệt). Cảnh báo `webhook_spool_cu` khi tin nằm quá 10 phút; `webhook_spool_hong` khi DB và hàng cùng hỏng; `webhook_spool_het_han` khi dòng bị xóa vì quá 14 ngày. Hàm `omni_crm.ingest.spool.spool_count()`/`oldest_age_seconds()`/`stats()` cho preflight V21-08.
 - **Sổ tay:** (1) Thấy `spool_count > 0` kéo dài: kiểm tra DB (khóa, kết nối), rồi chạy tay `bench --site <site> execute omni_crm.ingest.spool.drain`. (2) Dòng bị loại ghi log `omni spool: loai dong id=... ly_do=seal_sai|chu_ky_sai|...` (không có payload). (3) Cảnh báo "DB và hàng dự phòng đều hỏng": kiểm đĩa (`df`), quyền `private/omni_spool` (thư mục 0700, tệp 0600, cùng người chạy web) và DB ngay. (4) Chuyển site/khôi phục bản sao lưu: chạy `drain` trước, thư mục này chứa dữ liệu cá nhân chưa vào DB nên không sao chép lung tung. (5) Dọn tay: xóa `private/omni_spool/*` chỉ khi chắc chắn mất các tin đó.
+- **Đo tải lại kịch bản V2-08 (SITE TEST `omni.test`, Graph GIẢ, Redis tạm, CHƯA STAGING):** 200 lead quảng cáo trong 600 giây thật + 1.002 tin Zalo (1,67 tin/giây, 300 khách) cùng lúc; gunicorn 4 worker `--preload` ĐÃ làm nóng (750 request 401 trước khi đo), 8 worker RQ `omni,default,short` + 2 worker `omni_leads`, bot giả, sandbox bật, Lead Source quảng cáo KHÔNG tạo sẵn (kiểm luôn sửa G-V21-03-1: không có lỗi 1062 trong log worker).
+
+| Chỉ số | Kết quả |
+| --- | --- |
+| Phản hồi webhook quảng cáo | 223/223 là 200, **0 phản hồi 503** |
+| Phản hồi webhook Zalo | 1.115/1.115 là 200, **0 phản hồi 503** |
+| p50 / p95 / p99 / max quảng cáo | 16,2 / 29,7 / 238,2 / 253,8 ms |
+| p50 / p95 / p99 / max Zalo | 14,0 / 21,1 / 256,8 / 989,6 ms |
+| Tin vào quảng cáo | 200/200 Done, 0 mất, 0 dòng thừa, 0 `dedupe_key` trùng, 200 Lead, 0 Lead trùng, 0 Lead không chủ |
+| Lead: nhận -> có người phụ trách p50 / p95 / max | 5,4 / 13,3 / 15,2 giây |
+| Zalo | 1.002/1.002 Done, 300 Lead = 300 khách, 0 mất, 0 trùng; nhận -> Done p50 46 / p95 59 / max 61 giây |
+| Hàng dự phòng sau tải | rỗng (không có thư mục `omni_spool`): không có lần nào phải dùng hàng trong tải này |
+
+  Lưu ý trung thực: trong lần tải này DB không bị khóa nên "0 phản hồi 503" chủ yếu chứng minh đường lưu mới (không còn chờ bộ đếm Series) không làm hỏng gì và không chậm hơn; khả năng chịu khóa/mất kết nối được chứng minh bằng test (20 luồng, `tabSeries` bị giữ, DB khóa, mất kết nối, hàng đầy/hỏng). Lần đo đầu cùng ngày (cấu hình `workers` sai làm tin Zalo không vào hàng đợi; đã dọn và đo lại) cũng cho 0 phản hồi 503, p95 18,4 ms (Zalo) và 19,3 ms (quảng cáo). Chưa đo: staging, HTTPS/nginx, tải khi DB thật bị khóa trong lúc tải, nhiều máy web.
