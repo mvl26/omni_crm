@@ -38,6 +38,7 @@ from omni_crm.prospect import fit, hospital, import_errors, parsing
 from omni_crm.prospect.normalize import company_name_key
 from omni_crm.prospect.parsing import RowError
 from omni_crm.prospect.xlsx_reader import SheetRow, WorkbookData, WorkbookError, read_workbook
+from omni_crm.queue import queue_for
 
 LOG = "Omni Prospect Import"
 ORG = "CRM Organization"
@@ -47,7 +48,7 @@ CONTACT = "Contact"
 AWARD = "Omni Bid Award"
 NOTE = "FCRM Note"
 ALLOWED_ROLES = frozenset({"Omni Admin", "System Manager"})
-QUEUE = "omni"
+QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 JOB_METHOD = "omni_crm.prospect.importer.run_job"
 JOB_TIMEOUT = 1800
 STALE_RUNNING_SECONDS = JOB_TIMEOUT + 600  # quá hạn này mà vẫn "Running" thì worker đã chết giữa chừng

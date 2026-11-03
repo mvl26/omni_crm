@@ -7,9 +7,10 @@ import frappe
 from omni_crm import flags
 from omni_crm.identity.normalize import normalize_sender
 from omni_crm.ingest.events import InboundEvent
+from omni_crm.queue import DEFAULT_QUEUE, queue_for_identity
 
 WORKER_METHOD = "omni_crm.pipeline.worker.process_identity"
-QUEUE = "omni"
+QUEUE = DEFAULT_QUEUE  # tên mặc định; định tuyến thật qua queue_for_identity (V21-01)
 
 
 def compute_identity_key(channel_type: str, external_sender_id: str) -> str:
@@ -68,7 +69,7 @@ def enqueue_identity(identity_key: str, *, after_commit: bool = True, job_suffix
 		try:
 			frappe.enqueue(
 				WORKER_METHOD,
-				queue=QUEUE,
+				queue=queue_for_identity(identity_key),
 				job_id=job_id,
 				deduplicate=True,
 				identity_key=identity_key,
@@ -77,7 +78,7 @@ def enqueue_identity(identity_key: str, *, after_commit: bool = True, job_suffix
 			# Không ghi identity_key (có thể chứa SĐT/email) và không ghi nội dung lỗi.
 			frappe.log_error(
 				title="Omni: enqueue định danh thất bại",
-				message="Không đẩy được job vào hàng đợi omni; tin giữ trạng thái New, tác vụ quét sẽ đẩy lại.",
+				message="Không đẩy được job vào hàng đợi nền; tin giữ trạng thái New, tác vụ quét sẽ đẩy lại.",
 			)
 			if after_commit:
 				frappe.db.commit()
