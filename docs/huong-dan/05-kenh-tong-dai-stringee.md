@@ -22,12 +22,12 @@ Các bước đầy đủ ở [cau-hinh-stringee.md](cau-hinh-stringee.md) mục
 | --- | --- |
 | Tên kênh | Không dấu cách, ví dụ `tong-dai`. Tên này nằm trong URL (`?ch=`). |
 | Loại kênh | `Telephony` |
-| Nhà cung cấp tổng đài | `Stringee`. Kênh đang bật mà để trống nhà cung cấp thì không lưu được. |
-| API key SID / API key secret | Lấy ở Stringee Dashboard (mục API Keys). Secret dạng mật khẩu. Để trống secret = bỏ kiểm chữ ký nhưng **mất** gọi Call log/xác minh cuộc gọi (chỉ là cách tạm). |
-| Đầu số hotline | Số hotline của Stringee. |
+| Nhà cung cấp tổng đài (`telephony_provider`) | `Stringee`. Kênh đang bật mà để trống nhà cung cấp thì không lưu được. |
+| API key SID / API key secret (`telephony_api_key_sid`, `telephony_api_key_secret`) | Lấy ở Stringee Dashboard (mục API Keys). Secret dạng mật khẩu. Để trống secret = bỏ kiểm chữ ký nhưng **mất** gọi Call log/xác minh cuộc gọi (chỉ là cách tạm). |
+| Đầu số hotline (`telephony_hotline`) | Số hotline của Stringee. |
 | Token webhook | Chuỗi ngẫu nhiên **từ 32 ký tự** (ví dụ tạo bằng `openssl rand -hex 24`). Ngắn hơn 32 ký tự thì không lưu được; chưa đặt thì mọi webhook bị từ chối. |
-| Ánh xạ nhân viên tổng đài | Bảng Omni Agent Map, xem mục 3. |
-| Bật kênh | Tích **sau cùng**. Tắt: sự kiện vẫn được nhận (200) và lưu nhưng không xử lý; tra cứu trả "khách mới". |
+| Ánh xạ nhân viên tổng đài (`agent_map`) | Bảng Omni Agent Map, xem mục 3. |
+| Bật kênh | Tích **sau cùng**. Ô chỉ đọc "Lần thành công gần nhất" (`last_success_at`) cho biết lần nhận sự kiện gần nhất. Tắt: sự kiện vẫn được nhận (200) và lưu nhưng không xử lý; tra cứu trả "khách mới". |
 
 ## 3. Omni Agent Map (nhân viên tổng đài)
 

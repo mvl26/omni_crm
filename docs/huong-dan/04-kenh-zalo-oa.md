@@ -26,7 +26,7 @@ Mở **Desk > `/app/omni-channel` > Thêm mới**.
 | App secret | `zalo_app_secret` | Dạng mật khẩu, không hiện lại. Dùng khi đổi/làm mới token. |
 | OA secret key | `zalo_oa_secret_key` | Dạng mật khẩu. Dùng **xác thực chữ ký webhook** (công thức ở [mục 3](#3-webhook-và-chữ-ký)). |
 | Access token / Refresh token | `zalo_access_token`, `zalo_refresh_token` | Thường được **điền tự động** bởi nút "Kết nối Zalo OA" (mục 4); có thể nhập tay khi cần. Cả hai dạng mật khẩu. |
-| Access token hết hạn lúc | `zalo_token_expires_at` | Chỉ đọc, hệ thống tự cập nhật. |
+| Access token hết hạn lúc | `zalo_token_expires_at` | Chỉ đọc, hệ thống tự cập nhật. (Ô ẩn `zalo_oauth_state` là mã tạm của luồng cấp quyền, không điền.) |
 | Gói Zalo OA | `zalo_oa_package` | Mặc định `Chưa xác nhận`. Chọn gói thật sau khi xem trong trang quản trị OA (mục 4A). Chỉ để báo, không chặn gì. |
 | Hạn mức tin tư vấn ngoài 48 giờ mỗi tháng | `zalo_cs_paid_quota_month` | Để trống nếu chưa biết. Hộp thư dùng số này để hiện "Đã dùng X / Y". |
 | Khung gửi tin tư vấn miễn phí (giờ) | `zalo_cs_free_hours` | Mặc định 48. |

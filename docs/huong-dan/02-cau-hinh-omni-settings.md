@@ -260,6 +260,9 @@ Trường của **kênh** (`Omni Channel`, `/app/omni-channel`) cần biết th�
 | `meta_page_id`, `meta_app_id`, `meta_app_secret`, `meta_verify_token`, `meta_page_access_token` | Meta Lead Ads | Thông số kênh Meta; ba ô cuối là mật khẩu. Cần `meta_app_id` + `meta_app_secret` + token Page thì hệ thống mới tự kiểm token ([12](12-lead-quang-cao.md) mục 6). |
 | `meta_token_checked_at`, `meta_token_valid`, `meta_token_never_expires`, `meta_token_expires_at`, `meta_token_data_expires_at`, `meta_token_note` | Meta Lead Ads | **Chỉ đọc**: kết quả lần kiểm token gần nhất. Ghi chú "đủ quyền" nghĩa là ổn; ghi chú khác nghĩa là có vấn đề cần xử lý. |
 | `webform_captcha_provider`, `webform_captcha_secret` | Web Form | Xem 9D. |
+| `last_error` | Mọi kênh (chỉ đọc); cũng là cột "Lỗi gần nhất" của tin vào | Lỗi gần nhất của kênh hoặc của một tin; đã che bí mật. Xem [09](09-van-hanh-hang-ngay.md) mục 3 |
+
+Trường ở DocType khác mà `docs/09` nhắc: `omni_score` (điểm Lead, chỉ đọc, trên Lead của CRM; còn nguyên khi tắt `lead_scoring_enabled`).
 
 ## 11B. Lệnh kiểm trước phát hành: các mục nó kiểm
 
