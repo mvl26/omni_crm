@@ -62,6 +62,19 @@ Tool `record_lead_signals`, `input_schema` (rút gọn):
 }
 ```
 
+> **V21-06 (F6) — ý định theo bối cảnh nhà thầu.** Schema trên là schema v1 (câu lệnh `analyze_v1`, vẫn là bản ghim). Câu lệnh `analyze_v2` dùng schema v3 (`analyze_schema_v3`): `intent` chỉ nhận sáu giá trị dưới đây, bỏ `products`, `quantity`, `timeframe`, `timeframe_within_30d` (cột `omni_*` tương ứng trên Lead giữ nguyên, bot chỉ không còn điền), `required` không còn `products`. Danh sách, ánh xạ và quyết định chuyển người nằm ở một chỗ: `bot/intents.py`.
+>
+> | Ý định | Tín hiệu điểm | Chuyển người (bằng code) |
+> | --- | --- | --- |
+> | Hỏi cách vận hành | `intent_service_info` | Không |
+> | Hỏi gói dịch vụ | `intent_service_info` | Không |
+> | Hỏi phí | `intent_fee` | Luôn |
+> | Yêu cầu đề xuất | `intent_proposal` | Luôn |
+> | Khiếu nại | `complaint` | Luôn |
+> | Khác | — | Theo nhóm câu hỏi |
+>
+> Giá trị cũ (Tư vấn, Hỏi giá, Đặt hàng) vẫn nằm trong Select `omni_intent` và vẫn được hiểu ở mọi nơi dùng (`intents.normalize`): Hỏi giá = Hỏi phí, Đặt hàng = Yêu cầu đề xuất, Tư vấn = Hỏi cách vận hành. Patch tay `omni_crm.patches.v21.map_old_intents` (dry run mặc định, không đăng ký `patches.txt`) ánh xạ Lead đang mở, bỏ qua Lead mà sale đã tự sửa `omni_intent`. Điểm quan tâm không đổi trước và sau patch.
+
 Xử lý sau khi nhận kết quả (code, không phải AI):
 
 1. **Kiểm căn cứ**: trường nào có `evidence` không xuất hiện (so khớp mờ ≥ 0.85 sau bỏ dấu) trong lời khách → bỏ trường đó. Trường thiếu `evidence` → bỏ.
@@ -116,7 +129,7 @@ Khi kho tri thức vượt ~150 mục, chuyển sang truy hồi: chọn 20 mục
 
 Bất kỳ điều kiện nào đúng → đổi thành `handoff` và ghi `guard_flags`:
 
-1. Nhóm câu hỏi có `always_handoff` (Hỏi giá, Khiếu nại…) hoặc `intent` phân tích là Hỏi giá/Khiếu nại, hoặc `wants_human`.
+1. Nhóm câu hỏi có `always_handoff` (Hỏi giá, Khiếu nại…) hoặc `intent` phân tích là Hỏi phí/Yêu cầu đề xuất/Khiếu nại (và tên cũ Hỏi giá, Đặt hàng; V21-06, `intents.always_handoff`, độc lập nhóm câu hỏi và độc lập việc AI trả `reply`), hoặc `wants_human`.
 2. `kb_item_ids` rỗng, hoặc có mã không tồn tại/không active.
 3. Câu trả lời chứa **con số kèm đơn vị tiền** (đ, đồng, vnđ, k, nghìn, triệu, %, USD), **ngày/thời hạn giao**, hoặc từ cam kết ("cam kết", "đảm bảo", "chắc chắn", "bảo hành … năm") mà **không xuất hiện nguyên văn** trong các mục kho tri thức đã trích.
 4. Chứa đường dẫn hoặc SĐT không có trong kho tri thức.
