@@ -25,7 +25,7 @@ Trạng thái: **CHƯA CHẠY.** Tệp này là kịch bản và mẫu bảng ch
 6. Với Contact `Từ chối`: nút gọi/nhắn phải ẩn, SĐT/email không hiện; ghi lại nếu thấy lối nào khác để liên hệ.
 
 ### C. Ghi nhật ký chăm sóc
-7. Mở `/app/omni-customer/<lead>` (từ Hộp thư bấm vào tên khách, hoặc từ Tổng quan bấm "Ghi nhật ký" ở dòng nhà thầu), bấm "Ghi nhật ký chăm sóc" ở đầu trang hoặc tab Nhật ký chăm sóc (Hộp thư KHÔNG có form này, chỉ nhắc "Chưa ghi kết quả"): chọn kết quả (Đã liên hệ / Gọi lại / Không liên lạc được / …). "Gọi lại" bắt buộc có việc tiếp theo và hạn; kiểm có đúng một việc (ToDo) được tạo cho chủ Lead.
+7. Mở `/app/omni-customer/<lead>` (từ Hộp thư bấm vào tên khách, hoặc từ Tổng quan bấm "Ghi nhật ký" ở dòng nhà thầu), bấm "Ghi nhật ký chăm sóc" ở đầu trang hoặc tab Nhật ký chăm sóc (Hộp thư KHÔNG có form này, chỉ nhắc "Chưa ghi kết quả" và có nút "Mở hồ sơ chăm sóc" dẫn tới trang hồ sơ; Tổng quan có nút "Ghi nhật ký" ở dòng nhà thầu): chọn kết quả (Đã liên hệ / Gọi lại / Không liên lạc được / …). "Gọi lại" bắt buộc có việc tiếp theo và hạn; kiểm có đúng một việc (ToDo) được tạo cho chủ Lead.
 8. Kiểm phản hồi lần đầu của Lead được ghi (số phút làm việc) và Lead chuyển "Đã liên hệ" (trừ "Không liên lạc được").
 
 ### D. Chuyển giai đoạn
