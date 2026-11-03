@@ -25,6 +25,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 from frappe.utils.password import set_encrypted_password
 
+from omni_crm.channels.meta_leads.errors import TOKEN_NOTE_NEVER, TOKEN_NOTE_OK
 from omni_crm.ingest import spool
 from omni_crm.ops import preflight
 from omni_crm.ops.preflight import CAN_NGUOI_KIEM, DAT, KHONG_DAT
@@ -361,6 +362,7 @@ class TestChannelsAndTokens(PreflightCase):
 			"webhook_token": SECRET_WEBHOOK,
 			"meta_token_checked_at": now_datetime(),
 			"meta_token_valid": 1,
+			"meta_token_note": TOKEN_NOTE_OK,
 		}
 		return self.channel("Meta Lead Ads", "meta", **{**base, **kw})
 
@@ -402,6 +404,7 @@ class TestChannelsAndTokens(PreflightCase):
 			"meta_token_never_expires": 0,
 			"meta_token_expires_at": None,
 			"meta_token_data_expires_at": None,
+			"meta_token_note": TOKEN_NOTE_OK,
 		}
 		for values, prod, staging in cases:
 			frappe.db.set_value("Omni Channel", ch.name, {**base, **values})
@@ -550,7 +553,8 @@ class TestSpoolAndBackup(PreflightCase):
 
 	def backup(self, hours_old, name="20261103_000000-omni_test-database.sql.gz"):
 		path = os.path.join(self.backup_dir, name)
-		open(path, "wb").close()
+		with open(path, "wb") as f:
+			f.write(b"x")
 		ts = time.time() - hours_old * 3600
 		os.utime(path, (ts, ts))
 
@@ -588,6 +592,7 @@ class TestSafetyAndContract(PreflightCase):
 			webhook_token=SECRET_WEBHOOK,
 			meta_token_checked_at=now,
 			meta_token_valid=1,
+			meta_token_note=TOKEN_NOTE_OK,
 			meta_token_expires_at=now + timedelta(days=2),
 		)
 		self.channel(
@@ -730,7 +735,8 @@ class TestSafetyAndContract(PreflightCase):
 
 	def backup_dir_old(self):
 		path = os.path.join(self.backup_dir, "20261101_000000-omni_test-database.sql.gz")
-		open(path, "wb").close()
+		with open(path, "wb") as f:
+			f.write(b"x")
 		ts = time.time() - 72 * 3600
 		os.utime(path, (ts, ts))
 
@@ -795,3 +801,103 @@ class TestSafetyAndContract(PreflightCase):
 		self.assertNotIn("OK-het", bad.stdout)
 		self.assertEqual(good.returncode, 0, good.stderr[-500:])
 		self.assertIn("OK-het", good.stdout)
+
+
+class TestReviewFixes(PreflightCase):
+	"""Sửa theo review độc lập V21-08 (N1-N4, G1-G3)."""
+
+	def meta_ok(self, **kw):
+		base = {
+			"meta_app_id": "1234",
+			"meta_app_secret": SECRET_APP,
+			"meta_page_access_token": SECRET_META,
+			"webhook_token": SECRET_WEBHOOK,
+			"meta_token_checked_at": now_datetime(),
+			"meta_token_valid": 1,
+			"meta_token_expires_at": now_datetime() + timedelta(days=60),
+		}
+		return self.channel("Meta Lead Ads", "mr", **{**base, **kw})
+
+	def test_n1_meta_note_with_problem_fails_even_if_valid_and_far_expiry(self):
+		ch = self.meta_ok(meta_token_note=TOKEN_NOTE_OK)
+		self.both("token_meta", DAT, DAT)
+		frappe.db.set_value("Omni Channel", ch.name, "meta_token_note", TOKEN_NOTE_NEVER)
+		self.both("token_meta", DAT, DAT)
+		for note in (
+			"Không kiểm được token (Graph từ chối: mã 190)",
+			"Thiếu quyền leads_retrieval",
+			"",
+			None,
+		):
+			frappe.db.set_value("Omni Channel", ch.name, "meta_token_note", note)
+			self.both("token_meta", KHONG_DAT, KHONG_DAT)
+
+	def test_n2_spool_unreadable_or_truncated_is_not_empty(self):
+		os.makedirs(self.spool_dir)
+		path = os.path.join(self.spool_dir, spool.ACTIVE)
+		with open(path, "w") as f:  # một dòng cụt không có \n: spool_count() = 0
+			f.write('{"id": "1", "recv": "2026-11-03 10:00:00"')
+		self.assertEqual(spool.spool_count(), 0)
+		self.both("hang_du_phong_webhook", KHONG_DAT, KHONG_DAT)
+		with open(path, "w") as f:
+			f.write(json.dumps({"id": "1"}) + "\n")
+		os.chmod(path, 0)  # không đọc được: spool_count() nuốt lỗi và trả 0
+		self.addCleanup(os.chmod, path, 0o600)
+		if os.access(path, os.R_OK):
+			self.skipTest("chạy bằng root: chmod 0 vẫn đọc được")
+		self.assertEqual(spool.spool_count(), 0)
+		self.both("hang_du_phong_webhook", KHONG_DAT, KHONG_DAT)
+		os.chmod(path, 0o600)
+		open(path, "w").close()  # rỗng thật: đạt
+		self.both("hang_du_phong_webhook", DAT, DAT)
+		with open(os.path.join(self.spool_dir, "spool.1.work"), "w") as f:
+			f.write("x")
+		self.both("hang_du_phong_webhook", KHONG_DAT, KHONG_DAT)
+
+	def test_n3_unsaved_field_matches_runtime_not_doctype_default(self):
+		self.single(sandbox_mode=None)  # chưa có dòng: runtime thấy 0 (tắt), không phải default JSON = 1
+		self.assertEqual(int(frappe.get_doc("Omni Settings").sandbox_mode or 0), 0)
+		self.assertItem("sandbox_mode", "staging", KHONG_DAT)
+		self.assertItem("sandbox_mode", "production", DAT)
+		self.single(
+			q1_allowed=None, q11_allowed=None, gate_nhap_passed_at=None, gate_phan_tich_passed_at=None
+		)
+		self.conf(omni_ai_allow_customer_data=1)
+		self.assertItem("omni_ai_allow_customer_data", "production", KHONG_DAT)  # chưa lưu = chưa cho phép
+		self.single(bot_reply_mode=None, bot_analyze_enabled=None)
+		self.both("bot_reply_mode", DAT, DAT)
+
+	def test_n4_critical_items_that_crash_fail_on_production_only(self):
+		def boom(ctx):
+			raise RuntimeError("x")
+
+		for key in sorted(preflight.CRITICAL):
+			with mock.patch.object(preflight, "CHECKS", [(key, boom)]):
+				self.assertEqual(preflight.check("production")["muc"][0]["ket_qua"], KHONG_DAT, key)
+				self.assertEqual(preflight.check("staging")["muc"][0]["ket_qua"], CAN_NGUOI_KIEM, key)
+		with mock.patch.object(preflight, "CHECKS", [("worker_omni", boom)]):
+			self.assertEqual(preflight.check("production")["muc"][0]["ket_qua"], CAN_NGUOI_KIEM)
+		names = {k for k, _f in preflight.CHECKS}
+		self.assertTrue(preflight.CRITICAL <= names)
+
+	def test_g1_developer_mode_truthy_like_frappe(self):
+		for value in ("true", "0", 1, True):  # bool(): chuỗi không rỗng là bật, đúng cách Frappe đọc
+			self.conf(developer_mode=value)
+			self.both("developer_mode", KHONG_DAT, KHONG_DAT)
+		for value in (0, "", False, None):
+			self.conf(developer_mode=value)
+			self.both("developer_mode", DAT, DAT)
+
+	def test_g2_bad_target_is_system_exit_with_message(self):
+		with self.assertRaises(SystemExit) as cm:
+			preflight.run("dev")
+		self.assertIn("staging", str(cm.exception))
+		self.assertNotIsInstance(cm.exception, Exception)
+
+	def test_g3_empty_backup_file_does_not_count(self):
+		path = os.path.join(self.backup_dir, "20261103_220000-omni_test-database.sql.gz")
+		open(path, "wb").close()
+		self.assertItem("sao_luu_24h", "production", KHONG_DAT)
+		with open(path, "wb") as f:
+			f.write(b"x")
+		self.assertItem("sao_luu_24h", "production", DAT)

@@ -36,6 +36,17 @@ KHONG_DAT = "KHONG_DAT"
 CAN_NGUOI_KIEM = "CAN_NGUOI_KIEM"
 TARGETS = ("staging", "production")
 
+# Ở production, mục này ném lỗi thì KHONG_DAT (không thể kết luận an toàn); staging giữ CAN_NGUOI_KIEM
+CRITICAL = frozenset(
+	{
+		"developer_mode",
+		"zalo_skip_signature",
+		"omni_auto_send_allowed",
+		"omni_ai_allow_customer_data",
+		"bot_analyze_enabled",
+		"bot_reply_mode",
+	}
+)
 BACKUP_MAX_AGE_HOURS = 24
 TOKEN_MIN_DAYS = 7  # F9: token Meta còn hạn > 7 ngày
 TOKEN_CHECK_STALE_DAYS = 3  # kết quả kiểm token cũ hơn thì nhắc (tác vụ chạy mỗi 6 giờ)
@@ -66,6 +77,7 @@ class Ctx:
 		self.target = target
 		self.prod = target == "production"
 		self._stored: dict[str, str] | None = None
+		self._doc: Any = None
 
 	def stored(self) -> dict[str, str]:
 		if self._stored is None:
@@ -82,11 +94,12 @@ class Ctx:
 		return field in self.stored()
 
 	def setting(self, field: str) -> Any:
-		"""Giá trị đã lưu; chưa từng lưu thì mặc định khai báo trong DocType (Single không áp default khi chưa lưu)."""
+		"""Giá trị đã lưu; chưa từng lưu thì đúng giá trị mà runtime thấy (`get_doc`: Check = 0, còn lại None), KHÔNG lấy default của DocType."""
 		if field in self.stored():
 			return self.stored()[field]
-		df = frappe.get_meta("Omni Settings").get_field(field)
-		return df.default if df else None
+		if self._doc is None:
+			self._doc = frappe.get_doc("Omni Settings")
+		return self._doc.get(field)
 
 
 # ------------------------------------------------------------------ tiện ích
@@ -109,6 +122,11 @@ def _conf_on(key: str) -> bool:
 	return bool(cint(frappe.conf.get(key)))
 
 
+def _conf_truthy(key: str) -> bool:
+	"""Đúng như Frappe đọc cờ (`frappe.conf.developer_mode` dùng độ đúng của Python: "true" cũng là bật)."""
+	return bool(frappe.conf.get(key))
+
+
 def _channels(channel_type: str, **extra) -> list[Any]:
 	return frappe.get_all(
 		"Omni Channel", filters={"channel_type": channel_type, "enabled": 1, **extra}, fields=["*"]
@@ -129,7 +147,7 @@ def _gate_passed(ctx: Ctx, field: str) -> bool:
 
 
 def _developer_mode(ctx: Ctx) -> Result:
-	if _conf_on("developer_mode"):
+	if _conf_truthy("developer_mode"):
 		return (
 			KHONG_DAT,
 			_("developer_mode đang bật"),
@@ -504,6 +522,8 @@ def _lead_forms(ctx: Ctx) -> Result:
 
 
 def _token_meta(ctx: Ctx) -> Result:
+	from omni_crm.channels.meta_leads.errors import TOKEN_NOTE_NEVER, TOKEN_NOTE_OK
+
 	channels = _channels("Meta Lead Ads")
 	if not channels:
 		return DAT, _("Không có kênh Meta Lead Ads nào đang bật"), ""
@@ -528,6 +548,20 @@ def _token_meta(ctx: Ctx) -> Result:
 					KHONG_DAT,
 					_("{0}: token Meta không hợp lệ").format(name),
 					_("Cấp lại token Page (khuyến nghị token System User, docs/15 mục 2)."),
+				)
+			)
+			continue
+		if (c.meta_token_note or "") not in (TOKEN_NOTE_OK, TOKEN_NOTE_NEVER):
+			# cùng điều kiện snapshot._meta_token: kết quả kiểm có ghi chú lỗi/thiếu quyền dù valid = 1
+			rows.append(
+				(
+					KHONG_DAT,
+					_(
+						"{0}: lần kiểm token Meta gần nhất báo vấn đề (ghi chú trên kênh khác 'đủ quyền')"
+					).format(name),
+					_(
+						"Mở kênh, đọc meta_token_note và xử lý (thiếu quyền leads_retrieval, Graph từ chối...); cấp lại token Page nếu cần."
+					),
 				)
 			)
 			continue
@@ -679,6 +713,25 @@ def _spool(ctx: Ctx) -> Result:
 			_("Kiểm quyền private/omni_spool (0700, cùng người chạy web)."),
 		)
 	count = spool.spool_count()
+	if count == 0:
+		# spool_count() nuốt lỗi đọc (chmod 0) và không đếm dòng cụt thiếu \n: tệp có dữ liệu mà đếm 0 = không đọc/đếm được, coi là KHONG_DAT
+		stuck = []
+		for fpath in spool._files():
+			try:
+				if os.path.getsize(fpath) > 0:
+					stuck.append(os.path.basename(fpath))
+			except OSError:
+				stuck.append(os.path.basename(fpath))
+		if stuck:
+			return (
+				KHONG_DAT,
+				_(
+					"Hàng dự phòng webhook có tệp không rỗng nhưng không đếm được tin ({0} tệp: không đọc được hoặc dòng cụt)"
+				).format(len(stuck)),
+				_(
+					"Kiểm quyền private/omni_spool (0700/0600, cùng người chạy web) và nội dung tệp; chạy spool.drain; không xóa tay khi chưa chắc."
+				),
+			)
 	if count > 0:
 		age = spool.oldest_age_seconds()
 		return (
@@ -708,6 +761,7 @@ def _backup(ctx: Ctx) -> Result:
 		p
 		for pattern in ("*-database.sql.gz", "*-database.sql")
 		for p in glob.glob(os.path.join(_backup_dir(), pattern))
+		if os.path.getsize(p) > 0  # tệp rỗng (sao lưu hỏng) không tính
 	]
 	newest = max((os.path.getmtime(p) for p in files), default=None)
 	age_h = None if newest is None else (time.time() - newest) / 3600
@@ -804,7 +858,7 @@ def check(target: str = "production") -> dict[str, Any]:
 		except (
 			Exception
 		) as e:  # một mục lỗi không làm hỏng cả lệnh; chỉ in tên lỗi (message có thể chứa bí mật)
-			ket_qua = CAN_NGUOI_KIEM
+			ket_qua = KHONG_DAT if (ctx.prod and key in CRITICAL) else CAN_NGUOI_KIEM
 			chi_tiet = _("Không kiểm được mục này ({0})").format(type(e).__name__)
 			cach_sua = _("Kiểm tay mục này.")
 		rows.append(
@@ -839,6 +893,8 @@ def format_table(result: dict[str, Any]) -> str:
 
 def run(target: str = "production", strict: bool = True) -> dict[str, Any]:
 	"""In bảng kiểm trước phát hành, trả dict; có mục KHONG_DAT và strict thì raise PreflightFailed (bench execute thoát mã != 0)."""
+	if target not in TARGETS:  # SystemExit: bench execute nuốt Exception và báo NameError khó hiểu
+		raise SystemExit(f"target phải là một trong {TARGETS}, nhận được: {target!r}")
 	result = check(target)
 	print(format_table(result))
 	if strict and result["dem"][KHONG_DAT]:
