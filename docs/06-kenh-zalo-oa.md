@@ -25,6 +25,7 @@
 - Công thức thường được mô tả: `mac = sha256(app_id + raw_body + timestamp + oa_secret_key)` (hex), header có dạng `mac=<hex>`, `timestamp` lấy từ payload. **Xác nhận công thức chính xác trên tài liệu chính thức** và viết test bằng ví dụ trong tài liệu.
 - So sánh bằng `hmac.compare_digest`.
 - Từ chối nếu `timestamp` lệch quá 10 phút so với giờ máy chủ (chống phát lại); vẫn ghi nhận số lần từ chối để giám sát.
+- **Công cụ chẩn đoán (V21-05, ADR 0015):** khi cần xác nhận công thức trên OA thật, bật `omni_zalo_signature_debug_until` trong site_config (tối đa 2 giờ kể từ lúc bật) để ghi các webhook bị từ chối vào tệp riêng tư; xem `docs/huong-dan/04-kenh-zalo-oa.md` mục 3A. Công thức KHÔNG đổi. **Trạng thái đối chiếu tài liệu: trang webhook của Zalo for Developers là SPA, bản đọc bằng máy không có nội dung nên CHƯA xác nhận Z1** (docs/12 C-V21-05).
 - Có cờ cấu hình `zalo_skip_signature` **chỉ cho site dev**; production bật cờ này thì cổng từ chối khởi động xử lý và cảnh báo.
 
 ## 4. Ánh xạ sự kiện
@@ -67,7 +68,21 @@ Lần đầu gặp một user id: gọi API lấy thông tin người dùng củ
 | Đến `zalo_cs_max_days` (7 ngày) | Có thể có phí: **chỉ sale** được gửi, có hộp xác nhận "Tin này có thể bị tính phí"; bot không gửi |
 | Quá 7 ngày | `Blocked`, gợi ý sale liên hệ kênh khác |
 
-Theo tài liệu cộng đồng, Zalo tính miễn phí trong 48 giờ, có phí từ 48 giờ đến 7 ngày, sau 7 ngày bị từ chối; và từ 01/01/2026 các loại tin mẫu (ZNS, tin giao dịch, truyền thông) được hợp nhất thành ZBS Template Message. **Xác nhận lại với tài liệu chính thức và hợp đồng OA của công ty.**
+Hai mốc 48 giờ và 7 ngày là THAM SỐ của kênh (`zalo_cs_free_hours`, `zalo_cs_max_days`), không phải sự thật đã xác nhận. Trang giá chính thức của Zalo (xem 7a) chỉ nói về "hạn mức tin Tư vấn ngoài khung 48h có sẵn của gói OA" và phí 55 đ/tin sau hạn mức; **trang không nói gì về mốc 7 ngày** (cả "7 ngày có phí" lẫn "sau 7 ngày bị từ chối" đều CHƯA xác nhận). Mức phí và việc có bị từ chối hay không theo gói và hạn mức: xác nhận với Zalo và hợp đồng OA của công ty. Từ 01/01/2026 các loại tin mẫu (ZNS, tin giao dịch, truyền thông) hợp nhất thành ZBS Template Message theo tài liệu cộng đồng (chưa đối chiếu chính thức).
+
+### 7a. Gói OA và điều kiện API (V21-05)
+
+Từ 1/6/2026 Zalo áp dụng bốn gói OA: Cơ bản, Tiêu chuẩn, Tăng trưởng, Toàn diện. Đã đối chiếu https://zalo.solutions/oa/pricing ngày 2026-11-03:
+
+- **Điều kiện API (chính thức):** "Để liên kết ứng dụng với OA thông qua API, bạn cần sử dụng Gói tăng trưởng hoặc toàn diện." Vì vậy Cơ bản và Tiêu chuẩn có thể KHÔNG cho kết nối API, tức kênh này không chạy được trên hai gói đó.
+- **Hạn mức tin tư vấn ngoài khung 48h:** hàng "Số lượng tin tư vấn ngoài khung 48h có sẵn/tháng" có hai giá trị 500 và 2.000; phí ngoài hạn mức "55 đ/tin". Trang (bản đọc được bằng máy) KHÔNG gắn giá trị với gói; các bài của bên thứ ba (Subiz, MWY Consulting) ghi 500 cho Tăng trưởng và 2.000 cho Toàn diện. Dùng làm gợi ý khi điền `zalo_cs_paid_quota_month`, vẫn phải đối chiếu trong trang quản trị OA.
+- **Chưa xác nhận:** gói thật của OA công ty; việc tin gửi bằng API và tin gửi thẳng trên ứng dụng Zalo OA có cùng tính vào hạn mức không; tin nào bị tính là "tư vấn ngoài khung" khi follow/unfollow.
+
+Cách hệ thống xử lý (không chặn gì, chỉ báo):
+
+1. `Omni Channel.zalo_oa_package` (Chưa xác nhận / Cơ bản / Tiêu chuẩn / Tăng trưởng / Toàn diện, mặc định Chưa xác nhận) và `zalo_cs_paid_quota_month` (trống hoặc 0 = chưa biết).
+2. Hộp thư, dưới khung soạn tin: "Đã dùng X / Y tin ngoài 48 giờ tháng này" hoặc "Đã gửi X tin ngoài 48 giờ tháng này (chưa biết hạn mức)". Đếm tin Sale đã gửi qua API (Sent, không sandbox, có `sent_by`) mà tại lúc gửi khách không nhắn trong `zalo_cs_free_hours` giờ trước (trừ `oa_echo`, `unfollow`), theo tháng lịch của site (`channels/zalo/quota.py`). Vượt hạn mức chỉ đổi màu chữ, không chặn gửi.
+3. `/app/omni-monitor`, khối kênh: gói Chưa xác nhận, Cơ bản, Tiêu chuẩn hiện "Gói OA có thể chưa cho kết nối API". Không chặn kênh vì kết quả thật quyết định bằng phép thử trên OA.
 
 - Ánh xạ mã lỗi trả về: người dùng chặn/bỏ quan tâm, quá khung, token hết hạn (→ làm mới rồi thử lại một lần), vượt hạn mức (→ thử lại sau). Bảng ánh xạ để trong `channels/zalo/errors.py`, có test.
 - Độ dài văn bản tối đa theo giới hạn Zalo; vượt thì tách tin, giữ thứ tự.
