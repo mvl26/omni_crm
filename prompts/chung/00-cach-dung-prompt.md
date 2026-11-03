@@ -24,6 +24,7 @@
 | `{{NGUONG_STT}}` | Ngưỡng quyết định làm tóm tắt cuộc gọi (D3-03) | "WER ≤ 25%, trường đúng ≥ 80%" |
 | `{{KIT_V2}}` | Nơi giải nén kit v2, khác thư mục kit v1 (prompts/v2) | `/home/frappe/kits/crm_omnichannel_kit_v2` |
 | `{{FILE_DANH_SACH}}` | File danh sách nhà thầu đã đổ vào mẫu, nằm ngoài repo (D1-14, V2-03) | `/home/frappe/data/nha_thau_2026-11.xlsx` |
+| `{{KIT_V21}}` | Thư mục kit đã giải nén bản vá v2.1 (prompts/v2.1) | `/home/frappe/kits/crm_omnichannel_kit_v2` |
 
 ## 3. Khi agent dừng giữa chừng
 
