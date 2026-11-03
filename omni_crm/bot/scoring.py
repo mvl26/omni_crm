@@ -18,6 +18,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
 from omni_crm import flags
+from omni_crm.bot import intents
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.identity.normalize import normalize_email, normalize_phone
 from omni_crm.pipeline.retry import redact
@@ -224,28 +225,32 @@ def collect_signals(lead: str) -> dict[str, bool]:
 	)
 	if not row:
 		return dict.fromkeys(SIGNALS, False)
-	intent = row.omni_intent
+	# F6 (V21-06): chuẩn hóa ý định trên Lead và các lượt gần đây về giá trị mới, nên điểm không đổi khi patch
+	# `map_old_intents` ánh xạ Lead (Hỏi giá -> Hỏi phí...) và Lead chưa chạy patch vẫn được hiểu.
+	intent = intents.normalize(row.omni_intent)
 	analyses = recent_analyses(lead)
-	seen_intents = {a.get("intent") for a in analyses} | {intent}
+	seen_intents = {intents.normalize(a.get("intent")) for a in analyses} | {intent}
+	seen_signals = {intents.signal_of(i) for i in seen_intents}
 	return {
 		"has_phone": bool(normalize_phone(row.mobile_no) or normalize_phone(row.phone)),
 		"has_email": bool(normalize_email(row.email)),
 		"has_org": bool((row.organization or "").strip()),
-		"intent_price": intent == "Hỏi giá",
-		"intent_purchase": intent == "Đặt hàng",
+		"intent_price": intent == intents.FEE,  # tín hiệu v1: Hỏi giá = Hỏi phí
+		"intent_purchase": intent == intents.PROPOSAL,  # tín hiệu v1: Đặt hàng = Yêu cầu đề xuất
 		"quantity_given": bool((row.omni_quantity or "").strip()),
 		"timeframe_within_30d": bot_timeframe_within_30d(lead),
 		"urgency_high": row.omni_urgency == "Cao",
 		"repeat_contact": recent_contacts(lead) >= REPEAT_MIN_CONTACTS,
-		"complaint": intent == "Khiếu nại",
+		"complaint": intent == intents.COMPLAINT,
 		# B2B (V2-06). Hỏi phí/gói/đề xuất tính theo MỌI lượt gần đây (khách đã hỏi thì vẫn là đã hỏi dù tin cuối là cảm ơn).
 		"known_org": bool((row.organization or "").strip())
 		and bool(frappe.db.exists("CRM Organization", row.organization)),
 		"replied": customer_replied_after(lead, row.omni_first_response_at),
 		"needs_discussed": bool((row.omni_need or "").strip()) and bool(row.omni_first_response_at),
-		"intent_service_info": "Tư vấn" in seen_intents,
-		"intent_fee": "Hỏi giá" in seen_intents,
-		"intent_proposal": any(a.get("asks_proposal") is True for a in analyses),
+		"intent_service_info": "intent_service_info" in seen_signals,
+		"intent_fee": "intent_fee" in seen_signals,
+		"intent_proposal": "intent_proposal" in seen_signals
+		or any(a.get("asks_proposal") is True for a in analyses),
 		"decision_maker_engaged": row.omni_decision_role == "Người quyết định",
 		"pain_point_stated": bool((row.omni_current_pain or "").strip()),
 	}
