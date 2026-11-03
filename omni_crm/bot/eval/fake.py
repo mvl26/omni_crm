@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from omni_crm.bot import intents
 from omni_crm.bot.ai_client import AIResponse
 from omni_crm.bot.fake_client import FakeAIClient
 from omni_crm.identity.normalize import normalize_phone
@@ -34,13 +35,13 @@ class OracleClient(FakeAIClient):
 		"""Run gọi trước mỗi ca."""
 		self.case, self.items = case, items
 
-	def _analyze(self) -> dict:
+	def _analyze(self, tool: dict | None = None) -> dict:
 		case = self.case or {}
 		expected = case.get("expected_fields") or {}
 		turns = [t["text"] for t in case.get("conversation", []) if t.get("role") == "customer"]
 		quote = (turns[-1] if turns else "")[:EVIDENCE_MAX]
 		out: dict[str, Any] = {
-			"intent": expected.get("intent", "Khác"),
+			"intent": self._intent(expected.get("intent", "Khác"), tool),
 			"wants_human": bool(expected.get("wants_human", False)),
 			"summary": "Tóm tắt thử nghiệm.",
 			"phones": [],
@@ -70,6 +71,12 @@ class OracleClient(FakeAIClient):
 			out["evidence"]["asks_proposal"] = quote
 		return out
 
+	@staticmethod
+	def _intent(intent: str, tool: dict | None) -> str:
+		"""Ý định kỳ vọng ở dạng hợp lệ với schema của tool (ca v1 chạy với câu lệnh v2 và ngược lại)."""
+		allowed = ((tool or {}).get("input_schema", {}).get("properties", {}).get("intent") or {}).get("enum")
+		return intents.adapt_to(intent, allowed) if allowed else intent
+
 	def _reply(self) -> dict:
 		case = self.case or {}
 		group = case.get("expected_group") or "Khác"
@@ -97,7 +104,7 @@ class OracleClient(FakeAIClient):
 		"""Cùng chữ ký với AnthropicClient.create; ghi lại lời gọi như FakeAIClient."""
 		base = super().create(kind=kind, model=model, system=system, messages=messages, tool=tool, **kw)
 		if kind == "Analyze":
-			result = self._analyze()
+			result = self._analyze(tool)
 		elif kind == "Reply":
 			result = self._reply()
 		else:

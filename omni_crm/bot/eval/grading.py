@@ -9,7 +9,7 @@ from __future__ import annotations
 from difflib import SequenceMatcher
 from typing import Any
 
-from omni_crm.bot import guards
+from omni_crm.bot import guards, intents
 from omni_crm.bot.analyze import _fold
 from omni_crm.identity.normalize import normalize_email, normalize_phone
 
@@ -60,6 +60,8 @@ def field_match(key: str, expected: Any, actual: Any) -> bool:
 		return _empty(actual)
 	if _empty(actual):
 		return False
+	if key == "intent":  # F6: ca v1 (giá trị cũ) và bot v1 chấm được với ý định mới, qua ánh xạ cũ -> mới
+		return intents.same_intent(expected, actual)
 	if key in EXACT_FIELDS:
 		return actual == expected
 	if key in PHONE_FIELDS:

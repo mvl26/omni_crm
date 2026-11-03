@@ -6,6 +6,7 @@ của importer), email @example.com, tên/đơn vị bịa rõ ràng. Kết qu�
 Ra `eval/cases/b2b-<ngày>.jsonl`. Dùng với kho tri thức BỊA `eval/kb-b2b-tong-hop.csv` (tham số `kb_file`, không nhập
 vào site) và nhóm câu hỏi `mau/nhom-cau-hoi-mau.csv` (tham số `groups_file`).
 KHÔNG phải số đo cổng: đây là ca để kiểm công cụ chấm và để V2-07 chạy AI thật khi Q11 cho phép.
+`expected_fields.intent` theo ý định B2B (V21-06/F6): Hỏi phí, Yêu cầu đề xuất, Khiếu nại, Hỏi cách vận hành, Khác.
 Ca thật/ca tổng hợp cũ của v1 (`eval/cases/synthetic-2026-10-30.jsonl`) giữ nguyên.
 """
 
@@ -65,13 +66,13 @@ fee = [
 	"Phí dịch vụ đã gồm VAT chưa?",
 ]
 for i, q in enumerate(fee, 1):
-	add(f"B2B-PHI-{i:03d}", q, "Phí dịch vụ", "Handoff", {"intent": "Hỏi giá"}, critical=True)
+	add(f"B2B-PHI-{i:03d}", q, "Phí dịch vụ", "Handoff", {"intent": "Hỏi phí"}, critical=True)
 	add(
 		f"B2B-PHI-{i + 10:03d}",
 		"Chào Miyano, " + lower_first(q),
 		"Phí dịch vụ",
 		"Handoff",
-		{"intent": "Hỏi giá"},
+		{"intent": "Hỏi phí"},
 		critical=True,
 	)
 
@@ -94,7 +95,7 @@ contract = [
 	"Nhờ bên mình gửi điều khoản bảo lãnh để bên em xem.",
 ]
 for i, q in enumerate(contract, 1):
-	add(f"B2B-HD-{i:03d}", q, "Đàm phán hợp đồng", "Handoff", {"intent": "Tư vấn"}, critical=True)
+	add(f"B2B-HD-{i:03d}", q, "Đàm phán hợp đồng", "Handoff", {"intent": "Khác"}, critical=True)
 
 # 4. Khiếu nại (10)
 complaints = [
@@ -150,7 +151,7 @@ outside = [
 	"Có ký thỏa thuận bảo mật thông tin trước khi trao đổi không?",
 ]
 for i, q in enumerate(outside, 1):
-	add(f"B2B-NK-{i:03d}", q, "Khác", "Handoff", {"intent": "Tư vấn"})
+	add(f"B2B-NK-{i:03d}", q, "Khác", "Handoff", {"intent": "Khác"})
 
 # 6. Đòi gặp người (6)
 humans = [
@@ -274,7 +275,7 @@ for i, q in enumerate(med, 1):
 		"Bên em đang trúng thầu vật tư. " + q,
 		"Khác",
 		"Handoff",
-		{"intent": "Tư vấn"},
+		{"intent": "Khác"},
 		critical=True,
 	)
 
@@ -294,6 +295,15 @@ for line in open(HERE / "mau-ca-kiem-thu.jsonl", encoding="utf-8"):
 	row = json.loads(text)
 	if row["expected_action"] == "Reply":
 		row["reference_answer"] = by_group[row["expected_group"]]
+	old_intent = row["expected_fields"].get("intent")
+	if old_intent:  # F6: ý định theo bối cảnh nhà thầu. Tư vấn về vận hành/thanh toán -> Hỏi cách vận hành, còn lại -> Khác
+		if old_intent == "Tư vấn":
+			vh = row["expected_group"] in ("Cách vận hành dịch vụ", "Thanh toán back-to-back")
+			row["expected_fields"]["intent"] = "Hỏi cách vận hành" if vh else "Khác"
+		else:
+			row["expected_fields"]["intent"] = {"Hỏi giá": "Hỏi phí", "Đặt hàng": "Yêu cầu đề xuất"}.get(
+				old_intent, old_intent
+			)
 	cases.append(row)
 
 # 9. Ca có phản hồi nhiều bệnh viện, yêu cầu đề xuất
@@ -302,7 +312,11 @@ add(
 	"Bên em đang trúng thầu ở Bệnh viện Alpha, Bệnh viện Beta và Bệnh viện Gamma. Nhờ bên mình gửi đề xuất dịch vụ và hợp đồng mẫu.",
 	"Gói dịch vụ",
 	"Handoff",
-	{"hospitals_mentioned": ["Bệnh viện Alpha", "Bệnh viện Beta", "Bệnh viện Gamma"], "asks_proposal": True},
+	{
+		"intent": "Yêu cầu đề xuất",
+		"hospitals_mentioned": ["Bệnh viện Alpha", "Bệnh viện Beta", "Bệnh viện Gamma"],
+		"asks_proposal": True,
+	},
 )
 add(
 	"B2B-DX-002",
