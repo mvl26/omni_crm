@@ -1,5 +1,7 @@
 # UAT v2: nhận lead quảng cáo, chăm sóc và xem Chi tiết nhà thầu (V2-08)
 
+Cập nhật V21-10 (2026-11-04): vẫn **CHƯA CHẠY**; sau v2.1 cần thêm khi thử: thẻ token Meta, "Kéo lại lead Meta", hàng dự phòng webhook và hạn mức Zalo ở `/app/omni-monitor`, ý định gần nhất ở Chi tiết khách (chưa thẻ nào mở bằng trình duyệt). Form "Ghi nhật ký chăm sóc" chỉ có ở Chi tiết khách, không có trong Hộp thư (bước 7 đã sửa).
+
 Trạng thái: **CHƯA CHẠY.** Tệp này là kịch bản và mẫu bảng cho 2 đến 3 sale chạy thử; không có số liệu nào ở đây được đo. Mọi bước phải làm trên **staging** (hiện CHƯA có) với `sandbox_mode` BẬT. Phần giao diện (`omni-dashboard`, `omni-customer`, Hộp thư mới) **chưa từng được mở bằng trình duyệt thật** trong toàn bộ v2 (gap-report 13.01, 13.03, 13.04, 13.07, 14.13) nên UAT này cũng là lần kiểm giao diện đầu tiên: ghi mọi lỗi hiển thị.
 
 ## 1. Điều kiện trước ngày thử (người phụ trách hệ thống)
@@ -23,7 +25,7 @@ Trạng thái: **CHƯA CHẠY.** Tệp này là kịch bản và mẫu bảng ch
 6. Với Contact `Từ chối`: nút gọi/nhắn phải ẩn, SĐT/email không hiện; ghi lại nếu thấy lối nào khác để liên hệ.
 
 ### C. Ghi nhật ký chăm sóc
-7. Trong Hộp thư bấm "Ghi nhật ký chăm sóc" → mở trang hồ sơ, tab Nhật ký: chọn kết quả (Đã liên hệ / Gọi lại / Không liên lạc được / …). "Gọi lại" bắt buộc có việc tiếp theo và hạn; kiểm có đúng một việc (ToDo) được tạo cho chủ Lead.
+7. Mở `/app/omni-customer/<lead>` (từ Hộp thư bấm vào tên khách, hoặc từ Tổng quan bấm "Ghi nhật ký" ở dòng nhà thầu), bấm "Ghi nhật ký chăm sóc" ở đầu trang hoặc tab Nhật ký chăm sóc (Hộp thư KHÔNG có form này, chỉ nhắc "Chưa ghi kết quả" và có nút "Mở hồ sơ chăm sóc" dẫn tới trang hồ sơ; Tổng quan có nút "Ghi nhật ký" ở dòng nhà thầu): chọn kết quả (Đã liên hệ / Gọi lại / Không liên lạc được / …). "Gọi lại" bắt buộc có việc tiếp theo và hạn; kiểm có đúng một việc (ToDo) được tạo cho chủ Lead.
 8. Kiểm phản hồi lần đầu của Lead được ghi (số phút làm việc) và Lead chuyển "Đã liên hệ" (trừ "Không liên lạc được").
 
 ### D. Chuyển giai đoạn
