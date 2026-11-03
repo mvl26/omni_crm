@@ -91,6 +91,7 @@ class OmniMonitor {
 			this.row("developer_mode", this.yes_no(sw.developer_mode), sw.developer_mode) +
 			this.row(__("Email cảnh báo (alert_recipients)"), sw.alert_recipients_set ? __("Đã đặt") : __("Chưa đặt"), !sw.alert_recipients_set) +
 			this.row(__("Giữ raw_payload (ngày)"), sw.raw_payload_retention_days || __("Tắt dọn")) +
+			(sw.zalo_signature_debug_until ? this.row(__("Chẩn đoán chữ ký Zalo ĐANG BẬT tới"), sw.zalo_signature_debug_until, true) : "") +
 			(s.channels || []).map((c) =>
 				this.row(c.name, `${__("nhận")}: ${this.yes_no(c.enabled)} / ${__("gửi")}: ${this.yes_no(c.outbound_enabled)}`
 					+ (c.skip_signature ? ` / ${__("bỏ qua chữ ký")}` : ""), c.skip_signature)).join("")));
@@ -103,6 +104,10 @@ class OmniMonitor {
 				const left = c.token_seconds_left;
 				h += this.row(__("Hạn token Zalo"), c.token_expires_at ? `${c.token_expires_at} (${left > 0 ? __("còn") + " " + this.dur(left) : __("đã hết hạn")})` : "-",
 					left !== null && left < 3600);
+			}
+			if (c.channel_type === "Zalo OA") {
+				h += this.row(__("Gói OA"), c.oa_package_warning
+					? `${c.oa_package || __("Chưa xác nhận")} - ${__("Gói OA có thể chưa cho kết nối API")}` : (c.oa_package || "-"), !!c.oa_package_warning);
 			}
 			if (c.channel_type === "Meta Lead Ads" && c.meta_token) {
 				const m = c.meta_token;

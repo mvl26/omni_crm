@@ -20,6 +20,9 @@ CHANNEL = "Omni Channel"
 CANDIDATE = "Omni Duplicate Candidate"
 STATUSES = ["New", "Processing", "Retry", "Manual", "Done", "Ignored"]
 OUT_STATUSES = ["Queued", "Sent", "Failed", "Blocked"]
+# V21-05: theo trang giá Zalo (1/6/2026) chỉ gói Tăng trưởng, Toàn diện liên kết ứng dụng với OA qua API; xem docs/12 C-V21-05
+UNCONFIRMED_PACKAGE = "Chưa xác nhận"
+API_UNSURE_PACKAGES = (UNCONFIRMED_PACKAGE, "Cơ bản", "Tiêu chuẩn")
 SWEEP_STALE_MINUTES = 15  # tác vụ quét chạy mỗi 5 phút: quá 15 phút chưa chạy là scheduler/worker có vấn đề
 
 
@@ -63,6 +66,7 @@ def _channel_rows(now) -> list[dict[str, Any]]:
 			"meta_token_data_expires_at",
 			"meta_token_note",
 			"zalo_skip_signature",
+			"zalo_oa_package",
 			"creation",
 		],
 		order_by="creation asc",
@@ -87,6 +91,9 @@ def _channel_rows(now) -> list[dict[str, Any]]:
 				"enabled": cint(c.enabled),
 				"outbound_enabled": cint(c.outbound_enabled),
 				"skip_signature": cint(c.zalo_skip_signature),
+				"oa_package": c.zalo_oa_package if c.channel_type == "Zalo OA" else None,
+				"oa_package_warning": c.channel_type == "Zalo OA"
+				and (c.zalo_oa_package or UNCONFIRMED_PACKAGE) in API_UNSURE_PACKAGES,
 				"created": c.creation,
 				"last_inbound_at": last_in.get(c.name),
 				"last_outbound_at": last_out.get(c.name),
@@ -301,6 +308,17 @@ def _spool() -> dict[str, Any]:
 	return out
 
 
+def _sigprobe_until() -> str | None:
+	"""Hạn hiệu lực của công cụ chẩn đoán chữ ký Zalo (V21-05) nếu đang bật; lỗi đọc thì None."""
+	from omni_crm.channels.zalo import sigprobe
+
+	try:
+		until = sigprobe.effective_until()
+	except Exception:
+		return None
+	return str(until) if until else None
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -340,6 +358,7 @@ def build_snapshot() -> dict[str, Any]:
 			"bot_analyze_enabled": cint(settings.get("bot_analyze_enabled")),
 			"bot_reply_mode": settings.get("bot_reply_mode") or "Off",
 			"crm_lead_sync_sources_enabled": _crm_lead_sync_enabled(),
+			"zalo_signature_debug_until": _sigprobe_until(),
 		},
 		"channels": _channel_rows(now),
 		"queue": {

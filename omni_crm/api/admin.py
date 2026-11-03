@@ -57,6 +57,20 @@ def monitor_snapshot() -> dict[str, Any]:
 
 
 @frappe.whitelist()
+def zalo_signature_probes() -> dict[str, Any]:
+	"""Bản ghi chẩn đoán chữ ký webhook Zalo (V21-05, chỉ Omni Admin): webhook bị từ chối trong 24 giờ qua; không chứa khóa."""
+	require_omni_admin()
+	from omni_crm.channels.zalo import sigprobe
+
+	until = sigprobe.effective_until()
+	return {
+		"active": until is not None,
+		"until": str(until) if until else None,
+		"records": sigprobe.list_records(),
+	}
+
+
+@frappe.whitelist()
 def list_manual(limit: int | str = 50) -> list[dict]:
 	"""Tin Manual mới nhất để chọn "Xử lý lại": chỉ thông tin kỹ thuật, không có nội dung tin, SĐT/email đã che."""
 	require_omni_admin()

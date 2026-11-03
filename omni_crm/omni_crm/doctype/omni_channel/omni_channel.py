@@ -18,6 +18,8 @@ class OmniChannel(Document):
 			self.validate_telephony()
 		if (self.zalo_cs_free_hours or 0) < 0 or (self.zalo_cs_max_days or 0) < 0:
 			frappe.throw(_("Khung gửi tin Zalo không được âm"))
+		if (self.zalo_cs_paid_quota_month or 0) < 0:
+			frappe.throw(_("Hạn mức tin ngoài khung không được âm"))
 
 	def validate_telephony(self) -> None:
 		"""Nhà cung cấp Fake chỉ chọn được ở môi trường dev/test; token webhook (nếu đặt) phải đủ dài."""

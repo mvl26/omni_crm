@@ -495,6 +495,7 @@ class OmniInbox {
 				</div>`;
 			if (!z.can_send) html += `<div class="oi-error">${e(z.message || "")}</div>`;
 			else if (z.paid) html += `<div class="oi-warn">${e(z.message)}</div>`;
+			if (z.quota) html += `<div class="oi-meta ${z.quota.over ? "text-danger" : ""}">${e(z.quota.text)}</div>`;
 		}
 		if (c.email) {
 			html += `<div class="oi-actions"><a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(__("Trả lời email trong CRM"))}</a></div>`;
