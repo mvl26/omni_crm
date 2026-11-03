@@ -128,6 +128,18 @@ class OmniMonitor {
 			this.row(__("Tuổi tin New lâu nhất"), this.dur(q.oldest_new_age_seconds), q.oldest_new_age_seconds > 300) +
 			this.row(__("Lần quét gần nhất"), s.sweeper && s.sweeper.last_run_age_seconds !== null ? this.dur(s.sweeper.last_run_age_seconds) + " " + __("trước") : __("chưa có"), s.sweeper && s.sweeper.stale)));
 
+		const mr = s.meta_requeue || {};
+		if (mr.last_run || mr.manual_tam_thoi || mr.manual_vinh_vien || mr.requeued_total) {
+			const lr = mr.last_run;
+			cards.push(this.card(__("Kéo lại lead Meta"),
+				this.row(__("Lượt đối soát gần nhất"), lr ? `${lr.at} - ${__("tạo mới")} ${lr.created}, ${__("kéo lại")} ${lr.requeued}` : __("chưa có")) +
+				this.row(__("Tin kéo lại ở lượt gần nhất"), lr ? lr.requeued : "-") +
+				this.row(__("Tổng số lần đã kéo lại"), mr.requeued_total) +
+				this.row(__("Manual - lỗi tạm thời (đợi kéo lại)"), mr.manual_tam_thoi, mr.manual_tam_thoi > 0) +
+				this.row(__("Manual - lỗi vĩnh viễn (cần người)"), mr.manual_vinh_vien, mr.manual_vinh_vien > 0) +
+				this.row(__("Dừng kéo lại (quá 3 lần)"), lr ? lr.exhausted : "-", lr && lr.exhausted > 0)));
+		}
+
 		cards.push(this.card(__("Thời gian xử lý (24 giờ)"),
 			this.row(__("Số tin Done"), t.count) + this.row("p50", this.dur(t.p50)) + this.row("p95", this.dur(t.p95), t.p95 > 120)));
 

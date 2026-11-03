@@ -260,6 +260,32 @@ def _lead_queue() -> dict[str, Any]:
 		return {"declared": True, "length": None, "workers": None}
 
 
+def _meta_requeue() -> dict[str, Any]:
+	"""Kéo lại lead Meta (V21-03): kết quả lượt đối soát gần nhất (cache), tin Manual đang chờ theo loại lỗi, tổng số lần đã kéo lại."""
+	from omni_crm.channels.meta_leads.reconcile import RESULT_CACHE_KEY
+
+	try:
+		last = frappe.cache().get_value(RESULT_CACHE_KEY)
+	except Exception:
+		last = None
+	by_kind = dict(
+		frappe.db.sql(
+			"""select error_kind, count(*) from `tabOmni Inbound Message`
+			where status = 'Manual' and channel_type = 'Meta Lead Ads' group by error_kind"""
+		)
+	)
+	requeued = frappe.db.sql(
+		"select coalesce(sum(requeue_count), 0) from `tabOmni Inbound Message` where requeue_count > 0"
+	)[0][0]
+	return {
+		"last_run": last if isinstance(last, dict) else None,
+		"manual_tam_thoi": cint(by_kind.get("tam_thoi")),
+		"manual_vinh_vien": cint(by_kind.get("vinh_vien")),
+		"manual_chua_phan_loai": cint(by_kind.get("")) + cint(by_kind.get(None)),
+		"requeued_total": cint(requeued),
+	}
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -308,6 +334,7 @@ def build_snapshot() -> dict[str, Any]:
 			else None,
 		},
 		"lead_queue": _lead_queue(),
+		"meta_requeue": _meta_requeue(),
 		"timing": {"window_hours": 24, **_percentiles(add_to_date(now, hours=-24))},
 		"outbound": {
 			**{s.lower(): cint(out_today[s]) for s in OUT_STATUSES},
