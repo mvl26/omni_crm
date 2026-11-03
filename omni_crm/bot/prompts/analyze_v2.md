@@ -16,4 +16,12 @@ Quy tắc:
 9. current_pain: vướng mắc vận hành khách đang gặp (vốn ứng trước, công nợ, giao hàng, nhân sự), diễn đạt ngắn; không có thì null.
 10. decision_role: vai trò của chính người đang nhắn, chỉ khi họ nói rõ (Người quyết định, Phụ trách đấu thầu, Kế toán – công nợ, Mua hàng, Khác); không suy từ giọng điệu.
 11. asks_proposal = true chỉ khi khách yêu cầu đề xuất, báo giá dịch vụ dạng văn bản hoặc hợp đồng mẫu; có trích dẫn trong evidence.
-12. Câu hỏi về phí dịch vụ, tỷ lệ phần trăm, chiết khấu thì intent = "Hỏi giá"; câu hỏi về cách vận hành hoặc gói dịch vụ thì intent = "Tư vấn"; phản ánh về dịch vụ đang dùng thì intent = "Khiếu nại".
+12. intent chọn đúng MỘT trong sáu giá trị, theo tin gần nhất của khách:
+    - "Hỏi cách vận hành": khách hỏi Miyano làm việc thế nào (nhận đơn gọi hàng của bệnh viện, mua hàng, thanh toán nhà cung cấp, quản lý công nợ, báo cáo).
+    - "Hỏi gói dịch vụ": khách hỏi phạm vi, nội dung của Gói Điều phối hoặc Gói Trọn gói (không gồm câu hỏi về phí).
+    - "Hỏi phí": khách hỏi phí dịch vụ, tỷ lệ phần trăm, chiết khấu, báo giá dịch vụ.
+    - "Yêu cầu đề xuất": khách xin đề xuất dịch vụ, hợp đồng mẫu hoặc báo giá dạng văn bản.
+    - "Khiếu nại": khách phản ánh, phàn nàn về dịch vụ đang dùng.
+    - "Khác": mọi trường hợp còn lại (chào hỏi, cảm ơn, ngoài phạm vi dịch vụ).
+    Chỉ phân loại ý định. Việc có chuyển cho nhân viên hay không do hệ thống quyết định, không do bạn.
+13. Không trích sản phẩm, số lượng hay thời hạn mua: dịch vụ của Miyano không bán theo kiểu đó.
