@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import secrets
+import time
+
 import frappe
 
 from omni_crm import flags
@@ -16,6 +19,16 @@ QUEUE = DEFAULT_QUEUE  # tên mặc định; định tuyến thật qua queue_fo
 def compute_identity_key(channel_type: str, external_sender_id: str) -> str:
 	"""identity_key = "{channel_type}:{người gửi đã chuẩn hóa}"."""
 	return f"{channel_type}:{normalize_sender(channel_type, external_sender_id)}"
+
+
+def new_inbound_name() -> str:
+	"""Tên bản ghi tin vào theo thời gian (OIN-<năm>-<micro giây><3 số ngẫu nhiên>), KHÔNG dùng bộ đếm tabSeries.
+
+	Bộ đếm `OIN-.YYYY.-.########` giữ khóa ghi dòng `tabSeries` tới khi commit, nên MỌI webhook xếp hàng sau một giao dịch
+	đang giữ dòng đó (nguyên nhân chờ khóa, V21-04). Tên mới dài cố định 19 chữ số nên vẫn sắp xếp theo thời gian
+	(`scoring` dùng `name desc` để phân định khi cùng giây) và đứng sau mọi tên cũ 8 chữ số.
+	"""
+	return f"OIN-{time.strftime('%Y')}-{int(time.time() * 1_000_000)}{secrets.randbelow(1000):03d}"
 
 
 def save_inbound(event: InboundEvent) -> str | None:
@@ -42,10 +55,18 @@ def save_inbound(event: InboundEvent) -> str | None:
 			"status": "Manual" if unparsed else "Ignored" if ignored else "New",
 		}
 	)
-	try:
-		doc.insert(ignore_permissions=True)
-	except frappe.UniqueValidationError:
-		return None  # đã nhận rồi: bỏ qua, không enqueue
+	name = new_inbound_name()
+	for attempt in (1, 2):
+		try:
+			doc.flags.name_set = False
+			doc.insert(ignore_permissions=True, set_name=name)
+			break
+		except frappe.UniqueValidationError:
+			return None  # đã nhận rồi (dedupe_key): bỏ qua, không enqueue
+		except frappe.DuplicateEntryError:  # trùng TÊN (cực hiếm): đổi tên rồi thử lại một lần
+			if attempt == 2:
+				raise
+			name = new_inbound_name()
 
 	if unparsed or ignored or not flags.channel_enabled(event.channel):
 		return doc.name  # chỉ lưu, không xử lý

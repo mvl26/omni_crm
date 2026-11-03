@@ -86,7 +86,8 @@
   "meta_token_check_disabled",
   "meta_requeue_hours",
   "meta_requeue_batch",
-  "meta_requeue_disabled"
+  "meta_requeue_disabled",
+  "webhook_spool_disabled"
  ],
  "fields": [
   {
@@ -576,6 +577,13 @@
    "label": "Tắt tự kéo lại lead Meta",
    "default": "0",
    "description": "Bật: đối soát không kéo lại tin Manual (vẫn bù lead sót). Chưa từng lưu hoặc 0 = kéo lại (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
+  },
+  {
+   "fieldname": "webhook_spool_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt hàng dự phòng webhook",
+   "default": "0",
+   "description": "Bật: khi DB không ghi được tin, webhook trả 503 như trước V21-04 (không ghi hàng dự phòng); tác vụ quét vẫn chèn lại các tin đã có trong hàng. Chưa từng lưu hoặc 0 = dùng hàng dự phòng (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
   }
  ],
  "permissions": [

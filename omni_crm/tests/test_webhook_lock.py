@@ -1,5 +1,6 @@
-"""V2-01 (03.10): webhook không treo khi DB bị khóa (docs/10 mục 5: không quá 5 giây) mà trả 503 để nhà cung cấp gửi lại."""
+"""V2-01 (03.10): webhook không treo khi DB bị khóa (docs/10 mục 5: không quá 5 giây). V21-04: hết hạn chờ thì vào hàng dự phòng thay vì 503."""
 
+import shutil
 import time
 from unittest import mock
 
@@ -92,21 +93,29 @@ class TestWebhookLockWait(FrappeTestCase):
 		self.assertEqual(self.stored(), 1)  # tin đã commit bền
 		self.assertEqual(self.lock_wait(), before)
 
-	def test_locked_message_key_gives_503_quickly_saves_nothing_then_retry_is_accepted(self):
+	def test_locked_message_key_goes_to_spool_200_quickly_then_drain_stores_it_once(self):
+		"""V21-04: trước đây 503 (mất tin nếu nhà cung cấp không gửi lại); nay vào hàng dự phòng và được chèn lại."""
+		from omni_crm.ingest import spool
+
+		self.addCleanup(shutil.rmtree, spool.spool_dir(), True)
 		before = self.lock_wait()
 		self.hold_same_message_key()
 		started = time.monotonic()
-		with mock.patch.dict(frappe.conf, {webhooks.LOCK_WAIT_CONF: 1}):
+		with (
+			mock.patch.dict(frappe.conf, {webhooks.LOCK_WAIT_CONF: 1}),
+			mock.patch("omni_crm.ingest.spool.build_entry", wraps=spool.build_entry),
+		):
 			status, _ = self.call()
-		self.assertEqual(status, 503)
+		self.assertEqual(status, 200)
 		self.assertLess(time.monotonic() - started, 5)
-		self.assertEqual(self.stored(), 0)  # rollback: để nhà cung cấp gửi lại
+		self.assertEqual(self.stored(), 0)
+		self.assertEqual(spool.spool_count(), 1)
 		self.assertEqual(self.lock_wait(), before)
-		self.other.rollback()  # khóa nhả: lần gửi lại được nhận
+		self.other.rollback()  # khóa nhả: tác vụ quét chèn lại
 		frappe.cache().delete_keys("omni:")
-		status, result = self.call()
-		self.assertEqual((status, result["saved"]), (200, 1))
-		self.assertEqual(self.stored(), 1)
+		with mock.patch("omni_crm.ingest.spool.reverify", return_value=(True, "ok")):
+			self.assertEqual(spool.drain()["saved"], 1)
+		self.assertEqual((self.stored(), spool.spool_count()), (1, 0))
 
 	def test_without_lock_still_ok(self):
 		status, result = self.call()

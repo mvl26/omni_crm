@@ -151,3 +151,10 @@ stateDiagram-v2
 
 `_handle_webhook(channel_type, *, max_bytes=MAX_BODY_BYTES, guard=None)`: `max_bytes` là giới hạn kích thước riêng của kênh (Web Form 64 KB), `guard(channel_doc)` là kiểm tra thêm sau khi tải kênh (giới hạn tần suất theo IP của Web Form, trả 429). Ba webhook mới: `meta_leads` (GET handshake trả `hub.challenge` nguyên văn; POST kiểm `X-Hub-Signature-256`), `google_leads` (trả `{}` mã 200; 401 sai `google_key`; 503 khi hết hạn chờ khóa DB), `web_form` (Guest). Sự kiện `form_lead` dùng mã lead của nền tảng làm `external_sender_id`; adapter có `prepare_batch` (lấy dữ liệu Meta, bỏ biểu mẫu tắt) và `after_resolve` (quy kết chiến dịch, giao sale).
 
+
+## Ghi chú V21-04: webhook không làm mất tin khi chờ khóa
+
+- **Lưu tin chỉ chèn một bản ghi.** `gateway.save_inbound` đặt tên bằng `new_inbound_name()` (`OIN-<năm>-<micro giây><3 số>`), không dùng bộ đếm `tabSeries` (nguyên nhân mọi webhook xếp hàng, xem ADR 0014). Chống trùng chỉ bằng ràng buộc duy nhất `dedupe_key`: trùng = đã nhận, trả thành công của kênh. Webhook không khóa dòng nào khác ngoài dòng vừa chèn (và dấu `last_success_at`, tối đa 1 lần/phút, chờ khóa thì bỏ qua).
+- **Hàng dự phòng.** Sau khi xác thực, nếu parse/lưu gặp hết hạn chờ khóa (`omni_webhook_lock_wait_seconds`, mặc định 3 giây), bế tắc hoặc mất kết nối DB: rollback, ghi payload thô vào `private/omni_spool` (`ingest/spool.py`) và vẫn trả thành công của kênh. Tác vụ quét `omni_crm.ingest.spool.drain` (cron mỗi phút) kiểm lại seal và chữ ký, chèn vào `Omni Inbound Message` (trùng `dedupe_key` thì bỏ qua), xóa dòng đã chèn; chèn lỗi thì giữ lại.
+- **Chỉ trả 5xx khi DB và hàng dự phòng cùng hỏng** (hoặc công tắc `webhook_spool_disabled` bật): log mức nghiêm trọng, cảnh báo ngay (`webhook_spool_hong`), 503.
+- Giám sát: `spool_count()`, `oldest_age_seconds()`, thẻ "Hàng dự phòng webhook", cảnh báo `webhook_spool_cu` khi có tin nằm quá 10 phút.

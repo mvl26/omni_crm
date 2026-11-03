@@ -197,6 +197,8 @@ Các cờ này nằm ở `<bench-dir>/sites/<site>/site_config.json` (**của đ
 | `omni_ai_timeout_seconds` | 60 | Thời gian chờ tối đa mỗi lần gọi AI (giây). | Đặt quá thấp: nhiều lần lỗi và ngắt mạch. |
 | `omni_eval_judge_model` | `claude-sonnet-5-5` | Mô hình chấm cho bộ đề. | Đổi mô hình giám khảo làm số điểm không so sánh được với lần trước. |
 | `omni_zalo` | Không đặt | Từ điển ghi đè các hằng API Zalo (`api_base`, `send_path`, `signature_header`, `max_text_length`, ...). Dùng khi Zalo đổi API mà chưa kịp cập nhật app. | Sai giá trị làm Zalo ngừng gửi/nhận. Giá trị mặc định chưa được đối chiếu với tài liệu Zalo chính thức (docs/12 mục B2). |
+| `omni_webhook_lock_wait_seconds` | 3 | Thời gian webhook chờ khóa DB trước khi ghi **hàng dự phòng** (V21-04; trước đây là thời gian chờ rồi trả 503, mặc định 5). Giá trị cũ vẫn chạy, không lỗi. | Đặt quá cao làm request giữ worker web lâu; không còn gây mất tin. |
+| `omni_spool_max_bytes` / `omni_spool_max_lines` / `omni_spool_expire_days` | 50 MB / 5.000 / 14 | Giới hạn hàng dự phòng webhook tại `<site>/private/omni_spool` (chứa dữ liệu cá nhân chưa vào DB: thư mục 0700, tệp 0600). Đầy thì cảnh báo và webhook trả 503. | Đặt cao làm giữ nhiều dữ liệu cá nhân ngoài DB; đặt `expire_days` thấp có thể xóa tin chưa chèn được. |
 | `developer_mode` | Tắt (cờ chuẩn của Frappe) | Xem mục 11. | Xem mục 11. |
 
 Cách đặt (chạy trong `<bench-dir>`, ví dụ bật khóa AI cho một site **chỉ khi đã được phép**):
@@ -229,6 +231,7 @@ Danh sách kiểm trước mỗi lần phát hành: `developer_mode` tắt · `z
 | Triệu chứng | Nguyên nhân thường gặp | Cách xử lý |
 | --- | --- | --- |
 | Tin chỉ ở trạng thái `New`, không thành Lead | Chưa có worker `omni` (hoặc thiếu khóa `workers` ở `common_site_config.json`), Redis queue chết | `sudo supervisorctl status`; mục 3; `bench doctor` (trong `<bench-dir>`) |
+| Thẻ "Hàng dự phòng webhook" có tin / cảnh báo "Tin nằm lâu trong hàng dự phòng" (V21-04) | DB khóa hoặc mất kết nối lúc webhook đến; tác vụ quét `omni_crm.ingest.spool.drain` (mỗi phút) chưa chèn lại được (scheduler tắt, DB còn lỗi) | Bật scheduler (mục 4), kiểm DB, chạy tay `bench --site <site> execute omni_crm.ingest.spool.drain`; thư mục `private/omni_spool` phải ghi được (0700) |
 | Lỗi "Queue should be one of ..." trong log | Thiếu `workers.omni` trong `common_site_config.json` | Thêm như mục 3, khởi động lại |
 | Log có cảnh báo "chưa khai báo hàng đợi omni_leads" / lead quảng cáo chậm khi chat đông | Thiếu `workers.omni_leads` nên lead đi chung hàng đợi `omni` | Khai báo `omni_leads`, sinh lại supervisor, chạy ≥ 2 worker, khởi động lại |
 | Lead quảng cáo ở `New` mãi dù đã khai báo `omni_leads` | Không có worker lắng nghe `omni_leads` (supervisor sinh trước khi khai báo), hoặc tiến trình chưa khởi động lại | `supervisorctl status`; `bench setup supervisor`; mục 3 |

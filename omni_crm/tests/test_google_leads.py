@@ -115,7 +115,49 @@ class TestWebhook(GoogleCase):
 		_res, status = call_webhook(webhooks.google_leads, b"", method="GET", args={"ch": self.channel.name})
 		self.assertEqual(status, 405)
 
-	def test_lock_trouble_returns_503_so_google_retries(self):
+	def test_lock_trouble_goes_to_spool_and_returns_200(self):
+		"""V21-04: hết hạn chờ khóa không còn 503; tin vào hàng dự phòng, Google nhận 200."""
+		import shutil
+
+		from omni_crm.ingest import spool
+
+		self.addCleanup(shutil.rmtree, spool.spool_dir(), True)
+		with mock.patch("omni_crm.ingest.gateway.save_inbound", side_effect=frappe.QueryTimeoutError()):
+			_res, status = self.post()
+		self.assertEqual(status, 200)
+		self.assertEqual(spool.spool_count(), 1)
+
+	def test_spooled_google_lead_has_no_key_on_disk_and_is_reinserted_exactly(self):
+		import shutil
+
+		from omni_crm.ingest import spool
+
+		self.addCleanup(shutil.rmtree, spool.spool_dir(), True)
+		with mock.patch("omni_crm.ingest.gateway.save_inbound", side_effect=frappe.QueryTimeoutError()):
+			_res, status = self.post()
+		self.assertEqual(status, 200)
+		text = open(spool._files()[0], encoding="utf-8").read()
+		import base64
+		import json
+
+		raw = base64.b64decode(json.loads(text)["raw"])
+		self.assertNotIn(GOOGLE_KEY.encode(), raw)
+		self.assertNotIn(b"google_key", raw)
+		self.assertEqual(inbound(self.channel.name), [])
+		out = spool.drain()
+		self.assertEqual((out["saved"], out["dropped"]), (1, 0))
+		rows = inbound(self.channel.name)
+		self.assertEqual((len(rows), rows[0].external_message_id), (1, "TD505GL1"))
+		self.assertEqual(spool.spool_count(), 0)
+
+	def test_lock_trouble_returns_503_when_spool_switch_is_off(self):
+		def drop():
+			frappe.db.delete("Singles", {"doctype": "Omni Settings", "field": "webhook_spool_disabled"})
+			frappe.db.commit()
+
+		frappe.db.set_single_value("Omni Settings", "webhook_spool_disabled", 1)
+		frappe.db.commit()  # webhook rollback khi lỗi khóa: công tắc phải đã commit
+		self.addCleanup(drop)
 		with mock.patch("omni_crm.ingest.gateway.save_inbound", side_effect=frappe.QueryTimeoutError()):
 			_res, status = self.post()
 		self.assertEqual(status, 503)

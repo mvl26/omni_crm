@@ -128,6 +128,15 @@ class OmniMonitor {
 			this.row(__("Tuổi tin New lâu nhất"), this.dur(q.oldest_new_age_seconds), q.oldest_new_age_seconds > 300) +
 			this.row(__("Lần quét gần nhất"), s.sweeper && s.sweeper.last_run_age_seconds !== null ? this.dur(s.sweeper.last_run_age_seconds) + " " + __("trước") : __("chưa có"), s.sweeper && s.sweeper.stale)));
 
+		const sp = s.spool || {};
+		if (sp.count || sp.failed_at) {
+			cards.push(this.card(__("Hàng dự phòng webhook"),
+				this.row(__("Số tin đang chờ chèn lại"), sp.count, sp.count > 0) +
+				this.row(__("Tin cũ nhất"), sp.oldest_age_seconds === null || sp.oldest_age_seconds === undefined ? "-" : this.dur(sp.oldest_age_seconds), sp.stale) +
+				this.row(__("Dung lượng (byte)"), sp.bytes) +
+				this.row(__("Lần cuối DB và hàng dự phòng cùng hỏng"), sp.failed_at || "-", !!sp.failed_at)));
+		}
+
 		const mr = s.meta_requeue || {};
 		if (mr.last_run || mr.manual_tam_thoi || mr.manual_vinh_vien || mr.requeued_total) {
 			const lr = mr.last_run;

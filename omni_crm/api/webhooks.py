@@ -18,8 +18,9 @@ from omni_crm.ingest.events import InboundEvent
 MAX_BODY_BYTES = 1024 * 1024  # 1 MB
 LAST_SUCCESS_TTL = 60  # giây: tối đa 1 lần ghi last_success_at mỗi phút mỗi kênh
 ERROR_LOG_TTL = 60  # giây: chống tràn Error Log khi bị gọi sai liên tục
-LOCK_WAIT_CONF = "omni_webhook_lock_wait_seconds"  # site_config; docs/10 mục 5: webhook không treo quá 5 giây
-DEFAULT_LOCK_WAIT = 5
+# site_config; từ V21-04 là thời gian CHỜ KHÓA trước khi chuyển sang hàng dự phòng (không còn dẫn tới 503); docs/10 mục 5
+LOCK_WAIT_CONF = "omni_webhook_lock_wait_seconds"
+DEFAULT_LOCK_WAIT = 3
 
 
 def _respond(status: int, message: str, **extra) -> dict:
@@ -76,6 +77,82 @@ def _is_lock_trouble(e: BaseException) -> bool:
 		return bool(frappe.db.is_timedout(e) or frappe.db.is_deadlocked(e))
 	except Exception:
 		return False
+
+
+# Mã lỗi MySQL/MariaDB phía máy khách: 2002/2003/2006/2013 (không nối được, mất kết nối), 1040/1203 (quá nhiều kết nối),
+# 1205/1213 (hết hạn chờ khóa, bế tắc). Lỗi schema/quyền (1054, 1045, 1146...) KHÔNG nằm trong đây: phải nổi lên, không vào hàng.
+DB_TRANSIENT_CODES = frozenset({2002, 2003, 2006, 2013, 1040, 1203, 1205, 1213})
+
+
+def is_db_unavailable(e: BaseException) -> bool:
+	"""DB không ghi được lúc này (chờ khóa, bế tắc, mất kết nối, quá tải kết nối): tạm thời, đáng ghi hàng dự phòng."""
+	import pymysql
+
+	seen = 0
+	while e is not None and seen < 4:
+		if _is_lock_trouble(e) or isinstance(
+			e, pymysql.err.InterfaceError | ConnectionError | BrokenPipeError
+		):
+			return True
+		if isinstance(e, pymysql.err.OperationalError) and e.args and e.args[0] in DB_TRANSIENT_CODES:
+			return True
+		e, seen = (e.__cause__ or e.__context__), seen + 1
+	return False
+
+
+def _safe_rollback() -> None:
+	"""Rollback không ném lỗi; mất kết nối thì thử nối lại để phần kết thúc request của Frappe không hỏng."""
+	try:
+		frappe.db.rollback()
+	except Exception:
+		try:
+			frappe.db.connect()
+		except Exception:
+			pass
+
+
+def _spool_or_fail(channel_doc, raw: bytes, headers: dict) -> dict:
+	"""Ghi hàng dự phòng và trả thành công của kênh; hỏng nốt thì log nghiêm trọng, cảnh báo ngay và trả 503."""
+	from omni_crm.ingest import spool
+
+	if not spool.enabled():  # công tắc tắt: giữ hành vi cũ (nhà cung cấp gửi lại)
+		_log_short("cho_khoa_db_qua_han", channel_doc.name, len(raw))
+		return _respond(503, _("Hệ thống đang bận, vui lòng gửi lại sau"))
+	try:
+		spool.append(spool.build_entry(channel_doc.name, channel_doc.channel_type, raw, headers))
+	except Exception as e:
+		# Cả DB lẫn hàng dự phòng đều hỏng: không còn chỗ giữ tin. Log mức nghiêm trọng (tệp), KHÔNG kèm payload/PII.
+		frappe.logger("omni").critical(
+			"omni spool: DB va hang du phong deu hong, mat tin kenh=%s loai=%s",
+			channel_doc.name,
+			type(e).__name__,
+		)
+		_alert_spool_failure(channel_doc.name, type(e).__name__)
+		return _respond(503, _("Hệ thống tạm thời chưa nhận được tin, vui lòng gửi lại sau"))
+	frappe.logger("omni").warning("omni spool: da ghi hang du phong kenh=%s", channel_doc.name)
+	if channel_doc.channel_type == "Web Form" and not frappe.flags.get("omni_web_submission"):
+		frappe.flags.omni_web_submission = uuid.uuid4().hex
+	return _respond(200, "ok", received=0, saved=0, queued=1)
+
+
+def _alert_spool_failure(channel: str, kind: str) -> None:
+	"""Cảnh báo ngay (best effort: DB đang hỏng nên có thể không gửi được; log tệp mức nghiêm trọng vẫn còn)."""
+	try:
+		frappe.cache().set_value("omni:spool:failed_at", str(now_datetime()), expires_in_sec=3600)
+		from omni_crm.monitoring.alerts import Alert, deliver_now
+
+		deliver_now(
+			Alert(
+				"webhook_spool_hong",
+				channel,
+				_("Webhook không lưu được tin: DB và hàng dự phòng đều hỏng"),
+				_(
+					"Kênh {0}: DB không ghi được và hàng dự phòng ({1}) cũng không ghi được; webhook trả 503 và tin chỉ còn nếu nhà cung cấp gửi lại. Kiểm tra DB và thư mục private/omni_spool (quyền, dung lượng) ngay."
+				).format(channel, kind),
+			)
+		)
+	except Exception:
+		pass
 
 
 def _read_body(request, limit: int = MAX_BODY_BYTES) -> bytes:
@@ -152,21 +229,22 @@ def _handle_webhook(channel_type: str, *, max_bytes: int = MAX_BODY_BYTES, guard
 		_log_short("xac_thuc_that_bai", channel_doc.name, len(raw))
 		return _respond(401, _("Xác thực thất bại"))
 
-	# 5. parse; lỗi parse vẫn lưu một bản ghi unparsed (Manual) và trả 200
-	try:
-		events = adapter.parse(raw, headers, channel_doc)
-	except Exception:
-		_log_short("parse_that_bai", channel_doc.name, len(raw))
-		events = [_unparsed_event(channel_doc, raw)]
-
-	# 6-7. lưu từng sự kiện rồi commit NGAY để tin đã lưu bền; ghi dấu thành công (chỉ để giám sát) làm sau, riêng.
-	# Chờ khóa DB tối đa vài giây (V2-01, 03.10): lưu tin hết hạn chờ thì rollback và trả 503 để nhà cung cấp gửi lại
-	# (chưa xác nhận nhà cung cấp có gửi lại khi 5xx: docs/12 mục B); ghi dấu hết hạn chờ thì vẫn trả 200, tin đã lưu.
+	# 5-7. parse rồi lưu từng sự kiện, commit NGAY để tin đã lưu bền (V21-04, ADR 0014). Chỉ chèn Omni Inbound Message
+	# (tên không dùng bộ đếm Series), chống trùng bằng ràng buộc duy nhất dedupe_key. Chờ khóa tối đa vài giây; hết hạn
+	# chờ / bế tắc / mất kết nối DB thì rollback rồi GHI HÀNG DỰ PHÒNG (ingest/spool.py) và vẫn trả thành công; tác vụ quét
+	# mỗi phút chèn lại. Chỉ trả 503 khi cả DB lẫn hàng dự phòng đều hỏng. Request đến đây ĐÃ qua xác thực.
 	previous_wait = _set_lock_wait(cint(frappe.conf.get(LOCK_WAIT_CONF)) or DEFAULT_LOCK_WAIT)
 	try:
-		saved = 0
-		saved_real = 0  # sự kiện thật được lưu (không tính trùng, không tính unparsed)
 		try:
+			try:
+				events = adapter.parse(raw, headers, channel_doc)
+			except Exception as e:
+				if is_db_unavailable(e):
+					raise
+				_log_short("parse_that_bai", channel_doc.name, len(raw))
+				events = [_unparsed_event(channel_doc, raw)]
+			saved = 0
+			saved_real = 0  # sự kiện thật được lưu (không tính trùng, không tính unparsed)
 			for event in events:
 				if gateway.save_inbound(event):
 					saved += 1
@@ -174,19 +252,18 @@ def _handle_webhook(channel_type: str, *, max_bytes: int = MAX_BODY_BYTES, guard
 						saved_real += 1
 			frappe.db.commit()
 		except Exception as e:
-			if not _is_lock_trouble(e):
+			if not is_db_unavailable(e):
 				raise
-			frappe.db.rollback()
-			_log_short("cho_khoa_db_qua_han", channel_doc.name, len(raw))
-			return _respond(503, _("Hệ thống đang bận, vui lòng gửi lại sau"))
+			_safe_rollback()
+			return _spool_or_fail(channel_doc, raw, headers)
 		if saved_real:  # chỉ ghi dấu khi có sự kiện thật được lưu
 			try:
 				_touch_last_success(channel_doc.name)
 				frappe.db.commit()
 			except Exception as e:
-				if not _is_lock_trouble(e):
+				if not is_db_unavailable(e):
 					raise
-				frappe.db.rollback()  # chỉ bỏ dấu giám sát; tin đã commit ở trên
+				_safe_rollback()  # chỉ bỏ dấu giám sát; tin đã commit ở trên
 				_log_short("cho_khoa_db_ghi_dau_thanh_cong", channel_doc.name, len(raw))
 	finally:
 		if previous_wait is not None:

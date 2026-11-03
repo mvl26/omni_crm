@@ -169,6 +169,9 @@ has_permission = {
 
 scheduler_events = {
 	"cron": {
+		"* * * * *": [
+			"omni_crm.ingest.spool.drain",  # V21-04: chèn lại tin trong hàng dự phòng webhook (kiểm chữ ký, chống trùng)
+		],
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",
 			"omni_crm.monitoring.alerts.run_checks",  # D1-10
