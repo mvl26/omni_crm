@@ -29,6 +29,7 @@ EXPECTED_WHITELISTED = {
 		"monitor_snapshot",
 		"list_manual",
 		"sweep_now",
+		"zalo_signature_probes",  # V21-05: chỉ đọc, chỉ Omni Admin, không gửi gì
 		"refresh_zalo_token",
 		"erase_customer_data",
 		"erase_contact_data",
