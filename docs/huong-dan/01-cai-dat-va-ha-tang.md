@@ -56,7 +56,7 @@ App xử lý tin trong hai hàng đợi riêng: **`omni`** (email, Zalo, tổng 
 }
 ```
 
-Các khóa khác của tệp giữ nguyên. `omni_leads` cần **từ 2 worker** (xem công thức bên dưới); `omni` theo lưu lượng chat.
+Các khóa khác của tệp giữ nguyên. `omni_leads` cần **từ 2 worker**, đề xuất **3-4 worker ở production** (xem công thức bên dưới; chưa đo staging); `omni` theo lưu lượng chat.
 
 - `timeout`: giây. Bản code đặt thời gian tối đa 600 giây cho việc bot (hằng `JOB_TIMEOUT` trong `bot/analyze.py` và `bot/reply.py`), và `docs/01-kien-truc.md` khuyên 600. Máy dev đang để 300 (`docs/12`, G6). **Chưa kiểm** giá trị 300 hay 600 ảnh hưởng thế nào lên việc bot dài: dùng 600 ở production.
 - `background_workers`: số tiến trình worker cho hàng đợi này khi bench tự sinh cấu hình supervisor (xem công thức bên dưới).
