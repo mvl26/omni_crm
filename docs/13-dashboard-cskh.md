@@ -59,7 +59,7 @@ Ba cột (thu về một cột trên điện thoại): danh sách hội thoại 
 
 - **Danh sách**: ô tìm (tên, SĐT, email, đơn vị); bộ lọc dạng chip: Chưa trả lời, Của tôi, Zalo, Email, Cuộc gọi, Có nháp bot. Mỗi dòng: tên, đơn vị, giờ, trích tin cuối, nhãn kênh, một nhãn ưu tiên (cùng quy tắc mục 1.3).
 - **Dòng thời gian**: tin vào bên trái, tin ra bên phải, cuộc gọi là dòng riêng có tóm tắt (Đợt 3), mỗi mục ghi người · kênh · giờ. Nháp bot là khối viền xanh "Nháp của bot — chưa gửi" có nhóm câu hỏi, nguồn kho tri thức, nút Bỏ / Sửa rồi gửi / Gửi (Đợt 3). Thanh trên cùng: trạng thái bot với khách này và nút Tạm dừng/Tiếp tục (Đợt 3).
-- **Khung soạn**: chọn kênh trả lời, dòng trạng thái khung gửi Zalo, nút "Ghi nhật ký chăm sóc" (mở form mục 3.3 ngay trong Hộp thư) và nút Gửi.
+- **Khung soạn**: chọn kênh trả lời, dòng trạng thái khung gửi Zalo, nút "Ghi nhật ký chăm sóc" (đặc tả ban đầu: mở form mục 3.3 ngay trong Hộp thư; **mã thực tế (V21-09/V21-10): form chỉ có ở trang Chi tiết khách**, Hộp thư chỉ nhắc "Chưa ghi kết quả", xem docs/12 mục D) và nút Gửi.
 - **Hồ sơ rút gọn**: tên, đơn vị, nhãn Lead nóng, điểm và lý do; SĐT, email, kênh đầu, phụ trách, trạng thái; khối "Bot tóm tắt" (nhu cầu, sản phẩm, số lượng, thời điểm, mức gấp); khối "Bước tiếp theo" (bước và hạn gần nhất); nút "Mở hồ sơ chăm sóc", "Mở Lead trong CRM".
 
 ## 3. Màn hình Hồ sơ chăm sóc — format chuẩn
