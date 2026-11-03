@@ -115,7 +115,26 @@ class TestWebhook(GoogleCase):
 		_res, status = call_webhook(webhooks.google_leads, b"", method="GET", args={"ch": self.channel.name})
 		self.assertEqual(status, 405)
 
-	def test_lock_trouble_returns_503_so_google_retries(self):
+	def test_lock_trouble_goes_to_spool_and_returns_200(self):
+		"""V21-04: hết hạn chờ khóa không còn 503; tin vào hàng dự phòng, Google nhận 200."""
+		import shutil
+
+		from omni_crm.ingest import spool
+
+		self.addCleanup(shutil.rmtree, spool.spool_dir(), True)
+		with mock.patch("omni_crm.ingest.gateway.save_inbound", side_effect=frappe.QueryTimeoutError()):
+			_res, status = self.post()
+		self.assertEqual(status, 200)
+		self.assertEqual(spool.spool_count(), 1)
+
+	def test_lock_trouble_returns_503_when_spool_switch_is_off(self):
+		def drop():
+			frappe.db.delete("Singles", {"doctype": "Omni Settings", "field": "webhook_spool_disabled"})
+			frappe.db.commit()
+
+		frappe.db.set_single_value("Omni Settings", "webhook_spool_disabled", 1)
+		frappe.db.commit()  # webhook rollback khi lỗi khóa: công tắc phải đã commit
+		self.addCleanup(drop)
 		with mock.patch("omni_crm.ingest.gateway.save_inbound", side_effect=frappe.QueryTimeoutError()):
 			_res, status = self.post()
 		self.assertEqual(status, 503)
