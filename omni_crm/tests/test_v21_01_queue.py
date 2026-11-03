@@ -192,11 +192,11 @@ class TestSameCustomerNoOverlap(AdsCase):
 		zalo = make_zalo(f"{PREFIX} zalo", enabled=1)
 		frappe.db.commit()
 		call_webhook(
-			webhooks.web_form, body(payload(submission_id="v2101-sub")), args={"ch": f"{PREFIX} web"}
+			webhooks.web_form, body(payload(submission_id="td505-v2101-sub")), args={"ch": f"{PREFIX} web"}
 		)
 		web_key = frappe.get_all(
 			"Omni Inbound Message",
-			filters={"external_message_id": "v2101-sub"},
+			filters={"external_message_id": "td505-v2101-sub"},
 			pluck="identity_key",
 		)[0]
 		with mock.patch("frappe.enqueue"):
