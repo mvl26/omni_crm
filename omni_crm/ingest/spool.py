@@ -425,7 +425,7 @@ def drain(budget_seconds: float = 50.0) -> dict:
 			stop = False
 			with open(path, "rb") as f:
 				lines = [ln for ln in f.read().split(b"\n") if ln.strip()]
-			for i, line in enumerate(lines):
+			for line in lines:
 				if stop or time.monotonic() > deadline:
 					keep.append(line)
 					result["kept"] += 1
