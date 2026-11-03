@@ -79,15 +79,22 @@ def _is_lock_trouble(e: BaseException) -> bool:
 		return False
 
 
+# Mã lỗi MySQL/MariaDB phía máy khách: 2002/2003/2006/2013 (không nối được, mất kết nối), 1040/1203 (quá nhiều kết nối),
+# 1205/1213 (hết hạn chờ khóa, bế tắc). Lỗi schema/quyền (1054, 1045, 1146...) KHÔNG nằm trong đây: phải nổi lên, không vào hàng.
+DB_TRANSIENT_CODES = frozenset({2002, 2003, 2006, 2013, 1040, 1203, 1205, 1213})
+
+
 def is_db_unavailable(e: BaseException) -> bool:
-	"""DB không ghi được lúc này (hết hạn chờ khóa, bế tắc, mất kết nối, máy chủ DB lỗi): tạm thời, đáng ghi hàng dự phòng."""
+	"""DB không ghi được lúc này (chờ khóa, bế tắc, mất kết nối, quá tải kết nối): tạm thời, đáng ghi hàng dự phòng."""
 	import pymysql
 
 	seen = 0
 	while e is not None and seen < 4:
 		if _is_lock_trouble(e) or isinstance(
-			e, pymysql.err.OperationalError | pymysql.err.InterfaceError | ConnectionError | BrokenPipeError
+			e, pymysql.err.InterfaceError | ConnectionError | BrokenPipeError
 		):
+			return True
+		if isinstance(e, pymysql.err.OperationalError) and e.args and e.args[0] in DB_TRANSIENT_CODES:
 			return True
 		e, seen = (e.__cause__ or e.__context__), seen + 1
 	return False
