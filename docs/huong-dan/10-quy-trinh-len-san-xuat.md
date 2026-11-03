@@ -58,6 +58,7 @@ Trước khi bật:
 - [ ] Các quyết định ở mục 6 đánh dấu "chặn" đã được chủ dự án chốt hoặc ghi chấp nhận rủi ro bằng văn bản.
 - [ ] Production: `developer_mode` tắt (`frappe.conf.developer_mode`), `zalo_skip_signature` tắt, `omni_auto_send_allowed` vắng, `sandbox_mode` **bật** lúc đầu.
 - [ ] Dọn dẹp ở mục 7 xong.
+- [ ] **Lệnh kiểm trước phát hành (V21-08) không còn `KHONG_DAT`**: `bench --site <site> execute omni_crm.ops.preflight.run --kwargs "{'target': 'production'}"` (thoát mã 0). Chạy với `'staging'` ở bước 3. Đọc từng mục `CAN_NGUOI_KIEM`; chi tiết ở `docs/09` mục 6.
 - [ ] Bí mật production (App secret, OA secret key, token, API key, `webhook_token`) tạo mới, không dùng lại giá trị của dev/staging; không nằm trong chat/ghi chú/commit.
 - [ ] Sao lưu trước khi bật; đã thử khôi phục.
 - [ ] Kế hoạch quay lui và người trực được giao tên.

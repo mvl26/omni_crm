@@ -87,7 +87,13 @@
   "meta_requeue_hours",
   "meta_requeue_batch",
   "meta_requeue_disabled",
-  "webhook_spool_disabled"
+  "webhook_spool_disabled",
+  "sec_release_gate",
+  "q1_allowed",
+  "q11_allowed",
+  "col_release_gate",
+  "gate_phan_tich_passed_at",
+  "gate_nhap_passed_at"
  ],
  "fields": [
   {
@@ -584,6 +590,42 @@
    "label": "Tắt hàng dự phòng webhook",
    "default": "0",
    "description": "Bật: khi DB không ghi được tin, webhook trả 503 như trước V21-04 (không ghi hàng dự phòng); tác vụ quét vẫn chèn lại các tin đã có trong hàng. Chưa từng lưu hoặc 0 = dùng hàng dự phòng (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
+  },
+  {
+   "fieldname": "sec_release_gate",
+   "fieldtype": "Section Break",
+   "label": "Quyết định phát hành (V21-08)",
+   "description": "Người chốt quyết định (chủ dự án / người phụ trách) cập nhật các trường này khi quyết định thay đổi. Lệnh kiểm trước phát hành (omni_crm.ops.preflight) đọc chúng; không đoán từ docs/12. Chỉ Omni Admin ghi."
+  },
+  {
+   "fieldname": "q1_allowed",
+   "fieldtype": "Check",
+   "label": "Q1: cho phép bot tự gửi",
+   "default": "0",
+   "description": "Chủ dự án đã chốt Q1 (docs/12) cho phép bot tự gửi. Trường này chỉ GHI NHẬN quyết định để lệnh kiểm đối chiếu; nó KHÔNG mở khóa gì (khóa hạ tầng vẫn là site_config omni_auto_send_allowed)."
+  },
+  {
+   "fieldname": "q11_allowed",
+   "fieldtype": "Check",
+   "label": "Q11: cho phép gửi hội thoại khách sang AI",
+   "default": "0",
+   "description": "Chủ dự án đã chốt Q11 (docs/12) cho phép gửi hội thoại thật sang dịch vụ AI. Chỉ GHI NHẬN quyết định để lệnh kiểm đối chiếu với site_config omni_ai_allow_customer_data; nó KHÔNG mở khóa gì."
+  },
+  {
+   "fieldname": "col_release_gate",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gate_phan_tich_passed_at",
+   "fieldtype": "Datetime",
+   "label": "Cổng phân tích đã đạt lúc",
+   "description": "Thời điểm cổng phan_tich (docs/08 mục 10) được đo bằng AI thật trên bộ đề đã duyệt và đạt. Trống = chưa đạt."
+  },
+  {
+   "fieldname": "gate_nhap_passed_at",
+   "fieldtype": "Datetime",
+   "label": "Cổng nháp đã đạt lúc",
+   "description": "Thời điểm cổng nhap (docs/08 mục 10) được đo bằng AI thật trên bộ đề đã duyệt và đạt. Trống = chưa đạt."
   }
  ],
  "permissions": [
