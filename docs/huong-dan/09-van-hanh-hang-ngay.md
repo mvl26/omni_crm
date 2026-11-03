@@ -6,7 +6,7 @@ Mục lục: [1. Màn hình giám sát](#1-màn-hình-giám-sát) · [2. Cảnh 
 
 ## 1. Màn hình giám sát
 
-Mở **`/app/omni-monitor`** ("Giám sát Omni"; chỉ Omni Admin). Tự làm mới mỗi 30 giây; có nút **Quét ngay** (nút chính) và **Làm mới**. Các khối:
+Mở **`/app/omni-monitor`** ("Giám sát Omni"; chỉ Omni Admin). *Chưa kiểm trên giao diện:* tên các khối và dòng dưới đây lấy từ mã giao diện, chưa ai mở trang này bằng trình duyệt; nếu khác mô tả, hãy báo để sửa tài liệu. Tự làm mới mỗi 30 giây; có nút **Quét ngay** (nút chính) và **Làm mới**. Các khối:
 
 | Khối | Cho biết | Dấu hiệu xấu (đỏ) |
 | --- | --- | --- |

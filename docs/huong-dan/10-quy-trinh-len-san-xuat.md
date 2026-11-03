@@ -85,7 +85,7 @@ Sau khi bật: không đổi nhiều thứ cùng lúc; mỗi thay đổi công t
 
 ## 4A. Các bước thêm khi chạy chiến dịch quảng cáo
 
-Làm **sau** khi hạ tầng và kênh đã ổn (mục 2 dòng 1 tới 7) và **trước** ngày chạy. Danh sách đầy đủ từng mục, ai làm, đã tự kiểm gì: [truoc-ngay-chay-chien-dich.md](truoc-ngay-chay-chien-dich.md) (16 mục; mục nào cần Meta, Google hay website thật thì ghi "CHƯA KIỂM" cho đến khi người có quyền tự thử). Tóm tắt thứ tự:
+Làm **sau** khi hạ tầng và kênh đã ổn (mục 2 dòng 1 tới 7) và **trước** ngày chạy. Danh sách đầy đủ từng mục, ai làm, đã tự kiểm gì: [truoc-ngay-chay-chien-dich.md](truoc-ngay-chay-chien-dich.md) (16 mục; mục nào cần Meta, Google hay website thật thì ghi "CHƯA KIỂM" cho đến khi người có quyền tự thử). Tóm tắt thứ tự (*Chưa kiểm trên giao diện* với các form Desk được nhắc ở đây):
 
 1. **Hàng đợi riêng cho lead**: `omni_leads` khai báo và có worker ([01](01-cai-dat-va-ha-tang.md) mục 3). Thiếu thì lead chờ chung với chat.
 2. **Scheduler bật** (đối soát Meta hằng giờ, kiểm token, nhắc quá hạn, quét hàng dự phòng đều là tác vụ định kỳ).

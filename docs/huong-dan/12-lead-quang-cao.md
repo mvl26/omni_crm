@@ -67,7 +67,7 @@ https://<crm>/api/method/omni_crm.api.webhooks.meta_leads?ch=<tên kênh Meta>
 7. Phiên bản Graph API mặc định `v26.0` (**chưa xác nhận**): đổi bằng khóa site `omni_meta_graph_version` nếu cần.
 8. Gửi lead thử bằng **Lead Ads Testing Tool** của Meta; kiểm Lead xuất hiện, đúng chiến dịch, đúng người, và có đánh dấu thử.
 
-**Kênh Meta tắt (`enabled` bỏ tích)**: webhook trả 200, ghi log và **không lưu gì**; đối soát hằng giờ bỏ qua kênh. Khác với Email, Zalo, tổng đài vốn vẫn lưu khi tắt. Muốn tạm dừng mà không mất lead, tắt **biểu mẫu** (`Omni Lead Form.enabled`) thay vì tắt kênh: tin vẫn được lưu, chỉ không tạo Lead.
+**Kênh Meta tắt (`enabled` bỏ tích)**: webhook trả 200, ghi log và **không lưu gì**; đối soát hằng giờ bỏ qua kênh. Khác với Email, Zalo, tổng đài vốn vẫn lưu khi tắt. **Không có cách tạm dừng nhận lead mà không mất lead.** Tắt **biểu mẫu** (`Omni Lead Form.enabled`) thì tin vẫn được lưu nhưng được đánh dấu xong ngay và **không tạo Lead nào**; bật biểu mẫu lại **không** tự tạo Lead cho các tin đó (hệ thống không xử lý lại tin đã xong). Vì vậy chỉ tắt kênh hoặc biểu mẫu khi chủ ý bỏ lead trong thời gian đó, hoặc sẵn sàng nhập bù thủ công (Google: nhập CSV, mục 4).
 
 ## 4. Google Lead Form
 
@@ -107,13 +107,13 @@ Ba cơ chế tự bảo vệ để lead không bị mất vì lỗi tạm thời
 - Mỗi 6 giờ có một tác vụ chạy; mỗi kênh Meta được kiểm khoảng một lần mỗi ngày bằng cách hỏi Meta (`debug_token`) về token Page. Điều kiện: kênh có `meta_app_id`, `meta_app_secret` và token Page.
 - **Cảnh báo "Token Meta cần xử lý"** (thư tới `alert_recipients` và thông báo cho Omni Admin) khi: token không hợp lệ; token hoặc quyền dữ liệu còn không quá `meta_token_warn_days` ngày (mặc định 7); hoặc thiếu quyền `leads_retrieval`. Token System User không hết hạn thì không cảnh báo hết hạn, nhưng vẫn kiểm hợp lệ và quyền.
 - Kết quả hiện ở nhóm "Meta: kết quả kiểm token Page" của kênh (chỉ đọc) và ở dòng **Hạn token Meta** trong `/app/omni-monitor` cạnh hạn token Zalo.
-- **Việc cần làm khi có cảnh báo:** cấp token mới (nên dùng System User), dán vào `meta_page_access_token`, lưu. Lần kiểm kế tiếp sẽ xóa cảnh báo.
+- **Việc cần làm khi có cảnh báo:** cấp token mới (nên dùng System User), dán vào `meta_page_access_token`, lưu. Thư và thông báo đã gửi không thu hồi được; lần kiểm kế tiếp (trong khoảng một ngày) cập nhật lại kết quả trên kênh và ở `/app/omni-monitor`, và cảnh báo mới không lặp nếu token đã ổn.
 - Tắt kiểm: tích `meta_token_check_disabled`. Lỗi mạng tạm thời của Meta khi kiểm không sinh cảnh báo giả.
 - **Chưa đo với token Page thật.** Nếu cảnh báo này không hiện dù token sắp hết hạn, báo nhà phát triển.
 
 ### 6.2 Tự kéo lại lead Meta (V21-03)
 
-- Khi Graph API lỗi lâu hơn số lần thử lại (cỡ vài chục phút), tin lead chuyển sang trạng thái **Manual**. Trước đây phải bấm xử lý lại bằng tay. Nay **mỗi giờ**, lượt đối soát Meta tự bù lead sót, rồi đưa các tin Manual có lỗi **tạm thời** (mạng, hết thời gian chờ, lỗi 5xx của Meta, giới hạn tần suất) trong **72 giờ** qua về hàng đợi, tối đa 200 tin mỗi lượt mỗi kênh, mỗi tin tối đa **3 lần**.
+- Khi Graph API lỗi lâu hơn số lần thử lại (khoảng 17 phút theo cấu hình mặc định), tin lead chuyển sang trạng thái **Manual**. Trước đây phải bấm xử lý lại bằng tay. Nay **mỗi giờ**, lượt đối soát Meta tự bù lead sót, rồi đưa các tin Manual có lỗi **tạm thời** (mạng, hết thời gian chờ, lỗi 5xx của Meta, giới hạn tần suất) trong **72 giờ** qua về hàng đợi, tối đa 200 tin mỗi lượt mỗi kênh, mỗi tin tối đa **3 lần**.
 - Lỗi **vĩnh viễn** (token sai hoặc hết hạn, thiếu quyền `leads_retrieval`, lead đã bị xóa, dữ liệu lỗi) **không** được kéo lại. Thay vào đó có **một cảnh báo gộp mỗi lượt**: "Có lead Meta không tự kéo lại được". Việc cần làm: sửa token hoặc quyền, rồi vào `/app/omni-monitor` chọn các tin trong khối **Tin Manual** và bấm **Xử lý lại**.
 - Thẻ **Kéo lại lead Meta** trong `/app/omni-monitor` cho biết lượt đối soát gần nhất tạo mới và kéo lại bao nhiêu, tổng số lần đã kéo lại, bao nhiêu tin Manual lỗi tạm thời (đang đợi), bao nhiêu lỗi vĩnh viễn (cần người), bao nhiêu tin đã dừng sau 3 lần.
 - Nếu chính lượt đối soát cũng gặp lỗi tạm thời khi hỏi Meta (Graph vẫn chưa sống lại) thì **bỏ qua** bước kéo lại để không đốt lượt.
@@ -133,6 +133,8 @@ Ba cơ chế tự bảo vệ để lead không bị mất vì lỗi tạm thời
 
 ### 7.1 Omni Lead Form (chỉ Omni Admin tạo và sửa)
 
+*Chưa kiểm trên giao diện:* tên trường và nhãn lấy từ định nghĩa DocType trong mã.
+
 Mở `/app/omni-lead-form`. Mỗi biểu mẫu là một dòng:
 
 | Trường (nhãn) | Tên kỹ thuật | Ý nghĩa |
@@ -140,7 +142,7 @@ Mở `/app/omni-lead-form`. Mỗi biểu mẫu là một dòng:
 | Nền tảng | `platform` | Meta, Google hoặc Website |
 | Mã biểu mẫu trên nền tảng | `external_form_id` | Mã form bên Meta/Google, hoặc giá trị ô `form` của trang web. Duy nhất theo nền tảng |
 | Tên biểu mẫu | `form_name` | Tên gọi cho dễ nhận |
-| Bật | `enabled` | Mặc định bật. Tắt = biểu mẫu chỉ lưu tin, không tạo Lead |
+| Bật | `enabled` | Mặc định bật. Tắt = tin vẫn được lưu nhưng **không tạo Lead**, và bật lại **không** tự tạo Lead cho tin đã nhận lúc tắt |
 | Chiến dịch mặc định | `campaign` | Dùng khi nền tảng không báo chiến dịch |
 | Người phụ trách mặc định | `default_owner` | Nếu đặt, **ghi đè** quy tắc phân công: lead giao thẳng người này |
 | Assignment Rule áp dụng | `assignment_rule` | Tên một Assignment Rule của CRM, dùng khi không có người phụ trách mặc định |
@@ -190,7 +192,7 @@ bench --site <site> execute omni_crm.tests.acceptance.measure_campaign.run --kwa
 | --- | --- | --- |
 | Meta báo "xác minh thất bại" khi lưu webhook | Sai `ch`, sai `meta_verify_token`, kênh không phải loại Meta Lead Ads | Soát tên kênh trong URL và verify token |
 | Webhook Meta 401 | Sai `meta_app_secret` | Nhập lại App Secret đúng ứng dụng |
-| Có chiến dịch chạy nhưng không có lead; cảnh báo "Không có lead quảng cáo" | Webhook chưa đăng ký đúng Page, ứng dụng chưa Live, token chết, biểu mẫu bị tắt, kênh bị tắt | Kiểm theo thứ tự: kênh `enabled`, biểu mẫu `enabled`, token (mục 6.1), cấu hình bên Meta/Google |
+| Có chiến dịch chạy nhưng không có lead; cảnh báo "Không có lead quảng cáo" | Webhook chưa đăng ký đúng Page, ứng dụng chưa Live, token chết, biểu mẫu bị tắt, kênh bị tắt | Kiểm theo thứ tự: kênh `enabled`, biểu mẫu `enabled` (nhớ: lead đến lúc biểu mẫu tắt đã không thành Lead và không tự tạo lại), token (mục 6.1), cấu hình bên Meta/Google |
 | Lead vào nhưng không có người phụ trách | Biểu mẫu không có `default_owner` hoặc `assignment_rule` | Điền một trong hai; lead đã tạo giao tay |
 | Lead nằm `New` mãi | Không có worker `omni_leads` (hoặc `omni`) | [01](01-cai-dat-va-ha-tang.md) mục 3; cảnh báo "Hàng đợi omni_leads có việc nhưng không có worker" |
 | Lead website không thấy, trang vẫn báo thành công | Mã `form` chưa khai báo `Omni Lead Form`, hoặc ô bẫy bị điền | Mục 5 bước 2; hoặc bật `webform_accept_unknown_form` tạm |

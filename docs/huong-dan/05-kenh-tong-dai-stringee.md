@@ -16,7 +16,7 @@ Chỉ nhà cung cấp **Stringee** dùng được ở production. Lựa chọn `
 
 ## 2. Tạo Omni Channel loại Telephony
 
-Các bước đầy đủ ở [cau-hinh-stringee.md](cau-hinh-stringee.md) mục 1. Tóm tắt các trường (**Desk > `/app/omni-channel`**):
+Các bước đầy đủ ở [cau-hinh-stringee.md](cau-hinh-stringee.md) mục 1. Tóm tắt các trường (**Desk > `/app/omni-channel`**; chưa kiểm trên giao diện):
 
 | Trường | Điền |
 | --- | --- |

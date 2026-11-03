@@ -129,6 +129,8 @@ bench --site <site> execute omni_crm.bot.scoring.import_rules --kwargs "{'path':
 
 ## 9A. Quyết định phát hành (Q1, Q11) và cổng bot
 
+*Chưa kiểm trên giao diện cho các mục 9A tới 9E, 11A, 11B:* tên trường và nhãn lấy từ định nghĩa DocType trong mã, chưa mở form bằng trình duyệt.
+
 Nhóm **Quyết định phát hành** (V21-08). Bốn trường này **chỉ ghi nhận**: bật hay tắt chúng không đổi hành vi nào của hệ thống. Chúng để lệnh kiểm trước phát hành ([10](10-quy-trinh-len-san-xuat.md) mục 4, mục 11B bên dưới) đọc được quyết định của chủ dự án thay vì đoán từ tài liệu. Chỉ Omni Admin ghi; mọi thay đổi có lịch sử phiên bản.
 
 | Trường | Tên kỹ thuật | Mặc định | Ý nghĩa |
@@ -234,7 +236,7 @@ Công tắc cho từng dòng dữ liệu (không phải trường của Omni Set
 | `active`, `shadow_only` | **Nhóm câu hỏi** (`Omni Question Group`) | `active = 0`: nhóm ngừng, bot không thấy nhóm này. `shadow_only = 1`: nháp trả lời của nhóm chỉ ghi ngầm (Shadow), sale không thấy. Bỏ cả hai về mặc định (1 / 0) thì như v1. |
 | `active` | Dòng **bảng điểm** (`score_rules` trong Omni Settings) | `0` = quy tắc tắt, không xóa. Tắt cả bảng bằng `lead_scoring_enabled = 0`. |
 | `bot_paused_until` | Khách (`Omni Identity`), sale bấm **Tạm dừng bot với khách này** ([08](08-huong-dan-nhan-vien-sale.md) mục 7) | Bot ngầm không soạn nháp cho khách đó đến thời điểm này. |
-| `enabled` | **Biểu mẫu** (`Omni Lead Form`) | Tắt = biểu mẫu chỉ lưu tin, không tạo Lead. |
+| `enabled` | **Biểu mẫu** (`Omni Lead Form`) | Tắt = tin vẫn được lưu nhưng **không tạo Lead**; bật lại **không** tự tạo Lead cho tin đã nhận lúc tắt ([12](12-lead-quang-cao.md) mục 3). |
 
 ## 11A. Cờ site_config và trường của kênh
 
