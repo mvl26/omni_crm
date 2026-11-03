@@ -140,6 +140,7 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 	# Nhật ký chăm sóc (V2-04): `summary` là trích tin khách đầu phiên (hoặc tóm tắt) -> xóa nội dung; giữ kết quả, hạn
 	frappe.db.sql("update `tabOmni Care Log` set `summary` = null where `lead` = %s", lead)
 	care_logs_n = frappe.db.sql("select row_count()")[0][0]
+	spool_pending = _spool_pending()
 	calls_n, call_logs_n = _erase_calls(lead)
 	contacts_n = _erase_contacts(lead, reason)
 	frappe.get_doc(
@@ -169,7 +170,15 @@ def erase_customer_data(lead: str, reason: str) -> dict[str, Any]:
 		"call_logs": call_logs_n,
 		"contacts": contacts_n,
 		"care_logs": care_logs_n,
+		"spool_pending": spool_pending,  # V21-04: tin còn trong hàng dự phòng webhook KHÔNG xóa được theo Lead (docs/12)
 	}
+
+
+def _spool_pending() -> int:
+	"""Số tin còn trong hàng dự phòng webhook; payload thô chưa gắn Lead nên không xóa theo Lead được (xem docs/12 G-V21-04-1)."""
+	from omni_crm.ingest import spool
+
+	return spool.spool_count()
 
 
 @frappe.whitelist(methods=["POST"])

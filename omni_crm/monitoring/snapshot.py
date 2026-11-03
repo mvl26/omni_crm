@@ -286,6 +286,21 @@ def _meta_requeue() -> dict[str, Any]:
 	}
 
 
+def _spool() -> dict[str, Any]:
+	"""Hàng dự phòng webhook (V21-04): số tin, tuổi tin cũ nhất, dung lượng; không chạm DB, lỗi đọc thì rỗng."""
+	from omni_crm.ingest import spool
+
+	try:
+		out = spool.stats()
+	except Exception:
+		out = {"count": 0, "oldest_age_seconds": None, "bytes": 0, "writable": True, "stale": False}
+	try:
+		out["failed_at"] = frappe.cache().get_value("omni:spool:failed_at")
+	except Exception:
+		out["failed_at"] = None
+	return out
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -335,6 +350,7 @@ def build_snapshot() -> dict[str, Any]:
 		},
 		"lead_queue": _lead_queue(),
 		"meta_requeue": _meta_requeue(),
+		"spool": _spool(),
 		"timing": {"window_hours": 24, **_percentiles(add_to_date(now, hours=-24))},
 		"outbound": {
 			**{s.lower(): cint(out_today[s]) for s in OUT_STATUSES},

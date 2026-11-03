@@ -28,6 +28,7 @@ OUTBOUND_FAILED_MAX = 5
 DUPLICATES_OPEN_MAX = 20
 SILENT_CHANNEL_SECONDS = 4 * 3600
 TOKEN_MIN_SECONDS = 3600
+SPOOL_MAX_AGE_SECONDS = 10 * 60  # V21-04: tin nằm trong hàng dự phòng quá 10 phút
 MONITOR_ROUTE = "/app/omni-monitor"
 CRM_TASKS_ROUTE = "/crm/tasks"  # người được giao việc (Sales User) không mở được màn hình giám sát
 BOT_USAGE_WARN_PCT = 80
@@ -132,6 +133,29 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				_(
 					"Hàng đợi omni_leads đang có {0} việc chờ mà không có worker nào lắng nghe: lead quảng cáo nằm im. Thêm chương trình `bench worker --queue omni_leads` (supervisor) hoặc bỏ khai báo omni_leads khỏi workers."
 				).format(lead_q["length"]),
+			)
+		)
+	sp = snap.get("spool") or {}
+	if cint(sp.get("count")) > 0 and cint(sp.get("oldest_age_seconds")) > SPOOL_MAX_AGE_SECONDS:
+		out.append(
+			Alert(
+				"webhook_spool_cu",
+				"",
+				_("Tin nằm lâu trong hàng dự phòng webhook"),
+				_(
+					"Có {0} tin trong hàng dự phòng webhook, cũ nhất {1} phút (ngưỡng {2} phút): DB đang không ghi được hoặc tác vụ quét không chèn lại được."
+				).format(sp["count"], cint(sp["oldest_age_seconds"]) // 60, SPOOL_MAX_AGE_SECONDS // 60),
+			)
+		)
+	if sp.get("failed_at"):
+		out.append(
+			Alert(
+				"webhook_spool_hong",
+				"",
+				_("Webhook từng không lưu được tin: DB và hàng dự phòng đều hỏng"),
+				_(
+					"Lần gần nhất lúc {0}. Kiểm tra DB và thư mục private/omni_spool (quyền, dung lượng)."
+				).format(sp["failed_at"]),
 			)
 		)
 	bot = snap.get("bot") or {}
