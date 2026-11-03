@@ -71,6 +71,8 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | `lead_scoring_enabled` | Check | 0 | Công tắc chấm điểm Lead (D2-06); tắt thì giữ điểm cũ |
 | `handoff_pause_hours` | Int | 24 | Sau khi chuyển người, bot im với khách đó trong bao lâu |
 | `handoff_message_in_hours`, `handoff_message_after_hours`, `handoff_notify_channels` | Small Text | xem `docs/09` mục 4 | Đợt 3 |
+| `q1_allowed`, `q11_allowed` | Check | 0 | V21-08: GHI NHẬN quyết định Q1 (bot tự gửi) và Q11 (gửi hội thoại khách sang AI) của chủ dự án để lệnh kiểm trước phát hành đối chiếu; KHÔNG mở khóa gì (khóa thật là site_config `omni_auto_send_allowed`, `omni_ai_allow_customer_data`). Người chốt quyết định cập nhật; chỉ Omni Admin ghi. Chưa từng lưu = chưa cho phép |
+| `gate_phan_tich_passed_at`, `gate_nhap_passed_at` | Datetime | (trống) | V21-08: thời điểm cổng `phan_tich` / `nhap` (docs/08 mục 10) đạt bằng AI thật trên bộ đề đã duyệt. Trống = chưa đạt. Cập nhật tay sau khi `accept_run`/báo cáo cổng; chỉ Omni Admin ghi |
 
 ## 3. Omni Channel
 

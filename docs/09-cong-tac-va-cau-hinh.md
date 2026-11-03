@@ -58,6 +58,8 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `bot_paused_until` | Omni Identity | Bot im với một khách | 3 |
 | `alert_recipients` (trống) | Omni Settings | Không gửi thư cảnh báo (Notification Log cho Omni Admin vẫn tạo; không có công tắc riêng, xem docs/12 mục D) | 1 |
 | `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload`. Tác vụ đêm xóa theo `creation` (không theo `modified`) và chỉ với tin đã xử lý xong (bỏ qua New/Processing/Retry) | 1 |
+| `q1_allowed`, `q11_allowed` | Omni Settings | V21-08: chỉ GHI NHẬN quyết định Q1/Q11 đã chốt (máy đọc được, thay cho việc đoán từ `docs/12`); tắt/bật chúng KHÔNG đổi hành vi hệ thống. Lệnh kiểm trước phát hành đòi: `omni_auto_send_allowed` chỉ có khi `q1_allowed = 1`; `omni_ai_allow_customer_data` phải khớp `q11_allowed`. Chưa từng lưu = 0. **Người chốt quyết định cập nhật các trường này khi quyết định đổi.** | 1 (V21-08) |
+| `gate_phan_tich_passed_at`, `gate_nhap_passed_at` | Omni Settings | V21-08: thời điểm cổng bot đạt (trống = chưa). Lệnh kiểm đòi `gate_phan_tich_passed_at` để `bot_analyze_enabled = 1` và `gate_nhap_passed_at` để `bot_reply_mode` khác Off ở production. Chỉ ghi nhận, không mở khóa gì. Người phụ trách cổng cập nhật sau khi đo bằng AI thật | 1 (V21-08) |
 
 ### 1.1 Phần không có công tắc riêng và cách tắt thay thế (V2-01, ADR 0009)
 
@@ -112,3 +114,30 @@ Tắt tính năng: đặt `bot_reply_mode` về Off hoặc Shadow (không chuy�
 | `zalo_skip_signature` | Có thể bật | Tắt | Tắt (bật = cổng từ chối) |
 | `daily_token_budget` | Thấp | Thấp | Theo quyết định chi phí |
 | Worker `omni` | 1 | 2 | ≥ 2; công suất ≈ số worker / 6 khách mỗi giây (docs/11 mục D1-11), tính theo tin/giây giờ cao điểm |
+
+## 6. Lệnh kiểm cấu hình trước phát hành (V21-08)
+
+`bench --site <site> execute omni_crm.ops.preflight.run --kwargs "{'target': 'production'}"` (`target` = `staging` hoặc `production`). **Chỉ đọc**: không ghi DB, không tạo tệp, không gọi mạng ra ngoài (chỉ một kết nối Redis queue có timeout 3 giây để đếm worker), không tự sửa cấu hình, không in bí mật hay email. In bảng (mục · kết quả · chi tiết · cách sửa), trả dict, và **thoát mã 1 khi có mục `KHONG_DAT`** (dùng được trong quy trình triển khai). `CAN_NGUOI_KIEM` không làm lệnh thoát lỗi: người phụ trách đọc và xác nhận.
+
+| Mục | production | staging |
+| --- | --- | --- |
+| `developer_mode` | tắt | tắt |
+| `zalo_skip_signature` (mọi kênh, kể cả kênh tắt) | không kênh nào bật | như production |
+| `omni_auto_send_allowed` | vắng/0, trừ khi `q1_allowed = 1` | vắng/0 |
+| `omni_ai_allow_customer_data` | khớp `q11_allowed` (hai chiều) | vắng |
+| `bot_analyze_enabled` | 0, trừ khi `gate_phan_tich_passed_at` đã có | chỉ báo |
+| `bot_reply_mode` | Off, trừ khi `gate_nhap_passed_at` đã có | chỉ báo |
+| `sandbox_mode` | bật = CAN_NGUOI_KIEM ("tắt có chủ đích"), tắt = ĐẠT | bật (tắt = KHONG_DAT) |
+| `scheduler` | bật | bật |
+| `worker_omni`, `worker_omni_leads` | khai báo trong `workers` và có >= 1 worker đang nghe; không đọc được Redis = CAN_NGUOI_KIEM | như production |
+| `alert_recipients` | có email hợp lệ | như production |
+| `business_hours`, `holidays` | hợp lệ (chưa từng lưu = CAN_NGUOI_KIEM); `holidays` trống hoặc đã qua hết = CAN_NGUOI_KIEM | như production |
+| `lead_form` | mỗi nền tảng có kênh bật có >= 1 Omni Lead Form bật; mọi form bật có `default_owner` (User đang bật) hoặc `assignment_rule` (đang bật) | như production |
+| `token_meta` | kênh Meta bật: đã kiểm, hợp lệ, hạn token/quyền dữ liệu > 7 ngày (đọc kết quả `token_check` đã lưu, KHÔNG gọi Graph); chưa kiểm hoặc kết quả > 3 ngày = CAN_NGUOI_KIEM | hết hạn = KHONG_DAT, < 7 ngày = CAN_NGUOI_KIEM |
+| `token_zalo` | kênh Zalo OA bật: có refresh token, access token chưa hết hạn, `last_error` trống (access token Zalo sống ngắn và được làm mới mỗi 30 phút nên KHÔNG kiểm "> 7 ngày"; hết hạn khi sandbox bật = CAN_NGUOI_KIEM vì sandbox bỏ qua làm mới) | như production |
+| `zalo_oa_package` | `Chưa xác nhận` = KHONG_DAT; Cơ bản/Tiêu chuẩn = CAN_NGUOI_KIEM | không yêu cầu |
+| `hang_du_phong_webhook` | `spool_count() = 0` (kèm tuổi tin cũ nhất khi còn) | như production |
+| `sao_luu_24h` | có `*-database.sql*` trong `private/backups` của site, mới hơn 24 giờ | không yêu cầu |
+| `prompt_ghim` | chỉ để biết: ghim khác bản mặc định trong mã = CAN_NGUOI_KIEM, không bao giờ KHONG_DAT | như production |
+
+Điều lệnh KHÔNG kiểm (người phụ trách tự kiểm): token Meta/Zalo còn dùng được với nền tảng thật, backup ở nơi khác `private/backups`, chữ ký/quyền ở phía Meta-Google-Zalo, nginx, supervisor (chỉ gián tiếp qua số worker).

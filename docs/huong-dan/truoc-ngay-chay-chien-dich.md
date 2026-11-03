@@ -25,6 +25,17 @@ Hoàn cảnh khi lập: không có staging, không có tài khoản Meta/Google/
 | 15 | Chạy các lệnh một lần (nhập danh sách nhà thầu, patch) đã duyệt từng cái | Xem `docs/11` "Lưu ý V2-03/V2-05/V2-06": nhập danh sách (dry run trước), `backfill_ad_fields` dry run, `rescore_open_leads` dry run, `import_b2b`. Mỗi lệnh có dry run mặc định; chạy thật SAU khi anh duyệt kết quả dry run trên bản sao staging | Quản trị Omni | **CHƯA KIỂM — cần bản sao staging**; dry run mới chạy trên dữ liệu tổng hợp | [ ] |
 | 16 | Một lead thử THẬT từ Meta và từ Google trên production vào đúng chiến dịch, đúng sale, sale nhận thông báo trong 1 phút | Cổng 3 của anh: gửi lead thử từ công cụ của Meta và Google, đo thời gian đến thông báo | Chủ dự án + sale | **CHƯA KIỂM — cần production và nền tảng thật.** Cảnh báo: tải đồng thời với chat có thể làm trễ ~2 phút nếu ít worker (mục 3) | [ ] |
 
+## Tự kiểm bằng máy trước khi tick (V21-08)
+
+Một lệnh chỉ đọc kiểm các mục cấu hình máy kiểm được (mục 8, 9, 11, 13, 14 và phần cấu hình của mục 2, 4, 7 ở bảng trên). Chạy trên máy cần phát hành, TRƯỚC khi tick:
+
+```bash
+bench --site <site> execute omni_crm.ops.preflight.run --kwargs "{'target': 'production'}"
+echo "mã thoát: $?"   # 0 = không có mục KHÔNG ĐẠT; 1 = còn mục KHÔNG ĐẠT
+```
+
+Cột kết quả: `DAT` (đạt), `KHONG_DAT` (phải sửa trước khi phát hành), `CAN_NGUOI_KIEM` (máy không quyết được: đọc chi tiết và tự xác nhận, ví dụ `sandbox_mode` bật, `holidays` trống). Lệnh không tự sửa gì, không in token hay email. Đừng tick một ô chỉ vì lệnh báo `DAT`: lệnh không chạm Meta, Google, Zalo hay nginx thật. Nếu `bot_analyze_enabled`/`bot_reply_mode` báo `KHONG_DAT` thì site đang mang cấu hình dev: đặt về Off/0, không sửa `gate_*` cho lệnh qua. Quyết định Q1/Q11 và cổng bot do người chốt cập nhật ở Omni Settings (mục "Quyết định phát hành"), xem `docs/09` mục 6.
+
 ## Cách tự kiểm bằng dòng lệnh (chỉ đọc)
 
 ```bash
