@@ -181,7 +181,7 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
 Số đo đầy đủ ở `docs/nghiem-thu/v2.md`; **chưa đo trên staging**.
 
 - **Worker và hàng đợi (đã xử lý ở V21-01, xem mục "V21-01" cuối tài liệu):** lead quảng cáo và chat từng dùng chung hàng đợi `omni`. Với 8 worker và 1,67 tin chat/giây cùng lúc, lead quảng cáo chờ p95 ~113 giây mới có người phụ trách. Giờ cao điểm cần ≥ 12 worker `omni` (hoặc quyết hàng đợi riêng). **Scheduler phải bật**: lượt thử lại, quét tin kẹt, đối soát Meta hằng giờ và nhắc quá hạn đều chạy từ scheduler.
-- **Graph Meta lỗi lâu:** với cấu hình mặc định (`max_attempts` 3, backoff "1,5" phút) tin form Meta thành `Manual` sau ~17 phút Graph chết và `reconcile` KHÔNG kéo lại. Giảm nhẹ: đặt `max_attempts` ≥ 8 và `retry_backoff_minutes` "1,5,15,30,60" (chưa thử). Phục hồi: trang Giám sát → Xử lý lại các tin `Manual` (hoặc `omni_crm.api.admin.reprocess`). Cảnh báo `tin_manual` sẽ nổ.
+- **Graph Meta lỗi lâu (V21-03 đã tự phục hồi):** với `max_attempts` 3, backoff "1,5" tin form Meta vẫn thành `Manual` sau ~8-10 phút Graph chết, nhưng nếu lỗi là loại tạm thời (mạng, timeout, 5xx, giới hạn tần suất; `error_kind = tam_thoi`) thì lượt đối soát hằng giờ kế tiếp tự đưa tin về hàng đợi (tối đa 200 tin/lượt, nhận trong 72 giờ, mỗi tin tối đa 3 lần) mà không cần `reprocess`. Xem thẻ "Kéo lại lead Meta" ở `/app/omni-monitor`. Cảnh báo `meta_loi_vinh_vien` (một thư gộp mỗi kênh mỗi lượt) nghĩa là có tin lỗi VĨNH VIỄN (token sai/hết hạn, thiếu quyền, lead không tồn tại, lỗi dữ liệu) hoặc tin đã kéo lại quá 3 lần: KHÔNG tự kéo lại; kiểm token Meta (cảnh báo `token_meta`), sửa nguyên nhân rồi Xử lý lại trong trang Giám sát. Không muốn chờ giờ sau: chạy `omni_crm.channels.meta_leads.reconcile.run`. Tắt: `meta_requeue_disabled` = 1. Tin Manual có từ trước V21-03 (`error_kind` trống) vẫn xử lý tay.
 - **Redis queue chết:** webhook vẫn lưu tin (200); tin `New`/`Retry` được tác vụ quét đẩy lại, tối đa ~7 phút sau khi Redis lên (cron 5 phút, tin phải quá 2 phút).
 - **Token Meta:** không có cảnh báo hết hạn. Dùng token System User dài hạn; đặt nhắc lịch.
 - **Tải thử lại:** `omni_crm/tests/load/` có `send_ads_burst.py`, `fake_graph.py`, `ads_setup.py` (`setup`, `verify`, `cleanup`, `reconcile_with_fake_graph`), `rq_worker.py --fake-graph`. Chỉ chạy trên site test, dữ liệu tiền tố `LOADADS`, và **luôn chạy `ads_setup.cleanup` trước khi chạy bộ test** (G-5). `ads_setup.setup` nâng giới hạn tần suất form website và `cleanup` khôi phục đúng giá trị cũ.
@@ -206,3 +206,20 @@ Số đo đầy đủ ở `docs/nghiem-thu/v2.md`; **chưa đo trên staging**.
 - **Cảnh báo thiếu worker `omni_leads`:** nếu `omni_leads` đã khai báo, đang có job chờ mà không có worker nào lắng nghe thì luật `omni_leads_khong_worker` (email + Notification Log cho Omni Admin) nổ; snapshot có khối `lead_queue` (`declared`, `length`, `workers`; lỗi Redis thì để trống, không báo). Cảnh báo "tin chờ lâu" (New > 5 phút) vẫn là chốt chặn thứ hai.
 - **Đề xuất production:** 3-4 worker `omni_leads` (2 worker là mức tối thiểu và đúng bằng tải đo, không có dư địa; Graph thật chậm hơn Graph giả nên công suất mỗi worker còn thấp hơn). Đây là đề xuất, CHƯA kiểm chứng trên staging.
 - **Chưa đo / cần hệ thống thật:** staging, độ trễ Graph API thật (lúc đó mỗi lead giữ worker lâu hơn, công suất 2 worker giảm), supervisor thật với hai chương trình worker, `maxmemory`/Redis thật, tải chat khác 1,67 tin/giây.
+
+## V21-03: tự kéo lại lead Meta sau sự cố Graph API
+
+- **Cơ chế:** `mark_retry` ghi `error_kind` (`tam_thoi`/`vinh_vien`, `channels/meta_leads/errors.classify_meta_error`) mỗi lần tin vào thất bại. Đối soát Meta hằng giờ (`reconcile.run`) sau bước bù lead sót đưa tin Manual `tam_thoi` về `New` qua `enqueue_identity` (cùng `queue_for`, `job_id`, `deduplicate`; không tạo bản ghi mới nên không thể trùng), đếm `requeue_count`; quá 3 lần dừng và báo. Bỏ qua bước này trong lượt mà chính đối soát gặp lỗi tạm thời (Graph vẫn chết). Cấu hình ở docs/09.
+- **Kịch bản "Graph chết" (chạy lại V2-08 mục 4.1) — SITE TEST `omni.test`, Graph GIẢ (`fake_graph.py`, HTTP 500 mã 2), Redis tạm, CHƯA STAGING, THỜI GIAN NÉN 30 → 13 phút** (`tests/load/graph_down_requeue.py --down-minutes 13 --leads 20 --missed 5`; tác vụ quét mô phỏng mỗi 60 giây thay cho cron 5 phút; 2 worker `omni`; bot giả; `retry_backoff_minutes` "1,5", `max_attempts` 3 mặc định; `reprocess` KHÔNG được gọi):
+
+| Mốc | Kết quả |
+| --- | --- |
+| Webhook Meta lúc Graph chết | 20/20 trả 200 |
+| Phút 8,4 / 9,5 / 10,5 sau khi Graph chết | Manual 4 / 18 / 20 (còn lại Retry) |
+| Lúc Graph sống lại (12:32:05) | 20 tin `Manual`, 0 Lead; Graph nhận 180 yêu cầu lỗi |
+| Lượt đối soát kế tiếp | `forms 2, seen 25, created 5, requeued 20, permanent 0, exhausted 0` (5 lead chỉ có trên Graph được bù, 20 tin Manual được kéo lại) |
+| Sau ~90 giây (worker) | 25/25 `Done`, 25 CRM Lead (25 `facebook_lead_id` khác nhau), 25 dòng Inbound / 25 `dedupe_key` khác nhau, 0 Lead không chủ, `max requeue_count` 1, 0 lần `reprocess` |
+
+  Đạt tiêu chí F3 trên site test. **Lần chạy đầu (Graph chết 8 phút, cùng cấu hình) cho 24/25:** 4 tin Manual được kéo lại đúng; 1 tin vào `Manual` vĩnh viễn vì hai worker cùng tạo `CRM Lead Source` "Quảng cáo Meta" lần đầu (`IntegrityError 1062`), lỗi có sẵn từ trước V21-03, ghi ở docs/12 mục D; lần chạy chính thức tạo sẵn Lead Source (như production sau lead đầu tiên). Chưa đo: Graph thật (có chết bằng 5xx hay treo kết nối), staging, cron thật, UI thẻ "Kéo lại lead Meta" trên trình duyệt.
+- **Dọn sau kịch bản:** `ads_setup.cleanup` (xóa kênh/Lead/Identity/Source LOADADS) rồi `verify_burst.cleanup` (Zalo) nếu có; tắt Graph giả, `bench serve`, `rq_worker`, Redis tạm.
+
