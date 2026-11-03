@@ -259,3 +259,48 @@ class TestSameCustomerNoOverlap(AdsCase):
 		self.assertEqual([r.status for r in rows], ["Done", "Done"], rows)
 		self.assertEqual(len({r.lead for r in rows}), 1, rows)
 		self.assertEqual(frappe.db.count("CRM Lead", {"omni_phone_e164": "+84912345611"}), 1)
+
+
+class TestLeadQueueMonitoring(FrappeTestCase):
+	"""Khai báo `omni_leads` mà không có worker nghe thì lead nằm im: phải có cảnh báo (rà soát V21-01)."""
+
+	def kinds(self, lead_queue):
+		from omni_crm.monitoring import alerts
+		from omni_crm.tests.test_monitoring import MONDAY_10H, synthetic
+
+		snap = synthetic()
+		snap["lead_queue"] = lead_queue
+		return [a.kind for a in alerts.evaluate(snap, now=MONDAY_10H)]
+
+	def test_alert_when_declared_has_jobs_and_no_worker(self):
+		self.assertIn("omni_leads_khong_worker", self.kinds({"declared": True, "length": 3, "workers": 0}))
+
+	def test_no_alert_when_worker_listening_empty_queue_undeclared_or_redis_unknown(self):
+		for lq in (
+			{"declared": True, "length": 3, "workers": 2},
+			{"declared": True, "length": 0, "workers": 0},
+			{"declared": False, "length": None, "workers": None},
+			{"declared": True, "length": None, "workers": None},
+		):
+			self.assertNotIn("omni_leads_khong_worker", self.kinds(lq), lq)
+		from omni_crm.monitoring import alerts
+		from omni_crm.tests.test_monitoring import MONDAY_10H, synthetic
+
+		self.assertNotIn(
+			"omni_leads_khong_worker", [a.kind for a in alerts.evaluate(synthetic(), now=MONDAY_10H)]
+		)
+
+	def test_snapshot_reports_real_queue_length_and_zero_workers(self):
+		from omni_crm.monitoring.snapshot import _lead_queue
+
+		try:
+			get_redis_conn().ping()
+		except Exception as e:
+			self.skipTest(f"Redis queue không dùng được: {type(e).__name__}")
+		with workers(OMNI):
+			self.assertEqual(_lead_queue(), {"declared": False, "length": None, "workers": None})
+		with workers(OMNI, LEADS):
+			got = _lead_queue()
+		self.assertTrue(got["declared"])
+		self.assertIsInstance(got["length"], int)
+		self.assertIsInstance(got["workers"], int)
