@@ -133,11 +133,13 @@ Tắt tính năng: đặt `bot_reply_mode` về Off hoặc Shadow (không chuy�
 | `alert_recipients` | có email hợp lệ | như production |
 | `business_hours`, `holidays` | hợp lệ (chưa từng lưu = CAN_NGUOI_KIEM); `holidays` trống hoặc đã qua hết = CAN_NGUOI_KIEM | như production |
 | `lead_form` | mỗi nền tảng có kênh bật có >= 1 Omni Lead Form bật; mọi form bật có `default_owner` (User đang bật) hoặc `assignment_rule` (đang bật) | như production |
-| `token_meta` | kênh Meta bật: đã kiểm, hợp lệ, hạn token/quyền dữ liệu > 7 ngày (đọc kết quả `token_check` đã lưu, KHÔNG gọi Graph); chưa kiểm hoặc kết quả > 3 ngày = CAN_NGUOI_KIEM | hết hạn = KHONG_DAT, < 7 ngày = CAN_NGUOI_KIEM |
+| `token_meta` | kênh Meta bật: đã kiểm, hợp lệ, hạn token/quyền dữ liệu > 7 ngày và `meta_token_note` là "đủ quyền" (ghi chú lỗi/thiếu quyền = KHONG_DAT dù `valid = 1`; đọc kết quả `token_check` đã lưu, KHÔNG gọi Graph); chưa kiểm hoặc kết quả > 3 ngày = CAN_NGUOI_KIEM | hết hạn = KHONG_DAT, < 7 ngày = CAN_NGUOI_KIEM |
 | `token_zalo` | kênh Zalo OA bật: có refresh token, access token chưa hết hạn, `last_error` trống (access token Zalo sống ngắn và được làm mới mỗi 30 phút nên KHÔNG kiểm "> 7 ngày"; hết hạn khi sandbox bật = CAN_NGUOI_KIEM vì sandbox bỏ qua làm mới) | như production |
 | `zalo_oa_package` | `Chưa xác nhận` = KHONG_DAT; Cơ bản/Tiêu chuẩn = CAN_NGUOI_KIEM | không yêu cầu |
-| `hang_du_phong_webhook` | `spool_count() = 0` (kèm tuổi tin cũ nhất khi còn) | như production |
-| `sao_luu_24h` | có `*-database.sql*` trong `private/backups` của site, mới hơn 24 giờ | không yêu cầu |
+| `hang_du_phong_webhook` | `spool_count() = 0` và không có tệp hàng dự phòng không rỗng mà đếm ra 0 (không đọc được/dòng cụt = KHONG_DAT) | như production |
+| `sao_luu_24h` | có `*-database.sql*` trong `private/backups` của site, mới hơn 24 giờ (tệp rỗng không tính) | không yêu cầu |
 | `prompt_ghim` | chỉ để biết: ghim khác bản mặc định trong mã = CAN_NGUOI_KIEM, không bao giờ KHONG_DAT | như production |
+
+Mục an toàn trọng yếu (`developer_mode`, `zalo_skip_signature`, `omni_auto_send_allowed`, `omni_ai_allow_customer_data`, `bot_analyze_enabled`, `bot_reply_mode`) mà không kiểm được (ném lỗi) thì production = KHONG_DAT, staging = CAN_NGUOI_KIEM. Trường Omni Settings chưa từng lưu được đọc đúng như runtime (`get_doc`: Check = 0), KHÔNG theo default của DocType. `target` sai: thoát với thông báo rõ.
 
 Điều lệnh KHÔNG kiểm (người phụ trách tự kiểm): token Meta/Zalo còn dùng được với nền tảng thật, backup ở nơi khác `private/backups`, chữ ký/quyền ở phía Meta-Google-Zalo, nginx, supervisor (chỉ gián tiếp qua số worker).
