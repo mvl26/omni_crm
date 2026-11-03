@@ -125,12 +125,24 @@ def _install_trace(path: str) -> None:
 	callbacks.process_missed_call = traced
 
 
+def _declare_omni_queues(queues: str) -> None:
+	"""V21-01: khai báo tạm trong tiến trình này các hàng đợi `omni*` được yêu cầu (như khóa `workers` của bench), để
+	worker đo tải lắng nghe được `omni_leads` mà không phải sửa common_site_config.json. Không đụng tệp cấu hình."""
+	from frappe.utils.background_jobs import get_queues_timeout
+
+	extra = {q.strip(): {"timeout": 300} for q in queues.split(",") if q.strip().startswith("omni")}
+	if extra:
+		frappe.local.conf["workers"] = {**(frappe.local.conf.get("workers") or {}), **extra}
+		get_queues_timeout.cache_clear()
+
+
 def main() -> None:
 	"""Khởi động một worker trên các hàng đợi chỉ định."""
 	site, queues = sys.argv[1], sys.argv[2]
 	fake = sys.argv[sys.argv.index("--fake-ai") + 1] if "--fake-ai" in sys.argv else None
 	os.chdir(os.path.join(os.path.dirname(frappe.__file__), "..", "..", "..", "sites"))
 	frappe.init(site, sites_path=".")
+	_declare_omni_queues(queues)
 	qs = get_queue_list([q.strip() for q in queues.split(",")], build_queue_name=True)
 	if "--fake-graph" in sys.argv:
 		from omni_crm.channels.meta_leads import client as meta_client
