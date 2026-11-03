@@ -157,14 +157,15 @@ def ads_setting(fieldname: str) -> int:
 
 
 def meta_token_check_enabled() -> bool:
-	"""Công tắc kiểm token Meta hằng ngày (V21-02); chưa từng lưu = bật, đã lưu 0 = tắt, lỗi đọc = tắt (an toàn: không gọi ra ngoài)."""
+	"""Có kiểm token Meta hằng ngày không (V21-02). Cực tính NGƯỢC (`meta_token_check_disabled`): Single không áp default JSON,
+	nên lần lưu Omni Settings đầu tiên sẽ ghi 0 cho Check; chưa lưu hoặc 0 = kiểm, 1 = tắt. Lỗi đọc = tắt (không gọi ra ngoài)."""
 	try:
 		row = frappe.db.sql(
-			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'meta_token_check_enabled'"
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'meta_token_check_disabled'"
 		)
 	except Exception:
 		return False
-	return True if not row or row[0][0] in (None, "") else bool(cint(row[0][0]))
+	return not (row and cint(row[0][0]))
 
 
 def dashboard_enabled() -> bool:

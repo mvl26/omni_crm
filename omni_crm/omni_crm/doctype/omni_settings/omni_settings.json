@@ -83,7 +83,7 @@
   "webform_global_rate_per_hour",
   "webform_accept_unknown_form",
   "meta_token_warn_days",
-  "meta_token_check_enabled"
+  "meta_token_check_disabled"
  ],
  "fields": [
   {
@@ -547,11 +547,11 @@
    "description": "Cảnh báo khi token Page Meta còn ≤ N ngày tới hạn (hoặc hạn quyền dữ liệu). Chưa từng lưu hoặc ≤ 0 = 7."
   },
   {
-   "fieldname": "meta_token_check_enabled",
+   "fieldname": "meta_token_check_disabled",
    "fieldtype": "Check",
-   "label": "Kiểm token Meta hằng ngày",
-   "default": "1",
-   "description": "Tắt: tác vụ kiểm token Page Meta (debug_token) thoát ngay, không gọi Graph. Chưa từng lưu = bật."
+   "label": "Tắt kiểm token Meta hằng ngày",
+   "default": "0",
+   "description": "Bật: tác vụ kiểm token Page Meta (debug_token) thoát ngay, không gọi Graph. Chưa từng lưu hoặc 0 = kiểm (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
   }
  ],
  "permissions": [

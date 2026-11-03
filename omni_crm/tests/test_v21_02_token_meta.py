@@ -30,7 +30,7 @@ def cleanup() -> None:
 	frappe.db.delete("__Auth", {"doctype": "Omni Channel", "name": ["like", f"{PREFIX}%"]})
 	frappe.db.delete("Error Log", {"method": ["like", "%kiểm token Meta%"]})
 	frappe.db.sql(
-		"delete from tabSingles where doctype='Omni Settings' and field in ('meta_token_warn_days', 'meta_token_check_enabled')"
+		"delete from tabSingles where doctype='Omni Settings' and field in ('meta_token_warn_days', 'meta_token_check_disabled')"
 	)
 	frappe.db.commit()
 
@@ -204,7 +204,7 @@ class TestTokenMeta(FrappeTestCase):
 
 	def test_cong_tac_tat(self):
 		ch = make_channel("off")
-		set_single(self, "meta_token_check_enabled", "0")
+		set_single(self, "meta_token_check_disabled", "1")
 		with mock.patch.object(token_check, "MetaClient") as client:
 			self.assertEqual(token_check.run()["channels"], 0)
 		client.assert_not_called()
@@ -219,6 +219,17 @@ class TestTokenMeta(FrappeTestCase):
 		self.assertEqual(fake.calls, 1)
 		self.assertIsNone(frappe.db.get_value("Omni Channel", off, "meta_token_checked_at"))
 		self.assertTrue(frappe.db.get_value("Omni Channel", on, "meta_token_checked_at"))
+
+	def test_luu_omni_settings_khong_tat_kiem_token(self):
+		"""Single không áp default: lưu Omni Settings làm Check = 0 -> phải vẫn là BẬT kiểm (cực tính ngược)."""
+		frappe.db.sql(
+			"delete from tabSingles where doctype='Omni Settings' and field='meta_token_check_disabled'"
+		)
+		self.assertTrue(flags.meta_token_check_enabled())
+		frappe.db.sql(
+			"insert into tabSingles (doctype, field, value) values ('Omni Settings', 'meta_token_check_disabled', '0')"
+		)
+		self.assertTrue(flags.meta_token_check_enabled())
 
 	def test_hook_lich_chay(self):
 		hooks = frappe.get_hooks("scheduler_events")["cron"]
