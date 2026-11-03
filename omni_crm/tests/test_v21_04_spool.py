@@ -397,3 +397,106 @@ class TestSchedulerAndErase(SpoolCase):
 		self.assertEqual(out["spool_pending"], 1)
 		self.assertEqual(spool.spool_count(), 1)
 		frappe.db.rollback()
+
+
+class TestReviewFixes(SpoolCase):
+	def test_db_error_codes_only_transient_ones_go_to_spool(self):
+		for code in (2002, 2003, 2006, 2013, 1040, 1203, 1205, 1213):
+			self.assertTrue(webhooks.is_db_unavailable(pymysql.err.OperationalError(code, "x")), code)
+		for code in (1054, 1045, 1146, 1064):
+			self.assertFalse(webhooks.is_db_unavailable(pymysql.err.OperationalError(code, "x")), code)
+		self.assertTrue(webhooks.is_db_unavailable(pymysql.err.InterfaceError(0, "closed")))
+
+	def test_schema_or_permission_error_is_not_swallowed_into_the_spool(self):
+		for code in (1054, 1045):
+			err = pymysql.err.OperationalError(code, "loi schema/quyen")
+			with mock.patch("omni_crm.api.webhooks.gateway.save_inbound", side_effect=err):
+				with self.assertRaises(pymysql.err.OperationalError):
+					self.call(body_of(f"schema{code}"))
+			self.assertEqual(spool.spool_count(), 0)
+
+	def test_google_key_and_captcha_token_are_scrubbed_before_the_disk(self):
+		import base64
+
+		secret = json.dumps({"form_id": "F1", "google_key": "khoa-bi-mat-google", "lead_id": "L1"}).encode()
+		entry = spool.build_entry(NAME, "Google Lead Form", secret, {})
+		raw = base64.b64decode(entry["raw"])
+		self.assertNotIn(b"khoa-bi-mat-google", raw)
+		self.assertNotIn(b"google_key", raw)
+		self.assertEqual(json.loads(raw), {"form_id": "F1", "lead_id": "L1"})
+		self.assertEqual(spool.reverify(entry, mock.Mock(channel_type="Google Lead Form"))[0], True)
+		web = json.dumps({"x": 1, "captcha_token": "tok"}).encode()
+		self.assertNotIn(b"tok", base64.b64decode(spool.build_entry(NAME, "Web Form", web, {})["raw"]))
+		self.assertEqual(spool.scrub_payload("Zalo OA", b"khong json"), b"khong json")
+
+	def test_append_repairs_a_torn_last_line(self):
+		spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		path = os.path.join(spool.spool_dir(), spool.ACTIVE)
+		with open(path, "ab") as f:
+			f.write(b'{"v":1,"id":"cat-do')  # lần ghi trước bị cắt, không có \n
+		spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		lines = open(path, "rb").read().split(b"\n")
+		self.assertEqual(lines[-1], b"")
+		entries = list(spool._iter_entries(path))
+		self.assertEqual([e is None for e in entries], [False, True, False])
+
+	def test_preexisting_loose_file_is_tightened_to_0600(self):
+		os.makedirs(spool.spool_dir(), exist_ok=True)
+		path = os.path.join(spool.spool_dir(), spool.ACTIVE)
+		open(path, "wb").close()
+		os.chmod(path, 0o666)
+		spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+
+	def test_orphan_work_tmp_is_removed_after_the_retention_but_not_before(self):
+		os.makedirs(spool.spool_dir(), exist_ok=True)
+		old = os.path.join(spool.spool_dir(), "spool.1.old.work.tmp")
+		new = os.path.join(spool.spool_dir(), "spool.2.new.work.tmp")
+		for p in (old, new):
+			open(p, "wb").close()
+		past = time.time() - 15 * 86400
+		os.utime(old, (past, past))
+		spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))  # để drain không thoát sớm
+		with mock.patch.object(spool, "_insert_entry", side_effect=db_gone):
+			spool.drain()
+		self.assertFalse(os.path.exists(old))
+		self.assertTrue(os.path.exists(new))
+
+	def test_web_form_cannot_use_more_than_half_the_quota(self):
+		with mock.patch.dict(frappe.conf, {"omni_spool_max_lines": 4}):
+			for i in range(2):
+				spool.append(spool.build_entry(NAME, "Web Form", b"{}", {}))
+			with self.assertRaises(spool.SpoolFull):
+				spool.append(spool.build_entry(NAME, "Web Form", b"{}", {}))
+			for i in range(2):  # còn chỗ cho kênh có chữ ký
+				spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+			with self.assertRaises(spool.SpoolFull):
+				spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		with mock.patch.dict(frappe.conf, {"omni_spool_max_bytes": 3000}):
+			shutil.rmtree(spool.spool_dir())
+			big = b'{"p":"' + b"a" * 600 + b'"}'
+			spool.append(spool.build_entry(NAME, "Web Form", big, {}))
+			with self.assertRaises(spool.SpoolFull):
+				spool.append(spool.build_entry(NAME, "Web Form", big, {}))
+			spool.append(spool.build_entry(NAME, "Zalo OA", big, {}))
+
+	def test_counter_does_not_reread_the_spool_and_heals_after_drain(self):
+		for i in range(3):
+			spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		with mock.patch.object(
+			spool, "_count_lines", side_effect=AssertionError("không được đọc lại cả hàng")
+		):
+			spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		self.assertEqual(spool._read_meta()["lines"], 4)
+		with mock.patch.object(spool, "_insert_entry", return_value="drop:kenh_khong_con"):
+			spool.drain()
+		self.assertEqual((spool.spool_count(), spool._read_meta()["lines"]), (0, 0))
+
+	def test_oldest_age_stops_at_first_valid_line_and_stats_computes_it_once(self):
+		spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}, add_to_date(now_datetime(), minutes=-30)))
+		spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
+		with mock.patch.object(spool, "oldest_age_seconds", wraps=spool.oldest_age_seconds) as spy:
+			out = spool.stats()
+		self.assertEqual(spy.call_count, 1)
+		self.assertGreaterEqual(out["oldest_age_seconds"], 29 * 60)
+		self.assertTrue(out["stale"])

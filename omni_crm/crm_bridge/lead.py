@@ -197,7 +197,8 @@ def get_or_create_lead_source(source: str) -> str:
 	Cách cũ (`exists` rồi `insert`) làm bên thua nhận lỗi 1062 và tin thành Manual vĩnh viễn. Bắt lỗi rồi đọc lại không đủ:
 	giao dịch REPEATABLE READ đang giữ ảnh chụp cũ nên kiểm liên kết `CRM Lead.source` ngay sau đó vẫn không thấy bản ghi, và
 	nhiều bên cùng nâng khóa chia sẻ lên khóa ghi thì bế tắc (1213). `INSERT ... ON DUPLICATE KEY UPDATE` lấy khóa ghi ngay từ
-	đầu (các bên xếp hàng, không bế tắc) và chạm bản ghi của chính giao dịch này nên thấy được nó. Controller của
+	đầu (các bên xếp hàng, không bế tắc) và chạm bản ghi của chính giao dịch này nên thấy được nó. Phải CÓ thay đổi thật (`modified`): `name = name` không đổi dòng nên giao dịch REPEATABLE READ vẫn không thấy bản ghi của bên kia
+	(test `test_loser_of_the_race...` đỏ). Controller của
 	CRM Lead Source trống (không có hook) nên không đi qua `Document.insert`.
 	"""
 	if frappe.db.exists(LEAD_SOURCE, source):
