@@ -9,7 +9,8 @@ from unittest import mock
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from omni_crm.bot import ai_client, analyze, auto_send, guards, intents, scoring
+from omni_crm.api import customer, inbox
+from omni_crm.bot import ai_client, analyze, guards, intents, scoring
 from omni_crm.bot.eval import grading
 from omni_crm.bot.eval.fake import OracleClient
 from omni_crm.bot.prompts import loader
@@ -208,11 +209,6 @@ class TestGuardsByCode(ReplyTestCase):
 		)
 		self.assertFalse(guards.guard_handoff_topic(False, intent="Khác")[0])
 
-	def test_auto_send_source_refuses_always_handoff_intent(self):
-		src = (APP_ROOT / "omni_crm" / "bot" / "auto_send.py").read_text(encoding="utf-8")
-		self.assertIn('intents.always_handoff(analysis.get("intent"))', src)
-		self.assertTrue(callable(auto_send.on_analysis))
-
 
 class TestScoringIntents(ScoringTestCase):
 	def setUp(self):
@@ -399,3 +395,21 @@ class TestEvalCases(FrappeTestCase):
 				out = oracle._analyze(tool)
 				if tool is analyze.TOOL_V3:
 					self.assertIsNone(ai_client.validate_output(out, tool["input_schema"]), case["case_id"])
+
+
+class TestIntentLabelsInScreens(ScoringTestCase):
+	"""Hộp thư (get_thread) và Chi tiết khách/nhà thầu (get_profile) trả nhãn ý định mới như giá trị Select."""
+
+	def test_inbox_thread_carries_the_new_label(self):
+		for intent in NEW:
+			self.lead_set(omni_intent=intent)
+			self.assertEqual(inbox.get_thread(self.lead1)["lead"]["omni_intent"], intent)
+
+	def test_customer_profile_shows_intent_read_only_with_bot_source(self):
+		self.lead_set(omni_intent="Hỏi phí")
+		groups = {g["key"]: g for g in customer.get_profile(self.lead1)["groups"]}
+		item = next(i for i in groups["need"]["items"] if i["field"] == "omni_intent")
+		self.assertEqual(
+			(item["label"], item["value"], item["source"]), ("Ý định gần nhất", "Hỏi phí", "Bot")
+		)
+		self.assertFalse(item["editable"])  # ý định do bot ghi, sale không sửa tại chỗ

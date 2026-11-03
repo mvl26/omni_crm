@@ -1003,11 +1003,15 @@ class TestB2BSignals(ScoringTestCase):
 		self.assertEqual(score, 10 + 10 + 15 + 10 + 15)
 
 	def test_old_v1_signals_do_not_score_once_disabled(self):
-		# V21-06: bỏ omni_intent khỏi ca này, vì "Đặt hàng" (cũ) nay được hiểu là "Yêu cầu đề xuất" -> tín hiệu B2B intent_proposal
-		self.lead_set(organization=f"{PREFIX} x", omni_quantity="10 thùng", omni_urgency="Cao")
+		# V21-06: "Đặt hàng" (cũ) được hiểu là "Yêu cầu đề xuất", nên chỉ còn tín hiệu B2B intent_proposal; tín hiệu v1
+		# intent_purchase/quantity_given/urgency_high vẫn không được tính vì quy tắc v1 đã tắt.
+		self.lead_set(
+			organization=f"{PREFIX} x", omni_intent="Đặt hàng", omni_quantity="10 thùng", omni_urgency="Cao"
+		)
 		score, bd = scoring.score_lead(self.lead1)
-		self.assertEqual(score, 0)
-		self.assertEqual(bd["signals"], [])
+		self.assertEqual([s["signal"] for s in bd["signals"]], ["intent_proposal"])
+		self.assertEqual(score, scoring.load_rules()["intent_proposal"]["points"])
+		self.assertNotIn("intent_purchase", [s["signal"] for s in bd["signals"]])
 
 
 class TestHotMatrix(ScoringTestCase):
