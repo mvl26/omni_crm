@@ -1,5 +1,7 @@
 # UAT v2: nhận lead quảng cáo, chăm sóc và xem Chi tiết nhà thầu (V2-08)
 
+Cập nhật V21-10 (2026-11-04): vẫn **CHƯA CHẠY**; sau v2.1 cần thêm khi thử: thẻ token Meta, "Kéo lại lead Meta", hàng dự phòng webhook và hạn mức Zalo ở `/app/omni-monitor`, ý định gần nhất ở Chi tiết khách (chưa thẻ nào mở bằng trình duyệt). Form "Ghi nhật ký chăm sóc" chỉ có ở Chi tiết khách, không có trong Hộp thư (bước 7 đã sửa).
+
 Trạng thái: **CHƯA CHẠY.** Tệp này là kịch bản và mẫu bảng cho 2 đến 3 sale chạy thử; không có số liệu nào ở đây được đo. Mọi bước phải làm trên **staging** (hiện CHƯA có) với `sandbox_mode` BẬT. Phần giao diện (`omni-dashboard`, `omni-customer`, Hộp thư mới) **chưa từng được mở bằng trình duyệt thật** trong toàn bộ v2 (gap-report 13.01, 13.03, 13.04, 13.07, 14.13) nên UAT này cũng là lần kiểm giao diện đầu tiên: ghi mọi lỗi hiển thị.
 
 ## 1. Điều kiện trước ngày thử (người phụ trách hệ thống)
