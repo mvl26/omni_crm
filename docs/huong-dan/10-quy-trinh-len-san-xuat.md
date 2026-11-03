@@ -2,9 +2,11 @@
 
 Dành cho: chủ dự án, trưởng sale, quản trị hệ thống. Tổng hợp từ `docs/nghiem-thu/dot-1.md`, `dot-2.md`, `dot-3.md`, `uat-dot-1..3.md` và `docs/12-quyet-dinh-mo.md`.
 
-> **Kết luận nghiệm thu hiện tại (dot-3, 2026-10-30): "Chưa phát hành".** Phần đo được trên máy phát triển đều tốt (1.043 test tự động qua, tải giả không mất tin). Phần quyết định có cho **bot nói chuyện với khách thật** hay không thì **chưa đo được gì**: không có staging, không có AI thật, Zalo thật, Stringee thật, trình duyệt hay sale thật khi nghiệm thu. Mọi con số trong tài liệu nghiệm thu là trên dữ liệu giả, máy dev. Không có dòng nào là kết luận "đạt" cho nghiệm thu.
+> **Cập nhật 2026-11-03 (sau v2.1).** Từ nghiệm thu Đợt 3 hệ thống có thêm lead quảng cáo (Meta, Google, website), mảng nhà thầu, Tổng quan CSKH và các sửa của v2.1 (hàng đợi riêng cho lead, cảnh báo token Meta, tự kéo lại lead Meta, hàng dự phòng webhook, gói Zalo OA, lệnh kiểm trước phát hành). Kết luận nghiệm thu v2 ghi trong `docs/nghiem-thu/v2.md` là **"Sẵn sàng sau khi sửa/làm"**, chưa phải "Sẵn sàng chạy chiến dịch": chưa có lead thật nào từ Meta, Google hay website đi qua hệ thống, và giao diện v2 chưa ai mở bằng trình duyệt. Mọi số đo mới (kể cả của v2.1) là trên **site thử với máy chủ Graph giả**, chưa có kết quả staging nào ghi trong repo.
+>
+> **Kết luận nghiệm thu Đợt 3 (dot-3, 2026-10-30): "Chưa phát hành".** Phần đo được trên máy phát triển đều tốt (1.043 test tự động qua, tải giả không mất tin). Phần quyết định có cho **bot nói chuyện với khách thật** hay không thì **chưa đo được gì**: không có staging, không có AI thật, Zalo thật, Stringee thật, trình duyệt hay sale thật khi nghiệm thu. Mọi con số trong tài liệu nghiệm thu là trên dữ liệu giả, máy dev. Không có dòng nào là kết luận "đạt" cho nghiệm thu.
 
-Mục lục: [1. Ba môi trường](#1-ba-môi-trường) · [2. Thứ tự bật](#2-thứ-tự-bật-tính-năng-và-điều-kiện-từng-cổng) · [3. Checklist dev → staging](#3-checklist-dev--staging) · [4. Checklist staging → production](#4-checklist-staging--production) · [5. Cổng chưa đo](#5-các-cổng-và-chỉ-số-chưa-đo) · [6. Quyết định còn mở](#6-quyết-định-của-chủ-dự-án-còn-mở) · [7. Dọn dẹp](#7-việc-dọn-dẹp) · [8. Sự cố thường gặp](#8-sự-cố-thường-gặp-khi-lên-sản-xuất) · [9. Đã xong khi](#9-đã-xong-khi)
+Mục lục: [1. Ba môi trường](#1-ba-môi-trường) · [2. Thứ tự bật](#2-thứ-tự-bật-tính-năng-và-điều-kiện-từng-cổng) · [3. Checklist dev → staging](#3-checklist-dev--staging) · [4. Checklist staging → production](#4-checklist-staging--production) · [4A. Chiến dịch quảng cáo](#4a-các-bước-thêm-khi-chạy-chiến-dịch-quảng-cáo) · [5. Cổng chưa đo](#5-các-cổng-và-chỉ-số-chưa-đo) · [6. Quyết định còn mở](#6-quyết-định-của-chủ-dự-án-còn-mở) · [7. Dọn dẹp](#7-việc-dọn-dẹp) · [8. Sự cố thường gặp](#8-sự-cố-thường-gặp-khi-lên-sản-xuất) · [9. Đã xong khi](#9-đã-xong-khi)
 
 ## 1. Ba môi trường
 
@@ -34,6 +36,12 @@ Bật theo thứ tự này; **không nhảy bước**. Mỗi dòng: tính năng 
 | 10 | Draft (nháp cho sale) | `bot_reply_mode = Draft` | **Cổng `nhap` đạt bằng AI thật** (hành động đúng ≥ 90%, trả lời đạt ≥ 85%, lỗi nghiêm trọng = 0, đã chấm lại 20%); Q6, Q8; staging OA thử; sale tham gia | **CHƯA ĐO** (220/220 ca "chưa đo", `EVR-2026-00415`) |
 | 11 | Tuần chạy thử có sale | — | Mục 10 ở staging; UAT Đợt 3 mục 2-5 và 8; `measure_dot3` | **Chưa chạy** |
 | 12 | Auto theo nhóm | `omni_auto_send_allowed` + nút từng nhóm | **Q1 chốt**; Draft có dữ liệu thật: nhóm ≥ 30 nháp quyết định / 14 ngày, ≥ 95% nguyên văn hoặc sửa nhẹ, 0 nghiêm trọng | **Không có dữ liệu**; không thể nêu nhóm nào nên mở |
+| 13 | Hàng đợi riêng cho lead quảng cáo | `workers.omni_leads` trong `common_site_config.json` | [01](01-cai-dat-va-ha-tang.md) mục 3: khai báo, supervisor chạy từ 2 worker `omni_leads`; lệnh kiểm trước phát hành thấy `worker_omni_leads` `DAT` | Trên site thử, Graph giả: p95 từ lúc nhận lead tới lúc có người phụ trách 113 giây giảm còn 21 giây (V21-01). **Chưa đo trên staging** |
+| 14 | Kênh Meta Lead Ads | `enabled` Omni Channel Meta | [12](12-lead-quang-cao.md): Meta App Live, webhook `leadgen`, token (khuyến nghị System User), `Omni Lead Form` bật có `default_owner` hoặc `assignment_rule`; gửi lead thử THẬT | **Chưa đo** (chưa Meta thật). Phía Omni đã kiểm bằng test và Graph giả |
+| 15 | Kênh Google Lead Form | `enabled` Omni Channel Google | [12](12-lead-quang-cao.md): URL webhook và khóa trong từng biểu mẫu, "Send test data" | **Chưa đo** (chưa Google Ads thật) |
+| 16 | Form website | `enabled` Omni Channel Web Form | [gan-form-website.md](gan-form-website.md): CORS, nginx ghi đè `X-Forwarded-For`, mã `form` khớp | **Chưa đo** (chưa website thật, chưa nginx thật) |
+| 17 | Nhà thầu: nhập danh sách | `prospect_import_enabled` | [11](11-nha-thau-va-nhap-danh-sach.md): chạy thử, xử lý "cần xác nhận", nhập thật trên bản sao; đối chiếu top 10 với sheet TongHop | **Chưa chạy** trên tệp thật hay staging |
+| 18 | Tổng quan CSKH, Chi tiết khách, nhật ký chăm sóc | `dashboard_enabled`, `care_log_enabled` | [13](13-dashboard-va-cham-soc.md); 2-3 sale chạy kịch bản `docs/nghiem-thu/uat-v2.md` bằng trình duyệt thật | **Chưa chạy**; giao diện chưa kiểm trên trình duyệt |
 | — | Ghi âm, tóm tắt cuộc gọi | (chưa có công tắc) | D3-04 bị bỏ qua; cần Q13 (chọn nhà cung cấp), Q14 (ngưỡng) và đo chuyển giọng nói | **Không có tính năng** |
 
 ## 3. Checklist dev → staging
@@ -49,6 +57,8 @@ Bật theo thứ tự này; **không nhảy bước**. Mỗi dòng: tính năng 
 - [ ] Lặp lại thử tải trên staging (`tests/load/send_burst.py`, `send_calls.py`) vì số đo hiện có là máy dev.
 - [ ] Thử sự cố trên staging: tắt worker 10 phút (nhận cảnh báo), Redis chết, token Zalo hết hạn, kill worker.
 - [ ] Quay lui mức 1 và 2 thử trên staging ([09](09-van-hanh-hang-ngay.md) mục 5).
+- [ ] Staging có `omni_leads` khai báo và ≥ 2 worker lắng nghe; `bench --site <staging> execute omni_crm.ops.preflight.run --kwargs "{'target': 'staging'}"` không còn `KHONG_DAT` (đọc kỹ `CAN_NGUOI_KIEM`).
+- [ ] Các bước thêm của mảng chiến dịch quảng cáo (mục 4A) đã đi hết trên staging.
 - [ ] Đã ghi lại cho từng cổng ở mục 2 kết quả thật (đạt / không đạt / chưa đo).
 
 ## 4. Checklist staging → production
@@ -72,6 +82,25 @@ Bật theo đợt, từng bước một, có người theo dõi `/app/omni-monit
 4. Chỉ sau khi tuần đầu ổn mới tính đến bot (mục 2 dòng 8 trở đi), mỗi bước một thay đổi và quan sát trước khi sang bước sau.
 
 Sau khi bật: không đổi nhiều thứ cùng lúc; mỗi thay đổi công tắc có người ghi lại (lịch sử phiên bản của Omni Settings/Omni Channel/Omni Question Group lưu).
+
+## 4A. Các bước thêm khi chạy chiến dịch quảng cáo
+
+Làm **sau** khi hạ tầng và kênh đã ổn (mục 2 dòng 1 tới 7) và **trước** ngày chạy. Danh sách đầy đủ từng mục, ai làm, đã tự kiểm gì: [truoc-ngay-chay-chien-dich.md](truoc-ngay-chay-chien-dich.md) (16 mục; mục nào cần Meta, Google hay website thật thì ghi "CHƯA KIỂM" cho đến khi người có quyền tự thử). Tóm tắt thứ tự (*Chưa kiểm trên giao diện* với các form Desk được nhắc ở đây):
+
+1. **Hàng đợi riêng cho lead**: `omni_leads` khai báo và có worker ([01](01-cai-dat-va-ha-tang.md) mục 3). Thiếu thì lead chờ chung với chat.
+2. **Scheduler bật** (đối soát Meta hằng giờ, kiểm token, nhắc quá hạn, quét hàng dự phòng đều là tác vụ định kỳ).
+3. **Kênh và biểu mẫu** ([12](12-lead-quang-cao.md)): Meta, Google, website; mỗi biểu mẫu `Omni Lead Form` bật, có người phụ trách mặc định hoặc Assignment Rule, gắn đúng `Omni Campaign`.
+4. **Token Meta**: dùng token System User; điền `meta_app_id` để hệ thống tự kiểm hằng ngày; `alert_recipients` đã điền để cảnh báo đến được người.
+5. **Giờ làm việc và ngày lễ** đúng lịch chiến dịch ([02](02-cau-hinh-omni-settings.md) mục 4): đồng hồ phản hồi chỉ đếm giờ làm việc.
+6. **Nginx** ghi đè `X-Forwarded-For`, giới hạn thân request ([01](01-cai-dat-va-ha-tang.md) mục 6).
+7. **Nhập danh sách nhà thầu** nếu chiến dịch có liên hệ chủ động ([11](11-nha-thau-va-nhap-danh-sach.md)): chạy thử, xử lý, nhập thật, **trên bản sao** trước.
+8. **Lead thử THẬT** từ Meta và Google trên môi trường gần giống thật: đúng chiến dịch, đúng sale, sale nhận thông báo trong khoảng 1 phút.
+9. **Sale dùng thử** theo [13](13-dashboard-va-cham-soc.md) và `docs/nghiem-thu/uat-v2.md`.
+10. **Lệnh kiểm trước phát hành** với `production`, thoát mã 0 ([02](02-cau-hinh-omni-settings.md) mục 11B).
+11. **Bot ở Off**: lead quảng cáo không đi qua bot, và bot vẫn chưa được đo bằng AI thật.
+12. **Sau tuần chạy thử**: đo bằng `omni_crm.tests.acceptance.measure_campaign.run` (chỉ đọc) rồi điền cột "Đo được" của `docs/nghiem-thu/v2.md` mục 6.
+
+Hai quyết định pháp lý/kinh doanh cần có trước khi liên hệ chủ động nhà thầu: V2-Q12 (Nghị định 91/2020 và liên hệ giữa doanh nghiệp) và V2-Q15 (ngày chạy, câu hỏi trên form, ô đồng ý). Hệ thống không có chức năng gửi hàng loạt và không gửi email xác nhận tự động cho người điền form.
 
 ## 5. Các cổng và chỉ số chưa đo
 
@@ -127,6 +156,12 @@ Lấy từ `docs/12` mục A, B và `docs/nghiem-thu/dot-3.md` mục 9.1. "Chặ
 | **R1** | Gộp Lead sai vì tín hiệu trung bình | Cho khách thật | Cần người phụ trách chốt hoặc chấp nhận rủi ro bằng văn bản (`docs/12` mục D, "Review D1-05, R1") |
 | Xóa dữ liệu | `erase_customer_data` chưa phủ `Omni Call`, `CRM Call Log`, Communication, thông tin trong Identity/Lead | Yêu cầu xóa pháp lý, nhất là cuộc gọi | Mở rộng hàm xóa; quyết phạm vi |
 | E6 | Job nền chạy bằng Guest (chủ bản ghi/người sửa = Guest) | — | Đã thử: các đường bot làm việc bằng Guest. Còn lại là quyết định ADR |
+| **Q4** (đã có ở trên) và **V2-Q15** | Ai nhận lead quảng cáo (quy tắc phân công); ngày chạy, câu hỏi trên form | Lead quảng cáo có người phụ trách đúng | Hiện giao theo `default_owner` của từng biểu mẫu |
+| V2-Q12 | Liên hệ chủ động nhà thầu theo Nghị định 91/2020 | Mọi liên hệ chủ động hàng loạt | Chưa chốt; chỉ liên hệ từng nhà thầu một, không gửi hàng loạt |
+| V2-Q13 | Nguồn dữ liệu đấu thầu (cào trang hay mua API) | Nhập tự động | Chưa chốt; giai đoạn đầu nhập Excel |
+| Sáu ADR "Đề xuất" (0006, 0007, 0009, 0011, 0012, 0013) | Chủ dự án duyệt hoặc đảo; bảng quyết định ở `docs/nghiem-thu/v2.md` mục 11 | — | Agent đã làm theo hướng đề xuất |
+| **Z1 (chữ ký Zalo)** | Vẫn chưa xác nhận sau V21-05 | Zalo thật | Làm theo [04](04-kenh-zalo-oa.md) mục 3A trên OA thật |
+| Gói Zalo OA | Công ty đang ở gói nào, hạn mức tin ngoài 48 giờ | Biết OA có cho kết nối API không | Xem trong trang quản trị OA ([04](04-kenh-zalo-oa.md) mục 4A) |
 | Cooldown Auto | Có bắt buộc chờ sau khi nhóm tự tắt | Chưa có cooldown | `docs/12` mục D |
 | E9 | Debounce 0 cho cuộc gọi | Công suất cuộc gọi | Mở |
 | E2, E3, E10 | Webhook chờ khóa DB không giới hạn; phục hồi ~15 phút sau kill worker; phụ thuộc cron 5 phút | — | Mở từ Đợt 1/2 |
@@ -165,10 +200,12 @@ Làm **trước** khi mở production. Mục có ghi "không có chi tiết tron
 
 ## 9. Đã xong khi
 
-- [ ] Mỗi dòng ở mục 2 có ghi kết quả thật (đạt/không đạt/chưa đo) cùng người và ngày xác nhận.
+- [ ] Mỗi dòng ở mục 2 (kể cả dòng 13 tới 18 của mảng quảng cáo, nhà thầu và dashboard) có ghi kết quả thật (đạt/không đạt/chưa đo) cùng người và ngày xác nhận.
 - [ ] Mọi quyết định "chặn" ở mục 6 liên quan phần định bật đã có câu trả lời bằng văn bản.
 - [ ] Dọn dẹp mục 7 xong, đã đổi các bí mật cần đổi; DB user `omni_admin` đã xử lý.
 - [ ] Production: `developer_mode` tắt, `zalo_skip_signature` tắt, `sandbox_mode` đã tắt có chủ đích sau khi thử một tin tới tài khoản thử.
 - [ ] Bot: `bot_reply_mode = Off`, `bot_analyze_enabled = 0`, mọi `auto_send_enabled = 0`, không có `omni_auto_send_allowed` (cho tới khi đủ cổng).
 - [ ] Sao lưu trước khi bật và đã thử khôi phục; kế hoạch quay lui có tên người trực.
 - [ ] Sale đã được hướng dẫn và biết nơi báo lỗi; trưởng sale biết cách đọc báo cáo và nghi trùng.
+- [ ] Lệnh kiểm trước phát hành với `production` thoát mã 0 và kết quả đã lưu cùng ngày giờ; mọi mục `CAN_NGUOI_KIEM` có người đọc và xác nhận.
+- [ ] Nếu chạy chiến dịch: đã đi hết mục 4A và [truoc-ngay-chay-chien-dich.md](truoc-ngay-chay-chien-dich.md); mục nào cần hệ thống thật vẫn ghi "chưa kiểm" nếu chưa có bằng chứng.

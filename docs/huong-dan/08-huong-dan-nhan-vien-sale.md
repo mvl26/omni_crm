@@ -4,7 +4,7 @@ Dành cho: nhân viên sale và trưởng sale dùng **Hộp thư Omni** và Fra
 
 > **Lưu ý về độ tin cậy của tài liệu này.** Các bước và tên nút dưới đây được lấy từ mã giao diện của Hộp thư (`omni_crm/omni_crm/page/omni_inbox/omni_inbox.js`), nên tên nút, nhãn và thông báo là chính xác theo mã. Nhưng **chưa ai bấm thử trên giao diện thật** (không có trình duyệt, không có sale thật khi nghiệm thu). Mỗi bước vì vậy nên coi là "chưa kiểm trên giao diện". Nếu thấy khác mô tả, hãy báo quản trị. Tài liệu chỉ mô tả bằng chữ, không có ảnh chụp.
 
-Mục lục: [1. Mở Hộp thư](#1-mở-hộp-thư-omni) · [2. Danh sách hội thoại](#2-danh-sách-hội-thoại-bên-trái) · [3. Đọc một hội thoại](#3-đọc-một-hội-thoại-bên-phải) · [4. Trả lời Zalo](#4-trả-lời-khách-zalo) · [5. Email và điện thoại](#5-email-và-điện-thoại) · [6. Nháp của bot](#6-nháp-của-bot-khi-được-bật) · [7. Tạm dừng/tiếp tục bot](#7-tạm-dừng-và-cho-bot-tiếp-tục) · [8. Gọi lại khách gọi nhỡ](#8-gọi-lại-khách-gọi-nhỡ) · [9. Điểm Lead](#9-xem-điểm-lead) · [10. Hai Lead là một người](#10-hai-lead-cùng-một-người) · [11. Việc hằng ngày](#11-gợi-ý-nhịp-làm-việc-hằng-ngày) · [12. Sự cố thường gặp](#12-sự-cố-thường-gặp) · [13. Đã xong khi](#13-đã-xong-khi)
+Mục lục: [1. Mở Hộp thư](#1-mở-hộp-thư-omni) · [2. Danh sách hội thoại](#2-danh-sách-hội-thoại-bên-trái) · [3. Đọc một hội thoại](#3-đọc-một-hội-thoại-bên-phải) · [4. Trả lời Zalo](#4-trả-lời-khách-zalo) · [5. Email và điện thoại](#5-email-và-điện-thoại) · [6. Nháp của bot](#6-nháp-của-bot-khi-được-bật) · [7. Tạm dừng/tiếp tục bot](#7-tạm-dừng-và-cho-bot-tiếp-tục) · [8. Gọi lại khách gọi nhỡ](#8-gọi-lại-khách-gọi-nhỡ) · [9. Điểm Lead](#9-xem-điểm-lead) · [9A. Lead quảng cáo, nhà thầu, nhật ký](#9a-lead-quảng-cáo-nhà-thầu-và-nhật-ký-chăm-sóc) · [10. Hai Lead là một người](#10-hai-lead-cùng-một-người) · [11. Việc hằng ngày](#11-gợi-ý-nhịp-làm-việc-hằng-ngày) · [12. Sự cố thường gặp](#12-sự-cố-thường-gặp) · [13. Đã xong khi](#13-đã-xong-khi)
 
 ## 1. Mở Hộp thư Omni
 
@@ -18,13 +18,15 @@ Từ thông báo (chuông) "Có nháp bot chờ duyệt", "Bot chuyển người
 
 Mỗi dòng là một khách (một Lead), có:
 
-- **Tên khách** và thời gian tin gần nhất.
+- **Tên khách**, kèm **tên đơn vị** (nhà thầu) nếu có, và thời gian tin gần nhất.
 - Chấm màu nhỏ nghĩa là **chưa trả lời** (khách nhắn sau cùng, chưa ai trả lời).
 - Nhãn **Nháp** nghĩa là có nháp của bot đang chờ bạn duyệt (mục 6).
 - Đoạn tin cuối. Nếu tin cuối là của bạn, đầu dòng có chữ "Bạn:".
+- Một **nhãn ưu tiên màu đỏ** (nếu có), theo thứ tự từ gấp nhất: *Khiếu nại*, *Gọi nhỡ chưa gọi lại*, *Quá hạn phản hồi* (chờ lâu hơn ngưỡng trong giờ làm việc), *Lead nóng có tin chờ*, *Có nháp bot chờ duyệt*, *Đang chờ*. Dòng nào gấp nhất nằm trên.
+- Nhãn đỏ **Chưa ghi kết quả** khi bạn đã trả lời khách nhưng chưa ghi kết quả chăm sóc (mục 9A).
 - Các nhãn kênh (Zalo OA, Email, Điện thoại) và tên người phụ trách Lead.
 
-**Bộ lọc** ở trên cùng: ô **Tìm theo tên khách**; danh sách chọn **Mọi kênh** (Zalo OA, Email, Điện thoại); hai ô tích **Chưa trả lời** và **Của tôi**. Danh sách tự cập nhật khi có tin mới (không cần tải lại trang); nếu mất kết nối thì cập nhật mỗi phút.
+**Bộ lọc** ở trên cùng: ô **Tìm theo tên, SĐT, email, đơn vị**; danh sách chọn **Mọi kênh** (Zalo OA, Email, Điện thoại); bốn ô tích **Chưa trả lời**, **Của tôi**, **Cuộc gọi** (chỉ hội thoại điện thoại), **Có nháp bot**. Danh sách tự cập nhật khi có tin mới (không cần tải lại trang); nếu mất kết nối thì cập nhật mỗi phút.
 
 Bạn chỉ thấy hội thoại của những Lead mà CRM cho phép bạn xem.
 
@@ -32,7 +34,7 @@ Bạn chỉ thấy hội thoại của những Lead mà CRM cho phép bạn xem.
 
 Bấm vào một dòng ở bên trái. Bên phải hiện:
 
-- **Đầu hội thoại**: tên khách, SĐT, email, trạng thái Lead, các nhãn kênh của khách, và (nếu có) nhãn **Điểm N** (mục 9). Nút **Mở Lead trong CRM** (hoặc **Mở Deal trong CRM** nếu Lead đã chuyển thành Deal) mở Lead ở tab mới.
+- **Đầu hội thoại**: tên khách, tên đơn vị kèm nhãn **Hạng A/B/C** nếu khách là nhà thầu đã có điểm phù hợp (mục 9A), SĐT, email, trạng thái Lead, các nhãn kênh của khách, bước tiếp theo đã hẹn (nếu có) và (nếu có) nhãn **Điểm N** (mục 9). Nếu khách đã **từ chối nhận liên hệ** thì SĐT/email được thay bằng dòng "Từ chối nhận liên hệ" và trang Chi tiết khách không hiện nút gọi hay nhắn: **tôn trọng, đừng tìm đường liên hệ khác**. Hai nút: **Mở hồ sơ chăm sóc** (trang Chi tiết khách, mục 9A) và **Mở Lead trong CRM** (hoặc **Mở Deal trong CRM** nếu Lead đã chuyển thành Deal, mở ở tab mới).
 - **Tóm tắt do bot** (nếu bot phân tích đã bật): nhãn ý định và vài câu tóm tắt, kèm lưu ý "Tóm tắt do bot, có thể chưa chính xác". Đây là gợi ý, hãy kiểm tra lại với khách.
 - **Các tin**, mới nhất ở cuối. Mỗi tin ghi kênh · người gửi · thời gian. Tin ra của bạn có trạng thái: **Đang gửi**, **Đã gửi**, **Lỗi**, **Bị chặn** (kèm lý do màu đỏ bên dưới). Chữ **thử nghiệm** nghĩa là hệ thống đang ở chế độ thử, tin **không** tới khách thật. Nhãn **Bot đã gửi** nghĩa là tin do bot tự gửi (hiếm, chỉ khi quản trị bật; mục 6). Tệp đính kèm hiện thành liên kết.
 - Nếu hội thoại quá dài: "Chỉ hiện các tin gần nhất." Xem đầy đủ trong CRM.
@@ -51,6 +53,7 @@ Bấm vào một dòng ở bên trái. Bên phải hiện:
 - Quá **7 ngày**: khung nhập bị khóa, hiện lý do "Đã quá 7 ngày kể từ tin cuối của khách, Zalo không cho gửi tin tư vấn; hãy liên hệ qua kênh khác."
 - Khách chưa từng nhắn OA: không gửi được; dùng kênh khác.
 - Dòng **Chế độ thử: không gửi thật** dưới khung nghĩa là hệ thống đang ở sandbox (tin chỉ ghi lại, không tới khách).
+- Dưới khung còn có dòng **"Đã dùng X / Y tin ngoài 48 giờ tháng này"** (hoặc "Đã gửi X tin ngoài 48 giờ tháng này (chưa biết hạn mức)" khi quản trị chưa nhập hạn mức của gói OA). Đó là số tin có thể bị tính phí mà **đội sale** đã gửi qua hệ thống trong tháng. Chữ chuyển đỏ khi vượt hạn mức, nhưng hệ thống **không chặn** bạn gửi. Số này có thể thấp hơn thực tế vì tin trả lời thẳng trên ứng dụng Zalo OA không được đếm.
 
 **Xin số điện thoại**: nếu Lead chưa có SĐT, có nút **Xin SĐT qua Zalo**. Bấm thì khách nhận một yêu cầu chia sẻ SĐT; khách đồng ý thì số được điền vào Lead. Mỗi khách chỉ xin được **một lần mỗi 7 ngày**; nếu đã có SĐT hoặc vừa xin thì hệ thống báo và không gửi. Có SĐT giúp hệ thống nhận ra cùng một khách trên nhiều kênh (tránh Lead trùng).
 
@@ -101,12 +104,23 @@ Việc gọi lại **không nằm ở Hộp thư** mà là một **việc (Task)
 
 ## 9. Xem điểm Lead
 
-Điểm Lead do **luật cố định** của trưởng sale (không phải AI "nghĩ" ra) cộng từ những gì khách đã cho biết: có SĐT, có email, nêu tên đơn vị, hỏi giá, muốn mua, nêu số lượng, cần trong 30 ngày, nói gấp, liên hệ nhiều lần, khiếu nại (trừ điểm).
+Điểm Lead do **luật cố định** của trưởng sale (không phải AI "nghĩ" ra) cộng từ những gì đã biết về khách. Với nhà thầu, các tín hiệu là: có SĐT, có email, đã gắn được nhà thầu, nhà thầu phản hồi lần đầu, đã trao đổi nhu cầu, hỏi cách vận hành hoặc gói dịch vụ, hỏi phí, yêu cầu đề xuất, người quyết định tham gia, nêu vướng mắc, liên hệ nhiều lần trong 30 ngày, khiếu nại (trừ điểm). Bảng điểm cụ thể do trưởng sale duyệt, bạn xem lý do cộng ngay trên nhãn.
 
 - Trong Hộp thư: nhãn **Điểm N** ở đầu hội thoại. **Rê chuột** vào nhãn để xem lý do cộng điểm. Nhãn nổi bật khi Lead là **Lead nóng**.
+- Với nhà thầu **đã có hạng phù hợp**, **Lead nóng** cần **cả hai**: điểm quan tâm đạt ngưỡng **và** hạng A hoặc B (mục 9A). Nhà thầu hạng C không bị gọi là "nóng" dù hỏi nhiều. Lead chưa gắn nhà thầu hoặc chưa có hạng thì chỉ xét điểm như trước.
 - Khi Lead lần đầu vượt ngưỡng "Lead nóng", người phụ trách nhận thông báo "Lead nóng: <tên>, điểm <n>" kèm lý do. Chỉ báo một lần mỗi Lead.
 - Điểm chỉ hiện khi quản trị đã bật chấm điểm. Điểm là tham khảo để ưu tiên, **không thay phán đoán của bạn**.
-- Trên trang Lead của CRM, điểm (trường "Điểm Lead") và "Tóm tắt của bot" chỉ hiện nếu quản trị đã cấu hình bố cục trường của CRM; việc này **chưa làm** nên hiện tại hãy xem điểm trong Hộp thư. Bạn **không sửa tay** được điểm.
+- Trên trang Lead của CRM, điểm (trường "Điểm Lead") và "Tóm tắt của bot" chỉ hiện nếu quản trị đã cấu hình bố cục trường của CRM; việc này **chưa làm** nên hiện tại hãy xem điểm trong Hộp thư hoặc trang Chi tiết khách. Bạn **không sửa tay** được điểm.
+
+## 9A. Lead quảng cáo, nhà thầu và nhật ký chăm sóc
+
+*Chưa kiểm trên giao diện:* mô tả dưới đây lấy từ mã nguồn, chưa có ai thao tác trên trình duyệt thật.
+
+**Lead từ quảng cáo hoặc website.** Khi khách điền biểu mẫu Meta, Google hoặc website, hệ thống tạo Lead (hoặc gắn vào Lead đã có), giao cho một người và gửi thông báo "Lead mới từ quảng cáo: <tên>". Hệ thống **không gửi gì cho người điền form**: bạn là người liên hệ đầu tiên. Đồng hồ phản hồi chạy từ lúc Lead vào, chỉ đếm giờ làm việc; quá ngưỡng (mặc định 15 phút) bạn bị nhắc, quá gấp đôi thì trưởng nhóm được báo. Phản hồi đầu tiên được ghi khi bạn nhắn, gọi được nghe máy hoặc ghi nhật ký chăm sóc đầu tiên. Lead thử nghiệm (tiêu đề dòng thời gian có chữ "[Thử nghiệm]") không giao ai và không tính vào báo cáo. Chi tiết: [12](12-lead-quang-cao.md) và [13](13-dashboard-va-cham-soc.md).
+
+**Nhà thầu.** Khách là công ty đã trúng gói thầu; trang **Chi tiết khách** (nút **Mở hồ sơ chăm sóc** ở đầu hội thoại) cho thấy tên công ty và mã số thuế, hạng phù hợp A/B/C, các gói thầu đã trúng và người liên hệ. Hạng C nghĩa là chưa đạt tiêu chí về số bệnh viện và số mã hàng; không có nghĩa là bỏ qua, nhưng ưu tiên gọi chủ động thấp hơn. Xem [13](13-dashboard-va-cham-soc.md).
+
+**Nhật ký chăm sóc.** Sau mỗi lần trao đổi, hãy ghi kết quả và bước tiếp theo trong trang Chi tiết khách (tab **Nhật ký chăm sóc**, nút **Ghi nhật ký chăm sóc**). Hộp thư **không** có form ghi nhật ký; nó chỉ nhắc "Chưa ghi kết quả" và dẫn bạn sang trang Chi tiết khách. Hướng dẫn từng bước ở [13](13-dashboard-va-cham-soc.md) mục 4.
 
 ## 10. Hai Lead cùng một người
 
@@ -134,6 +148,8 @@ Hệ thống tự nhận ra khách qua SĐT/email/định danh kênh, nhưng khi
 | Bấm Gửi nháp bị từ chối kèm thông báo | Khách vừa nhắn thêm trong lúc bạn xem, hoặc nháp đã hết hạn, hoặc quản trị vừa đổi chế độ bot | Mở lại hội thoại để thấy nháp mới (nếu có), hoặc trả lời tay |
 | Khách hỏi giá mà bot "chuyển người" | Đúng thiết kế: bot **không bao giờ** báo giá | Trả lời theo bảng giá chính thức |
 | Việc gọi lại không thấy | Khách ẩn số, hoặc chưa có Lead | Báo trưởng sale; xem nhật ký cuộc gọi |
+| Hộp thư ghi "Từ chối nhận liên hệ", không thấy SĐT/email | Khách (hoặc nhà thầu) đã từ chối nhận liên hệ, hoặc đã bị xóa dữ liệu theo yêu cầu | Đúng thiết kế: không liên hệ chủ động. Nếu khách tự nhắn lại, hỏi trưởng sale |
+| Lead quảng cáo mới nhưng bị nhắc "Quá hạn phản hồi" | Chưa có tin ra, cuộc gọi nghe máy hay nhật ký chăm sóc nào kể từ lúc Lead vào | Liên hệ khách, rồi ghi nhật ký ở trang Chi tiết khách để đồng hồ dừng |
 
 ## 13. Đã xong khi
 
@@ -146,5 +162,7 @@ Với mỗi nhân viên sale mới, người hướng dẫn kiểm cùng họ tr
 - [ ] (Nếu bot Draft bật) Thử đủ 3 hành động Gửi / Sửa rồi gửi / Bỏ và chấm Đúng/Sai/Thiếu; hiểu thẻ "Bot đề nghị chuyển người".
 - [ ] Biết bấm **Tạm dừng bot với khách này** / **Cho bot tiếp tục**.
 - [ ] Biết tìm và xử lý việc "Gọi lại khách ..." trong CRM.
-- [ ] Biết xem Điểm N và rê chuột để đọc lý do.
+- [ ] Biết xem Điểm N và rê chuột để đọc lý do; hiểu "Lead nóng" của nhà thầu cần hạng A hoặc B.
+- [ ] Biết mở **Mở hồ sơ chăm sóc**, đọc hạng và gói thầu của nhà thầu, và ghi một nhật ký chăm sóc (kết quả + bước tiếp theo + hạn).
+- [ ] Biết khi nào bị nhắc "Quá hạn phản hồi" và hiểu hệ thống không tự gửi gì cho khách điền form.
 - [ ] Biết báo hai Lead trùng cho trưởng sale.

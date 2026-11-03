@@ -2,9 +2,9 @@
 
 Dành cho: quản trị hệ thống, có tài khoản quản trị Zalo Official Account (OA) và Zalo for Developers của công ty. Đặc tả: `docs/06-kenh-zalo-oa.md`.
 
-> **ĐỌC TRƯỚC.** Mã Zalo (công thức chữ ký, tên sự kiện, OAuth, API gửi tin, mã lỗi, khung 48 giờ/7 ngày) được viết theo đặc tả và hiểu biết sẵn có, **chưa được đối chiếu với tài liệu hay API Zalo thật** (`docs/12` mục B2, các mục Z1-Z9, G7-G9). Test tự động ký bằng đúng công thức của mã nên không chứng minh gì về công thức thật. **Điểm dễ sai nhất là chữ ký (Z1)**: nếu sai, mọi webhook thật bị trả 401 và không có tin nào vào. Vì vậy phải thử trên **staging với OA thử** trước khi bật cho khách (xem mục 7 và [10](10-quy-trinh-len-san-xuat.md)).
+> **ĐỌC TRƯỚC.** Mã Zalo (công thức chữ ký, tên sự kiện, OAuth, API gửi tin, mã lỗi, khung 48 giờ/7 ngày) được viết theo đặc tả và hiểu biết sẵn có, **chưa được đối chiếu với tài liệu hay API Zalo thật** (`docs/12` mục B2, các mục Z1-Z9, G7-G9). Test tự động ký bằng đúng công thức của mã nên không chứng minh gì về công thức thật. **Điểm dễ sai nhất là chữ ký (Z1)**: nếu sai, mọi webhook thật bị trả 401 và không có tin nào vào. Vì vậy phải thử trên **staging với OA thử** trước khi bật cho khách (xem mục 7 và [10](10-quy-trinh-len-san-xuat.md)). Ngày 2026-11-03 đã thử đối chiếu lại bằng máy, nhưng trang tài liệu chữ ký của Zalo là trang động nên máy không đọc được nội dung: **Z1 vẫn CHƯA xác nhận**. Mục 3A là cách xác nhận trên OA thật (chưa ai làm).
 
-Mục lục: [1. Chuẩn bị](#1-chuẩn-bị-phía-zalo) · [2. Tạo kênh](#2-tạo-omni-channel-loại-zalo-oa) · [3. Webhook và chữ ký](#3-webhook-và-chữ-ký) · [4. Cấp quyền/token](#4-cấp-quyền-và-token) · [5. Gửi tin và khung thời gian](#5-gửi-tin-khung-48-giờ-và-7-ngày) · [6. Các tùy chọn khác](#6-tùy-chọn-khác-của-kênh) · [7. Kiểm thử bằng sandbox](#7-kiểm-thử-bằng-sandbox) · [8. Sự cố thường gặp](#8-sự-cố-thường-gặp) · [9. Đã xong khi](#9-đã-xong-khi)
+Mục lục: [1. Chuẩn bị](#1-chuẩn-bị-phía-zalo) · [2. Tạo kênh](#2-tạo-omni-channel-loại-zalo-oa) · [3. Webhook và chữ ký](#3-webhook-và-chữ-ký) · [3A. Chẩn đoán chữ ký](#3a-xác-nhận-công-thức-chữ-ký-z1-trong-15-phút) · [4. Cấp quyền/token](#4-cấp-quyền-và-token) · [4A. Gói OA](#4a-gói-oa-và-điều-kiện-api) · [5. Gửi tin và khung thời gian](#5-gửi-tin-khung-48-giờ-và-7-ngày) · [6. Các tùy chọn khác](#6-tùy-chọn-khác-của-kênh) · [7. Kiểm thử bằng sandbox](#7-kiểm-thử-bằng-sandbox) · [8. Sự cố thường gặp](#8-sự-cố-thường-gặp) · [9. Đã xong khi](#9-đã-xong-khi)
 
 ## 1. Chuẩn bị phía Zalo
 
@@ -26,7 +26,9 @@ Mở **Desk > `/app/omni-channel` > Thêm mới**.
 | App secret | `zalo_app_secret` | Dạng mật khẩu, không hiện lại. Dùng khi đổi/làm mới token. |
 | OA secret key | `zalo_oa_secret_key` | Dạng mật khẩu. Dùng **xác thực chữ ký webhook** (công thức ở [mục 3](#3-webhook-và-chữ-ký)). |
 | Access token / Refresh token | `zalo_access_token`, `zalo_refresh_token` | Thường được **điền tự động** bởi nút "Kết nối Zalo OA" (mục 4); có thể nhập tay khi cần. Cả hai dạng mật khẩu. |
-| Access token hết hạn lúc | `zalo_token_expires_at` | Chỉ đọc, hệ thống tự cập nhật. |
+| Access token hết hạn lúc | `zalo_token_expires_at` | Chỉ đọc, hệ thống tự cập nhật. (Ô ẩn `zalo_oauth_state` là mã tạm của luồng cấp quyền, không điền.) |
+| Gói Zalo OA | `zalo_oa_package` | Mặc định `Chưa xác nhận`. Chọn gói thật sau khi xem trong trang quản trị OA (mục 4A). Chỉ để báo, không chặn gì. |
+| Hạn mức tin tư vấn ngoài 48 giờ mỗi tháng | `zalo_cs_paid_quota_month` | Để trống nếu chưa biết. Hộp thư dùng số này để hiện "Đã dùng X / Y". |
 | Khung gửi tin tư vấn miễn phí (giờ) | `zalo_cs_free_hours` | Mặc định 48. |
 | Hạn tối đa gửi tin tư vấn (ngày) | `zalo_cs_max_days` | Mặc định 7. |
 | Bỏ qua kiểm tra chữ ký (chỉ site dev) | `zalo_skip_signature` | **Để tắt.** Xem [01](01-cai-dat-va-ha-tang.md) mục 11. |
@@ -156,3 +158,4 @@ Kết quả các bước này trên Zalo thật **chưa được kiểm** (nghi�
 - [ ] `zalo_skip_signature` tắt, `developer_mode` tắt, `sandbox_mode` tắt ở production, `outbound_enabled` bật.
 - [ ] Gói OA thật đã xem trong trang quản trị OA, mục Quản lý gói; đã điền `Gói Zalo OA` và hạn mức tin ngoài 48 giờ (mục 4A); gói là Tăng trưởng hoặc Toàn diện.
 - [ ] Mốc 48 giờ/7 ngày và chuyện tính phí đã được xác nhận với Zalo/hợp đồng OA.
+- [ ] Lệnh kiểm trước phát hành ([02](02-cau-hinh-omni-settings.md) mục 11B) không báo `KHONG_DAT` ở `token_zalo`, `zalo_oa_package`, `zalo_skip_signature`. Lệnh chỉ đọc cấu hình đã lưu, không chứng minh chữ ký hay quyền với Zalo thật.
