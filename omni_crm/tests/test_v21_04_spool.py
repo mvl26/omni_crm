@@ -464,11 +464,11 @@ class TestReviewFixes(SpoolCase):
 
 	def test_web_form_cannot_use_more_than_half_the_quota(self):
 		with mock.patch.dict(frappe.conf, {"omni_spool_max_lines": 4}):
-			for i in range(2):
+			for _i in range(2):
 				spool.append(spool.build_entry(NAME, "Web Form", b"{}", {}))
 			with self.assertRaises(spool.SpoolFull):
 				spool.append(spool.build_entry(NAME, "Web Form", b"{}", {}))
-			for i in range(2):  # còn chỗ cho kênh có chữ ký
+			for _i in range(2):  # còn chỗ cho kênh có chữ ký
 				spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
 			with self.assertRaises(spool.SpoolFull):
 				spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
@@ -481,7 +481,7 @@ class TestReviewFixes(SpoolCase):
 			spool.append(spool.build_entry(NAME, "Zalo OA", big, {}))
 
 	def test_counter_does_not_reread_the_spool_and_heals_after_drain(self):
-		for i in range(3):
+		for _i in range(3):
 			spool.append(spool.build_entry(NAME, "Zalo OA", b"{}", {}))
 		with mock.patch.object(
 			spool, "_count_lines", side_effect=AssertionError("không được đọc lại cả hàng")
