@@ -26,6 +26,8 @@ Quyết định: đúng **một** Lead khớp tín hiệu mạnh → gắn vào 
 
 SĐT được chuẩn hóa sang dạng quốc tế `+84...` (kể cả đầu số 11 số cũ); email chữ thường (không bỏ dấu chấm, không bỏ phần `+tag`). Việc chuẩn hóa chạy mỗi khi Lead được lưu (hai trường ẩn `omni_phone_e164`, `omni_email_norm`).
 
+**Từ v2, với khách là nhà thầu** ([11](11-nha-thau-va-nhap-danh-sach.md)), thứ tự khớp có thêm các bước đứng đầu: (1) **mã số thuế** của nhà thầu (khớp chắc chắn khi đến từ nơi có cấu trúc như danh sách nhập); (2) SĐT hoặc email của một **người liên hệ** đã biết của nhà thầu thì gắn vào Lead đang mở của nhà thầu đó; (3) **tên miền email công ty** (không tính gmail, yahoo, outlook...) khớp đúng một nhà thầu, **chỉ tin khi tin đến từ kênh email**, ở mức trung bình; rồi mới đến các quy tắc ở trên. Quy tắc cốt lõi không đổi: **chỉ tự gắn khi khớp đúng một kết quả**; mơ hồ thì tạo Lead mới kèm "nghi trùng". Hai điểm cần nhớ: một nhà thầu thường có **nhiều người liên hệ trên cùng một Lead** nên tên người nhắn khác tên người đã biết **không** tạo nghi trùng; và **mã số thuế khách tự khai** trên form công khai hay trong tin nhắn là tín hiệu **yếu** (có thể gõ nhầm hoặc giả): không tự gắn vào nhà thầu đã có, chỉ để sale xác nhận. Lead từ biểu mẫu quảng cáo đi qua cùng bộ nhận diện này ([12](12-lead-quang-cao.md) mục 1).
+
 Hệ quả cho người dùng: một khách nhắn Zalo (chưa có SĐT), sau đó gửi form SĐT, sau đó gửi email chữ ký có SĐT đó → vẫn **một** Lead. Cách làm tăng khả năng này: dùng nút **Xin SĐT qua Zalo** ([08](08-huong-dan-nhan-vien-sale.md)).
 
 ## 2. Nghi trùng (Omni Duplicate Candidate)
