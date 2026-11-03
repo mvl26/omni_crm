@@ -14,7 +14,7 @@ from frappe import _
 from frappe.utils import cint, convert_utc_to_system_timezone, now_datetime
 
 from omni_crm.channels.registry import register_adapter
-from omni_crm.channels.zalo import signature, worker_hooks
+from omni_crm.channels.zalo import signature, sigprobe, worker_hooks
 from omni_crm.channels.zalo.client import ZaloClient
 from omni_crm.ingest.events import InboundEvent, OutboundRequest, stable_message_id
 
@@ -180,14 +180,12 @@ class ZaloAdapter:
 				"Cổng từ chối mọi webhook của kênh cho tới khi tắt cờ này.",
 			)
 			return False
-		ok, reason = signature.check(
-			raw_body,
-			headers,
-			channel_doc.zalo_app_id or "",
-			channel_doc.get_password("zalo_oa_secret_key", raise_exception=False) or "",
-		)
+		app_id = channel_doc.zalo_app_id or ""
+		secret = channel_doc.get_password("zalo_oa_secret_key", raise_exception=False) or ""
+		ok, reason = signature.check(raw_body, headers, app_id, secret)
 		if not ok:
 			_record_rejection(channel_doc.name, reason)
+			sigprobe.record_rejection(raw_body, headers, app_id, secret, reason, channel_doc.name)  # V21-05
 		return ok
 
 	def parse(self, raw_body: bytes, headers: dict, channel_doc) -> list[InboundEvent]:

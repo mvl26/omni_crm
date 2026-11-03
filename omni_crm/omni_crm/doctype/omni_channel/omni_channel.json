@@ -29,6 +29,8 @@
   "col_zalo2",
   "zalo_cs_free_hours",
   "zalo_cs_max_days",
+  "zalo_oa_package",
+  "zalo_cs_paid_quota_month",
   "zalo_skip_signature",
   "zalo_create_lead_on_follow",
   "zalo_oauth_state",
@@ -212,6 +214,22 @@
    "fieldtype": "Int",
    "label": "Hạn tối đa gửi tin tư vấn (ngày)",
    "default": "7",
+   "depends_on": "eval:doc.channel_type=='Zalo OA'"
+  },
+  {
+   "fieldname": "zalo_oa_package",
+   "fieldtype": "Select",
+   "label": "Gói Zalo OA",
+   "options": "Chưa xác nhận\nCơ bản\nTiêu chuẩn\nTăng trưởng\nToàn diện",
+   "default": "Chưa xác nhận",
+   "description": "Theo trang giá Zalo (từ 1/6/2026) chỉ gói Tăng trưởng và Toàn diện liên kết ứng dụng với OA qua API. Xác nhận trong trang quản trị OA, mục Quản lý gói.",
+   "depends_on": "eval:doc.channel_type=='Zalo OA'"
+  },
+  {
+   "fieldname": "zalo_cs_paid_quota_month",
+   "fieldtype": "Int",
+   "label": "Hạn mức tin tư vấn ngoài 48 giờ mỗi tháng",
+   "description": "Để trống = chưa biết. Chỉ để báo trong Hộp thư, không chặn gửi.",
    "depends_on": "eval:doc.channel_type=='Zalo OA'"
   },
   {

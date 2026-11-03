@@ -550,8 +550,20 @@ def compose_state(lead: str) -> dict:
 		"can_request_phone": bool(ok and not has_phone and _phone_request_due(identity_doc)),
 		"has_phone": has_phone,
 		"sandbox": bool(flags.sandbox()),
+		"quota": _quota_safe(channel_doc),
 	}
 	return state
+
+
+def _quota_safe(channel_doc: Any) -> dict | None:
+	"""Số tin ngoài khung 48 giờ tháng này (V21-05); lỗi đếm không được làm hỏng khung soạn tin."""
+	from omni_crm.channels.zalo import quota
+
+	try:
+		return quota.usage(channel_doc)
+	except Exception:
+		frappe.logger("omni").warning("omni: đếm hạn mức Zalo lỗi", exc_info=True)
+		return None
 
 
 def _has_phone(lead: str) -> bool:

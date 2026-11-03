@@ -195,6 +195,7 @@ scheduler_events = {
 	"hourly": [
 		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi
 		"omni_crm.channels.meta_leads.reconcile.run",  # V2-05: bù lead Meta mà webhook bị sót
+		"omni_crm.channels.zalo.sigprobe.cleanup",  # V21-05: xóa bản ghi chẩn đoán chữ ký quá 24 giờ
 	],
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
 }
