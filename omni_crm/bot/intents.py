@@ -6,6 +6,8 @@ Câu lệnh đang chạy vẫn ghim v1 nên bot còn trả giá trị CŨ (`LEGA
 
 from __future__ import annotations
 
+import unicodedata
+
 OPERATION = "Hỏi cách vận hành"
 PACKAGE = "Hỏi gói dịch vụ"
 FEE = "Hỏi phí"
@@ -39,11 +41,36 @@ ALWAYS_HANDOFF = frozenset({FEE, PROPOSAL, COMPLAINT})
 SERVICE_INFO = frozenset({"Tư vấn", OPERATION, PACKAGE})
 
 
+def _fold(value: str) -> str:
+	"""NFC + bỏ ký tự ẩn/điều khiển + cắt khoảng trắng + casefold (khóa tra cứu, giữ dấu)."""
+	t = unicodedata.normalize("NFC", value)
+	t = "".join(c for c in t if unicodedata.category(c) not in ("Cf", "Cc") or c.isspace())
+	return " ".join(t.split()).casefold()
+
+
+def _unaccent(folded: str) -> str:
+	"""Bỏ dấu (đ -> d) của chuỗi đã `_fold`; chỉ dùng làm khóa tra cứu dự phòng (không có hai ý định trùng khóa này)."""
+	t = unicodedata.normalize("NFD", folded.replace("đ", "d"))
+	return "".join(c for c in t if unicodedata.category(c) != "Mn")
+
+
+# Khóa tra cứu -> giá trị chuẩn (mới). Cả giá trị mới lẫn cũ, có dấu và không dấu.
+_CANON: dict[str, str] = {}
+for _v in ALL_INTENTS:
+	_target = LEGACY_TO_B2B.get(_v, _v)
+	_CANON[_fold(_v)] = _target
+	_CANON.setdefault(_unaccent(_fold(_v)), _target)
+
+
 def normalize(intent: str | None) -> str | None:
-	"""Đưa ý định (cũ hoặc mới) về giá trị mới; giá trị lạ/trống trả nguyên (None nếu trống)."""
-	if not intent:
+	"""Đưa ý định (cũ hoặc mới) về giá trị mới, bỏ qua hoa thường/khoảng trắng/NFD/ký tự ẩn/không dấu.
+
+	Chỉ nhận str; trống hoặc không phải str (list, dict, số…) trả None; giá trị lạ trả nguyên văn.
+	"""
+	if not isinstance(intent, str) or not intent.strip():
 		return None
-	return LEGACY_TO_B2B.get(intent, intent)
+	key = _fold(intent)
+	return _CANON.get(key) or _CANON.get(_unaccent(key)) or intent
 
 
 def signal_of(intent: str | None) -> str | None:
@@ -53,7 +80,8 @@ def signal_of(intent: str | None) -> str | None:
 
 def always_handoff(intent: str | None) -> bool:
 	"""Ý định này luôn phải chuyển người (hiểu cả giá trị cũ: Hỏi giá, Đặt hàng, Khiếu nại)."""
-	return normalize(intent) in ALWAYS_HANDOFF
+	canon = normalize(intent)
+	return canon is not None and canon in ALWAYS_HANDOFF
 
 
 def same_intent(expected: str | None, actual: str | None) -> bool:

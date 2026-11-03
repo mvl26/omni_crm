@@ -6,11 +6,16 @@ bất kỳ lý do nào thì bản nháp phải đổi thành chuyển người. 
 
 from __future__ import annotations
 
+import functools
 import re
 import unicodedata
 
 from omni_crm.bot import intents
 from omni_crm.bot.context import normalize_text
+from omni_crm.bot.guard_text import compact_hit, guard_variants
+from omni_crm.bot.guard_text import (
+	normalize_for_guard as normalize_for_guard,  # tái xuất: API công khai của F7
+)
 from omni_crm.identity.normalize import strip_accents
 
 GuardResult = tuple[bool, str]
@@ -96,6 +101,9 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bbao nhieu phan tram\b",
 		r"\bphan tram\b",  # V2-08: "phần trăm hoa hồng/chiết khấu"
 		r"\bhoa hong\b",
+		# V21-07: tỷ lệ kèm % / phần trăm / phí, và tiếng Anh (khách lách bằng ngôn ngữ khác)
+		r"\bty le\b.{0,20}(?:%|phan tram|phi|chiet khau|hoa hong|bao nhieu)",
+		r"\b(?:discount\w*|commission|service fees?|fees?|pricing|quotation)\b",
 	),
 	# B2B (V2-06): điều khoản/đàm phán hợp đồng. KHÔNG dùng "hợp đồng" trơn vì dịch vụ chính là vận hành hợp đồng.
 	"dieu_khoan_hop_dong": (
@@ -105,6 +113,10 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bthoa thuan\b",  # V2-08
 		r"\bbao lanh\b",
 		r"\bchinh sua (?:hop dong|dieu khoan)\b",
+		# V21-07: sửa/đổi/đàm phán hợp đồng (KHÔNG chặn "hợp đồng" trơn)
+		r"\b(?:sua|doi|thay doi|dieu chinh|bo sung|soan lai) (?:lai )?(?:hop dong|dieu khoan)\b",
+		r"\bnegotiat\w*\b",
+		r"\bcontract terms\b|\bterms and conditions\b",
 	),
 	"khieu_nai": (
 		r"\bkhieu nai\b",
@@ -145,6 +157,16 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bgoi lai cho toi\b",
 	),
 }
+# V21-07: từ khóa so dạng viết liền / đảo ngược / trong một từ (guard_text.compact_hit), chuẩn hóa cùng cách văn bản.
+COMPACT_KEYWORDS = {
+	"hoi_gia": (
+		"phi dich vu", "phi quan ly", "phi van hanh", "ty le phi", "muc phi", "phan tram", "hoa hong",
+		"chiet khau", "giam gia", "bao gia", "bang gia", "discount", "commission",
+	),
+	"dieu_khoan_hop_dong": (
+		"dieu khoan", "dam phan", "thuong luong", "thoa thuan", "bao lanh", "negotiat",
+	),
+}  # fmt: skip
 PRICE_WORD_ACCENTED = r"(?<!\w)giá(?!\w)(?!\s+(?:treo|đỡ|trị|kệ|thể|như))"
 # Ý định luôn chuyển người: quyết ở bot/intents.py (F6, V21-06), hiểu cả giá trị cũ của câu lệnh v1 (Hỏi giá, Đặt hàng).
 # Chèn lệnh từ khách (so khớp trên văn bản đã bỏ dấu).
@@ -159,6 +181,7 @@ INJECTION_PATTERNS = (
 	r"\bjailbreak\b",
 	r"\bbao gia 0\b",
 	r"\bgia 0 dong\b",
+	r"\b(?:bao )?gia [0o] (?:dong|d|vnd)\b",  # V21-07: sau chuẩn hóa 0 -> o
 	r"\b(?:reveal|show|tiet lo)\b.{0,20}\b(?:prompt|huong dan|instruction)",
 	r"\byou are now\b",
 	r"\bforget (?:everything|all|your)\b",
@@ -168,6 +191,10 @@ INJECTION_PATTERNS = (
 	r"\btu gio ban la\b",
 	r"\bliet ke (?:toan bo|tat ca) (?:kho|du lieu|huong dan|noi dung)",
 )
+INJECTION_COMPACT = (
+	"bo qua huong dan", "bo qua chi dan", "bo qua quy tac", "ignore previous", "ignore all previous",
+	"ignore the above", "system prompt", "cau lenh he thong", "developer mode",
+)  # fmt: skip
 # Đầu ra bot không được chứa dấu hiệu rò cấu trúc nội bộ hay thẻ dữ liệu.
 UNSAFE_OUTPUT_PATTERNS = (
 	r"[<>]",
@@ -285,15 +312,36 @@ def _collapse(s: str) -> str:
 	return re.sub(r"\b(?:[a-z] ){2,}[a-z]\b", lambda m: m.group(0).replace(" ", ""), s)
 
 
+@functools.lru_cache(maxsize=16)
+def _forms_of(text: str) -> tuple[str, ...]:
+	return tuple(guard_variants(text, _folded_variants(text)))
+
+
+def _topic_forms(customer_text: object) -> tuple[str, ...]:
+	"""Mọi dạng gập/chuẩn hóa của lời khách (chốt chặn cũ + normalize_for_guard); không phải str thì coi như rỗng."""
+	return _forms_of(customer_text if isinstance(customer_text, str) else "")
+
+
+@functools.cache
+def _alt(patterns: tuple[str, ...]) -> re.Pattern:
+	"""Gộp các mẫu thành một biểu thức (biên dịch một lần) để quét nhanh."""
+	return re.compile("|".join(f"(?:{p})" for p in patterns))
+
+
 def sensitive_topics(customer_text: str | None) -> list[str]:
-	"""Chủ đề nhạy cảm (giá, khiếu nại, pháp lý, y khoa, muốn gặp người) xuất hiện trong lời khách."""
-	folded = _folded_variants(customer_text)
+	"""Chủ đề nhạy cảm (giá, khiếu nại, pháp lý, y khoa, muốn gặp người) xuất hiện trong lời khách, kể cả khi viết lách."""
+	forms = _topic_forms(customer_text)
 	topics = [
 		topic
 		for topic, patterns in SENSITIVE_CUSTOMER_PATTERNS.items()
-		if any(re.search(p, folded) for p in patterns)
+		if any(_alt(patterns).search(f) for f in forms)
 	]
-	if re.search(PRICE_WORD_ACCENTED, re.sub(r"\s+", " ", normalize_text(customer_text or "")).lower()):
+	for topic, keywords in COMPACT_KEYWORDS.items():
+		if topic not in topics and compact_hit(list(forms), keywords):
+			topics.append(topic)
+	if isinstance(customer_text, str) and re.search(
+		PRICE_WORD_ACCENTED, re.sub(r"\s+", " ", normalize_text(customer_text)).lower()
+	):
 		topics.append("hoi_gia")
 	return list(dict.fromkeys(topics))
 
@@ -465,11 +513,10 @@ def guard_unsafe_output(reply_text: str) -> GuardResult:
 
 
 def guard_injection(customer_text: str | None) -> GuardResult:
-	"""Lời khách có dấu hiệu chèn lệnh ("bỏ qua hướng dẫn", "báo giá 0 đồng"…) thì bot không tự trả lời."""
-	folded = _folded_variants(customer_text)
-	for pattern in INJECTION_PATTERNS:
-		if re.search(pattern, folded):
-			return True, "nghi_chen_lenh"
+	"""Lời khách có dấu hiệu chèn lệnh ("bỏ qua hướng dẫn", "báo giá 0 đồng"…) thì bot không tự trả lời; kháng cả lối viết lách."""
+	forms = _topic_forms(customer_text)
+	if any(_alt(INJECTION_PATTERNS).search(f) for f in forms) or compact_hit(list(forms), INJECTION_COMPACT):
+		return True, "nghi_chen_lenh"
 	return False, ""
 
 
