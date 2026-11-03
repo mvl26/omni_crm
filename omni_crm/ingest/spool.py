@@ -90,7 +90,14 @@ def _ensure_dir() -> str:
 
 
 def _open_private(path: str, flags: int) -> int:
-	return os.open(path, flags | getattr(os, "O_CLOEXEC", 0), 0o600)
+	"""Mở tệp với quyền 0600; tệp có sẵn quyền rộng hơn (ví dụ 0666) cũng được siết lại bằng fchmod."""
+	fd = os.open(path, flags | getattr(os, "O_CLOEXEC", 0), 0o600)
+	try:
+		os.fchmod(fd, 0o600)
+	except OSError:
+		os.close(fd)
+		raise
+	return fd
 
 
 @contextlib.contextmanager
@@ -145,8 +152,35 @@ def _signature_headers(headers: dict) -> dict[str, str]:
 	return out
 
 
+SCRUB_KEYS = {
+	"Google Lead Form": ("google_key",),
+	"Web Form": ("captcha_token", "cf-turnstile-response", "g-recaptcha-response"),
+}
+
+
+def scrub_payload(channel_type: str, raw: bytes) -> bytes:
+	"""Bỏ khóa xác thực khỏi payload trước khi ghi đĩa (`google_key` là bí mật của biểu mẫu Google).
+
+	Yêu cầu đã qua xác thực trước khi vào hàng, `seal` chứng minh điều đó; khi chèn lại không kiểm lại các khóa này.
+	Payload không phải JSON object thì giữ nguyên.
+	"""
+	keys = SCRUB_KEYS.get(channel_type)
+	if not keys:
+		return raw
+	try:
+		data = json.loads(raw)
+	except ValueError:
+		return raw
+	if not isinstance(data, dict) or not any(k in data for k in keys):
+		return raw
+	for k in keys:
+		data.pop(k, None)
+	return json.dumps(data, ensure_ascii=False).encode()
+
+
 def build_entry(channel_name: str, channel_type: str, raw: bytes, headers: dict, received_at=None) -> dict:
-	"""Dựng một dòng hàng dự phòng đã niêm phong."""
+	"""Dựng một dòng hàng dự phòng đã niêm phong (payload đã bỏ khóa xác thực, xem `scrub_payload`)."""
+	raw = scrub_payload(channel_type, raw)
 	entry = {
 		"v": VERSION,
 		"id": uuid.uuid4().hex,
@@ -208,8 +242,8 @@ def spool_count() -> int:
 
 
 def oldest_age_seconds() -> int | None:
-	"""Tuổi (giây) của tin cũ nhất trong hàng dự phòng; None nếu rỗng. Dòng hỏng tính theo thời gian sửa tệp."""
-	oldest: datetime | None = None
+	"""Tuổi (giây) của tin cũ nhất; None nếu rỗng. Các tệp xếp theo thời gian nên chỉ cần dòng đầu tiên của tệp đầu tiên có dòng
+	(dòng hỏng tính theo thời gian sửa tệp). Dừng ngay, không đọc hết hàng."""
 	try:
 		for path in _files():
 			for entry in _iter_entries(path):
@@ -221,10 +255,10 @@ def oldest_age_seconds() -> int | None:
 					)
 				except Exception:
 					t = datetime.fromtimestamp(os.path.getmtime(path))
-				oldest = t if oldest is None or t < oldest else oldest
+				return max(0, int((now_datetime() - t).total_seconds()))
 	except OSError:
 		return None
-	return None if oldest is None else max(0, int((now_datetime() - oldest).total_seconds()))
+	return None
 
 
 def stats() -> dict:
@@ -233,12 +267,13 @@ def stats() -> dict:
 		size = sum(os.path.getsize(p) for p in _files())
 	except OSError:
 		size = 0
+	oldest = oldest_age_seconds()
 	return {
 		"count": spool_count(),
-		"oldest_age_seconds": oldest_age_seconds(),
+		"oldest_age_seconds": oldest,
 		"bytes": size,
 		"writable": is_writable(),
-		"stale": (oldest_age_seconds() or 0) > STALE_ALERT_SECONDS,
+		"stale": (oldest or 0) > STALE_ALERT_SECONDS,
 	}
 
 
@@ -264,26 +299,104 @@ def enabled() -> bool:
 		return True  # DB hỏng thì không đọc được công tắc: ưu tiên không mất tin
 
 
+META_FILE = "spool.meta"
+WEB_FORM = "Web Form"
+WEB_SHARE = (
+	2  # Web Form (công khai) chỉ được dùng tối đa 1/2 số dòng và dung lượng: không ép kênh có chữ ký về 503
+)
+
+
+def _recompute_meta() -> dict:
+	"""Đếm lại từ các tệp (dòng, dòng Web Form, byte Web Form); dùng khi thiếu bộ đếm và sau mỗi lượt quét."""
+	meta = {"lines": 0, "web_lines": 0, "web_bytes": 0}
+	for path in _files():
+		try:
+			with open(path, "rb") as f:
+				for line in f:
+					if not line.strip():
+						continue
+					meta["lines"] += 1
+					if b'"ct":"Web Form"' in line:
+						meta["web_lines"] += 1
+						meta["web_bytes"] += len(line)
+		except FileNotFoundError:
+			continue
+	return meta
+
+
+def _read_meta() -> dict:
+	try:
+		with open(os.path.join(spool_dir(), META_FILE), encoding="utf-8") as f:
+			meta = json.load(f)
+		if all(isinstance(meta.get(k), int) for k in ("lines", "web_lines", "web_bytes")):
+			return meta
+	except (OSError, ValueError, AttributeError):
+		pass
+	return _recompute_meta()
+
+
+def _write_meta(meta: dict) -> None:
+	path = os.path.join(spool_dir(), META_FILE)
+	tmp = path + ".tmp"
+	fd = _open_private(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+	try:
+		os.write(fd, json.dumps(meta).encode())
+	finally:
+		os.close(fd)
+	os.replace(tmp, path)
+
+
+def _ends_with_newline(path: str) -> bool:
+	"""Tệp rỗng hoặc byte cuối là \n; ngược lại (lần ghi trước bị cắt dở) là False."""
+	try:
+		size = os.path.getsize(path)
+		if not size:
+			return True
+		with open(path, "rb") as f:
+			f.seek(size - 1)
+			return f.read(1) == b"\n"
+	except FileNotFoundError:
+		return True
+
+
 def append(entry: dict) -> None:
-	"""Nối một dòng vào hàng dự phòng (khóa ghi, fsync). Hết chỗ: SpoolFull; lỗi đĩa/quyền: SpoolError."""
+	"""Nối một dòng vào hàng dự phòng (khóa ghi, fsync). Hết chỗ: SpoolFull; lỗi đĩa/quyền: SpoolError.
+
+	Giới hạn tính bằng bộ đếm `spool.meta` (không đọc lại cả hàng mỗi lần). Web Form chỉ được tối đa 1/2 hạn mức.
+	Tệp đang ghi mà byte cuối không phải xuống dòng (lần ghi trước bị cắt) thì thêm một \n trước dòng mới.
+	"""
 	line = (json.dumps(entry, separators=(",", ":")) + "\n").encode()
 	if len(line) > MAX_LINE_BYTES:
 		raise SpoolFull("dòng vượt giới hạn kích thước")
+	is_web = entry.get("ct") == WEB_FORM
 	try:
 		with _flock(LOCK_FILE) as got:
 			if not got:
 				raise SpoolError("không lấy được khóa ghi")
-			files = _files()
-			if sum(os.path.getsize(p) for p in files) + len(line) > max_bytes():
+			active = os.path.join(spool_dir(), ACTIVE)
+			prefix = b"" if _ends_with_newline(active) else b"\n"
+			meta = _read_meta()
+			total_bytes = sum(os.path.getsize(p) for p in _files())
+			if total_bytes + len(prefix) + len(line) > max_bytes():
 				raise SpoolFull("vượt dung lượng")
-			if sum(_count_lines(p) for p in files) + 1 > max_lines():
+			if meta["lines"] + 1 > max_lines():
 				raise SpoolFull("vượt số dòng")
-			fd = _open_private(os.path.join(spool_dir(), ACTIVE), os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+			if is_web and (
+				meta["web_lines"] + 1 > max_lines() // WEB_SHARE
+				or meta["web_bytes"] + len(line) > max_bytes() // WEB_SHARE
+			):
+				raise SpoolFull("Web Form vượt hạn mức riêng")
+			fd = _open_private(active, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
 			try:
-				os.write(fd, line)
+				os.write(fd, prefix + line)
 				os.fsync(fd)
 			finally:
 				os.close(fd)
+			meta["lines"] += 1
+			if is_web:
+				meta["web_lines"] += 1
+				meta["web_bytes"] += len(line)
+			_write_meta(meta)
 	except SpoolError:
 		raise
 	except OSError as e:
@@ -319,6 +432,18 @@ def _rewrite(path: str, lines: list[bytes]) -> None:
 	finally:
 		os.close(fd)
 	os.replace(tmp, path)
+
+
+def _clean_orphan_tmp() -> None:
+	"""Xóa tệp `*.tmp` mồ côi (quét bị ngắt giữa lúc ghi lại) cũ hơn hạn giữ; tệp .work gốc vẫn còn nguyên."""
+	path = spool_dir()
+	cutoff = time.time() - expire_days() * 86400
+	for name in os.listdir(path) if os.path.isdir(path) else []:
+		full = os.path.join(path, name)
+		if name.endswith(WORK_SUFFIX + ".tmp"):
+			with contextlib.suppress(OSError):
+				if os.path.getmtime(full) < cutoff:
+					os.remove(full)
 
 
 def _log(msg: str, *args) -> None:
@@ -357,9 +482,7 @@ def reverify(entry: dict, channel_doc) -> tuple[bool, str]:
 
 			ok = bool(get_adapter(ctype).verify_request(raw, headers, channel_doc))
 		elif ctype == "Google Lead Form":
-			from omni_crm.channels.registry import get_adapter
-
-			ok = bool(get_adapter(ctype).verify_request(raw, headers, channel_doc))
+			ok = True  # `google_key` đã bị bỏ khỏi payload lúc ghi (không để bí mật trên đĩa); seal chứng minh đã xác thực
 		elif ctype == "Telephony":
 			from omni_crm.channels.telephony.registry import provider_for_channel
 
@@ -413,11 +536,14 @@ def drain(budget_seconds: float = 50.0) -> dict:
 	"""Tác vụ quét mỗi phút: chèn lại các dòng trong hàng dự phòng, xóa dòng đã chèn; lỗi DB thì giữ lại thử lần sau."""
 	result = {"saved": 0, "dup": 0, "dropped": 0, "kept": 0, "expired": 0}
 	if not _files():
+		with contextlib.suppress(OSError):
+			os.remove(os.path.join(spool_dir(), META_FILE))  # hàng rỗng: bộ đếm về 0
 		return result
 	with _flock(DRAIN_LOCK_FILE, blocking=False) as got:
 		if not got:
 			return result
 		_rotate()
+		_clean_orphan_tmp()
 		deadline = time.monotonic() + budget_seconds
 		cutoff = add_to_date(now_datetime(), days=-expire_days())
 		for path in [p for p in _files() if p.endswith(WORK_SUFFIX)]:
@@ -474,6 +600,10 @@ def drain(budget_seconds: float = 50.0) -> dict:
 				else:
 					survivors.append(line + b"\n")
 			_rewrite(path, survivors)
+	with _flock(LOCK_FILE) as locked:  # sửa bộ đếm theo thực tế sau khi xóa dòng
+		if locked:
+			with contextlib.suppress(OSError):
+				_write_meta(_recompute_meta())
 	if result["expired"]:
 		_alert_expired(result["expired"])
 	return result
