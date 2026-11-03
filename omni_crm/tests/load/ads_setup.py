@@ -228,6 +228,17 @@ def verify(expected: int = 200, wait_minutes: int = 10, channels: str = "meta,go
 	)
 
 
+def ensure_sources() -> None:
+	"""Tạo sẵn CRM Lead Source quảng cáo (như production sau lead đầu tiên). Tránh đua tạo lần đầu của nhiều worker (docs/12 Phát hiện V21-03)."""
+	frappe.set_user("Administrator")
+	for source in ("Quảng cáo Meta", "Quảng cáo Google", "Website"):
+		if not frappe.db.exists("CRM Lead Source", source):
+			frappe.get_doc({"doctype": "CRM Lead Source", "source_name": source}).insert(
+				ignore_permissions=True
+			)
+	frappe.db.commit()
+
+
 def cleanup() -> None:
 	"""Xóa MỌI dữ liệu LOADADS và khôi phục giới hạn tần suất form; commit. In số bản ghi đã xóa."""
 	frappe.db.rollback()

@@ -116,8 +116,10 @@ def _fetch_meta(channel_doc, hook: dict, form_doc) -> dict:
 		ad = client.get_ad_info(str(lead.get("ad_id") or hook.get("ad_id") or ""))
 	except MetaError as e:
 		if e.kind == TRANSIENT:
-			raise TransientError(_("Graph API lỗi tạm thời, sẽ thử lại")) from None
-		raise ValueError(f"meta_{e.kind}: {e}") from None
+			raise TransientError(
+				_("Graph API lỗi tạm thời, sẽ thử lại")
+			) from e  # MetaError đã làm sạch: giữ chuỗi để phân loại
+		raise ValueError(f"meta_{e.kind}: {e}") from e
 	return meta_form_from_graph(lead, ad, hook, form_doc)
 
 

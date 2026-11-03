@@ -119,4 +119,8 @@ def mark_retry(
 		else:
 			values = {"status": "Retry", "next_attempt_at": now + next_delay(attempts, backoff)}
 		values.update({"attempts": attempts, "last_error": message})
+		if dt == INBOUND and isinstance(error, BaseException):
+			from omni_crm.channels.meta_leads.errors import classify_meta_error
+
+			values["error_kind"] = classify_meta_error(error)  # V21-03: đối soát Meta dựa vào để kéo lại
 		frappe.db.set_value(dt, name, values, update_modified=False)

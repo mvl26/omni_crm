@@ -83,7 +83,10 @@
   "webform_global_rate_per_hour",
   "webform_accept_unknown_form",
   "meta_token_warn_days",
-  "meta_token_check_disabled"
+  "meta_token_check_disabled",
+  "meta_requeue_hours",
+  "meta_requeue_batch",
+  "meta_requeue_disabled"
  ],
  "fields": [
   {
@@ -552,6 +555,27 @@
    "label": "Tắt kiểm token Meta hằng ngày",
    "default": "0",
    "description": "Bật: tác vụ kiểm token Page Meta (debug_token) thoát ngay, không gọi Graph. Chưa từng lưu hoặc 0 = kiểm (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
+  },
+  {
+   "fieldname": "meta_requeue_hours",
+   "fieldtype": "Int",
+   "label": "Kéo lại lead Meta: trong N giờ",
+   "default": "72",
+   "description": "Đối soát hằng giờ đưa tin Meta ở Manual (lỗi tạm thời) nhận trong N giờ qua về hàng đợi. Chưa từng lưu hoặc ≤ 0 = 72."
+  },
+  {
+   "fieldname": "meta_requeue_batch",
+   "fieldtype": "Int",
+   "label": "Kéo lại lead Meta: tối đa mỗi lần",
+   "default": "200",
+   "description": "Số tin tối đa kéo lại mỗi lần đối soát. Chưa từng lưu hoặc ≤ 0 = 200."
+  },
+  {
+   "fieldname": "meta_requeue_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt tự kéo lại lead Meta",
+   "default": "0",
+   "description": "Bật: đối soát không kéo lại tin Manual (vẫn bù lead sót). Chưa từng lưu hoặc 0 = kéo lại (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
   }
  ],
  "permissions": [

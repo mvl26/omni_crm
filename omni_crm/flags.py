@@ -129,6 +129,8 @@ ADS_DEFAULTS = {
 	"webform_rate_window_minutes": 10,
 	"webform_global_rate_per_hour": 300,
 	"meta_token_warn_days": 7,  # V21-02: ngưỡng cảnh báo token Meta (ngày)
+	"meta_requeue_hours": 72,  # V21-03: tin Meta Manual (lỗi tạm thời) nhận trong N giờ qua thì được kéo lại
+	"meta_requeue_batch": 200,  # V21-03: số tin kéo lại tối đa mỗi lần đối soát
 }
 
 
@@ -162,6 +164,18 @@ def meta_token_check_enabled() -> bool:
 	try:
 		row = frappe.db.sql(
 			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'meta_token_check_disabled'"
+		)
+	except Exception:
+		return False
+	return not (row and cint(row[0][0]))
+
+
+def meta_requeue_enabled() -> bool:
+	"""Có tự kéo lại tin Meta Manual (lỗi tạm thời) không (V21-03). Cực tính NGƯỢC (`meta_requeue_disabled`) như
+	`meta_token_check_enabled`: chưa lưu hoặc 0 = kéo lại, 1 = tắt. Lỗi đọc = tắt."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'meta_requeue_disabled'"
 		)
 	except Exception:
 		return False
