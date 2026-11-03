@@ -45,13 +45,18 @@ bench --site <site> migrate            # chạy lần hai: không lỗi, không 
 
 ## 3. Worker omni và supervisor
 
-App xử lý tin trong hàng đợi riêng tên **`omni`**. Hàng đợi này **không tồn tại** nếu `common_site_config.json` chưa khai báo; thiếu nó thì mọi lần xếp việc báo lỗi "Queue should be one of ..." (docs/12 mục C, G6).
+App xử lý tin trong hai hàng đợi riêng: **`omni`** (email, Zalo, tổng đài, bot, tin ra) và **`omni_leads`** (lead quảng cáo: Meta Lead Ads, Google Lead Form, Web Form; từ V21-01). Các hàng đợi này **không tồn tại** nếu `common_site_config.json` chưa khai báo; thiếu `omni` thì mọi lần xếp việc báo lỗi "Queue should be one of ..." (docs/12 mục C, G6). Thiếu `omni_leads` thì app **không lỗi**: lead quảng cáo rơi về hàng đợi `omni` (dùng chung worker với chat, chậm khi chat đông) và ghi cảnh báo "chưa khai báo hàng đợi omni_leads" tối đa một lần mỗi giờ.
 
 **Bước 1. Khai báo hàng đợi.** Sửa `<bench-dir>/sites/common_site_config.json`, thêm khóa `workers` (tệp này dùng chung cả bench; chỉ thêm khóa, đừng đổi gì khác):
 
 ```json
-"workers": { "omni": { "timeout": 600, "background_workers": 2 } }
+"workers": {
+  "omni": { "timeout": 600, "background_workers": 8 },
+  "omni_leads": { "timeout": 600, "background_workers": 2 }
+}
 ```
+
+Các khóa khác của tệp giữ nguyên. `omni_leads` cần **từ 2 worker** (xem công thức bên dưới); `omni` theo lưu lượng chat.
 
 - `timeout`: giây. Bản code đặt thời gian tối đa 600 giây cho việc bot (hằng `JOB_TIMEOUT` trong `bot/analyze.py` và `bot/reply.py`), và `docs/01-kien-truc.md` khuyên 600. Máy dev đang để 300 (`docs/12`, G6). **Chưa kiểm** giá trị 300 hay 600 ảnh hưởng thế nào lên việc bot dài: dùng 600 ở production.
 - `background_workers`: số tiến trình worker cho hàng đợi này khi bench tự sinh cấu hình supervisor (xem công thức bên dưới).
@@ -62,20 +67,25 @@ App xử lý tin trong hàng đợi riêng tên **`omni`**. Hàng đợi này **
 bench setup supervisor            # sinh lại config/supervisor.conf
 sudo supervisorctl reread
 sudo supervisorctl update
-sudo supervisorctl status         # phải thấy ...-frappe-omni-worker:...-0, -1 ở trạng thái RUNNING
+sudo supervisorctl status         # phải thấy ...-frappe-omni-worker:... (đủ số worker omni) và ...-frappe-omni_leads-worker:... (≥ 2) ở trạng thái RUNNING
 ```
 
 Nếu bạn quản lý supervisor/systemd bằng tay, chương trình cần chạy đúng lệnh sau (trong `<bench-dir>`, người dùng chạy bench):
 
 ```bash
 bench worker --queue omni
+bench worker --queue omni_leads   # ít nhất 2 tiến trình
 ```
+
+Sau khi đổi khóa `workers` phải **khởi động lại** gunicorn, worker và scheduler (Frappe đọc khóa này một lần mỗi tiến trình). Khai báo `omni_leads` mà không chạy worker nào lắng nghe thì lead quảng cáo nằm chờ trong hàng đợi và không thành Lead: khai báo và chạy worker phải đi cùng nhau.
 
 > Lưu ý: tệp `config/supervisor.conf` sinh trước khi thêm khóa `workers` sẽ **không có** worker omni. Phải sinh lại như trên. Đây là sai sót dễ gặp nhất: tin vẫn được nhận (trạng thái `New`) nhưng không bao giờ thành Lead.
 
 **Số worker cần bao nhiêu** (docs/11 mục D1-11): mỗi lượt xử lý giữ một worker khoảng `debounce_seconds` (mặc định 5 giây) cộng khoảng 1 giây xử lý, nên công suất xấp xỉ `số_worker / 6` khách mỗi giây.
 
 > **số_worker ≥ tin_mỗi_giây_giờ_cao_điểm × 6 × 1,5**, tối thiểu 2.
+
+**Hàng đợi `omni_leads`:** mỗi lead cũng giữ một worker ~`debounce_seconds` + xử lý, nên công suất ~`số_worker / 6` lead mỗi giây; 2 worker đủ cho khoảng 0,33 lead/giây (200 lead trong 10 phút) và nên thêm worker khi chiến dịch dồn lead (số đo trên site test ở `docs/11-van-hanh.md`, mục "V21-01": 2 worker đủ cho đúng 200 lead/10 phút, không có dư địa; chưa đo staging).
 
 Ví dụ: cao điểm 1 tin/giây từ các khách khác nhau → 1 × 6 × 1,5 = 9 worker. Số liệu đo (máy dev 16 nhân, không phải staging): 4 worker xử lý ~0,75 tin/giây; 12 worker giữ backlog dưới ~200 tin. Khi tin của cùng một khách đến dồn thì chúng gộp thành một lượt nên công suất cao hơn. Cảnh báo "Tin chờ xử lý quá lâu" (tin `New` cũ hơn 5 phút) là tín hiệu cần thêm worker. Cuộc gọi dùng chung `debounce_seconds` nên cũng giữ worker ~6 giây.
 
@@ -220,6 +230,8 @@ Danh sách kiểm trước mỗi lần phát hành: `developer_mode` tắt · `z
 | --- | --- | --- |
 | Tin chỉ ở trạng thái `New`, không thành Lead | Chưa có worker `omni` (hoặc thiếu khóa `workers` ở `common_site_config.json`), Redis queue chết | `sudo supervisorctl status`; mục 3; `bench doctor` (trong `<bench-dir>`) |
 | Lỗi "Queue should be one of ..." trong log | Thiếu `workers.omni` trong `common_site_config.json` | Thêm như mục 3, khởi động lại |
+| Log có cảnh báo "chưa khai báo hàng đợi omni_leads" / lead quảng cáo chậm khi chat đông | Thiếu `workers.omni_leads` nên lead đi chung hàng đợi `omni` | Khai báo `omni_leads`, sinh lại supervisor, chạy ≥ 2 worker, khởi động lại |
+| Lead quảng cáo ở `New` mãi dù đã khai báo `omni_leads` | Không có worker lắng nghe `omni_leads` (supervisor sinh trước khi khai báo), hoặc tiến trình chưa khởi động lại | `supervisorctl status`; `bench setup supervisor`; mục 3 |
 | Hết cảnh báo/việc bù không chạy | Scheduler tắt | `bench --site <site> scheduler enable` |
 | Sau khi sao lưu/chép site, Zalo báo lỗi token | Token trong bản chép đã bị làm mới ở nơi khác | Cấp quyền lại qua nút "Kết nối Zalo OA" ([04](04-kenh-zalo-oa.md)) |
 | `bench migrate` báo thiếu app `crm` | Chưa cài `crm` | Cài `crm` trước |
@@ -230,7 +242,7 @@ Danh sách kiểm trước mỗi lần phát hành: `developer_mode` tắt · `z
 
 - [ ] `bench --site <site> list-apps` có `omni_crm`; `bench --site <site> migrate` chạy hai lần liên tiếp đều sạch.
 - [ ] Vai trò Omni Admin gán cho ít nhất hai người; mở được `/app/omni-settings`.
-- [ ] `common_site_config.json` có `workers.omni`; `supervisorctl status` thấy worker omni RUNNING (≥ 2).
+- [ ] `common_site_config.json` có `workers.omni` và `workers.omni_leads`; `supervisorctl status` thấy worker omni RUNNING (≥ 2) và worker omni_leads RUNNING (≥ 2).
 - [ ] `bench --site <site> scheduler status` báo enabled.
 - [ ] Redis cache và queue chạy khỏe; không dùng RDB hỏng.
 - [ ] Nginx có giới hạn thân 1 MB và rate limit cho webhook; access log webhook không ghi query.
