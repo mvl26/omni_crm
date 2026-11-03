@@ -104,6 +104,16 @@ class OmniMonitor {
 				h += this.row(__("Hạn token Zalo"), c.token_expires_at ? `${c.token_expires_at} (${left > 0 ? __("còn") + " " + this.dur(left) : __("đã hết hạn")})` : "-",
 					left !== null && left < 3600);
 			}
+			if (c.channel_type === "Meta Lead Ads" && c.meta_token) {
+				const m = c.meta_token;
+				let txt = "-";
+				if (m.checked_at) {
+					txt = m.never_expires ? __("không hết hạn") : (m.expires_at
+						? `${m.expires_at} (${m.seconds_left > 0 ? __("còn") + " " + this.dur(m.seconds_left) : __("đã hết hạn")})` : "-");
+					if (m.data_expires_at) txt += ` / ${__("quyền dữ liệu")}: ${m.data_expires_at}`;
+				}
+				h += this.row(__("Hạn token Meta"), m.checked_at ? `${txt} - ${m.note || ""}` : __("chưa kiểm"), m.problem);
+			}
 			if (c.last_error) h += this.row(__("Lỗi gần nhất"), c.last_error, true);
 			if (c.channel_type === "Zalo OA") {
 				h += `<button class="btn btn-xs btn-default om-refresh-token" data-channel="${e(c.name)}">${__("Làm mới token Zalo")}</button>`;

@@ -6,6 +6,10 @@ TRANSIENT = "transient"
 PERMANENT = "permanent"
 TOKEN = "token"
 
+# Ghi chú kết quả kiểm token Page (V21-02) khi KHÔNG có vấn đề; màn giám sát coi ghi chú khác là cần chú ý
+TOKEN_NOTE_OK = "Còn hạn, đủ quyền"
+TOKEN_NOTE_NEVER = "Token không hết hạn, đủ quyền"
+
 
 class MetaError(Exception):
 	"""Lỗi Graph API; `kind` ∈ transient (thử lại được), token (token hết hạn/thiếu quyền), permanent."""

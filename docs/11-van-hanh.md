@@ -20,6 +20,7 @@ Nút thao tác: "Xử lý lại" tin Manual (đưa về New), "Quét ngay", "Là
 - Gửi email tới `alert_recipients` và tạo Notification Log cho Omni Admin.
 - Mỗi loại cảnh báo tối đa 1 lần / 30 phút (khóa Redis), kèm số liệu và liên kết màn hình giám sát.
 - Không đưa bí mật hay nội dung tin khách vào cảnh báo.
+- **Token Meta (V21-02):** `channels/meta_leads/token_check.run` (cron `10 */6 * * *`, mỗi kênh Meta Lead Ads bật ~1 lần/20 giờ) gửi cảnh báo `token_meta` (theo kênh) khi token Page không hợp lệ, sắp hết hạn, thiếu `leads_retrieval`, hoặc Graph từ chối kiểm (sai App ID/Secret). Lỗi tạm thời không cảnh báo. Xử lý: cấp token System User mới, dán vào `Meta: Page Access Token`, chờ lần kiểm kế tiếp hoặc chạy `bench --site <site> execute omni_crm.channels.meta_leads.token_check.run` (xóa `Kiểm lần cuối` của kênh trước nếu vừa kiểm).
 
 ## 3. Sổ tay sự cố
 

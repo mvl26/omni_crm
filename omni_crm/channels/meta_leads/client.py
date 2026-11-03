@@ -57,15 +57,24 @@ class MetaClient:
 			raise MetaError(PERMANENT, _("Kênh Meta chưa có Page access token"))
 		return token
 
-	def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
-		token = self._token()
+	def debug_token(self, app_id: str, app_secret: str) -> dict[str, Any]:
+		"""Kiểm token Page của kênh qua `GET /debug_token` (F2); trả phần `data` (`is_valid`, `expires_at`, `scopes`...)."""
+		page_token = self._token()
+		if not app_id or not app_secret:
+			raise MetaError(PERMANENT, _("Thiếu App ID hoặc App Secret"))
+		# Theo tài liệu Meta: input_token + access_token (app access token = app_id|app_secret) là tham số truy vấn.
+		# Không ghi URL/tham số vào log: mọi lỗi mạng được đổi thành MetaError với thông điệp cố định.
+		params = {"input_token": page_token, "access_token": f"{_check_id(app_id)}|{app_secret}"}
+		data = self._get("debug_token", params, send_page_token=False).get("data")
+		return data if isinstance(data, dict) else {}
+
+	def _get(self, path: str, params: dict | None = None, send_page_token: bool = True) -> dict[str, Any]:
+		headers = {"Authorization": f"Bearer {self._token()}"} if send_page_token else {}
 		url = f"{API_BASE}/{graph_version()}/{path.lstrip('/')}"
 		attempt = 0
 		while True:
 			try:
-				resp = requests.get(
-					url, params=params, headers={"Authorization": f"Bearer {token}"}, timeout=TIMEOUT
-				)
+				resp = requests.get(url, params=params, headers=headers, timeout=TIMEOUT)
 				payload: Any = resp.json()
 			except requests.RequestException:
 				if attempt < RETRIES:

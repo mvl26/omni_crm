@@ -81,7 +81,9 @@
   "webform_rate_limit",
   "webform_rate_window_minutes",
   "webform_global_rate_per_hour",
-  "webform_accept_unknown_form"
+  "webform_accept_unknown_form",
+  "meta_token_warn_days",
+  "meta_token_check_disabled"
  ],
  "fields": [
   {
@@ -536,6 +538,20 @@
    "label": "Web Form: nhận biểu mẫu chưa cấu hình",
    "default": "0",
    "description": "Tắt (mặc định): form có mã chưa cấu hình Omni Lead Form bị bỏ qua và trả thành công giả. Bật: nhận, ghi chú 'biểu mẫu chưa cấu hình' và KHÔNG tự giao sale."
+  },
+  {
+   "fieldname": "meta_token_warn_days",
+   "fieldtype": "Int",
+   "label": "Token Meta: cảnh báo trước (ngày)",
+   "default": "7",
+   "description": "Cảnh báo khi token Page Meta còn ≤ N ngày tới hạn (hoặc hạn quyền dữ liệu). Chưa từng lưu hoặc ≤ 0 = 7."
+  },
+  {
+   "fieldname": "meta_token_check_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt kiểm token Meta hằng ngày",
+   "default": "0",
+   "description": "Bật: tác vụ kiểm token Page Meta (debug_token) thoát ngay, không gọi Graph. Chưa từng lưu hoặc 0 = kiểm (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
   }
  ],
  "permissions": [

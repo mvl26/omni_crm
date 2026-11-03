@@ -128,6 +128,7 @@ ADS_DEFAULTS = {
 	"webform_rate_limit": 5,
 	"webform_rate_window_minutes": 10,
 	"webform_global_rate_per_hour": 300,
+	"meta_token_warn_days": 7,  # V21-02: ngưỡng cảnh báo token Meta (ngày)
 }
 
 
@@ -153,6 +154,18 @@ def ads_setting(fieldname: str) -> int:
 		return default
 	value = cint(row[0][0]) if row and row[0][0] not in (None, "") else 0
 	return value if value > 0 else default
+
+
+def meta_token_check_enabled() -> bool:
+	"""Có kiểm token Meta hằng ngày không (V21-02). Cực tính NGƯỢC (`meta_token_check_disabled`): Single không áp default JSON,
+	nên lần lưu Omni Settings đầu tiên sẽ ghi 0 cho Check; chưa lưu hoặc 0 = kiểm, 1 = tắt. Lỗi đọc = tắt (không gọi ra ngoài)."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'meta_token_check_disabled'"
+		)
+	except Exception:
+		return False
+	return not (row and cint(row[0][0]))
 
 
 def dashboard_enabled() -> bool:
