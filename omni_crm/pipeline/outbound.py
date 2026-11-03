@@ -27,11 +27,12 @@ from omni_crm.crm_bridge import care_log, first_response, timeline
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline.retry import is_transient, mark_retry, redact
+from omni_crm.queue import queue_for
 
 OUTBOUND = "Omni Outbound Message"
 IDENTITY = "Omni Identity"
 CHANNEL = "Omni Channel"
-QUEUE = "omni"
+QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 WORKER_METHOD = "omni_crm.pipeline.outbound.send_outbound"
 SENDING_MARK = "[đang gửi]"  # last_error khi đã nhận việc nhưng chưa có kết quả
 LEASE_MINUTES = 5

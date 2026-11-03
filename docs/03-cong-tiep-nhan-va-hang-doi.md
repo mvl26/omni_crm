@@ -22,6 +22,20 @@ Khung xử lý chung cho mọi webhook (trong `api/webhooks.py`, gọi xuống `
 
 Không gọi AI, không gọi API ngoài, không tạo Lead trong request webhook.
 
+### 1b. Hàng đợi `omni` và `omni_leads` (V21-01)
+
+Hàm duy nhất `omni_crm/queue.py::queue_for(channel_type)` chọn hàng đợi; `queue_for_identity(identity_key)` lấy loại kênh từ phần trước dấu `:` đầu tiên của `identity_key`.
+
+| Loại kênh | Hàng đợi |
+| --- | --- |
+| Meta Lead Ads, Google Lead Form, Web Form | `omni_leads` |
+| Email, Zalo OA, Telephony, bot (`analyze_batch`, `reply_batch`), tin ra, nhập danh sách | `omni` |
+
+- `job_id` (`omni-identity::{identity_key}`), `deduplicate`, khóa Redis theo định danh (`omni:lock:{identity_key}`), khóa theo SĐT/email (`sig:`) và debounce **không đổi**: tách hàng đợi không làm thay đổi cách chống xử lý chồng. Một khách vừa điền form (`omni_leads`) vừa nhắn Zalo (`omni`) có hai định danh khác nhau; hai worker khác hàng đợi vẫn tuần tự qua khóa `sig:<SĐT/email>` và ra đúng một Lead (test `test_v21_01_queue`).
+- Tác vụ quét `requeue_stuck`, nút "Xử lý lại" (`reprocess`) và job tiếp nối của worker đều đi qua `enqueue_identity`, nên dùng cùng hàm định tuyến. Đối soát Meta tạo tin qua `save_inbound` nên cũng vậy.
+- Thiếu khai báo `omni_leads` trong khóa `workers` (`common_site_config.json`) thì `queue_for` trả `omni` và ghi cảnh báo "chưa khai báo hàng đợi omni_leads" tối đa một lần mỗi giờ (khóa Redis `omni:queue:leads_missing_warned`); không lỗi, lead vẫn được xử lý nhưng lại dùng chung worker với chat. **Khai báo mà không có worker lắng nghe thì việc nằm chờ**: luôn khai báo kèm worker (docs/huong-dan/01 mục 3).
+- Lưu ý: cấu hình `workers` được Frappe đọc một lần mỗi tiến trình (`lru_cache`); đổi cấu hình phải khởi động lại gunicorn, worker và scheduler.
+
 ## 2. `gateway.save_inbound(event) -> str | None`
 
 ```text
@@ -35,7 +49,7 @@ if not flags.channel_enabled(event.channel):
     return name                                         # chỉ lưu, không xử lý
 frappe.enqueue(
     "omni_crm.pipeline.worker.process_identity",
-    queue="omni",
+    queue=queue_for_identity(identity_key),             # "omni_leads" cho lead quảng cáo, còn lại "omni" (mục 1b)
     job_id=f"omni-identity::{identity_key}",
     deduplicate=True,                                   # đã có job chờ cho khách này thì không thêm
     enqueue_after_commit=True,

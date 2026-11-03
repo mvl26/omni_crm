@@ -95,6 +95,7 @@ omni_crm/
 │   │   ├── webhooks.py               # zalo(), zalo_oauth_start/callback(), telephony_event(), telephony_lookup()
 │   │   ├── inbox.py                  # Hộp thư: list_conversations, get_thread, send_reply, request_phone, duyệt nháp
 │   │   └── admin.py                  # Giám sát: monitor_snapshot, reprocess, erase_customer_data
+│   ├── queue.py                      # queue_for(channel_type), queue_for_identity(): MỘT chỗ định tuyến hàng đợi (V21-01)
 │   ├── ingest/
 │   │   ├── gateway.py                # save_inbound(), enqueue_identity()
 │   │   └── events.py                 # InboundEvent, OutboundRequest, stable_message_id()
@@ -186,7 +187,8 @@ class ChannelAdapter(Protocol):
 
 | Tên | Loại | Việc |
 | --- | --- | --- |
-| `omni` | hàng đợi riêng | process_identity, send_outbound, bot_* , tải ghi âm |
+| `omni` | hàng đợi riêng | process_identity của email/Zalo/tổng đài, send_outbound, bot_*, tải ghi âm, nhập danh sách |
+| `omni_leads` | hàng đợi riêng (V21-01) | process_identity của lead quảng cáo (Meta Lead Ads, Google Lead Form, Web Form): xử lý tin, gọi Graph API, giao sale, thông báo |
 | mỗi 5 phút | scheduler | `pipeline.sweeper.requeue_stuck` — tin kẹt, tin chờ thử lại |
 | mỗi 30 phút | scheduler | `channels.zalo.token.refresh_if_needed` |
 | hằng đêm 01:30 | scheduler | `channels.telephony.registry.reconcile_yesterday` (Đợt 2) |
@@ -197,8 +199,13 @@ class ChannelAdapter(Protocol):
 Cấu hình worker riêng trong `common_site_config.json` (xác nhận cú pháp với bench v15 đang dùng):
 
 ```json
-"workers": { "omni": { "timeout": 600, "background_workers": 2 } }
+"workers": {
+  "omni": { "timeout": 600, "background_workers": 8 },
+  "omni_leads": { "timeout": 600, "background_workers": 2 }
+}
 ```
+
+Việc chọn hàng đợi nằm ở `omni_crm/queue.py::queue_for(channel_type)`; không ghi cứng tên hàng đợi ở nơi khác. Thiếu `omni_leads` trong `workers` thì lead quảng cáo rơi về `omni` (ghi cảnh báo tối đa một lần mỗi giờ, không lỗi).
 
 ## 6. Hook
 

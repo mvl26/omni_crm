@@ -219,6 +219,22 @@ def _ads(now) -> dict[str, Any]:
 	}
 
 
+def _lead_queue() -> dict[str, Any]:
+	"""Hàng đợi `omni_leads` (V21-01): đã khai báo chưa, số job chờ, số worker đang nghe; lỗi Redis thì `None` (không báo)."""
+	from omni_crm.queue import LEADS_QUEUE, leads_queue_declared
+
+	if not leads_queue_declared():
+		return {"declared": False, "length": None, "workers": None}
+	try:
+		from frappe.utils.background_jobs import get_queue
+		from rq import Worker
+
+		queue = get_queue(LEADS_QUEUE)
+		return {"declared": True, "length": int(queue.count), "workers": len(Worker.all(queue=queue))}
+	except Exception:
+		return {"declared": True, "length": None, "workers": None}
+
+
 def build_snapshot() -> dict[str, Any]:
 	"""Toàn bộ số liệu Đợt 1 của màn hình giám sát. Không chứa bí mật hay nội dung tin."""
 	now = now_datetime()
@@ -266,6 +282,7 @@ def build_snapshot() -> dict[str, Any]:
 			if oldest_new
 			else None,
 		},
+		"lead_queue": _lead_queue(),
 		"timing": {"window_hours": 24, **_percentiles(add_to_date(now, hours=-24))},
 		"outbound": {
 			**{s.lower(): cint(out_today[s]) for s in OUT_STATUSES},

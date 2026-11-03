@@ -27,11 +27,12 @@ from omni_crm.identity.extract import extract_contacts
 from omni_crm.identity.normalize import is_placeholder_name, normalize_email, normalize_phone, strip_accents
 from omni_crm.pipeline.retry import redact
 from omni_crm.prospect.normalize import InvalidTaxId, normalize_tax_id
+from omni_crm.queue import queue_for
 
 LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
 BOT_RUN = "Omni Bot Run"
-QUEUE = "omni"
+QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 JOB = "omni_crm.bot.analyze.analyze_batch"
 JOB_TIMEOUT = 600  # 1 lần gọi AI có thể tới 3 x 60 giây + chờ thử lại
 EVIDENCE_THRESHOLD = 0.85  # docs/08 mục 3 bước 1

@@ -31,13 +31,14 @@ from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
 from omni_crm.pipeline.retry import redact
+from omni_crm.queue import queue_for
 from omni_crm.utils import business_hours
 
 DRAFT = "Omni Bot Draft"
 BOT_RUN = "Omni Bot Run"
 INBOUND = "Omni Inbound Message"
 GROUP = "Omni Question Group"
-QUEUE = "omni"
+QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 JOB = "omni_crm.bot.reply.reply_batch"
 JOB_TIMEOUT = 600
 LOCK_WAIT_SECONDS = 100  # chờ khóa lượt tối đa (E12); nhỏ hơn timeout job RQ để job còn kịp trả "locked"

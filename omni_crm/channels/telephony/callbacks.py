@@ -14,11 +14,12 @@ from omni_crm import flags
 from omni_crm.channels.telephony import worker_hooks
 from omni_crm.crm_bridge import task as task_bridge
 from omni_crm.pipeline.retry import redact
+from omni_crm.queue import queue_for
 
 CALL = "Omni Call"
 INBOUND = "Omni Inbound Message"
 JOB = "omni_crm.channels.telephony.callbacks.process_missed_call"
-QUEUE = "omni"
+QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 SWEEP_AGE_MINUTES = 5  # chỉ quét cuộc gọi đã nhỡ hơn 5 phút (job thường đã chạy)
 SWEEP_WINDOW_DAYS = 2
 SWEEP_LIMIT = 100

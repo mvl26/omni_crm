@@ -122,6 +122,18 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				).format(cint(snap["switches"]["crm_lead_sync_sources_enabled"])),
 			)
 		)
+	lead_q = snap.get("lead_queue") or {}
+	if lead_q.get("declared") and cint(lead_q.get("length")) > 0 and lead_q.get("workers") == 0:
+		out.append(
+			Alert(
+				"omni_leads_khong_worker",
+				"",
+				_("Hàng đợi omni_leads có việc nhưng không có worker"),
+				_(
+					"Hàng đợi omni_leads đang có {0} việc chờ mà không có worker nào lắng nghe: lead quảng cáo nằm im. Thêm chương trình `bench worker --queue omni_leads` (supervisor) hoặc bỏ khai báo omni_leads khỏi workers."
+				).format(lead_q["length"]),
+			)
+		)
 	bot = snap.get("bot") or {}
 	if bot.get("usage_pct") is not None and bot["usage_pct"] > BOT_USAGE_WARN_PCT:
 		out.append(

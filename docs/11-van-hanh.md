@@ -90,7 +90,7 @@ Tắt `outbound_enabled` của một kênh thì mọi tin ra đang `Queued` củ
 - **Dọn raw_payload** 02:00 hằng đêm, theo lô 500, tối đa ~240 giây mỗi lần, chỉ tin đã xử lý xong; đặt `raw_payload_retention_days = 0` để tắt.
 - **Xóa dữ liệu khách**: trang `omni-monitor` > "Xóa dữ liệu khách" (Lead + lý do + xác nhận) hoặc API `omni_crm.api.admin.erase_customer_data`. Xóa nội dung tin vào/ra theo Lead và các Identity của Lead, ghi Comment (lý do, người làm); không xóa Lead. LƯU Ý: chưa xóa Communication do timeline tạo, tên/SĐT/email trong Identity, `identity_key`, Comment liên kết (xem docs/12 mục D) nên chưa đủ cho yêu cầu pháp lý đầy đủ.
 - **Email Account của Frappe** (kênh email, docs/05): trên Email Account dùng cho kênh phải để cờ tạo Lead của CRM = 0 và `append_to` trống, nếu không CRM tự tạo Lead song song với Omni (trùng Lead).
-- **Supervisor/worker**: production phải có tiến trình `bench worker --queue omni`, tối thiểu 2 worker (debounce 5 giây giữ 1 worker mỗi khách; 1 worker xử lý ~20 khách khác nhau mất ~100 giây). Thiếu worker thì tin New tăng và cảnh báo "tin chờ lâu" nổ.
+- **Supervisor/worker**: production phải có tiến trình `bench worker --queue omni` VÀ `bench worker --queue omni_leads` (V21-01: lead quảng cáo có hàng đợi riêng, **từ 2 worker**; `omni` theo lưu lượng chat). `omni`: tối thiểu 2 worker (debounce 5 giây giữ 1 worker mỗi khách; 1 worker xử lý ~20 khách khác nhau mất ~100 giây). Thiếu worker thì tin New tăng và cảnh báo "tin chờ lâu" nổ.
 - **Redis queue** phải chạy: không có thì không enqueue được job nền, không tạo được Comment trên Lead (hook CRM enqueue).
 - Giữ nguyên các lưu ý D1-05 (`sig:`), D1-08 (cấm `developer_mode` ở production) và D1-09 (tắt `outbound_enabled` => tin Blocked, không tự gửi lại) ở trên. Bảo vệ 1 MB cho webhook cần đặt thêm `client_max_body_size 1m;` ở nginx cho `/api/method/omni_crm.api.webhooks.*` (code đã chặn ở tầng ứng dụng nhưng nginx chặn sớm hơn).
 
@@ -179,9 +179,29 @@ Số liệu và kết luận đầy đủ ở `docs/nghiem-thu/dot-2.md`. Điề
 
 Số đo đầy đủ ở `docs/nghiem-thu/v2.md`; **chưa đo trên staging**.
 
-- **Worker và hàng đợi:** lead quảng cáo và chat dùng chung hàng đợi `omni`. Với 8 worker và 1,67 tin chat/giây cùng lúc, lead quảng cáo chờ p95 ~113 giây mới có người phụ trách. Giờ cao điểm cần ≥ 12 worker `omni` (hoặc quyết hàng đợi riêng). **Scheduler phải bật**: lượt thử lại, quét tin kẹt, đối soát Meta hằng giờ và nhắc quá hạn đều chạy từ scheduler.
+- **Worker và hàng đợi (đã xử lý ở V21-01, xem mục "V21-01" cuối tài liệu):** lead quảng cáo và chat từng dùng chung hàng đợi `omni`. Với 8 worker và 1,67 tin chat/giây cùng lúc, lead quảng cáo chờ p95 ~113 giây mới có người phụ trách. Giờ cao điểm cần ≥ 12 worker `omni` (hoặc quyết hàng đợi riêng). **Scheduler phải bật**: lượt thử lại, quét tin kẹt, đối soát Meta hằng giờ và nhắc quá hạn đều chạy từ scheduler.
 - **Graph Meta lỗi lâu:** với cấu hình mặc định (`max_attempts` 3, backoff "1,5" phút) tin form Meta thành `Manual` sau ~17 phút Graph chết và `reconcile` KHÔNG kéo lại. Giảm nhẹ: đặt `max_attempts` ≥ 8 và `retry_backoff_minutes` "1,5,15,30,60" (chưa thử). Phục hồi: trang Giám sát → Xử lý lại các tin `Manual` (hoặc `omni_crm.api.admin.reprocess`). Cảnh báo `tin_manual` sẽ nổ.
 - **Redis queue chết:** webhook vẫn lưu tin (200); tin `New`/`Retry` được tác vụ quét đẩy lại, tối đa ~7 phút sau khi Redis lên (cron 5 phút, tin phải quá 2 phút).
 - **Token Meta:** không có cảnh báo hết hạn. Dùng token System User dài hạn; đặt nhắc lịch.
 - **Tải thử lại:** `omni_crm/tests/load/` có `send_ads_burst.py`, `fake_graph.py`, `ads_setup.py` (`setup`, `verify`, `cleanup`, `reconcile_with_fake_graph`), `rq_worker.py --fake-graph`. Chỉ chạy trên site test, dữ liệu tiền tố `LOADADS`, và **luôn chạy `ads_setup.cleanup` trước khi chạy bộ test** (G-5). `ads_setup.setup` nâng giới hạn tần suất form website và `cleanup` khôi phục đúng giá trị cũ.
 - **Đo chỉ số chiến dịch sau tuần chạy:** `omni_crm.tests.acceptance.measure_campaign.run` (chỉ đọc).
+
+## V21-01: hàng đợi riêng `omni_leads` cho lead quảng cáo
+
+- **Cấu hình:** `workers.omni_leads` trong `common_site_config.json` + tối thiểu 2 tiến trình `bench worker --queue omni_leads` (docs/huong-dan/01 mục 3). Số worker `omni` theo lưu lượng chat. Thiếu khai báo thì lead quảng cáo rơi về `omni` và log có cảnh báo "chưa khai báo hàng đợi omni_leads" (tối đa một lần mỗi giờ): thấy cảnh báo này là thiếu cấu hình, không phải lỗi dữ liệu.
+- **Công suất `omni_leads`:** mỗi lead giữ một worker ~`debounce_seconds` + ~1 giây xử lý, nên công suất ~`số_worker / 6` lead/giây. 2 worker = ~0,33 lead/giây = 200 lead trong 10 phút, tức **đúng bằng** tải đo (không có dư địa). Chiến dịch dồn lead nhiều hơn thì thêm worker `omni_leads`; hàng đợi `omni_leads` tăng và thời gian "tin vào -> có người phụ trách" tăng là tín hiệu.
+- **Số đo (site test `omni.test`, KHÔNG phải staging; Graph API là máy chủ GIẢ):** kịch bản V2-08 (200 lead trong 600 giây thật + 1.002 tin Zalo cùng lúc, gunicorn 8, 8 worker `omni`, nay thêm 2 worker `omni_leads`):
+
+| Chỉ số | V2-08 (chung hàng đợi `omni`) | V21-01 (`omni_leads` 2 worker) |
+| --- | --- | --- |
+| Lead: tin vào -> có người phụ trách p50 / p95 / max | 97,9 / **113,1** / 114,1 giây | 5,4 / **21,3** / 25,9 giây |
+| Lead: nhận -> Done p50 / p95 | 97 / 113 giây | 5 / 21 giây |
+| Lead mất / dòng thừa / `dedupe_key` trùng / Lead trùng / Lead không chủ | 0 / 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 / 0 (200 Lead, 200 + 200 thông báo) |
+| Zalo cùng lúc: nhận -> Done p50 / p95 / max | 85 / 112 / 114 giây | 47 / 68 / 71 giây |
+| Zalo mất / trùng | 0 / 0 (1.002 tin, 300 Lead) | 0 / 0 (1.002 tin, 300 Lead) |
+
+  Tiêu chí p95 <= 30 giây: **đạt** (21,3 giây) trên site test. Webhook trả 200 cho 223/223 request quảng cáo và 1.114/1.114 Zalo; p95 webhook 27,0 và 26,8 ms nhưng p99/max cao hơn lần V2-08 (quảng cáo 6,6 / 8,8 giây; Zalo 7,1 / 10,6 giây, so với 64,7 / 100,6 ms và 38,2 / 234 ms): nguyên nhân CHƯA xác minh (nghi gunicorn khởi động nguội, 8 worker chưa được làm nóng trước khi bắn tải; Zalo không đi qua mã mới nên ít khả năng do thay đổi). Cần đo lại có làm nóng.
+- **Dọn sau khi đo tải:** chạy `ads_setup.cleanup` TRƯỚC `verify_burst.cleanup` (kênh Zalo). Làm ngược lại thì Lead đã bị xóa nên `Omni Bot Draft`/`Omni Bot Run` do bot tạo cho chúng thành mồ côi và làm đỏ `test_draft`, `test_handoff`, `test_web_form` (đã gặp ở V21-01: 331 nháp + 845 lượt chạy mồ côi; đã dọn đúng các dòng tạo sau thời điểm bắt đầu tải).
+- **Cảnh báo thiếu worker `omni_leads`:** nếu `omni_leads` đã khai báo, đang có job chờ mà không có worker nào lắng nghe thì luật `omni_leads_khong_worker` (email + Notification Log cho Omni Admin) nổ; snapshot có khối `lead_queue` (`declared`, `length`, `workers`; lỗi Redis thì để trống, không báo). Cảnh báo "tin chờ lâu" (New > 5 phút) vẫn là chốt chặn thứ hai.
+- **Đề xuất production:** 3-4 worker `omni_leads` (2 worker là mức tối thiểu và đúng bằng tải đo, không có dư địa; Graph thật chậm hơn Graph giả nên công suất mỗi worker còn thấp hơn). Đây là đề xuất, CHƯA kiểm chứng trên staging.
+- **Chưa đo / cần hệ thống thật:** staging, độ trễ Graph API thật (lúc đó mỗi lead giữ worker lâu hơn, công suất 2 worker giảm), supervisor thật với hai chương trình worker, `maxmemory`/Redis thật, tải chat khác 1,67 tin/giây.
