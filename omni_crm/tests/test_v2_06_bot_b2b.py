@@ -72,33 +72,46 @@ def cleanup_orgs() -> None:
 
 
 def b2b(**over) -> dict:
-	"""Kết quả phân tích có trường B2B (schema v2)."""
+	"""Kết quả phân tích có trường B2B (dạng câu lệnh v1: ý định cũ, còn trường bán lẻ); `b2b_v3` cho schema v3."""
 	return signals(**over)
 
 
+def b2b_v3(**over) -> dict:
+	"""Kết quả phân tích đúng schema v3 (V21-06): ý định B2B, không có trường bán lẻ."""
+	out = signals(**{"intent": "Khác", **over})
+	for retail in ("products", "quantity", "timeframe", "timeframe_within_30d"):
+		out.pop(retail, None)
+	return out
+
+
 class TestSchemaV2(FrappeTestCase):
-	def test_v1_schema_unchanged_and_v2_is_superset(self):
+	def test_v1_schema_unchanged_and_v3_changes_exactly_per_f6(self):
 		v1 = analyze.TOOL_V1["input_schema"]["properties"]
-		v2 = analyze.TOOL_V2["input_schema"]["properties"]
-		self.assertTrue(set(v1) < set(v2))
+		v3 = analyze.TOOL_V3["input_schema"]["properties"]
+		# V21-06 (F6): bỏ trường bán lẻ, thêm trường B2B, đổi enum ý định; schema v1 không đổi
+		self.assertEqual(set(v1) - set(v3), {"products", "quantity", "timeframe", "timeframe_within_30d"})
 		self.assertEqual(
-			set(v2) - set(v1),
+			set(v3) - set(v1),
 			{"tax_id", "hospitals_mentioned", "current_pain", "decision_role", "asks_proposal"},
 		)
 		self.assertEqual(
-			analyze.TOOL_V1["input_schema"]["required"], analyze.TOOL_V2["input_schema"]["required"]
+			analyze.TOOL_V3["input_schema"]["required"],
+			["intent", "wants_human", "summary", "evidence", "phones", "emails"],
 		)
-		self.assertIs(analyze.TOOL, analyze.TOOL_V2)
-		self.assertNotEqual(analyze.SCHEMA_V1, analyze.SCHEMA_V2)
+		self.assertIn("products", analyze.TOOL_V1["input_schema"]["required"])
+		self.assertEqual(v1["intent"]["enum"], list(analyze.INTENTS))
+		self.assertIs(analyze.TOOL, analyze.TOOL_V3)
+		self.assertNotEqual(analyze.SCHEMA_V1, analyze.SCHEMA_V3)
 
 	def test_tool_follows_prompt_version(self):
 		self.assertIs(analyze.tool_for("v1"), analyze.TOOL_V1)
 		self.assertIs(analyze.tool_for(None), analyze.TOOL_V1)
-		self.assertIs(analyze.tool_for("v2"), analyze.TOOL_V2)
+		self.assertIs(analyze.tool_for("v2"), analyze.TOOL_V3)
 
 	def test_valid_and_invalid_payloads(self):
-		schema = analyze.TOOL_V2["input_schema"]
-		ok = b2b(
+		schema = analyze.TOOL_V3["input_schema"]
+		ok = b2b_v3(
+			intent="Hỏi phí",
 			tax_id="0900000611",
 			hospitals_mentioned=["Bệnh viện A"],
 			current_pain="vốn",
@@ -106,8 +119,8 @@ class TestSchemaV2(FrappeTestCase):
 			asks_proposal=True,
 		)
 		self.assertIsNone(ai_client.validate_output(ok, schema))
-		self.assertIsNone(ai_client.validate_output(b2b(), schema))  # payload v1 vẫn hợp lệ với schema v2
-		self.assertIsNone(ai_client.validate_output(b2b(decision_role=None), schema))
+		self.assertIsNone(ai_client.validate_output(b2b_v3(), schema))
+		self.assertIsNone(ai_client.validate_output(b2b_v3(decision_role=None), schema))
 		for bad in (
 			{"decision_role": "Sếp"},
 			{"decision_role": "Kế toán - công nợ"},  # gạch nối thường khác gạch ngang trong enum
@@ -116,13 +129,13 @@ class TestSchemaV2(FrappeTestCase):
 			{"current_pain": "x" * 301},
 			{"asks_proposal": "có"},
 		):
-			self.assertIsNotNone(ai_client.validate_output(b2b(**bad), schema), bad)
+			self.assertIsNotNone(ai_client.validate_output(b2b_v3(**bad), schema), bad)
 
 	def test_decision_role_enum_matches_custom_field_and_docs(self):
 		options = [o for o in frappe.get_meta(LEAD).get_field("omni_decision_role").options.split("\n") if o]
 		self.assertEqual(options, list(analyze.DECISION_ROLES))
 		self.assertEqual(
-			list(analyze.TOOL_V2["input_schema"]["properties"]["decision_role"]["enum"]),
+			list(analyze.TOOL_V3["input_schema"]["properties"]["decision_role"]["enum"]),
 			[*analyze.DECISION_ROLES, None],
 		)
 
@@ -389,10 +402,12 @@ class TestTaxIdLinking(TaxLinkCase):
 		self.addCleanup(set_settings, analyze_prompt_version=original or "")
 		set_settings(analyze_prompt_version="v2")
 		batch2 = self.say("Cho hỏi thêm về dịch vụ")
+		self.fake.rules.clear()
+		self.fake.add_rule(b2b_v3(), kind="Analyze")  # câu lệnh v2 trả đúng schema v3
 		analyze.analyze_batch(batch2)
 		call2 = [c for c in self.fake.calls if c["kind"] == "Analyze"][-1]
 		self.assertIn("tax_id", call2["tool"]["input_schema"]["properties"])
-		self.assertEqual(json.loads(self.run_row(batch2).output_json)["schema_version"], analyze.SCHEMA_V2)
+		self.assertEqual(json.loads(self.run_row(batch2).output_json)["schema_version"], analyze.SCHEMA_V3)
 
 
 class TestPromptsV2(FrappeTestCase):
@@ -988,12 +1003,15 @@ class TestB2BSignals(ScoringTestCase):
 		self.assertEqual(score, 10 + 10 + 15 + 10 + 15)
 
 	def test_old_v1_signals_do_not_score_once_disabled(self):
+		# V21-06: "Đặt hàng" (cũ) được hiểu là "Yêu cầu đề xuất", nên chỉ còn tín hiệu B2B intent_proposal; tín hiệu v1
+		# intent_purchase/quantity_given/urgency_high vẫn không được tính vì quy tắc v1 đã tắt.
 		self.lead_set(
 			organization=f"{PREFIX} x", omni_intent="Đặt hàng", omni_quantity="10 thùng", omni_urgency="Cao"
 		)
 		score, bd = scoring.score_lead(self.lead1)
-		self.assertEqual(score, 0)
-		self.assertEqual(bd["signals"], [])
+		self.assertEqual([s["signal"] for s in bd["signals"]], ["intent_proposal"])
+		self.assertEqual(score, scoring.load_rules()["intent_proposal"]["points"])
+		self.assertNotIn("intent_purchase", [s["signal"] for s in bd["signals"]])
 
 
 class TestHotMatrix(ScoringTestCase):

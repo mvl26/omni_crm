@@ -318,7 +318,7 @@ D3-01: ở `mode = Draft`, `decision` đi `Pending -> Sent As Is | Sent Edited |
 | `omni_quantity` | Data | Số lượng |
 | `omni_timeframe` | Data | Thời điểm mua dự kiến |
 | `omni_urgency` | Select (Thấp/Trung bình/Cao) | Mức gấp |
-| `omni_intent` | Select (Tư vấn/Hỏi giá/Đặt hàng/Khiếu nại/Khác) | Ý định gần nhất |
+| `omni_intent` | Select (giữ giá trị cũ Tư vấn/Hỏi giá/Đặt hàng/Khiếu nại/Khác; V21-06 thêm Hỏi cách vận hành/Hỏi gói dịch vụ/Hỏi phí/Yêu cầu đề xuất) | Ý định gần nhất; bot theo câu lệnh v2 chỉ ghi giá trị mới (xem `docs/08` mục 3) |
 | `omni_score` | Int | Điểm Lead |
 | `omni_score_breakdown` | JSON (ẩn) | Các tín hiệu đã cộng điểm và lúc đã báo Lead nóng |
 | `omni_bot_summary` | Small Text | Tóm tắt của bot |

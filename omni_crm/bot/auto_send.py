@@ -31,7 +31,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, escape_html, get_datetime, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import handoff, reply
+from omni_crm.bot import handoff, intents, reply
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.ingest.events import OutboundRequest
@@ -573,7 +573,12 @@ def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = N
 	if not flags.bot_analyze_enabled():
 		return False, "khong_phan_tich"
 	analysis = reply.analysis_of(row.batch_id)
-	if not analysis or analysis.get("intent") == COMPLAINT_INTENT or analysis.get("wants_human"):
+	if (
+		not analysis
+		or analysis.get("intent") == COMPLAINT_INTENT
+		or intents.always_handoff(analysis.get("intent"))  # F6: Hỏi phí/Yêu cầu đề xuất không bao giờ tự gửi
+		or analysis.get("wants_human")
+	):
 		return False, "phan_tich"
 	# Chốt thứ hai chống gửi lặp (E12) khi khóa Redis theo lượt không dùng được: đã có tin Bot gắn với nháp KHÁC của cùng lượt
 	# thì không gửi nữa. Đọc có khóa; chạy dưới khóa dòng nhóm nên các đường gửi Auto của cùng nhóm đã tuần tự.

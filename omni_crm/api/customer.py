@@ -278,6 +278,9 @@ def get_profile(lead: str) -> dict[str, Any]:
 		"omni_urgency": _("Mức gấp"),
 	}
 	need = [item(f, need_labels[f], row.get(f)) for f in NEED_FIELDS]
+	need.append(
+		item("omni_intent", _("Ý định gần nhất"), row.get("omni_intent"))
+	)  # V21-06: nhãn ý định B2B, chỉ đọc
 	show_need = flags.bot_analyze_enabled() or any(n["value"] for n in need)
 	owners = _names([row.lead_owner])
 	manage = [

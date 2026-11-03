@@ -17,7 +17,7 @@ from frappe import _
 from frappe.utils import cint
 
 from omni_crm import flags
-from omni_crm.bot import ai_client
+from omni_crm.bot import ai_client, intents
 from omni_crm.bot.context import _line, build_conversation, escape_tags, mask_pii, normalize_text
 from omni_crm.bot.prompts.loader import load_prompt, render
 from omni_crm.crm_bridge import lead as lead_bridge
@@ -64,9 +64,9 @@ LEAD_FIELDS = {
 	"decision_role": "omni_decision_role",
 }
 DECISION_ROLES = ("Người quyết định", "Phụ trách đấu thầu", "Kế toán – công nợ", "Mua hàng", "Khác")  # noqa: RUF001
-SCHEMA_V1, SCHEMA_V2 = "analyze_schema_v1", "analyze_schema_v2"
+SCHEMA_V1, SCHEMA_V3 = "analyze_schema_v1", "analyze_schema_v3"  # v3 = V21-06 (ý định B2B, bỏ trường bán lẻ)
 SCHEMA_VERSION = (
-	SCHEMA_V2  # phiên bản schema mới nhất; ghi vào kết quả phân tích (output_json) và báo cáo bộ đề
+	SCHEMA_V3  # phiên bản schema mới nhất; ghi vào kết quả phân tích (output_json) và báo cáo bộ đề
 )
 
 TOOL_V1: dict[str, Any] = {
@@ -98,9 +98,16 @@ TOOL_V1: dict[str, Any] = {
 	},
 }
 
-# Schema v2 = v1 + trường B2B tùy chọn (không bắt buộc, nên bản ghim v1 và bộ đề cũ vẫn hợp lệ).
-TOOL_V2: dict[str, Any] = copy.deepcopy(TOOL_V1)
-TOOL_V2["input_schema"]["properties"].update(
+# Schema v3 (câu lệnh v2 trở lên, V21-06/F6) = v1 đổi sang ý định B2B, BỎ trường bán lẻ (products, quantity, timeframe,
+# timeframe_within_30d) và thêm trường B2B tùy chọn. Cột cũ trên Lead giữ nguyên, chỉ là bot không còn điền.
+# Bản ghim v1 giữ TOOL_V1 nguyên vẹn (enum ý định cũ).
+TOOL_V3: dict[str, Any] = copy.deepcopy(TOOL_V1)
+_props_v3 = TOOL_V3["input_schema"]["properties"]
+for _retail in ("products", "quantity", "timeframe", "timeframe_within_30d"):
+	del _props_v3[_retail]
+_props_v3["intent"] = {"enum": list(intents.INTENTS_B2B)}
+TOOL_V3["input_schema"]["required"] = ["intent", "wants_human", "summary", "evidence", "phones", "emails"]
+_props_v3.update(
 	{
 		"tax_id": {
 			"type": ["string", "null"],
@@ -112,12 +119,12 @@ TOOL_V2["input_schema"]["properties"].update(
 		"asks_proposal": {"type": ["boolean", "null"]},
 	}
 )
-TOOL = TOOL_V2
+TOOL = TOOL_V3
 
 
 def tool_for(prompt_version: str | None) -> dict[str, Any]:
 	"""Schema của tool theo phiên bản câu lệnh: v1 giữ schema v1 (đường chạy ghim không đổi), còn lại schema v2."""
-	return TOOL_V1 if (prompt_version or "v1") == "v1" else TOOL_V2
+	return TOOL_V1 if (prompt_version or "v1") == "v1" else TOOL_V3
 
 
 # --- Kiểm căn cứ --------------------------------------------------------------------------------------------
@@ -335,7 +342,9 @@ def postprocess(signals: dict, text_of_customer: str) -> dict:
 		else:
 			dropped.append(key)
 
-	if signals.get("intent") in INTENTS:
+	if (
+		signals.get("intent") in intents.ALL_INTENTS
+	):  # câu lệnh v1 trả giá trị cũ, câu lệnh v2 trả giá trị mới
 		accepted["intent"] = signals["intent"]
 	accepted["wants_human"] = bool(signals.get("wants_human"))
 	summary = _clean(signals.get("summary"), FIELD_LIMITS["summary"])
@@ -581,7 +590,7 @@ def run_analysis(batch_id: str, lead: str) -> dict | None:
 	written = apply_to_lead(lead, accepted)
 	candidates, cut = flag_duplicates(lead, accepted)
 	result = {
-		"schema_version": SCHEMA_V1 if tool_for(prompt.version) is TOOL_V1 else SCHEMA_V2,
+		"schema_version": SCHEMA_V1 if tool_for(prompt.version) is TOOL_V1 else SCHEMA_V3,
 		"accepted": accepted,
 		"dropped": checked["dropped"] + ([f"candidates_truncated:{cut}"] if cut else []),
 		"applied": written["applied"],

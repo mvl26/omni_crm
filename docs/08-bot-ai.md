@@ -62,6 +62,19 @@ Tool `record_lead_signals`, `input_schema` (rút gọn):
 }
 ```
 
+> **V21-06 (F6) — ý định theo bối cảnh nhà thầu.** Schema trên là schema v1 (câu lệnh `analyze_v1`, vẫn là bản ghim). Câu lệnh `analyze_v2` dùng schema v3 (`analyze_schema_v3`): `intent` chỉ nhận sáu giá trị dưới đây, bỏ `products`, `quantity`, `timeframe`, `timeframe_within_30d` (cột `omni_*` tương ứng trên Lead giữ nguyên, bot chỉ không còn điền), `required` không còn `products`. Danh sách, ánh xạ và quyết định chuyển người nằm ở một chỗ: `bot/intents.py`.
+>
+> | Ý định | Tín hiệu điểm | Chuyển người (bằng code) |
+> | --- | --- | --- |
+> | Hỏi cách vận hành | `intent_service_info` | Không |
+> | Hỏi gói dịch vụ | `intent_service_info` | Không |
+> | Hỏi phí | `intent_fee` | Luôn |
+> | Yêu cầu đề xuất | `intent_proposal` | Luôn |
+> | Khiếu nại | `complaint` | Luôn |
+> | Khác | — | Theo nhóm câu hỏi |
+>
+> Giá trị cũ (Tư vấn, Hỏi giá, Đặt hàng) vẫn nằm trong Select `omni_intent` và vẫn được hiểu ở mọi nơi dùng (`intents.normalize`): Hỏi giá = Hỏi phí, Đặt hàng = Yêu cầu đề xuất, Tư vấn = Hỏi cách vận hành. Patch tay `omni_crm.patches.v21.map_old_intents` (dry run mặc định, không đăng ký `patches.txt`) ánh xạ Lead đang mở, bỏ qua Lead mà sale đã tự sửa `omni_intent`. Điểm quan tâm không đổi trước và sau patch.
+
 Xử lý sau khi nhận kết quả (code, không phải AI):
 
 1. **Kiểm căn cứ**: trường nào có `evidence` không xuất hiện (so khớp mờ ≥ 0.85 sau bỏ dấu) trong lời khách → bỏ trường đó. Trường thiếu `evidence` → bỏ.
@@ -75,7 +88,7 @@ Xử lý sau khi nhận kết quả (code, không phải AI):
 
 Hoàn toàn bằng code, từ bảng `Omni Settings.score_rules` (mẫu ở `mau/bang-diem-lead-mau.csv`). Mỗi tín hiệu chỉ cộng một lần. Kết quả ghi `omni_score`. Lần đầu vượt `hot_lead_threshold` → thông báo cho người phụ trách Lead ("Lead nóng: …, điểm …, lý do: …"). Điểm và các tín hiệu đã cộng hiển thị được (ghi vào Comment ẩn hoặc trường JSON) để sale hiểu vì sao.
 
-Cách làm (D2-06): nguồn tín hiệu là trường Lead (`mobile_no`/`phone`, `email`, `organization`, `omni_quantity`, `omni_urgency` = Cao, `omni_intent` = Hỏi giá / Đặt hàng / Khiếu nại), khóa `timeframe_within_30d` của lượt phân tích thành công GẦN NHẤT CÓ khóa đó (quét tối đa 20 lượt; khóa vắng = không có căn cứ), và `repeat_contact` = từ 2 lượt khách liên hệ trong 30 ngày (mỗi batch tin `message` một lần, cộng mỗi cuộc gọi vào `Omni Call`). Chấm điểm chạy ở `analyze.after_analyze`; lượt không qua bot (cuộc gọi, bot tắt) chấm ở `worker.post_batch_hooks`. `omni_score_breakdown` = `{total, signals:[{signal, points, note}], scored_at, hot_notified_at}`; `hot_notified_at` không bao giờ bị xóa nên điểm dao động quanh ngưỡng không báo lại. Lead đã chuyển Deal không báo. Thông báo chỉ có tên Lead, điểm và ghi chú tín hiệu (không SĐT/email/nội dung tin). Bật bằng `lead_scoring_enabled`; nhập bảng điểm: `bench --site <site> execute omni_crm.bot.scoring.import_rules --kwargs "{'path': '<csv>'}"`.
+Cách làm (D2-06): nguồn tín hiệu là trường Lead (`mobile_no`/`phone`, `email`, `organization`, `omni_quantity`, `omni_urgency` = Cao, `omni_intent` = Hỏi giá / Đặt hàng / Khiếu nại; từ V21-06 các tên cũ được chuẩn hóa sang ý định mới qua `bot/intents.py::normalize` trước khi lấy tín hiệu, xem mục 3), khóa `timeframe_within_30d` của lượt phân tích thành công GẦN NHẤT CÓ khóa đó (quét tối đa 20 lượt; khóa vắng = không có căn cứ), và `repeat_contact` = từ 2 lượt khách liên hệ trong 30 ngày (mỗi batch tin `message` một lần, cộng mỗi cuộc gọi vào `Omni Call`). Chấm điểm chạy ở `analyze.after_analyze`; lượt không qua bot (cuộc gọi, bot tắt) chấm ở `worker.post_batch_hooks`. `omni_score_breakdown` = `{total, signals:[{signal, points, note}], scored_at, hot_notified_at}`; `hot_notified_at` không bao giờ bị xóa nên điểm dao động quanh ngưỡng không báo lại. Lead đã chuyển Deal không báo. Thông báo chỉ có tên Lead, điểm và ghi chú tín hiệu (không SĐT/email/nội dung tin). Bật bằng `lead_scoring_enabled`; nhập bảng điểm: `bench --site <site> execute omni_crm.bot.scoring.import_rules --kwargs "{'path': '<csv>'}"`.
 
 ## 5. Soạn trả lời — `bot/reply.py`
 
@@ -116,7 +129,7 @@ Khi kho tri thức vượt ~150 mục, chuyển sang truy hồi: chọn 20 mục
 
 Bất kỳ điều kiện nào đúng → đổi thành `handoff` và ghi `guard_flags`:
 
-1. Nhóm câu hỏi có `always_handoff` (Hỏi giá, Khiếu nại…) hoặc `intent` phân tích là Hỏi giá/Khiếu nại, hoặc `wants_human`.
+1. Nhóm câu hỏi có `always_handoff` (Hỏi giá, Khiếu nại…) hoặc `intent` phân tích là Hỏi phí/Yêu cầu đề xuất/Khiếu nại (và tên cũ Hỏi giá, Đặt hàng; V21-06, `intents.always_handoff`, độc lập nhóm câu hỏi và độc lập việc AI trả `reply`), hoặc `wants_human`.
 2. `kb_item_ids` rỗng, hoặc có mã không tồn tại/không active.
 3. Câu trả lời chứa **con số kèm đơn vị tiền** (đ, đồng, vnđ, k, nghìn, triệu, %, USD), **ngày/thời hạn giao**, hoặc từ cam kết ("cam kết", "đảm bảo", "chắc chắn", "bảo hành … năm") mà **không xuất hiện nguyên văn** trong các mục kho tri thức đã trích.
 4. Chứa đường dẫn hoặc SĐT không có trong kho tri thức.
