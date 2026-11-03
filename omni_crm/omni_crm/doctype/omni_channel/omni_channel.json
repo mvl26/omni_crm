@@ -43,6 +43,15 @@
   "meta_app_secret",
   "meta_verify_token",
   "meta_page_access_token",
+  "meta_app_id",
+  "sec_meta_token",
+  "meta_token_checked_at",
+  "meta_token_valid",
+  "meta_token_never_expires",
+  "col_meta_token",
+  "meta_token_expires_at",
+  "meta_token_data_expires_at",
+  "meta_token_note",
   "col_ads",
   "webform_captcha_provider",
   "webform_captcha_secret",
@@ -316,6 +325,58 @@
    "fieldtype": "Password",
    "label": "Meta: Page Access Token",
    "description": "Quyền leads_retrieval. Chỉ gửi trong header Authorization."
+  },
+  {
+   "fieldname": "meta_app_id",
+   "fieldtype": "Data",
+   "label": "Meta: App ID",
+   "description": "Mã ứng dụng Meta (không bí mật). Cùng App Secret tạo app access token để kiểm hạn token Page hằng ngày (F2). Để trống = không kiểm."
+  },
+  {
+   "fieldname": "sec_meta_token",
+   "fieldtype": "Section Break",
+   "label": "Meta: kết quả kiểm token Page (chỉ đọc)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "meta_token_checked_at",
+   "fieldtype": "Datetime",
+   "label": "Kiểm lần cuối",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_token_valid",
+   "fieldtype": "Check",
+   "label": "Token hợp lệ",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_token_never_expires",
+   "fieldtype": "Check",
+   "label": "Token không hết hạn",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_meta_token",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "meta_token_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Token hết hạn lúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_token_data_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Quyền dữ liệu hết hạn lúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_token_note",
+   "fieldtype": "Small Text",
+   "label": "Kết quả kiểm token",
+   "read_only": 1
   },
   {
    "fieldname": "col_ads",

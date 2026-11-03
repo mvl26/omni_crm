@@ -179,6 +179,9 @@ scheduler_events = {
 			"omni_crm.bot.handoff.email_unread_handoffs",  # D3-02: email nhắc nếu chưa mở thông báo chuyển người sau 10 phút
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
+		"10 */6 * * *": [
+			"omni_crm.channels.meta_leads.token_check.run"
+		],  # V21-02: kiểm token Page Meta (mỗi kênh ~1 lần/ngày)
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
 		"45 17 * * *": ["omni_crm.crm_bridge.care_log.end_of_day_digest"],  # V2-04: phiên chưa ghi kết quả
