@@ -175,7 +175,7 @@ class TestAnalyzeBatch(AnalyzeTestCase):
 		self.assertEqual(out.omni_urgency, "Trung bình")
 		self.assertEqual(out.omni_intent, "Đặt hàng")
 		self.assertEqual(out.omni_bot_summary, "Khách hỏi về găng tay.")
-		self.assertFalse(out.mobile_no)  # không tự ghi SĐT trung bình vào Lead
+		self.assertEqual(out.mobile_no, normalize_phone(PHONE))  # V3-04: SĐT khách tự nhắn vào ô trống
 		run = self.run_row(batch)
 		self.assertEqual(run.status, "Success")
 		stored = json.loads(run.output_json)
@@ -555,3 +555,94 @@ class TestHardening(AnalyzeTestCase):
 		text = analyze.customer_text(self.lead2, max_chars=300)
 		self.assertIn("5" + "x" * 80, text)
 		self.assertNotIn("0" + "x" * 80, text)
+
+
+class TestFillContacts(AnalyzeTestCase):
+	"""V3-04: bot điền SĐT/email khách tự nhắn vào ô trống của Lead, không ghi đè, không lấy của Lead khác."""
+
+	EMAIL = "td106khach@example.com"
+
+	def _contacts(self, lead=None):
+		return frappe.db.get_value(
+			"CRM Lead",
+			lead or self.lead1,
+			["mobile_no", "phone", "email", "omni_phone_e164", "omni_email_norm", "omni_manual_fields"],
+			as_dict=True,
+		)
+
+	def _blank(self):
+		frappe.db.set_value(
+			"CRM Lead",
+			self.lead1,
+			{"mobile_no": None, "phone": None, "email": None, "omni_phone_e164": "", "omni_email_norm": ""},
+		)
+		frappe.db.commit()
+
+	def _say_contacts(self):
+		text = f"Số em {PHONE}, email {self.EMAIL}"
+		batch = self.say(text)
+		self.analyze(
+			batch,
+			signals(phones=[PHONE], emails=[self.EMAIL], evidence={"phones": text, "emails": text}),
+		)
+		return batch
+
+	def test_fills_blank_phone_and_email_with_normalized_fields_and_note(self):
+		self._blank()
+		batch = self._say_contacts()
+		row = self._contacts()
+		self.assertEqual(row.mobile_no, normalize_phone(PHONE))
+		self.assertEqual(row.omni_phone_e164, normalize_phone(PHONE))
+		self.assertEqual(row.email, self.EMAIL)
+		self.assertEqual(row.omni_email_norm, self.EMAIL)
+		applied = json.loads(self.run_row(batch).output_json)["applied"]
+		self.assertIn("mobile_no", applied)
+		self.assertIn("email", applied)
+		note = frappe.get_all(
+			"Comment",
+			filters={"reference_name": self.lead1, "content": ["like", "Bot đã cập nhật:%"]},
+			pluck="content",
+			order_by="creation desc",
+			limit=1,
+		)[0]
+		self.assertIn("mobile_no", note)
+		self.assertNotIn("omni_phone_e164", note)
+		self.assertNotIn(PHONE, note)  # ghi chú chỉ có tên trường
+
+	def test_never_overwrites_existing_contacts(self):
+		frappe.db.set_value(
+			"CRM Lead",
+			self.lead1,
+			{
+				"mobile_no": "0987000111",
+				"email": "cu@example.com",
+				"omni_phone_e164": normalize_phone("0987000111"),
+				"omni_email_norm": "cu@example.com",
+			},
+		)
+		frappe.db.commit()
+		self._say_contacts()
+		row = self._contacts()
+		self.assertEqual(row.mobile_no, "0987000111")
+		self.assertEqual(row.email, "cu@example.com")
+
+	def test_contact_of_other_lead_is_not_copied_but_flagged(self):
+		self._blank()
+		frappe.db.set_value("CRM Lead", self.lead2, "omni_phone_e164", normalize_phone(PHONE))
+		frappe.db.commit()
+		self._say_contacts()
+		row = self._contacts()
+		self.assertFalse(row.mobile_no)  # SĐT thuộc Lead khác: không chép, chỉ nghi trùng
+		self.assertEqual(row.email, self.EMAIL)  # email không trùng ai: vẫn điền
+		a, b = sorted((self.lead1, self.lead2))
+		self.assertTrue(frappe.db.exists("Omni Duplicate Candidate", {"lead_a": a, "lead_b": b}))
+
+	def test_manual_contact_fields_are_respected(self):
+		self._blank()
+		frappe.db.set_value("CRM Lead", self.lead1, "omni_manual_fields", json.dumps(["mobile_no", "email"]))
+		frappe.db.commit()
+		batch = self._say_contacts()
+		row = self._contacts()
+		self.assertFalse(row.mobile_no)
+		self.assertFalse(row.email)
+		self.assertIn("mobile_no", json.loads(self.run_row(batch).output_json)["skipped_manual"])

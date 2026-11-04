@@ -78,7 +78,7 @@ Tool `record_lead_signals`, `input_schema` (rút gọn):
 Xử lý sau khi nhận kết quả (code, không phải AI):
 
 1. **Kiểm căn cứ**: trường nào có `evidence` không xuất hiện (so khớp mờ ≥ 0.85 sau bỏ dấu) trong lời khách → bỏ trường đó. Trường thiếu `evidence` → bỏ.
-2. SĐT/email trích được → chuẩn hóa → đưa cho `resolver` như **tín hiệu trung bình**; không tự ghi đè `mobile_no`/`email` của Lead nếu đã có.
+2. SĐT/email trích được → chuẩn hóa → đưa cho `resolver` như **tín hiệu trung bình**; không tự ghi đè `mobile_no`/`email` của Lead nếu đã có. **V3-04 (người phụ trách chốt 2026-11-04):** điền vào ô ĐANG TRỐNG (`mobile_no`, không thì `phone`; `email`) kèm trường chuẩn hóa, chỉ khi giá trị không thuộc Lead khác (thuộc Lead khác thì chỉ tạo nghi trùng) và trường không nằm trong `omni_manual_fields`.
 3. Ghi vào custom field `omni_*` của Lead. **Không ghi trường có trong `omni_manual_fields`** (hook `CRM Lead.on_update` ghi tên trường mỗi khi người dùng — không phải hệ thống — sửa).
 4. Tên khách: chỉ điền `first_name`/`last_name` của Lead khi Lead đang để tên tạm (tên hiển thị kênh, "Khách Zalo …").
 5. `omni_bot_summary` cập nhật mỗi lượt; `omni_intent` = ý định gần nhất.

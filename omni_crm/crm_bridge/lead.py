@@ -142,28 +142,40 @@ def create_lead_for_identity(identity: str, signals: dict) -> str:
 	return doc.name
 
 
-def fill_blank_contact(lead: str, phone: str | None, email: str | None) -> bool:
-	"""Điền SĐT/email mạnh vào Lead nếu Lead chưa có (không ghi đè); trả True nếu có thay đổi."""
-	row = frappe.db.get_value(
-		LEAD,
-		lead,
-		["mobile_no", "phone", "email", "omni_phone_e164", "omni_email_norm"],
-		as_dict=True,
-	)
+CONTACT_FIELDS = ["mobile_no", "phone", "email", "omni_phone_e164", "omni_email_norm"]
+
+
+def blank_contact_values(row: Any, phone: str | None, email: str | None) -> dict[str, str]:
+	"""Giá trị cần ghi để điền SĐT/email vào ô còn trống của Lead `row` (đọc đủ CONTACT_FIELDS); {} nếu không có gì.
+
+	Không ghi đè: SĐT chỉ điền khi Lead chưa có SĐT chuẩn hóa (mobile_no trống thì vào mobile_no, không thì phone),
+	email chỉ khi chưa có email. Kèm trường chuẩn hóa `omni_phone_e164`/`omni_email_norm` tính lại.
+	"""
 	values: dict[str, str] = {}
-	if phone and not row.omni_phone_e164:
-		if not row.mobile_no:
+	if phone and not row.get("omni_phone_e164"):
+		if not row.get("mobile_no"):
 			values["mobile_no"] = phone
-		elif not row.phone:
+		elif not row.get("phone"):
 			values["phone"] = phone
-	if email and not row.omni_email_norm and not row.email:
+	if email and not row.get("omni_email_norm") and not row.get("email"):
 		values["email"] = email
 	if not values:
-		return False
+		return {}
 	new_phone, new_email = normalized_fields(
-		values.get("mobile_no", row.mobile_no), values.get("phone", row.phone), values.get("email", row.email)
+		values.get("mobile_no", row.get("mobile_no")),
+		values.get("phone", row.get("phone")),
+		values.get("email", row.get("email")),
 	)
 	values.update(omni_phone_e164=new_phone, omni_email_norm=new_email)
+	return values
+
+
+def fill_blank_contact(lead: str, phone: str | None, email: str | None) -> bool:
+	"""Điền SĐT/email mạnh vào Lead nếu Lead chưa có (không ghi đè); trả True nếu có thay đổi."""
+	row = frappe.db.get_value(LEAD, lead, CONTACT_FIELDS, as_dict=True)
+	values = blank_contact_values(row, phone, email)
+	if not values:
+		return False
 	# db.set_value: không chạy validate của CRM (tránh has_gravatar qua mạng); tự tính trường chuẩn hóa.
 	frappe.db.set_value(LEAD, lead, values)
 	return True
