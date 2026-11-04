@@ -199,6 +199,7 @@ Sáu ô dưới đây gồm số và ô tích "Tắt..."; chưa từng lưu thì
 | Tắt tự kéo lại lead Meta | `meta_requeue_disabled` | Không tích (= **đang kéo lại**) | Tích = đối soát hằng giờ vẫn bù lead sót, nhưng không kéo lại tin lỗi và không gửi cảnh báo gộp. |
 | Tắt hàng dự phòng webhook | `webhook_spool_disabled` | Không tích (= **đang dùng hàng dự phòng**) | Tích = khi DB không ghi được, webhook trả lỗi 503 như trước V21-04 (nhà cung cấp phải tự gửi lại). Tác vụ quét vẫn chèn lại tin đã nằm trong hàng. |
 | Tắt tab Zalo trong trang Lead/Deal | `zalo_tab_disabled` | Không tích (= **tab Zalo đang hiện**, nếu patch giao diện đã được áp trên bench) | Tích = ẩn tab Zalo trong giao diện CRM; Hộp thư và dòng thời gian không đổi. Có hiệu lực sau khi tải lại trang CRM. |
+| Hiện tin Zalo mới trong tab Hoạt động/Email | `zalo_in_activity_enabled` | Không tích (= **ẩn**, tin Zalo chỉ ở tab Zalo và Hộp thư) | Tích = tin Zalo ghi từ lúc đó hiện lại ở Hoạt động/Email như trước. Ô này **thuận chiều** (tích = bật). Tin cũ đổi bằng lệnh `omni_crm.ops.hide_zalo_activity.run`. |
 
 Cẩn thận chiều ngược: các ô `..._disabled` **bật** là **tắt** tính năng. Bốn ô `..._disabled` mặc định không tích, tức tính năng đang chạy.
 

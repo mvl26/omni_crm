@@ -67,7 +67,7 @@ Khung bên dưới gửi tin **qua Zalo OA** tới đúng khách của Lead đó
 
 **OA của công ty đang ở gói Cơ bản: gửi qua API sẽ báo "Gói OA hiện tại không hỗ trợ gửi tin qua API; hãy nhắn từ trang Zalo OA".** Khi đó nhắn như sau: trong tab Zalo bấm **Mở chat Zalo OA**. Cửa sổ mới mở **đúng hội thoại của khách này** trên trang Zalo OA (lần đầu bạn phải đăng nhập Zalo OA). Bạn không phải tìm khách. Chỉ khi hệ thống thiếu mã Zalo hoặc mã OA thì nút mở danh sách chat chung và tab hiện hướng dẫn: **tìm khách theo tên hoặc mã Zalo** (bấm **Sao chép** để chép mã). Tin bạn nhắn từ trang đó sẽ tự hiện lại trong tab Zalo (bong bóng bên phải, ghi là nhân viên ngoài hệ thống) sau ít phút. Zalo không cho nhúng khung chat vào trang CRM nên chỉ có nút mở cửa sổ riêng. Nếu dưới nút có dòng "Chưa lấy được tên Zalo: ...": hệ thống chưa lấy được tên Zalo của khách (thường do gói OA hoặc chế độ thử); tên hiển thị lúc này là tên Lead, bạn có thể sửa tên Lead cho đúng. Chưa kiểm trên site thật.
 
-Trong tab **Hoạt động/Email** tin Zalo vẫn hiện như một thẻ; tên người gửi nay là tên khách (hoặc "Khách Zalo OA 8383"), không còn mã số dài.
+Tin Zalo **không còn hiện** ở tab Hoạt động và tab Email (tránh một tin hiện ở ba nơi); đọc và trả lời Zalo ở tab Zalo hoặc Hộp thư. Email vẫn ở tab Email. Tên người gửi là tên khách (hoặc "Khách Zalo OA 8383"), không còn mã số dài.
 
 ## 5. Email và điện thoại
 
