@@ -7,6 +7,8 @@ import frappe
 
 from omni_crm import flags
 from omni_crm.api import inbox, zalo_tab
+from omni_crm.channels.zalo import errors, profile_refresh, worker_hooks
+from omni_crm.channels.zalo.client import ZaloClient
 from omni_crm.crm_bridge import timeline
 from omni_crm.ops import backfill_sender
 from omni_crm.pipeline import outbound
@@ -350,7 +352,8 @@ class TestOaChatContactAndQuotaError(ZaloTabCase):
 	def test_contact_has_names_and_zalo_id_only(self):
 		self.as_user(SALE1)
 		contact = zalo_tab.get_conversation("CRM Lead", self.lead1)["contact"]
-		self.assertEqual(set(contact), {"lead_name", "display_name", "zalo_user_id"})
+		self.assertEqual(set(contact), {"lead_name", "display_name", "zalo_user_id", "oa_id", "name_note"})
+		self.assertEqual(contact["name_note"], "")
 		self.assertEqual(contact["display_name"], "Mai Zalo")
 		self.assertEqual(contact["zalo_user_id"], "TD106Z1")
 		self.assertTrue(contact["lead_name"])
@@ -391,6 +394,103 @@ class TestOaChatContactAndQuotaError(ZaloTabCase):
 		self.assertEqual(msg["status"], "Failed")
 		self.assertEqual(msg["error"], reason)
 		self.assertTrue(zalo_tab.get_conversation("CRM Lead", self.lead1)["compose"]["can_send"])
+
+
+class TestOaIdAndNameNote(ZaloTabCase):
+	def test_contact_has_oa_id_of_the_channel_the_customer_wrote_to(self):
+		frappe.db.set_value("Omni Channel", self.channel.name, "zalo_oa_id", "378159422113841368")
+		frappe.db.commit()
+		self.as_user(SALE1)
+		self.assertEqual(
+			zalo_tab.get_conversation("CRM Lead", self.lead1)["contact"]["oa_id"], "378159422113841368"
+		)
+
+	def test_missing_name_shows_reason_and_never_raw_id(self):
+		frappe.db.set_value("Omni Identity", self.ident1, "display_name", None)
+		frappe.db.commit()
+		key = frappe.db.get_value("Omni Identity", self.ident1, "identity_key")
+		worker_hooks.note_profile_reason(key, "Gói OA hiện tại không hỗ trợ gửi tin qua API")
+		self.addCleanup(worker_hooks.note_profile_reason, key, None)
+		self.as_user(SALE1)
+		res = zalo_tab.get_conversation("CRM Lead", self.lead1)
+		self.assertEqual(
+			res["contact"]["name_note"],
+			"Chưa lấy được tên Zalo: Gói OA hiện tại không hỗ trợ gửi tin qua API",
+		)
+		self.assertEqual(res["customer_name"], frappe.db.get_value("CRM Lead", self.lead1, "lead_name"))
+		self.assertNotIn("TD106Z1", res["customer_name"])
+
+	def test_default_reason_is_sandbox_or_never_tried(self):
+		frappe.db.set_value("Omni Identity", self.ident1, "display_name", None)
+		frappe.db.commit()
+		self.as_user(SALE1)
+		self.sandbox(True)
+		self.assertIn("sandbox", zalo_tab.get_conversation("CRM Lead", self.lead1)["contact"]["name_note"])
+
+
+class TestProfileReasonAndRefresh(ZaloTabCase):
+	def msg(self):
+		key = frappe.db.get_value("Omni Identity", self.ident1, "identity_key")
+		self.addCleanup(worker_hooks.note_profile_reason, key, None)
+		self.addCleanup(frappe.cache().delete_value, f"omni:zalo:profile_fail:{key}")
+		return profile_refresh._Msg(key, "TD106Z1", self.channel.name), key
+
+	def test_sandbox_skips_api_and_records_reason(self):
+		self.sandbox(True)
+		msg, key = self.msg()
+		with mock.patch.object(ZaloClient, "get_user_profile", side_effect=AssertionError("không gọi API")):
+			self.assertEqual(worker_hooks.fetch_profile(msg, self.channel), {})
+		self.assertIn("sandbox", worker_hooks.profile_reason(key))
+
+	def test_api_error_is_classified_logged_and_reason_saved_without_secret(self):
+		self.sandbox(False)
+		msg, key = self.msg()
+		err = errors.to_error(-224)
+		with mock.patch.object(ZaloClient, "get_user_profile", side_effect=err):
+			self.assertEqual(worker_hooks.fetch_profile(msg, self.channel), {})
+		self.assertIn("không hỗ trợ gửi tin qua API", worker_hooks.profile_reason(key))
+		# cooldown: lần sau không gọi API; chạy tay (ignore_cooldown) thì gọi
+		with mock.patch.object(ZaloClient, "get_user_profile", side_effect=AssertionError("cooldown")):
+			self.assertEqual(worker_hooks.fetch_profile(msg, self.channel), {})
+		with mock.patch.object(ZaloClient, "get_user_profile", return_value={"display_name": "Mai"}) as api:
+			self.assertEqual(
+				worker_hooks.fetch_profile(msg, self.channel, ignore_cooldown=True)["display_name"], "Mai"
+			)
+		api.assert_called_once()
+		self.assertIsNone(worker_hooks.profile_reason(key))  # thành công thì xóa lý do
+
+	def test_empty_name_from_api_records_reason(self):
+		self.sandbox(False)
+		msg, key = self.msg()
+		with mock.patch.object(ZaloClient, "get_user_profile", return_value={"display_name": ""}):
+			worker_hooks.fetch_profile(msg, self.channel)
+		self.assertIn("không trả tên", worker_hooks.profile_reason(key))
+
+	def test_refresh_command_dry_run_sandbox_and_apply(self):
+		frappe.db.set_value("Omni Identity", self.ident1, "display_name", None)
+		frappe.db.commit()
+		key = frappe.db.get_value("Omni Identity", self.ident1, "identity_key")
+		self.addCleanup(worker_hooks.note_profile_reason, key, None)
+		self.addCleanup(frappe.cache().delete_value, f"omni:zalo:profile_fail:{key}")
+		with mock.patch.object(ZaloClient, "get_user_profile", side_effect=AssertionError("không gọi API")):
+			dry = profile_refresh.run()
+			self.assertTrue(dry["dry_run"])
+			self.assertGreaterEqual(dry["candidates"], 1)
+			self.sandbox(True)
+			sb = profile_refresh.run(dry_run=0)
+			self.assertTrue(sb["sandbox"])
+			self.assertEqual(sb["updated"], 0)
+		self.assertFalse(frappe.db.get_value("Omni Identity", self.ident1, "display_name"))
+		self.sandbox(False)
+		frappe.cache().set_value(
+			f"omni:zalo:profile_fail:{key}", 1, expires_in_sec=600
+		)  # đang trong thời gian chờ
+		with mock.patch.object(ZaloClient, "get_user_profile", return_value={"display_name": "Mai Thật"}):
+			res = profile_refresh.run(dry_run=0)
+		self.assertGreaterEqual(res["updated"], 1)
+		self.assertEqual(frappe.db.get_value("Omni Identity", self.ident1, "display_name"), "Mai Thật")
+		again = profile_refresh.run(dry_run=0)  # idempotent: không còn gì để cập nhật cho khách này
+		self.assertEqual(again["updated"], 0)
 
 
 class TestTabSwitch(BridgeTestCase):

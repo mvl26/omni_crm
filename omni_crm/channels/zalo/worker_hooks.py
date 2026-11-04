@@ -21,6 +21,25 @@ IDENTITY = "Omni Identity"
 OUTBOUND = "Omni Outbound Message"
 PROFILE_COOLDOWN = 600  # giây: sau lỗi lấy hồ sơ, chưa thử lại cho cùng khách
 PROFILE_EVENTS = {"message", "follow", "user_info"}
+PROFILE_NOTE_SECONDS = 30 * 24 * 3600  # giữ lý do không lấy được tên 30 ngày (bộ nhớ đệm, không đổi DocType)
+
+
+def _note_key(identity_key: str) -> str:
+	return f"omni:zalo:profile_note:{identity_key}"
+
+
+def note_profile_reason(identity_key: str, reason: str | None) -> None:
+	"""Ghi (hoặc xóa khi reason rỗng) lý do gần nhất không lấy được tên Zalo; chỉ thông điệp đã lọc, không bí mật."""
+	cache = frappe.cache()
+	if reason:
+		cache.set_value(_note_key(identity_key), reason[:200], expires_in_sec=PROFILE_NOTE_SECONDS)
+	else:
+		cache.delete_value(_note_key(identity_key))
+
+
+def profile_reason(identity_key: str) -> str | None:
+	"""Lý do gần nhất không lấy được tên Zalo của khách (None nếu chưa có ghi nhận)."""
+	return frappe.cache().get_value(_note_key(identity_key))
 
 
 def _profile_of(msg: Any) -> dict:
@@ -68,6 +87,9 @@ def _needs_profile(msg: Any, channel_doc: Any) -> bool:
 	if msg.event_type not in PROFILE_EVENTS or _profile_of(msg).get("display_name"):
 		return False
 	if not channel_doc.get_password("zalo_access_token", raise_exception=False):
+		note_profile_reason(
+			msg.identity_key, _("Kênh Zalo chưa có access token nên chưa hỏi được hồ sơ khách")
+		)
 		return False
 	name = _identity_name(msg.identity_key)
 	if name and frappe.db.get_value(IDENTITY, name, "display_name"):
@@ -75,23 +97,38 @@ def _needs_profile(msg: Any, channel_doc: Any) -> bool:
 	return not frappe.cache().get_value(f"omni:zalo:profile_fail:{msg.identity_key}", expires=True)
 
 
-def fetch_profile(msg: Any, channel_doc: Any) -> dict:
-	"""Lấy hồ sơ Zalo của khách; lỗi thì ghi log đã lọc, đặt thời gian chờ và trả {} (không ném).
+def fetch_profile(msg: Any, channel_doc: Any, ignore_cooldown: bool = False) -> dict:
+	"""Lấy hồ sơ Zalo của khách; lỗi thì ghi log đã lọc, lưu lý do, đặt thời gian chờ và trả {} (không ném).
 
-	Sandbox: không gọi API (trả {}).
+	Sandbox: không gọi API (trả {}), lý do được ghi để tab Zalo hiển thị. `ignore_cooldown`: lệnh chạy tay bỏ qua thời gian chờ.
 	"""
 	if flags.sandbox():
+		note_profile_reason(msg.identity_key, _("Đang ở chế độ thử (sandbox) nên không gọi Zalo để lấy tên"))
+		return {}
+	if not ignore_cooldown and frappe.cache().get_value(
+		f"omni:zalo:profile_fail:{msg.identity_key}", expires=True
+	):
 		return {}
 	try:
-		return ZaloClient(channel_doc.name).get_user_profile(msg.external_sender_id)
+		profile = ZaloClient(channel_doc.name).get_user_profile(msg.external_sender_id)
 	except Exception as e:
 		frappe.cache().set_value(
 			f"omni:zalo:profile_fail:{msg.identity_key}", 1, expires_in_sec=PROFILE_COOLDOWN
 		)
+		reason = getattr(e, "message_vi", None) or _("Lỗi gọi Zalo ({0})").format(type(e).__name__)
+		note_profile_reason(msg.identity_key, redact(str(reason)))
 		frappe.logger("omni").warning(
 			"omni zalo: không lấy được hồ sơ khách (kênh %s): %s", channel_doc.name, redact(str(e))[:200]
 		)
 		return {}
+	if not profile.get("display_name"):
+		note_profile_reason(
+			msg.identity_key,
+			_("Zalo không trả tên cho khách này (khách chưa chia sẻ hoặc OA không có quyền)"),
+		)
+	else:
+		note_profile_reason(msg.identity_key, None)
+	return profile
 
 
 def _is_own_send(msg: Any) -> bool:

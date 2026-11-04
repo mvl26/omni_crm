@@ -39,10 +39,10 @@ index bc2f6dc..522d37c 100644
          <Button
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..ff5bf07
+index 0000000..593dd1e
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,342 @@
+@@ -0,0 +1,349 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <div
@@ -144,7 +144,9 @@ index 0000000..ff5bf07
 +      </div>
 +      <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
 +        <span>{{
-+          __('Trong danh sách chat, tìm khách theo tên hoặc mã Zalo:')
++          directLink
++            ? __('Mở đúng hội thoại của khách:')
++            : __('Trong danh sách chat, tìm khách theo tên hoặc mã Zalo:')
 +        }}</span>
 +        <span v-if="contactNames" class="font-medium text-ink-gray-9">{{
 +          contactNames
@@ -160,6 +162,9 @@ index 0000000..ff5bf07
 +            @click="copyId"
 +          />
 +        </template>
++      </div>
++      <div v-if="contact.name_note" class="mt-1 text-xs text-ink-gray-5">
++        {{ contact.name_note }}
 +      </div>
 +    </div>
 +
@@ -228,6 +233,7 @@ index 0000000..ff5bf07
 +  dayLabel,
 +  groupByDay,
 +  copyToClipboard,
++  hasDirectChatLink,
 +  isRelevantUpdate,
 +  openOaChat,
 +  shortZaloId,
@@ -280,6 +286,7 @@ index 0000000..ff5bf07
 +// Nhắn từ trang chính thức của Zalo OA (OA gói Cơ bản không gửi được qua API). Zalo không mở thẳng hội thoại theo
 +// tham số, nên chỉ hiện thông tin để nhân viên tự tìm khách. Zalo chặn nhúng trang chat vào khung (đã thử): chỉ có nút mở cửa sổ riêng.
 +const contact = computed(() => conversation.data?.contact || null)
++const directLink = computed(() => hasDirectChatLink(contact.value))
 +const contactNames = computed(() => {
 +  const c = contact.value
 +  if (!c) return ''
@@ -287,7 +294,7 @@ index 0000000..ff5bf07
 +})
 +
 +function openChat() {
-+  if (!openOaChat()) toast.error(__('Trình duyệt chặn cửa sổ mới'))
++  if (!openOaChat(contact.value)) toast.error(__('Trình duyệt chặn cửa sổ mới'))
 +}
 +
 +async function copyId() {
@@ -499,10 +506,10 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..599d534
+index 0000000..fccac9d
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,149 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -596,7 +603,7 @@ index 0000000..599d534
 +
 +// --- Nhắn từ trang chính thức của Zalo OA (OA gói Cơ bản không gửi được qua API) ---
 +
-+/** Trang chat chính thức của Zalo OA. Zalo bỏ tham số uid/oaId nên không mở thẳng hội thoại của khách. */
++/** Trang chat chính thức của Zalo OA (chung, không chọn khách). */
 +export const OA_CHAT_URL = 'https://oa.zalo.me/chat'
 +/** Tham số cửa sổ chat: nhỏ gọn để đặt cạnh trang Lead; luôn noopener,noreferrer. */
 +export function chatWindowFeatures(screenWidth = 1280, screenHeight = 800) {
@@ -606,12 +613,28 @@ index 0000000..599d534
 +  return `noopener,noreferrer,popup=yes,width=${width},height=${height},left=${left},top=40`
 +}
 +
-+/** Mở trang chat Zalo OA ở cửa sổ mới; trả true nếu gọi được window.open. */
-+export function openOaChat(win = globalThis.window) {
++/**
++ * Địa chỉ mở đúng hội thoại của khách: ?uid=<mã người dùng Zalo>&oaid=<mã OA> (oaid CHỮ THƯỜNG; viết oaId thì Zalo bỏ
++ * tham số). Chỉ nhận chuỗi số; thiếu hoặc không hợp lệ một trong hai thì rơi về trang chat chung.
++ */
++export function buildOaChatUrl(contact) {
++  const uid = String(contact?.zalo_user_id ?? '').trim()
++  const oaid = String(contact?.oa_id ?? '').trim()
++  if (!/^\d{1,32}$/.test(uid) || !/^\d{1,32}$/.test(oaid)) return OA_CHAT_URL
++  return `${OA_CHAT_URL}?uid=${encodeURIComponent(uid)}&oaid=${encodeURIComponent(oaid)}`
++}
++
++/** Có mở thẳng được hội thoại của khách không (đủ cả uid và oaid hợp lệ). */
++export function hasDirectChatLink(contact) {
++  return buildOaChatUrl(contact) !== OA_CHAT_URL
++}
++
++/** Mở trang chat Zalo OA (đúng hội thoại nếu đủ thông tin) ở cửa sổ mới; trả true nếu gọi được window.open. */
++export function openOaChat(contact = null, win = globalThis.window) {
 +  if (!win || typeof win.open !== 'function') return false
 +  const screen = win.screen || {}
 +  win.open(
-+    OA_CHAT_URL,
++    buildOaChatUrl(contact),
 +    '_blank',
 +    chatWindowFeatures(screen.availWidth, screen.availHeight),
 +  )
@@ -638,13 +661,15 @@ index 0000000..599d534
 +}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..20f4f48
+index 0000000..2b17adc
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,206 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
++  buildOaChatUrl,
++  hasDirectChatLink,
 +  bubbleSide,
 +  chatWindowFeatures,
 +  copyToClipboard,
@@ -764,6 +789,39 @@ index 0000000..20f4f48
 +})
 +
 +describe('mở chat Zalo OA / sao chép mã', () => {
++  it('dựng URL mở đúng hội thoại với oaid chữ thường', () => {
++    const contact = {
++      zalo_user_id: '2716764713514648383',
++      oa_id: '378159422113841368',
++    }
++    expect(buildOaChatUrl(contact)).toBe(
++      'https://oa.zalo.me/chat?uid=2716764713514648383&oaid=378159422113841368',
++    )
++    expect(buildOaChatUrl(contact)).not.toContain('oaId')
++    expect(hasDirectChatLink(contact)).toBe(true)
++  })
++  it('thiếu hoặc không phải số thì rơi về trang chung (chống chèn tham số)', () => {
++    for (const bad of [
++      null,
++      {},
++      { zalo_user_id: '123' },
++      { oa_id: '456' },
++      { zalo_user_id: '12 3', oa_id: '456' },
++      { zalo_user_id: '123&x=1', oa_id: '456' },
++      { zalo_user_id: '123', oa_id: '4/../56' },
++      { zalo_user_id: 'abc', oa_id: '456' },
++    ]) {
++      expect(buildOaChatUrl(bad)).toBe('https://oa.zalo.me/chat')
++      expect(hasDirectChatLink(bad)).toBe(false)
++    }
++  })
++  it('openOaChat mở URL của khách', () => {
++    const calls = []
++    const win = { screen: {}, open: (...a) => calls.push(a) }
++    openOaChat({ zalo_user_id: '1', oa_id: '2' }, win)
++    expect(calls[0][0]).toBe('https://oa.zalo.me/chat?uid=1&oaid=2')
++    expect(calls[0][2]).toContain('noopener,noreferrer')
++  })
 +  it('URL cố định, đúng https và không chứa tham số khách', () => {
 +    expect(OA_CHAT_URL).toBe('https://oa.zalo.me/chat')
 +  })
@@ -783,12 +841,12 @@ index 0000000..20f4f48
 +      screen: { availWidth: 1600, availHeight: 900 },
 +      open: (...a) => calls.push(a),
 +    }
-+    expect(openOaChat(win)).toBe(true)
++    expect(openOaChat(null, win)).toBe(true)
 +    expect(calls[0][0]).toBe('https://oa.zalo.me/chat')
 +    expect(calls[0][1]).toBe('_blank')
 +    expect(calls[0][2]).toContain('noopener,noreferrer')
-+    expect(openOaChat(null)).toBe(false)
-+    expect(openOaChat({})).toBe(false)
++    expect(openOaChat(null, null)).toBe(false)
++    expect(openOaChat(null, {})).toBe(false)
 +  })
 +  it('rút gọn mã Zalo', () => {
 +    expect(shortZaloId('2716764713514648383')).toBe('2716…8383')

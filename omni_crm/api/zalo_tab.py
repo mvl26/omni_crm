@@ -14,6 +14,7 @@ from frappe import _
 
 from omni_crm import flags
 from omni_crm.api import inbox
+from omni_crm.channels.zalo import worker_hooks
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.pipeline import outbound as outbound_pipeline
 
@@ -68,26 +69,46 @@ def _message(item: dict) -> dict:
 
 
 def _contact(lead: str, data: dict) -> dict | None:
-	"""Thông tin để nhân viên tự tìm khách trong trang chat Zalo OA chính thức (Zalo không mở thẳng hội thoại theo tham số).
+	"""Thông tin để mở đúng hội thoại trên trang chat Zalo OA chính thức và để nhân viên nhận ra khách.
 
-	Chỉ gồm tên khách (Lead, định danh) và mã người dùng Zalo; None khi Lead không có định danh Zalo hoặc khách đã từ chối liên hệ.
+	Gồm tên khách (Lead, định danh), mã người dùng Zalo, mã OA của kênh, và lý do chưa có tên Zalo (nếu thiếu). None khi Lead
+	không có định danh Zalo hoặc khách đã từ chối liên hệ.
 	"""
 	if (data.get("profile") or {}).get("person_refused"):
 		return None
 	rows = frappe.get_all(
 		"Omni Identity",
 		filters={"lead": lead, "channel_type": CHANNEL},
-		fields=["external_id", "display_name"],
+		fields=["name", "identity_key", "external_id", "display_name"],
 		order_by="last_inbound_at desc, creation desc",
 		limit_page_length=1,
 	)
 	if not rows:
 		return None
+	ident = rows[0]
+	channel = frappe.db.get_value(
+		"Omni Inbound Message", {"identity": ident.name}, "channel", order_by="received_at desc"
+	) or frappe.db.get_value("Omni Channel", {"channel_type": CHANNEL, "enabled": 1}, "name")
+	oa_id = (frappe.db.get_value("Omni Channel", channel, "zalo_oa_id") if channel else None) or ""
 	return {
 		"lead_name": data["lead"].get("lead_name") or "",
-		"display_name": rows[0].display_name or "",
-		"zalo_user_id": rows[0].external_id or "",
+		"display_name": ident.display_name or "",
+		"zalo_user_id": ident.external_id or "",
+		"oa_id": str(oa_id).strip(),
+		"name_note": "" if ident.display_name else _name_note(ident.identity_key),
 	}
+
+
+def _name_note(identity_key: str) -> str:
+	""" "Chưa lấy được tên Zalo: <lý do>" cho khách chưa có tên định danh (lý do chỉ là thông điệp đã lọc, không bí mật)."""
+	reason = worker_hooks.profile_reason(identity_key)
+	if not reason:
+		reason = (
+			_("Đang ở chế độ thử (sandbox) nên không gọi Zalo để lấy tên")
+			if flags.sandbox()
+			else _("chưa có lần lấy hồ sơ nào hoặc Zalo không trả tên")
+		)
+	return _("Chưa lấy được tên Zalo: {0}").format(reason)
 
 
 def _compose(data: dict, can_write: bool) -> dict:
