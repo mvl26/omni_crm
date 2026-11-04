@@ -387,3 +387,50 @@ class TestTabSwitch(BridgeTestCase):
 		frappe.set_user("Guest")
 		self.addCleanup(frappe.set_user, "Administrator")
 		self.assertFalse(zalo_tab.tab_state()["enabled"])
+
+
+class TestCrmFrontendPatchFiles(BridgeTestCase):
+	"""Kiểm tĩnh bộ patch giao diện crm (V3-01, ADR 0016): đúng phạm vi tối thiểu, không có mã nguy hiểm. KHÔNG áp patch."""
+
+	ALLOWED = frozenset(
+		{
+			"frontend/src/components/Activities/ActivityHeader.vue",
+			"frontend/src/components/Activities/Activities.vue",
+			"frontend/src/components/Activities/ZaloTab.vue",
+			"frontend/src/components/Icons/ZaloIcon.vue",
+			"frontend/src/composables/zalo.js",
+			"frontend/src/pages/Deal.vue",
+			"frontend/src/pages/Lead.vue",
+			"frontend/src/utils/zaloThread.js",
+			"frontend/tests/unit/zaloThread.test.js",
+		}
+	)
+
+	def setUp(self):
+		from pathlib import Path
+
+		self.dir = Path(__file__).resolve().parents[1] / "crm_frontend_patch"
+		self.patch = (self.dir / "0001-zalo-tab.patch").read_text(encoding="utf-8")
+
+	def test_patch_only_touches_allowed_files(self):
+		import re
+
+		files = set(re.findall(r"^diff --git a/(\S+) b/", self.patch, flags=re.M))
+		self.assertEqual(files, self.ALLOWED)
+
+	def test_added_code_has_no_v_html_or_eval(self):
+		added = "\n".join(line for line in self.patch.splitlines() if line.startswith("+"))
+		for bad in ("v-html", "innerHTML", "eval(", "document.write"):
+			self.assertNotIn(bad, added)
+
+	def test_scripts_pin_commit_and_are_executable(self):
+		import os
+
+		pin = (self.dir / "CRM_VERSION").read_text().split()
+		self.assertEqual(pin[0], "v1.73.0")
+		self.assertEqual(len(pin[1]), 40)
+		for name in ("apply.sh", "build.sh"):
+			self.assertTrue(os.access(self.dir / name, os.X_OK), name)
+
+	def test_compose_exposes_max_chars(self):
+		self.assertEqual(zalo_tab._compose({}, False)["max_chars"], outbound.MAX_TEXT_CHARS)

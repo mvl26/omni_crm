@@ -1,0 +1,666 @@
+diff --git a/frontend/src/components/Activities/Activities.vue b/frontend/src/components/Activities/Activities.vue
+index e262752..a9244a8 100644
+--- a/frontend/src/components/Activities/Activities.vue
++++ b/frontend/src/components/Activities/Activities.vue
+@@ -10,7 +10,13 @@
+     :whatsappBox="whatsappBox"
+     :modalRef="modalRef"
+   />
+-  <FadedScrollableDiv class="flex flex-col h-full overflow-y-auto">
++  <ZaloTab
++    v-if="title == 'Zalo'"
++    :key="doctype + docname"
++    :doctype="doctype"
++    :docname="docname"
++  />
++  <FadedScrollableDiv v-else class="flex flex-col h-full overflow-y-auto">
+     <div
+       v-if="all_activities?.loading"
+       class="flex flex-1 flex-col items-center justify-center gap-3 text-xl font-medium text-ink-gray-4"
+@@ -466,6 +472,7 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+ import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
+ import WhatsAppArea from '@/components/Activities/WhatsAppArea.vue'
+ import WhatsAppBox from '@/components/Activities/WhatsAppBox.vue'
++import ZaloTab from '@/components/Activities/ZaloTab.vue'
+ import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
+ import EmptyState from '@/components/ListViews/EmptyState.vue'
+ import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
+diff --git a/frontend/src/components/Activities/ActivityHeader.vue b/frontend/src/components/Activities/ActivityHeader.vue
+index bc2f6dc..522d37c 100644
+--- a/frontend/src/components/Activities/ActivityHeader.vue
++++ b/frontend/src/components/Activities/ActivityHeader.vue
+@@ -58,6 +58,7 @@
+         @click="whatsappBox.show()"
+       />
+     </div>
++    <div v-else-if="title == 'Zalo'" />
+     <Dropdown v-else :options="defaultActions" @click.stop>
+       <template #default="{ open }">
+         <Button
+diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
+new file mode 100644
+index 0000000..016bf94
+--- /dev/null
++++ b/frontend/src/components/Activities/ZaloTab.vue
+@@ -0,0 +1,292 @@
++<template>
++  <div class="flex h-full min-h-0 flex-col overflow-hidden">
++    <div
++      ref="scroller"
++      class="min-h-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-10"
++    >
++      <div
++        v-if="conversation.loading && !conversation.data"
++        class="flex items-center justify-center gap-3 py-10 text-ink-gray-4"
++      >
++        <LoadingIndicator class="h-5 w-5" />
++        <span>{{ __('Loading...') }}</span>
++      </div>
++      <div
++        v-else-if="loadFailed"
++        class="py-10 text-center text-base text-ink-red-3"
++      >
++        {{ __('Không tải được hội thoại Zalo. Thử tải lại trang.') }}
++      </div>
++      <div
++        v-else-if="!messages.length"
++        class="py-10 text-center text-base text-ink-gray-5"
++      >
++        {{ __('Chưa có tin nhắn Zalo nào với khách này.') }}
++      </div>
++      <template v-else>
++        <div
++          v-if="conversation.data?.truncated"
++          class="pb-2 text-center text-sm text-ink-gray-5"
++        >
++          {{ __('Chỉ hiện các tin gần nhất. Xem đầy đủ trong Hộp thư Omni.') }}
++        </div>
++        <div v-for="group in groups" :key="group.day">
++          <div class="py-2 text-center text-xs text-ink-gray-5">
++            {{ dayLabel(group.day) }}
++          </div>
++          <div
++            v-for="msg in group.items"
++            :key="msg.name"
++            class="activity mb-2 flex"
++            :class="
++              bubbleSide(msg) === 'right' ? 'justify-end' : 'justify-start'
++            "
++          >
++            <div
++              :class="[
++                'max-w-[85%] rounded-lg px-3 py-1.5 text-base text-ink-gray-9 shadow-sm',
++                bubbleSide(msg) === 'right'
++                  ? 'bg-blue-100'
++                  : 'bg-surface-gray-2',
++                msg.status === 'Failed' || msg.status === 'Blocked'
++                  ? 'border border-red-400'
++                  : '',
++              ]"
++            >
++              <div class="mb-0.5 text-xs text-ink-gray-5">
++                {{ senderLabel(msg) }}
++              </div>
++              <div v-if="msg.text" class="whitespace-pre-wrap break-words">
++                {{ msg.text }}
++              </div>
++              <div
++                v-for="att in safeAttachments(msg.attachments)"
++                :key="att.url"
++                class="mt-1 text-sm"
++              >
++                <a
++                  :href="att.url"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  class="text-ink-blue-3 underline"
++                  >{{ att.name }}</a
++                >
++              </div>
++              <div
++                v-if="msg.sandbox"
++                class="mt-1 text-xs italic text-ink-gray-6"
++              >
++                {{ __('Thử nghiệm (sandbox), chưa gửi tới khách') }}
++              </div>
++              <div v-if="statusText(msg)" class="mt-1 text-xs text-ink-red-3">
++                {{ statusText(msg) }}
++              </div>
++              <div class="mt-0.5 text-right text-xs text-ink-gray-5">
++                {{ timeLabel(msg.at) }}
++              </div>
++            </div>
++          </div>
++        </div>
++      </template>
++    </div>
++
++    <div class="border-t px-3 py-2.5 sm:px-10">
++      <div
++        v-if="!compose.can_send"
++        class="mb-2 rounded bg-surface-gray-2 px-3 py-2 text-sm text-ink-gray-7"
++      >
++        {{ compose.reason }}
++      </div>
++      <div
++        v-else-if="compose.paid && compose.message"
++        class="mb-2 rounded border border-amber-400 px-3 py-2 text-sm text-ink-gray-8"
++      >
++        {{ compose.message }}
++      </div>
++      <div
++        v-if="compose.sandbox && compose.linked"
++        class="mb-1 text-xs text-ink-gray-5"
++      >
++        {{
++          __('Chế độ thử: tin gửi chỉ được ghi lại, không gửi thật tới khách.')
++        }}
++      </div>
++      <div v-if="compose.quota" class="mb-1 text-xs text-ink-gray-5">
++        {{ compose.quota.text }}
++      </div>
++      <div class="flex items-end gap-2">
++        <Textarea
++          v-model="text"
++          type="textarea"
++          class="min-h-8 w-full"
++          :rows="3"
++          :disabled="!compose.can_send"
++          :placeholder="__('Nhập tin trả lời Zalo')"
++          @keydown.enter.exact.prevent="submit(0)"
++        />
++        <Button
++          variant="solid"
++          :label="__('Gửi qua Zalo')"
++          :loading="sending"
++          :disabled="!canSubmit(compose, text, sending, compose.max_chars)"
++          @click="submit(0)"
++        />
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
++import {
++  Button,
++  LoadingIndicator,
++  Textarea,
++  call,
++  createResource,
++  toast,
++} from 'frappe-ui'
++import { globalStore } from '@/stores/global'
++import {
++  POLL_MS,
++  ZALO_EVENT,
++  bubbleSide,
++  canSubmit,
++  dayLabel,
++  groupByDay,
++  isRelevantUpdate,
++  safeAttachments,
++  sourceOf,
++  timeLabel,
++} from '@/utils/zaloThread'
++
++const props = defineProps({
++  doctype: { type: String, required: true },
++  docname: { type: String, required: true },
++})
++
++const { $socket } = globalStore()
++
++const text = ref('')
++const sending = ref(false)
++const scroller = ref(null)
++const loadFailed = ref(false)
++
++// Dữ liệu và mọi guard (khung 48 giờ, hạn mức, từ chối liên hệ, sandbox) nằm ở máy chủ: omni_crm.api.zalo_tab.
++const conversation = createResource({
++  url: 'omni_crm.api.zalo_tab.get_conversation',
++  makeParams: () => ({ doctype: props.doctype, name: props.docname }),
++  auto: true,
++  onSuccess: () => {
++    loadFailed.value = false
++    nextTick(scrollToBottom)
++  },
++  onError: () => {
++    loadFailed.value = true
++  },
++})
++
++const messages = computed(() => conversation.data?.messages || [])
++const groups = computed(() => groupByDay(messages.value))
++const compose = computed(
++  () =>
++    conversation.data?.compose || {
++      can_send: false,
++      reason: '',
++      paid: false,
++      message: '',
++      sandbox: false,
++      quota: null,
++      linked: false,
++    },
++)
++
++function senderLabel(msg) {
++  const source = sourceOf(msg)
++  if (source === 'customer') return msg.sender
++  if (source === 'bot') return `${__('Bot')} · ${msg.sender}`
++  if (source === 'echo') return __('Nhân viên (ngoài hệ thống)')
++  return `${__('Sale')} · ${msg.sender}`
++}
++
++function statusText(msg) {
++  if (msg.status === 'Queued' || msg.queued) return __('Đang gửi...')
++  if (msg.status === 'Blocked') return msg.error || __('Bị chặn, chưa gửi')
++  if (msg.status === 'Failed') return msg.error || __('Gửi lỗi')
++  return ''
++}
++
++function scrollToBottom() {
++  const el = scroller.value
++  if (el) el.scrollTop = el.scrollHeight
++}
++
++function reload() {
++  if (sending.value) return
++  conversation.reload()
++}
++
++async function submit(confirmPaid) {
++  if (
++    !canSubmit(
++      compose.value,
++      text.value,
++      sending.value,
++      compose.value.max_chars,
++    )
++  )
++    return
++  const body = text.value
++  sending.value = true
++  try {
++    const res = await call('omni_crm.api.zalo_tab.send', {
++      doctype: props.doctype,
++      name: props.docname,
++      text: body,
++      confirm_paid: confirmPaid,
++    })
++    if (res?.status === 'confirm_required') {
++      if (window.confirm(`${res.warning}\n\n${__('Bạn vẫn muốn gửi?')}`)) {
++        sending.value = false
++        return submit(1)
++      }
++    } else if (res?.status === 'Blocked') {
++      toast.error(res.reason || __('Tin bị chặn, chưa gửi'))
++    } else {
++      text.value = ''
++    }
++  } catch (error) {
++    toast.error(
++      error?.messages?.[0] || error?.message || __('Không gửi được tin Zalo'),
++    )
++  } finally {
++    sending.value = false
++    conversation.reload()
++  }
++}
++
++// Realtime: payload chỉ có {lead, channels}, không có nội dung tin; nhận tín hiệu rồi tải lại qua API có kiểm quyền.
++let timer = null
++let poll = null
++function onUpdate(payload) {
++  if (!isRelevantUpdate(payload, conversation.data?.lead)) return
++  clearTimeout(timer)
++  timer = setTimeout(reload, 500)
++}
++
++onMounted(() => {
++  $socket?.on(ZALO_EVENT, onUpdate)
++  poll = setInterval(reload, POLL_MS) // dự phòng khi mất kết nối realtime
++})
++
++onBeforeUnmount(() => {
++  $socket?.off(ZALO_EVENT, onUpdate)
++  clearInterval(poll)
++  clearTimeout(timer)
++})
++
++watch(
++  () => [props.doctype, props.docname],
++  () => conversation.reload(),
++)
++</script>
+diff --git a/frontend/src/components/Icons/ZaloIcon.vue b/frontend/src/components/Icons/ZaloIcon.vue
+new file mode 100644
+index 0000000..0db54de
+--- /dev/null
++++ b/frontend/src/components/Icons/ZaloIcon.vue
+@@ -0,0 +1,16 @@
++<template>
++  <svg
++    width="16"
++    height="16"
++    viewBox="0 0 16 16"
++    fill="none"
++    xmlns="http://www.w3.org/2000/svg"
++  >
++    <path
++      d="M3 3.5h10a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z"
++      stroke="currentColor"
++      stroke-width="1.2"
++      stroke-linejoin="round"
++    />
++  </svg>
++</template>
+diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
+new file mode 100644
+index 0000000..5e7db68
+--- /dev/null
++++ b/frontend/src/composables/zalo.js
+@@ -0,0 +1,18 @@
++import { createResource } from 'frappe-ui'
++import { ref } from 'vue'
++
++// Tab Zalo chỉ hiện khi app omni_crm đã cài và công tắc không bị tắt (Omni Settings.zalo_tab_disabled).
++// Nếu omni_crm không có trên site, lời gọi lỗi và tab đơn giản không hiện (CRM chạy như cũ).
++export const zaloEnabled = ref(false)
++
++createResource({
++  url: 'omni_crm.api.zalo_tab.tab_state',
++  cache: 'Omni Zalo Tab Enabled',
++  auto: true,
++  onSuccess: (data) => {
++    zaloEnabled.value = Boolean(data?.enabled)
++  },
++  onError: () => {
++    zaloEnabled.value = false
++  },
++})
+diff --git a/frontend/src/pages/Deal.vue b/frontend/src/pages/Deal.vue
+index 77cd4b7..6c14517 100644
+--- a/frontend/src/pages/Deal.vue
++++ b/frontend/src/pages/Deal.vue
+@@ -349,6 +349,7 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+ import TaskIcon from '@/components/Icons/TaskIcon.vue'
+ import NoteIcon from '@/components/Icons/NoteIcon.vue'
+ import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
++import ZaloIcon from '@/components/Icons/ZaloIcon.vue'
+ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
+ import LinkIcon from '@/components/Icons/LinkIcon.vue'
+ import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
+@@ -379,6 +380,7 @@ import { statusesStore } from '@/stores/statuses'
+ import { getMeta } from '@/stores/meta'
+ import { useDocument } from '@/data/document'
+ import { whatsappEnabled } from '@/composables/whatsapp'
++import { zaloEnabled } from '@/composables/zalo'
+ import { callEnabled } from '@/composables/telephony'
+ import { useBroadcast } from '@/composables/useBroadcast'
+ import {
+@@ -601,6 +603,12 @@ const tabs = computed(() => {
+       icon: WhatsAppIcon,
+       condition: () => whatsappEnabled.value,
+     },
++    {
++      name: 'Zalo',
++      label: __('Zalo'),
++      icon: ZaloIcon,
++      condition: () => zaloEnabled.value,
++    },
+   ]
+   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+ })
+diff --git a/frontend/src/pages/Lead.vue b/frontend/src/pages/Lead.vue
+index d363cbf..d56df0a 100644
+--- a/frontend/src/pages/Lead.vue
++++ b/frontend/src/pages/Lead.vue
+@@ -246,6 +246,7 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+ import TaskIcon from '@/components/Icons/TaskIcon.vue'
+ import NoteIcon from '@/components/Icons/NoteIcon.vue'
+ import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
++import ZaloIcon from '@/components/Icons/ZaloIcon.vue'
+ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
+ import CameraIcon from '@/components/Icons/CameraIcon.vue'
+ import LinkIcon from '@/components/Icons/LinkIcon.vue'
+@@ -273,6 +274,7 @@ import { statusesStore } from '@/stores/statuses'
+ import { getMeta } from '@/stores/meta'
+ import { useDocument } from '@/data/document'
+ import { whatsappEnabled } from '@/composables/whatsapp'
++import { zaloEnabled } from '@/composables/zalo'
+ import { callEnabled } from '@/composables/telephony'
+ import {
+   createResource,
+@@ -453,6 +455,12 @@ const tabs = computed(() => {
+       icon: WhatsAppIcon,
+       condition: () => whatsappEnabled.value,
+     },
++    {
++      name: 'Zalo',
++      label: __('Zalo'),
++      icon: ZaloIcon,
++      condition: () => zaloEnabled.value,
++    },
+   ]
+   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+ })
+diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
+new file mode 100644
+index 0000000..959ad1b
+--- /dev/null
++++ b/frontend/src/utils/zaloThread.js
+@@ -0,0 +1,90 @@
++// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
++
++export const ZALO_EVENT = 'omni_inbox_update'
++export const POLL_MS = 60000
++
++/** Chỉ cho phép liên kết http(s); mọi thứ khác (javascript:, data:, /files/...) bị bỏ. */
++export function isSafeUrl(url) {
++  return /^https?:\/\//i.test(String(url || '').trim())
++}
++
++/** Danh sách đính kèm đã lọc: chỉ URL http(s), mỗi mục có name để hiển thị. */
++export function safeAttachments(list) {
++  if (!Array.isArray(list)) return []
++  return list
++    .filter((a) => a && isSafeUrl(a.url))
++    .map((a) => ({
++      url: String(a.url).trim(),
++      name: String(a.name || a.url).slice(0, 120),
++    }))
++}
++
++/** 'left' cho khách, 'right' cho nhân viên / bot / nhân viên trả lời ngoài hệ thống. */
++export function bubbleSide(msg) {
++  return msg?.kind === 'customer' || msg?.direction === 'in' ? 'left' : 'right'
++}
++
++/** Nguồn tin: customer | sale | bot | echo. */
++export function sourceOf(msg) {
++  if (msg?.kind === 'bot' || msg?.bot_sent) return 'bot'
++  if (msg?.kind === 'echo') return 'echo'
++  if (bubbleSide(msg) === 'left') return 'customer'
++  return 'sale'
++}
++
++function parseAt(at) {
++  if (!at) return null
++  const d = new Date(String(at).replace(' ', 'T').slice(0, 19))
++  return isNaN(d.getTime()) ? null : d
++}
++
++const pad = (n) => String(n).padStart(2, '0')
++
++/** Ngày (YYYY-MM-DD) của thời điểm; '' nếu không đọc được. */
++export function dayKey(at) {
++  const d = parseAt(at)
++  return d
++    ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
++    : ''
++}
++
++/** Giờ:phút (HH:mm); '' nếu không đọc được. */
++export function timeLabel(at) {
++  const d = parseAt(at)
++  return d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : ''
++}
++
++/** Nhãn ngày dd/mm/yyyy cho đường phân cách ngày. */
++export function dayLabel(key) {
++  const [y, m, d] = String(key).split('-')
++  return y && m && d ? `${d}/${m}/${y}` : ''
++}
++
++/** Nhóm tin theo ngày, giữ thứ tự thời gian: [{ day, items }]. */
++export function groupByDay(messages) {
++  const groups = []
++  for (const msg of messages || []) {
++    const day = dayKey(msg.at)
++    const last = groups[groups.length - 1]
++    if (last && last.day === day) last.items.push(msg)
++    else groups.push({ day, items: [msg] })
++  }
++  return groups
++}
++
++/** Có được bấm Gửi không: khung soạn mở, có chữ, không quá giới hạn, không đang gửi. */
++export function canSubmit(compose, text, sending, maxChars = 6000) {
++  const value = String(text || '').trim()
++  return Boolean(
++    compose?.can_send && !sending && value && value.length <= maxChars,
++  )
++}
++
++/** Tín hiệu realtime `omni_inbox_update` có thuộc hội thoại đang xem không (payload chỉ có {lead, channels}). */
++export function isRelevantUpdate(payload, lead) {
++  if (!payload || !lead || payload.lead !== lead) return false
++  const channels = payload.channels
++  return (
++    !Array.isArray(channels) || !channels.length || channels.includes('Zalo OA')
++  )
++}
+diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
+new file mode 100644
+index 0000000..92a3ba6
+--- /dev/null
++++ b/frontend/tests/unit/zaloThread.test.js
+@@ -0,0 +1,115 @@
++import { describe, expect, it } from 'vitest'
++import {
++  bubbleSide,
++  canSubmit,
++  dayKey,
++  dayLabel,
++  groupByDay,
++  isRelevantUpdate,
++  isSafeUrl,
++  safeAttachments,
++  sourceOf,
++  timeLabel,
++} from '@/utils/zaloThread'
++
++describe('isSafeUrl / safeAttachments', () => {
++  it('chỉ nhận http(s)', () => {
++    expect(isSafeUrl('https://x.example/a.png')).toBe(true)
++    expect(isSafeUrl(' HTTP://x.example ')).toBe(true)
++    for (const bad of [
++      'javascript:alert(1)',
++      'data:text/html,x',
++      '/files/a.pdf',
++      '//x.example',
++      '',
++      null,
++      undefined,
++    ]) {
++      expect(isSafeUrl(bad)).toBe(false)
++    }
++  })
++  it('lọc đính kèm và đặt tên', () => {
++    const out = safeAttachments([
++      { url: 'https://x.example/a.png', name: 'a.png' },
++      { url: 'javascript:x' },
++      { url: 'https://x.example/b' },
++      null,
++    ])
++    expect(out).toEqual([
++      { url: 'https://x.example/a.png', name: 'a.png' },
++      { url: 'https://x.example/b', name: 'https://x.example/b' },
++    ])
++    expect(safeAttachments(undefined)).toEqual([])
++  })
++})
++
++describe('bubbleSide / sourceOf', () => {
++  it('khách bên trái, còn lại bên phải', () => {
++    expect(bubbleSide({ kind: 'customer', direction: 'in' })).toBe('left')
++    for (const kind of ['sale', 'bot', 'echo']) {
++      expect(bubbleSide({ kind, direction: 'out' })).toBe('right')
++    }
++  })
++  it('nhận biết nguồn', () => {
++    expect(sourceOf({ kind: 'customer', direction: 'in' })).toBe('customer')
++    expect(sourceOf({ kind: 'bot', direction: 'out' })).toBe('bot')
++    expect(sourceOf({ kind: 'sale', bot_sent: true, direction: 'out' })).toBe(
++      'bot',
++    )
++    expect(sourceOf({ kind: 'echo', direction: 'out' })).toBe('echo')
++    expect(sourceOf({ kind: 'sale', direction: 'out' })).toBe('sale')
++  })
++})
++
++describe('thời gian và nhóm theo ngày', () => {
++  it('định dạng giờ và ngày theo giờ máy chủ', () => {
++    expect(timeLabel('2026-11-04 09:05:33.123456')).toBe('09:05')
++    expect(dayKey('2026-11-04 23:59:59')).toBe('2026-11-04')
++    expect(dayLabel('2026-11-04')).toBe('04/11/2026')
++    expect(timeLabel('hỏng')).toBe('')
++    expect(dayKey(null)).toBe('')
++  })
++  it('nhóm tin theo ngày, giữ thứ tự', () => {
++    const msgs = [
++      { name: 'a', at: '2026-11-03 23:00:00' },
++      { name: 'b', at: '2026-11-04 00:10:00' },
++      { name: 'c', at: '2026-11-04 08:00:00' },
++    ]
++    const groups = groupByDay(msgs)
++    expect(groups.map((g) => g.day)).toEqual(['2026-11-03', '2026-11-04'])
++    expect(groups[1].items.map((m) => m.name)).toEqual(['b', 'c'])
++    expect(groupByDay(null)).toEqual([])
++  })
++})
++
++describe('canSubmit', () => {
++  const open = { can_send: true }
++  it('cần khung mở, có chữ, không đang gửi', () => {
++    expect(canSubmit(open, 'xin chào', false)).toBe(true)
++    expect(canSubmit(open, '   ', false)).toBe(false)
++    expect(canSubmit(open, 'x', true)).toBe(false)
++    expect(canSubmit({ can_send: false }, 'x', false)).toBe(false)
++    expect(canSubmit(null, 'x', false)).toBe(false)
++  })
++  it('chặn tin quá dài', () => {
++    expect(canSubmit(open, 'a'.repeat(6001), false, 6000)).toBe(false)
++    expect(canSubmit(open, 'a'.repeat(6000), false, 6000)).toBe(true)
++  })
++})
++
++describe('isRelevantUpdate', () => {
++  it('chỉ nhận tín hiệu đúng Lead và đúng kênh', () => {
++    expect(isRelevantUpdate({ lead: 'L1', channels: ['Zalo OA'] }, 'L1')).toBe(
++      true,
++    )
++    expect(isRelevantUpdate({ lead: 'L1', channels: [] }, 'L1')).toBe(true)
++    expect(isRelevantUpdate({ lead: 'L1', channels: ['Email'] }, 'L1')).toBe(
++      false,
++    )
++    expect(isRelevantUpdate({ lead: 'L2', channels: ['Zalo OA'] }, 'L1')).toBe(
++      false,
++    )
++    expect(isRelevantUpdate(null, 'L1')).toBe(false)
++    expect(isRelevantUpdate({ lead: 'L1' }, null)).toBe(false)
++  })
++})

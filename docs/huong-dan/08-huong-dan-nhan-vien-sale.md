@@ -59,6 +59,14 @@ Bấm vào một dòng ở bên trái. Bên phải hiện:
 
 Nếu bạn trả lời khách trực tiếp trong ứng dụng Zalo OA (không qua CRM), tin đó vẫn được ghi vào dòng thời gian như tin của sale.
 
+### 4A. Trả lời Zalo ngay trong trang Lead/Deal của CRM (tab Zalo)
+
+Nếu quản trị đã bật giao diện này, trang Lead (và Deal) của CRM có tab **Zalo** cạnh Hoạt động, Email, Ghi chú. Mở tab để đọc hội thoại dạng bong bóng: **khách bên trái**, **bạn, đồng nghiệp, bot và nhân viên trả lời trực tiếp trên ứng dụng Zalo OA bên phải** (nhãn **Sale** hoặc **Bot** ở mỗi tin; ngày và giờ ở từng tin). Tin có nhãn **Thử nghiệm (sandbox), chưa gửi tới khách** nghĩa là hệ thống đang ở chế độ thử. Ảnh và tệp đính kèm hiện thành liên kết bấm mở ở tab mới.
+
+Khung bên dưới gửi tin **qua Zalo OA** tới đúng khách của Lead đó, kể cả khi Lead đã thành Deal. Mọi quy tắc ở mục 4 (48 giờ, 7 ngày, hạn mức, xác nhận khi có phí) giữ nguyên; lý do không gửi được hiện ngay trên khung. Khung bị khóa kèm giải thích khi: khách chưa có tài khoản Zalo liên kết với Lead (tab **không bao giờ** gửi email thay thế), khách đã từ chối nhận liên hệ, quá 7 ngày, hoặc bạn chỉ có quyền xem. Tin mới của khách tự hiện (không cần tải lại; nếu mất kết nối thì cập nhật sau tối đa 1 phút). Cần quyền trên cả Lead/Deal đang mở lẫn Lead gốc chứa hội thoại; nếu không thấy tab hoặc báo không có quyền, hỏi quản trị. Xin SĐT qua Zalo và duyệt nháp bot vẫn làm ở Hộp thư. Tab chưa có trên giao diện điện thoại của CRM. **Chưa kiểm trên trình duyệt thật** (xem báo cáo V3-01).
+
+Trong tab **Hoạt động/Email** tin Zalo vẫn hiện như một thẻ; tên người gửi nay là tên khách (hoặc "Khách Zalo OA 8383"), không còn mã số dài.
+
 ## 5. Email và điện thoại
 
 - **Email**: Hộp thư cho bạn **đọc** thư của khách. Để trả lời, bấm **Trả lời email trong CRM** (mở Lead trong CRM) rồi dùng trình soạn thư của CRM trên Lead. Hộp thư không có khung soạn thư cho email.

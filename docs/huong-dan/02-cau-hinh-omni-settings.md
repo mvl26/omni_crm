@@ -198,8 +198,9 @@ Sáu ô dưới đây gồm số và ô tích "Tắt..."; chưa từng lưu thì
 | Kéo lại lead Meta: tối đa mỗi lần | `meta_requeue_batch` | 200 | Số tin tối đa mỗi lượt đối soát (mỗi kênh). Mỗi tin kéo lại tối đa 3 lần. |
 | Tắt tự kéo lại lead Meta | `meta_requeue_disabled` | Không tích (= **đang kéo lại**) | Tích = đối soát hằng giờ vẫn bù lead sót, nhưng không kéo lại tin lỗi và không gửi cảnh báo gộp. |
 | Tắt hàng dự phòng webhook | `webhook_spool_disabled` | Không tích (= **đang dùng hàng dự phòng**) | Tích = khi DB không ghi được, webhook trả lỗi 503 như trước V21-04 (nhà cung cấp phải tự gửi lại). Tác vụ quét vẫn chèn lại tin đã nằm trong hàng. |
+| Tắt tab Zalo trong trang Lead/Deal | `zalo_tab_disabled` | Không tích (= **tab Zalo đang hiện**, nếu patch giao diện đã được áp trên bench) | Tích = ẩn tab Zalo trong giao diện CRM; Hộp thư và dòng thời gian không đổi. Có hiệu lực sau khi tải lại trang CRM. |
 
-Cẩn thận chiều ngược: các ô `..._disabled` **bật** là **tắt** tính năng. Ba ô `..._disabled` mặc định không tích, tức tính năng đang chạy.
+Cẩn thận chiều ngược: các ô `..._disabled` **bật** là **tắt** tính năng. Bốn ô `..._disabled` mặc định không tích, tức tính năng đang chạy.
 
 ## 10. Ghi âm và chuyển giọng nói
 

@@ -101,6 +101,15 @@ App `crm` hiển thị email, bình luận, cuộc gọi, ghi chú, công việc
 
 **Đã chọn ở D1-06: C + A** (CRM hiển thị được Communication `Chat`; xem `docs/adr/0004-cach-hien-thi-hoi-thoai-zalo.md`).
 
+**Cập nhật V3-01 (ADR 0016): tab "Zalo" trong trang Lead/Deal.** Ngoại lệ có chủ đích duy nhất của quy tắc "không sửa `crm`": một patch **chỉ giao diện** (frontend) trên crm v1.73.0 thêm tab **Zalo** (cạnh Hoạt động/Email/WhatsApp) với:
+
+- Hội thoại dạng bong bóng: khách bên trái; nhân viên, bot và nhân viên trả lời ngoài hệ thống (`oa_echo`) bên phải; đường phân cách ngày, giờ từng tin; nhãn **Sale** / **Bot**; tin sandbox có nhãn "Thử nghiệm (sandbox), chưa gửi tới khách"; tin đang gửi/lỗi/bị chặn có dòng trạng thái; đính kèm là liên kết chỉ khi `http(s)://`; nội dung khách hiện bằng văn bản thuần (không HTML).
+- Khung soạn + nút **Gửi qua Zalo** luôn đi qua `omni_crm.api.zalo_tab.send` -> `inbox.send_zalo` -> Omni Outbound Message -> adapter Zalo (đúng kênh và định danh Zalo của Lead, kể cả khi Lead đã thành Deal). Mọi guard giữ nguyên ở máy chủ: sandbox, khung 48 giờ/7 ngày (xác nhận khi có phí), hạn mức, từ chối liên hệ, độ dài. Lead không có định danh Zalo: khung soạn khóa kèm giải thích; Lead có cả Zalo và email: chỉ gửi qua Zalo, không bao giờ gửi email từ tab này.
+- Cập nhật tức thời qua sự kiện realtime `omni_inbox_update` (chỉ có `{lead, channels}`, không có nội dung) và tải lại qua API có kiểm quyền; thăm dò dự phòng 60 giây.
+- Quyền: cần quyền trên tài liệu đang mở **và** trên Lead gốc (như Hộp thư). Tắt bằng `Omni Settings.zalo_tab_disabled` (docs/09). Chưa có trên giao diện di động của CRM.
+
+Tên người gửi tin vào ở dòng thời gian: `Omni Identity.display_name`, rồi tên Lead/Deal (ví dụ "Khách Zalo OA 8383"), rồi mã rút gọn `Zalo OA …8383`; không bao giờ hiện mã số thô. Tin cũ sửa bằng lệnh chạy tay `omni_crm.ops.backfill_sender.run` (mặc định chỉ xem trước). Cách áp patch và build: `omni_crm/crm_frontend_patch/README.md`.
+
 ## 9. Test bắt buộc
 
 - Chữ ký đúng/sai/thiếu; timestamp quá cũ.

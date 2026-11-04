@@ -15,6 +15,7 @@ from frappe import _
 from omni_crm import flags
 from omni_crm.api import inbox
 from omni_crm.crm_bridge import lead as lead_bridge
+from omni_crm.pipeline import outbound as outbound_pipeline
 
 LEAD = "CRM Lead"
 DEAL = "CRM Deal"
@@ -75,6 +76,7 @@ def _compose(data: dict, can_write: bool) -> dict:
 		"paid": False,
 		"message": "",
 		"sandbox": bool(flags.sandbox()),
+		"max_chars": outbound_pipeline.MAX_TEXT_CHARS,
 		"quota": None,
 		"linked": zalo is not None,
 	}
