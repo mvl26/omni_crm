@@ -131,11 +131,12 @@ class TestTimeline(BridgeTestCase):
 	def test_inbound_visible_in_crm_activities(self):
 		msg = self.send("m1", text="Cho tôi hỏi giá máy cắt")
 		lead = self.lead_of(msg)
-		acts = _activity_communications(lead)
-		self.assertEqual(len(acts), 1)
-		self.assertIn("Cho tôi hỏi giá máy cắt", acts[0]["data"]["content"])
-		self.assertIn("Zalo OA", acts[0]["data"]["subject"])
+		# V3-02 (ADR 0017): vẫn có Communication nhưng loại Chat nên KHÔNG hiện ở tab Hoạt động/Email
+		self.assertEqual(_activity_communications(lead), [])
 		comm = self.communications("CRM Lead", lead)[0]
+		self.assertIn("Cho tôi hỏi giá máy cắt", comm.content)
+		self.assertIn("Zalo OA", comm.subject)
+		self.assertEqual(frappe.db.get_value("Communication", comm.name, "communication_type"), "Chat")
 		self.assertEqual(comm.communication_medium, "Chat")
 		self.assertEqual(comm.sent_or_received, "Received")
 		self.assertEqual(comm.omni_inbound_message, msg)

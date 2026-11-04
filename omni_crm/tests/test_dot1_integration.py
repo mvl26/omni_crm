@@ -89,8 +89,12 @@ class TestI01toI02(SignedZaloCase):
 		lead = leads.pop()
 		self.assertTrue(lead)
 		self.assertEqual(frappe.db.count("Omni Identity", {"identity_key": self.key(), "lead": lead}), 1)
+		comms = frappe.get_all(
+			"Communication", filters={"reference_name": lead, "omni_inbound_message": ["is", "set"]}
+		)
+		self.assertEqual(len(comms), 3, "dòng thời gian CRM phải có đủ 3 Communication")
 		shown = [a for a in get_activities(lead)[0] if a["activity_type"] == "communication"]
-		self.assertEqual(len(shown), 3, "dòng thời gian CRM phải có đủ 3 dòng")
+		self.assertEqual(shown, [], "V3-02: tin Zalo không hiện ở tab Hoạt động/Email")
 
 	def test_i02_same_event_redelivered_five_times_is_one_record(self):
 		data = self.text_event("i02-1")

@@ -327,7 +327,7 @@ class TestHideCommand(HideCase):
 		self.out_name = self.send_real(ext="zl-v302m")
 		self.out = frappe.db.get_value("Communication", {"omni_outbound_message": self.out_name}, "name")
 		self.mail_in = self.make_mail(reference_name=self.lead, omni_inbound_message=self.mail1)
-		self.mail_plain = self.make_mail(subject="TD106 thư lẻ")
+		self.mail_plain = self.make_mail(subject="TD106 thư lẻ", reference_name=self.lead)
 		self.chat_plain = frappe.get_doc(
 			{
 				"doctype": "Communication",
