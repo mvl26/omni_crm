@@ -558,6 +558,27 @@ class TestRefreshSafety(ZaloTabCase):
 		self.assertNotIn("stopped", res)
 
 
+class TestUserNameCache(ZaloTabCase):
+	def test_thread_queries_each_user_name_once(self):
+		for minutes in (9, 8, 7, 6):
+			self.make_outbound(self.lead1, f"tin {minutes}", minutes)
+		self.as_user(SALE1)
+		real = frappe.db.get_value
+		user_lookups = []
+
+		def spy(doctype, *a, **kw):
+			if doctype == "User":
+				user_lookups.append(a[0] if a else None)
+			return real(doctype, *a, **kw)
+
+		with mock.patch("frappe.db.get_value", side_effect=spy):
+			data = inbox.get_thread(self.lead1)
+		sale_msgs = [m for m in data["messages"] if m.get("doctype") == "Omni Outbound Message"]
+		self.assertEqual(len(sale_msgs), 4)
+		self.assertTrue(all(m["sender"] == sale_msgs[0]["sender"] for m in sale_msgs))
+		self.assertEqual(user_lookups.count(SALE1), 1)
+
+
 class TestTabSwitch(BridgeTestCase):
 	def setUp(self):
 		super().setUp()
