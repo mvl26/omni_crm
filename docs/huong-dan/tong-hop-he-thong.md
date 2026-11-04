@@ -139,7 +139,7 @@ Thứ tự gợi ý: hạ tầng → cấu hình chung → từng kênh → nhà
 | Nhà thầu | `fit_*` (12 tham số điểm phù hợp), `fit_scoring_enabled`, `prospect_import_enabled` |
 | Bot | `bot_analyze_enabled`, `bot_reply_mode` (Off/Shadow/Draft), `lead_scoring_enabled`, `daily_token_budget`, ghim `analyze_prompt_version`/`reply_prompt_version` (đang **v1**), khóa API (`ai_api_key`, kiểu Password), ngưỡng Lead nóng |
 | Chuyển người | `handoff_pause_hours`, người nhận thông báo chuyển người |
-| Meta và hàng dự phòng | `meta_token_warn_days` (7), `meta_token_check_disabled`, `meta_requeue_hours` (72), `meta_requeue_batch` (200), `meta_requeue_disabled`, `webhook_spool_disabled`, `zalo_tab_disabled` (tab Zalo trong trang Lead/Deal của CRM; V3-01, ADR 0016) (các ô "Tắt..." mặc định không tích, tức tính năng ĐANG chạy) |
+| Meta và hàng dự phòng | `meta_token_warn_days` (7), `meta_token_check_disabled`, `meta_requeue_hours` (72), `meta_requeue_batch` (200), `meta_requeue_disabled`, `webhook_spool_disabled`, `zalo_tab_disabled` (tab Zalo trong trang Lead/Deal của CRM; V3-01, ADR 0016), `zalo_in_activity_enabled` (tích = tin Zalo mới hiện lại ở Hoạt động/Email; mặc định ẩn; V3-02, ADR 0017) (các ô "Tắt..." mặc định không tích, tức tính năng ĐANG chạy) |
 | Quyết định phát hành | `q1_allowed`, `q11_allowed`, `gate_phan_tich_passed_at`, `gate_nhap_passed_at`: chỉ ghi nhận cho lệnh kiểm, **không** mở khóa gì; để trống/tắt khi chưa có quyết định hay kết quả đo thật |
 
 ### 4.4 Từng kênh (`Omni Channel`)

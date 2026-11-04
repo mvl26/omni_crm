@@ -1,8 +1,10 @@
 """Ghi dòng thời gian của Lead/Deal (ADR 0004: mỗi tin Zalo là một Communication, medium "Chat").
 
-CRM lấy hoạt động của Lead/Deal từ `frappe.desk.form.load.get_docinfo`, trong đó Communication thuộc
-mọi `communication_medium` đều được trả về nếu `reference_doctype`/`reference_name` trỏ tới Lead/Deal. Khóa
-chống ghi trùng là Custom Field `omni_inbound_message` / `omni_outbound_message` trên Communication.
+CRM lấy hoạt động của Lead/Deal từ `frappe.desk.form.load.get_docinfo`, trong đó Communication có `communication_type`
+IN ('Communication', 'Feedback', 'Automated Message') và trỏ tới Lead/Deal đều được trả về (không lọc theo medium).
+Từ V3-02 (ADR 0017) tin Zalo OA ghi với `communication_type = "Chat"` nên KHÔNG hiện ở tab Hoạt động/Email (đã có tab
+Zalo); vẫn là Communication thật (hook CRM cập nhật `communication_status` như cũ). Khóa chống ghi trùng là Custom Field
+`omni_inbound_message` / `omni_outbound_message` trên Communication.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, get_datetime, now_datetime, strip_html_tags
 
+from omni_crm import flags
 from omni_crm.crm_bridge import lead as lead_bridge
 
 LEAD = "CRM Lead"
@@ -22,6 +25,7 @@ INBOUND = "Omni Inbound Message"
 OUTBOUND = "Omni Outbound Message"
 COMMUNICATION = "Communication"
 EMAIL = "Email"
+ZALO = "Zalo OA"
 # Sự kiện có nội dung hội thoại để hiện trên dòng thời gian (follow/unfollow/user_info... không hiện).
 TIMELINE_EVENTS = {"message", "oa_echo", "form_lead"}
 SUBJECT_LEN = 80
@@ -106,11 +110,19 @@ def _subject(channel_type: str, text: str | None) -> str:
 	return f"[{channel_type}] {snippet}".strip()
 
 
-def _insert_communication(values: dict) -> str:
+def communication_type_for(channel_type: str | None) -> str:
+	"""`Communication.communication_type` cho tin của kênh: "Chat" (ẩn khỏi Hoạt động/Email) với Zalo OA, trừ khi bật
+	`Omni Settings.zalo_in_activity_enabled`; kênh khác (form quảng cáo, web form) giữ "Communication"."""
+	if channel_type == ZALO and not flags.zalo_in_activity_enabled():
+		return "Chat"
+	return "Communication"
+
+
+def _insert_communication(values: dict, channel_type: str | None = None) -> str:
 	doc = frappe.get_doc(
 		{
 			"doctype": COMMUNICATION,
-			"communication_type": "Communication",
+			"communication_type": communication_type_for(channel_type),
 			"communication_medium": "Chat",
 			**values,
 		}
@@ -231,7 +243,8 @@ def append(target: str | None, msgs: list[Any]) -> int:
 				"reference_doctype": tgt[0],
 				"reference_name": tgt[1],
 				"omni_inbound_message": row.name,
-			}
+			},
+			row.channel_type,
 		)
 		done += 1
 	return done
@@ -280,7 +293,8 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 			"reference_doctype": tgt[0],
 			"reference_name": tgt[1],
 			"omni_outbound_message": row.name,
-		}
+		},
+		channel_type,
 	)
 
 
