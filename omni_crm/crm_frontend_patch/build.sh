@@ -37,6 +37,7 @@ rm -rf "$BK"; mkdir -p "$BK"
 [ -f crm/www/crm.html ] && cp -a crm/www/crm.html "$BK/crm.html"
 restore() {
   echo "BUILD LỖI: phục hồi giao diện cũ từ $BK" >&2
+  cd "$CRM_DIR"
   rm -rf crm/public/frontend
   [ -d "$BK/frontend" ] && cp -a "$BK/frontend" crm/public/frontend
   [ -f "$BK/crm.html" ] && cp -a "$BK/crm.html" crm/www/crm.html
