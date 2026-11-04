@@ -148,6 +148,16 @@ def _compose(data: dict, can_write: bool) -> dict:
 @frappe.whitelist()
 def get_conversation(doctype: str, name: str) -> dict:
 	"""Hội thoại Zalo OA của Lead/Deal đang xem (chỉ kênh Zalo OA) và trạng thái khung soạn."""
+	if not flags.zalo_tab_enabled():  # công tắc tắt thật ở máy chủ, không chỉ ẩn tab ở giao diện
+		return {
+			"lead": None,
+			"customer_name": "",
+			"contact": None,
+			"messages": [],
+			"truncated": False,
+			"disabled": True,
+			"compose": {**_compose({}, False), "reason": _("Tab Zalo đang bị tắt")},
+		}
 	lead = resolve_lead(doctype, name, "read")
 	if not lead:
 		return {
@@ -182,6 +192,8 @@ def get_conversation(doctype: str, name: str) -> dict:
 @frappe.whitelist(methods=["POST"])
 def send(doctype: str, name: str, text: str, confirm_paid: int | str = 0) -> dict:
 	"""Sale trả lời khách qua Zalo OA từ tab Zalo; luôn kênh Zalo OA, mọi guard của `inbox.send_zalo` giữ nguyên."""
+	if not flags.zalo_tab_enabled():
+		frappe.throw(_("Tab Zalo đang bị tắt"), frappe.PermissionError)
 	lead = resolve_lead(doctype, name, "write")
 	if not lead:
 		frappe.throw(_("Không có Lead gốc để gắn hội thoại Zalo"))

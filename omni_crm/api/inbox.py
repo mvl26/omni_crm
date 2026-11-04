@@ -370,6 +370,9 @@ def thread_data(lead: str) -> dict:
 		if r.name in {o.channel for o in outbound}
 	}
 	items: list[dict] = []
+	user_names: dict[
+		str, str
+	] = {}  # tên người dùng theo lượt gọi: bỏ truy vấn User lặp lại cho mỗi tin/cuộc gọi
 	for m in inbound:
 		echo = m.event_type == "oa_echo"
 		items.append(
@@ -391,14 +394,14 @@ def thread_data(lead: str) -> dict:
 			}
 		)
 	for c in call_rows:
-		items.append(_call_item(c))
+		items.append(_call_item(c, user_names))
 	# Tin Sale trả lời ngoài hệ thống (oa_echo) có cả Omni Outbound Message cùng mã tin: chỉ hiện bản echo.
 	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
 	for o in outbound:
 		if o.external_message_id and o.external_message_id in echo_ids:
 			continue
 		if o.sent_by:
-			sender = frappe.db.get_value("User", o.sent_by, "full_name") or o.sent_by
+			sender = _user_full_name(o.sent_by, user_names)
 		else:
 			sender = _("Bot") if o.source == "Bot" else _("Hệ thống")
 		items.append(
@@ -473,7 +476,19 @@ def _duration_text(seconds: int | None) -> str:
 	return _("{0} phút {1} giây").format(minutes, secs) if secs else _("{0} phút").format(minutes)
 
 
-def _call_item(c: Any) -> dict:
+def _user_full_name(user: str | None, cache: dict[str, str] | None = None) -> str | None:
+	"""Tên đầy đủ của User (hoặc chính mã nếu trống); `cache` theo lượt gọi để không truy vấn lại cho cùng người."""
+	if not user:
+		return None
+	if cache is not None and user in cache:
+		return cache[user]
+	name = frappe.db.get_value("User", user, "full_name") or user
+	if cache is not None:
+		cache[user] = name
+	return name
+
+
+def _call_item(c: Any, names: dict[str, str] | None = None) -> dict:
 	"""Dòng cuộc gọi trong hội thoại: chiều, trạng thái, thời lượng, người nghe máy (không kèm số, ghi âm, sự kiện gốc)."""
 	inbound = c.direction != "Outbound"
 	labels = {
@@ -486,7 +501,7 @@ def _call_item(c: Any) -> dict:
 	parts = [_("Cuộc gọi đến") if inbound else _("Cuộc gọi đi"), labels.get(c.status, c.status)]
 	if c.status == "Answered" and c.duration_seconds is not None:
 		parts.append(_duration_text(c.duration_seconds))
-	agent = frappe.db.get_value("User", c.agent, "full_name") or c.agent if c.agent else None
+	agent = _user_full_name(c.agent, names)
 	if agent:
 		parts.append((_("Nghe máy: {0}") if inbound else _("Gọi bởi: {0}")).format(agent))
 	return {

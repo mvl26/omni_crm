@@ -97,10 +97,13 @@ def _needs_profile(msg: Any, channel_doc: Any) -> bool:
 	return not frappe.cache().get_value(f"omni:zalo:profile_fail:{msg.identity_key}", expires=True)
 
 
-def fetch_profile(msg: Any, channel_doc: Any, ignore_cooldown: bool = False) -> dict:
+def fetch_profile(
+	msg: Any, channel_doc: Any, ignore_cooldown: bool = False, error_sink: list | None = None
+) -> dict:
 	"""Lấy hồ sơ Zalo của khách; lỗi thì ghi log đã lọc, lưu lý do, đặt thời gian chờ và trả {} (không ném).
 
-	Sandbox: không gọi API (trả {}), lý do được ghi để tab Zalo hiển thị. `ignore_cooldown`: lệnh chạy tay bỏ qua thời gian chờ.
+	Sandbox: không gọi API (trả {}), lý do được ghi để tab Zalo hiển thị. `ignore_cooldown`: lệnh chạy tay bỏ qua thời gian chờ;
+	`error_sink`: nếu là list thì lỗi gặp phải được thêm vào đó (để lệnh chạy tay biết khi nào nên dừng).
 	"""
 	if flags.sandbox():
 		note_profile_reason(msg.identity_key, _("Đang ở chế độ thử (sandbox) nên không gọi Zalo để lấy tên"))
@@ -112,6 +115,8 @@ def fetch_profile(msg: Any, channel_doc: Any, ignore_cooldown: bool = False) -> 
 	try:
 		profile = ZaloClient(channel_doc.name).get_user_profile(msg.external_sender_id)
 	except Exception as e:
+		if error_sink is not None:
+			error_sink.append(e)
 		frappe.cache().set_value(
 			f"omni:zalo:profile_fail:{msg.identity_key}", 1, expires_in_sec=PROFILE_COOLDOWN
 		)

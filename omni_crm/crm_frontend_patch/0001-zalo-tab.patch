@@ -39,10 +39,10 @@ index bc2f6dc..522d37c 100644
          <Button
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..a86454a
+index 0000000..3724050
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,366 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <div
@@ -207,14 +207,14 @@ index 0000000..a86454a
 +          :rows="3"
 +          :disabled="!compose.can_send"
 +          :placeholder="__('Nhập tin trả lời Zalo')"
-+          @keydown.enter.exact.prevent="submit(0)"
++          @keydown.enter.exact.prevent="submit()"
 +        />
 +        <Button
 +          variant="solid"
 +          :label="__('Gửi qua Zalo')"
 +          :loading="sending"
 +          :disabled="!canSubmit(compose, text, sending, compose.max_chars)"
-+          @click="submit(0)"
++          @click="submit()"
 +        />
 +      </div>
 +    </div>
@@ -242,6 +242,7 @@ index 0000000..a86454a
 +  chatPanelMode,
 +  copyToClipboard,
 +  isRelevantUpdate,
++  sendWithConfirm,
 +  openOaChat,
 +  shortZaloId,
 +  safeAttachments,
@@ -335,7 +336,7 @@ index 0000000..a86454a
 +  conversation.reload()
 +}
 +
-+async function submit(confirmPaid) {
++async function submit() {
 +  if (
 +    !canSubmit(
 +      compose.value,
@@ -346,22 +347,22 @@ index 0000000..a86454a
 +  )
 +    return
 +  const body = text.value
-+  sending.value = true
++  sending.value = true // giữ cờ này đến khi CẢ hai lần gọi (nếu có xác nhận phí) kết thúc: không gửi đôi
 +  try {
-+    const res = await call('omni_crm.api.zalo_tab.send', {
-+      doctype: props.doctype,
-+      name: props.docname,
-+      text: body,
-+      confirm_paid: confirmPaid,
-+    })
-+    if (res?.status === 'confirm_required') {
-+      if (window.confirm(`${res.warning}\n\n${__('Bạn vẫn muốn gửi?')}`)) {
-+        sending.value = false
-+        return submit(1)
-+      }
-+    } else if (res?.status === 'Blocked') {
++    const res = await sendWithConfirm(
++      (value, confirmPaid) =>
++        call('omni_crm.api.zalo_tab.send', {
++          doctype: props.doctype,
++          name: props.docname,
++          text: value,
++          confirm_paid: confirmPaid,
++        }),
++      (warning) => window.confirm(`${warning}\n\n${__('Bạn vẫn muốn gửi?')}`),
++      body,
++    )
++    if (res?.status === 'Blocked') {
 +      toast.error(res.reason || __('Tin bị chặn, chưa gửi'))
-+    } else {
++    } else if (res) {
 +      text.value = ''
 +    }
 +  } catch (error) {
@@ -383,14 +384,23 @@ index 0000000..a86454a
 +  timer = setTimeout(reload, 500)
 +}
 +
++function onVisible() {
++  if (!document.hidden) reload()
++}
++
 +onMounted(() => {
 +  $socket?.on(ZALO_EVENT, onUpdate)
-+  poll = setInterval(reload, POLL_MS) // dự phòng khi mất kết nối realtime
++  // Dự phòng khi mất kết nối realtime; tab trình duyệt ẩn thì không thăm dò, hiện lại thì tải ngay.
++  poll = setInterval(() => {
++    if (!document.hidden) reload()
++  }, POLL_MS)
++  document.addEventListener('visibilitychange', onVisible)
 +})
 +
 +onBeforeUnmount(() => {
 +  $socket?.off(ZALO_EVENT, onUpdate)
 +  clearInterval(poll)
++  document.removeEventListener('visibilitychange', onVisible)
 +  clearTimeout(timer)
 +})
 +
@@ -513,10 +523,10 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..e774bf6
+index 0000000..dd446f1
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,169 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -675,12 +685,23 @@ index 0000000..e774bf6
 +    return { ok: false, error: e?.name || 'failed' }
 +  }
 +}
++
++/**
++ * Gửi tin, nếu máy chủ yêu cầu xác nhận phí thì hỏi rồi gửi lần hai. Trả kết quả cuối, hoặc null khi người dùng hủy.
++ * Lần hai được AWAIT trong cùng hàm nên người gọi giữ cờ "đang gửi" đến khi xong (không mở lại nút Gửi giữa chừng).
++ */
++export async function sendWithConfirm(sendFn, confirmFn, body) {
++  const first = await sendFn(body, 0)
++  if (first?.status !== 'confirm_required') return first
++  if (!confirmFn(first.warning)) return null
++  return await sendFn(body, 1)
++}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..0b168cb
+index 0000000..ddc0aad
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,259 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
@@ -697,6 +718,7 @@ index 0000000..0b168cb
 +  dayLabel,
 +  groupByDay,
 +  isRelevantUpdate,
++  sendWithConfirm,
 +  isSafeUrl,
 +  safeAttachments,
 +  sourceOf,
@@ -893,5 +915,49 @@ index 0000000..0b168cb
 +    })
 +    expect((await copyToClipboard('abc', {})).error).toBe('unsupported')
 +    expect((await copyToClipboard('', ok)).error).toBe('empty')
++  })
++})
++
++describe('sendWithConfirm', () => {
++  it('không cần xác nhận: gửi đúng một lần', async () => {
++    const calls = []
++    const send = async (body, paid) => {
++      calls.push([body, paid])
++      return { status: 'Queued' }
++    }
++    const res = await sendWithConfirm(send, () => true, 'xin chào')
++    expect(res).toEqual({ status: 'Queued' })
++    expect(calls).toEqual([['xin chào', 0]])
++  })
++  it('cần xác nhận phí: hỏi, rồi gửi lần hai với confirm_paid=1 và CHỜ xong mới trả về', async () => {
++    const order = []
++    const send = async (body, paid) => {
++      order.push(`start${paid}`)
++      if (paid === 0) return { status: 'confirm_required', warning: 'có phí' }
++      await new Promise((r) => setTimeout(r, 10))
++      order.push('end1')
++      return { status: 'Queued' }
++    }
++    let asked = null
++    const res = await sendWithConfirm(send, (w) => ((asked = w), true), 'x')
++    order.push('returned')
++    expect(asked).toBe('có phí')
++    expect(res).toEqual({ status: 'Queued' })
++    expect(order).toEqual(['start0', 'start1', 'end1', 'returned'])
++  })
++  it('người dùng hủy: không gửi lần hai, trả null', async () => {
++    let n = 0
++    const send = async () => {
++      n += 1
++      return { status: 'confirm_required', warning: 'có phí' }
++    }
++    expect(await sendWithConfirm(send, () => false, 'x')).toBeNull()
++    expect(n).toBe(1)
++  })
++  it('lỗi ở lần gọi nào cũng ném ra cho người gọi', async () => {
++    const send = async () => {
++      throw new Error('mạng')
++    }
++    await expect(sendWithConfirm(send, () => true, 'x')).rejects.toThrow('mạng')
 +  })
 +})

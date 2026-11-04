@@ -13,7 +13,7 @@ from omni_crm.crm_bridge import timeline
 from omni_crm.ops import backfill_sender
 from omni_crm.pipeline import outbound
 from omni_crm.tests import test_inbox
-from omni_crm.tests.bridge_helpers import BridgeTestCase
+from omni_crm.tests.bridge_helpers import BridgeTestCase, make_users
 from omni_crm.tests.test_outbound import OutboundTestCase
 
 SALE1, SALE2 = test_inbox.SALE1, test_inbox.SALE2
@@ -493,6 +493,92 @@ class TestProfileReasonAndRefresh(ZaloTabCase):
 		self.assertEqual(again["updated"], 0)
 
 
+class TestRefreshSafety(ZaloTabCase):
+	def blank_names(self):
+		frappe.db.set_value("Omni Identity", self.ident1, "display_name", None)
+		frappe.db.set_value("Omni Identity", self.ident2, "display_name", None)
+		frappe.db.commit()
+		for ident in (self.ident1, self.ident2):
+			key = frappe.db.get_value("Omni Identity", ident, "identity_key")
+			self.addCleanup(worker_hooks.note_profile_reason, key, None)
+			self.addCleanup(frappe.cache().delete_value, f"omni:zalo:profile_fail:{key}")
+
+	def test_skips_identities_of_refused_leads(self):
+		self.blank_names()
+		self.sandbox(False)
+		seen = []
+
+		def fake(msg, channel_doc, ignore_cooldown=False, error_sink=None):
+			seen.append(msg.external_sender_id)
+			return {"display_name": "Tên"}
+
+		def refused(lead):
+			return {"refused": lead == self.lead1, "erased": False}
+
+		with (
+			mock.patch("omni_crm.api.customer._person_flags", side_effect=refused),
+			mock.patch.object(worker_hooks, "fetch_profile", side_effect=fake),
+		):
+			res = profile_refresh.run(dry_run=0)
+		self.assertNotIn("TD106Z1", seen)
+		self.assertIn("TD106Z2", seen)
+		self.assertFalse(frappe.db.get_value("Omni Identity", self.ident1, "display_name"))
+		self.assertEqual(frappe.db.get_value("Omni Identity", self.ident2, "display_name"), "Tên")
+		self.assertGreaterEqual(res["updated"], 1)
+
+	def test_stops_on_rate_limit_or_token_error(self):
+		for err in (errors.to_error(-223), errors.to_error(-216)):
+			self.blank_names()
+			self.sandbox(False)
+			calls = []
+
+			def fake(msg, channel_doc, ignore_cooldown=False, error_sink=None, _err=err):
+				calls.append(msg.external_sender_id)
+				error_sink.append(_err)
+				return {}
+
+			with mock.patch.object(worker_hooks, "fetch_profile", side_effect=fake):
+				res = profile_refresh.run(dry_run=0)
+			self.assertEqual(len(calls), 1, err.kind)  # dừng ngay sau lỗi đầu tiên
+			self.assertEqual(res["stopped"], err.kind)
+
+	def test_permanent_error_continues_to_next_customer(self):
+		self.blank_names()
+		self.sandbox(False)
+		calls = []
+
+		def fake(msg, channel_doc, ignore_cooldown=False, error_sink=None):
+			calls.append(1)
+			error_sink.append(errors.to_error(-213))
+			return {}
+
+		with mock.patch.object(worker_hooks, "fetch_profile", side_effect=fake):
+			res = profile_refresh.run(dry_run=0)
+		self.assertGreaterEqual(len(calls), 2)
+		self.assertNotIn("stopped", res)
+
+
+class TestUserNameCache(ZaloTabCase):
+	def test_thread_queries_each_user_name_once(self):
+		for minutes in (9, 8, 7, 6):
+			self.make_outbound(self.lead1, f"tin {minutes}", minutes)
+		self.as_user(SALE1)
+		real = frappe.db.get_value
+		user_lookups = []
+
+		def spy(doctype, *a, **kw):
+			if doctype == "User":
+				user_lookups.append(a[0] if a else None)
+			return real(doctype, *a, **kw)
+
+		with mock.patch("frappe.db.get_value", side_effect=spy):
+			data = inbox.get_thread(self.lead1)
+		sale_msgs = [m for m in data["messages"] if m.get("doctype") == "Omni Outbound Message"]
+		self.assertEqual(len(sale_msgs), 4)
+		self.assertTrue(all(m["sender"] == sale_msgs[0]["sender"] for m in sale_msgs))
+		self.assertEqual(user_lookups.count(SALE1), 1)
+
+
 class TestTabSwitch(BridgeTestCase):
 	def setUp(self):
 		super().setUp()
@@ -528,6 +614,33 @@ class TestTabSwitch(BridgeTestCase):
 		self.set(1)
 		self.assertFalse(flags.zalo_tab_enabled())
 		self.assertFalse(zalo_tab.tab_state()["enabled"])
+
+	def test_disabled_switch_blocks_conversation_and_send_on_the_server(self):
+		make_users()
+		lead = self.make_lead_for_switch()
+		self.set(1)
+		frappe.db.commit()
+		with mock.patch("frappe.enqueue") as enq:
+			res = zalo_tab.get_conversation("CRM Lead", lead)
+			self.assertEqual((res["messages"], res["contact"], res["lead"]), ([], None, None))
+			self.assertFalse(res["compose"]["can_send"])
+			self.assertTrue(res["disabled"])
+			with self.assertRaises(frappe.PermissionError):
+				zalo_tab.send("CRM Lead", lead, "xin chào")
+		enq.assert_not_called()
+		self.assertFalse(frappe.db.exists("Omni Outbound Message", {"lead": lead}))
+		self.set(0)  # bật lại thì dùng được
+		self.assertNotIn("disabled", zalo_tab.get_conversation("CRM Lead", lead))
+
+	def make_lead_for_switch(self):
+		doc = frappe.get_doc(
+			{"doctype": "CRM Lead", "first_name": "TD106 Switch", "omni_first_channel": "Zalo OA"}
+		)
+		doc.flags.ignore_permissions = True
+		with mock.patch("frappe.enqueue"):
+			doc.insert()
+		frappe.db.commit()
+		return doc.name
 
 	def test_guest_cannot_see_tab(self):
 		self.set(None)
