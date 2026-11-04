@@ -13,7 +13,7 @@ from omni_crm.crm_bridge import timeline
 from omni_crm.ops import backfill_sender
 from omni_crm.pipeline import outbound
 from omni_crm.tests import test_inbox
-from omni_crm.tests.bridge_helpers import BridgeTestCase
+from omni_crm.tests.bridge_helpers import BridgeTestCase, make_users
 from omni_crm.tests.test_outbound import OutboundTestCase
 
 SALE1, SALE2 = test_inbox.SALE1, test_inbox.SALE2
@@ -528,6 +528,33 @@ class TestTabSwitch(BridgeTestCase):
 		self.set(1)
 		self.assertFalse(flags.zalo_tab_enabled())
 		self.assertFalse(zalo_tab.tab_state()["enabled"])
+
+	def test_disabled_switch_blocks_conversation_and_send_on_the_server(self):
+		make_users()
+		lead = self.make_lead_for_switch()
+		self.set(1)
+		frappe.db.commit()
+		with mock.patch("frappe.enqueue") as enq:
+			res = zalo_tab.get_conversation("CRM Lead", lead)
+			self.assertEqual((res["messages"], res["contact"], res["lead"]), ([], None, None))
+			self.assertFalse(res["compose"]["can_send"])
+			self.assertTrue(res["disabled"])
+			with self.assertRaises(frappe.PermissionError):
+				zalo_tab.send("CRM Lead", lead, "xin chào")
+		enq.assert_not_called()
+		self.assertFalse(frappe.db.exists("Omni Outbound Message", {"lead": lead}))
+		self.set(0)  # bật lại thì dùng được
+		self.assertNotIn("disabled", zalo_tab.get_conversation("CRM Lead", lead))
+
+	def make_lead_for_switch(self):
+		doc = frappe.get_doc(
+			{"doctype": "CRM Lead", "first_name": "TD106 Switch", "omni_first_channel": "Zalo OA"}
+		)
+		doc.flags.ignore_permissions = True
+		with mock.patch("frappe.enqueue"):
+			doc.insert()
+		frappe.db.commit()
+		return doc.name
 
 	def test_guest_cannot_see_tab(self):
 		self.set(None)
