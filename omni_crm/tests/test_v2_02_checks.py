@@ -75,7 +75,11 @@ EXPECTED_WHITELISTED = {
 		"google_leads",
 		"web_form",
 	},
-	"api/zalo_tab.py": {"tab_state", "get_conversation", "send"},  # V3-01: tab Zalo, 1 Lead/1 khách mỗi lần gửi
+	"api/zalo_tab.py": {
+		"tab_state",
+		"get_conversation",
+		"send",
+	},  # V3-01: tab Zalo, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
 }
 BULK_NAME = re.compile(r"bulk|broadcast|mass|blast|newsletter|campaign_send|send_all|send_many", re.I)
