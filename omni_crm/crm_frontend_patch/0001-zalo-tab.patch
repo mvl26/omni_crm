@@ -457,10 +457,10 @@ index 0000000..0db54de
 +  </svg>
 +</template>
 diff --git a/frontend/src/components/SidePanelLayout.vue b/frontend/src/components/SidePanelLayout.vue
-index 592f215..4c01da7 100644
+index 592f215..809b322 100644
 --- a/frontend/src/components/SidePanelLayout.vue
 +++ b/frontend/src/components/SidePanelLayout.vue
-@@ -629,6 +629,15 @@ function firstVisibleIndex() {
+@@ -629,6 +629,24 @@ function firstVisibleIndex() {
    margin: 2px;
  }
  
@@ -471,6 +471,15 @@ index 592f215..4c01da7 100644
 +  min-height: 2.25rem;
 +  max-height: 60vh;
 +  resize: vertical;
++}
++
++/* omni_crm: trường CHỈ ĐỌC dạng chữ (Tóm tắt của bot...) mặc định nằm trong khung cao cố định h-7 nên bị cắt;
++   cho khung cao theo nội dung và xuống dòng. Giá trị ngắn vẫn cao 1 dòng như cũ. */
++.grid > .h-7.cursor-pointer {
++  height: auto;
++  min-height: 1.75rem;
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
 +}
 +
  :deep(.form-control input:not([type='checkbox'])),
