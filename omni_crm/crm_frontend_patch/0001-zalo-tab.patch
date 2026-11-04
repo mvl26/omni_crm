@@ -39,10 +39,10 @@ index bc2f6dc..522d37c 100644
          <Button
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..016bf94
+index 0000000..ff5bf07
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,292 @@
+@@ -0,0 +1,342 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <div
@@ -135,6 +135,34 @@ index 0000000..016bf94
 +      </template>
 +    </div>
 +
++    <div
++      v-if="contact"
++      class="border-t px-3 py-2 text-sm text-ink-gray-7 sm:px-10"
++    >
++      <div class="flex flex-wrap items-center gap-2">
++        <Button :label="__('Mở chat Zalo OA')" @click="openChat" />
++      </div>
++      <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
++        <span>{{
++          __('Trong danh sách chat, tìm khách theo tên hoặc mã Zalo:')
++        }}</span>
++        <span v-if="contactNames" class="font-medium text-ink-gray-9">{{
++          contactNames
++        }}</span>
++        <template v-if="contact.zalo_user_id">
++          <span :title="contact.zalo_user_id">{{
++            __('Mã') + ' ' + shortZaloId(contact.zalo_user_id)
++          }}</span>
++          <Button
++            size="sm"
++            variant="ghost"
++            :label="__('Sao chép')"
++            @click="copyId"
++          />
++        </template>
++      </div>
++    </div>
++
 +    <div class="border-t px-3 py-2.5 sm:px-10">
 +      <div
 +        v-if="!compose.can_send"
@@ -199,7 +227,10 @@ index 0000000..016bf94
 +  canSubmit,
 +  dayLabel,
 +  groupByDay,
++  copyToClipboard,
 +  isRelevantUpdate,
++  openOaChat,
++  shortZaloId,
 +  safeAttachments,
 +  sourceOf,
 +  timeLabel,
@@ -245,6 +276,25 @@ index 0000000..016bf94
 +      linked: false,
 +    },
 +)
++
++// Nhắn từ trang chính thức của Zalo OA (OA gói Cơ bản không gửi được qua API). Zalo không mở thẳng hội thoại theo
++// tham số, nên chỉ hiện thông tin để nhân viên tự tìm khách. Zalo chặn nhúng trang chat vào khung (đã thử): chỉ có nút mở cửa sổ riêng.
++const contact = computed(() => conversation.data?.contact || null)
++const contactNames = computed(() => {
++  const c = contact.value
++  if (!c) return ''
++  return [...new Set([c.lead_name, c.display_name].filter(Boolean))].join(' / ')
++})
++
++function openChat() {
++  if (!openOaChat()) toast.error(__('Trình duyệt chặn cửa sổ mới'))
++}
++
++async function copyId() {
++  const res = await copyToClipboard(contact.value?.zalo_user_id)
++  if (res.ok) toast.success(__('Đã sao chép mã Zalo'))
++  else toast.error(__('Không sao chép được, hãy chọn và chép tay'))
++}
 +
 +function senderLabel(msg) {
 +  const source = sourceOf(msg)
@@ -449,10 +499,10 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..959ad1b
+index 0000000..599d534
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,133 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -543,15 +593,63 @@ index 0000000..959ad1b
 +    !Array.isArray(channels) || !channels.length || channels.includes('Zalo OA')
 +  )
 +}
++
++// --- Nhắn từ trang chính thức của Zalo OA (OA gói Cơ bản không gửi được qua API) ---
++
++/** Trang chat chính thức của Zalo OA. Zalo bỏ tham số uid/oaId nên không mở thẳng hội thoại của khách. */
++export const OA_CHAT_URL = 'https://oa.zalo.me/chat'
++/** Tham số cửa sổ chat: nhỏ gọn để đặt cạnh trang Lead; luôn noopener,noreferrer. */
++export function chatWindowFeatures(screenWidth = 1280, screenHeight = 800) {
++  const width = 480
++  const height = Math.max(520, Math.min(760, Number(screenHeight) - 120 || 700))
++  const left = Math.max(0, Number(screenWidth) - width - 20 || 0)
++  return `noopener,noreferrer,popup=yes,width=${width},height=${height},left=${left},top=40`
++}
++
++/** Mở trang chat Zalo OA ở cửa sổ mới; trả true nếu gọi được window.open. */
++export function openOaChat(win = globalThis.window) {
++  if (!win || typeof win.open !== 'function') return false
++  const screen = win.screen || {}
++  win.open(
++    OA_CHAT_URL,
++    '_blank',
++    chatWindowFeatures(screen.availWidth, screen.availHeight),
++  )
++  return true
++}
++
++/** Mã Zalo rút gọn để đọc nhanh: giữ 4 ký tự đầu và 4 cuối; mã ngắn giữ nguyên. */
++export function shortZaloId(id) {
++  const value = String(id || '').trim()
++  return value.length > 10 ? `${value.slice(0, 4)}…${value.slice(-4)}` : value
++}
++
++/** Chép chuỗi vào clipboard; không ném lỗi, trả { ok, error }. */
++export async function copyToClipboard(text, nav = globalThis.navigator) {
++  const value = String(text ?? '')
++  if (!value) return { ok: false, error: 'empty' }
++  try {
++    if (!nav?.clipboard?.writeText) return { ok: false, error: 'unsupported' }
++    await nav.clipboard.writeText(value)
++    return { ok: true, error: null }
++  } catch (e) {
++    return { ok: false, error: e?.name || 'failed' }
++  }
++}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..92a3ba6
+index 0000000..20f4f48
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,171 @@
 +import { describe, expect, it } from 'vitest'
 +import {
++  OA_CHAT_URL,
 +  bubbleSide,
++  chatWindowFeatures,
++  copyToClipboard,
++  openOaChat,
++  shortZaloId,
 +  canSubmit,
 +  dayKey,
 +  dayLabel,
@@ -662,5 +760,56 @@ index 0000000..92a3ba6
 +    )
 +    expect(isRelevantUpdate(null, 'L1')).toBe(false)
 +    expect(isRelevantUpdate({ lead: 'L1' }, null)).toBe(false)
++  })
++})
++
++describe('mở chat Zalo OA / sao chép mã', () => {
++  it('URL cố định, đúng https và không chứa tham số khách', () => {
++    expect(OA_CHAT_URL).toBe('https://oa.zalo.me/chat')
++  })
++  it('tham số cửa sổ luôn noopener,noreferrer và nằm trong màn hình', () => {
++    const f = chatWindowFeatures(1920, 1080)
++    expect(f).toContain('noopener,noreferrer')
++    expect(f).toContain('width=480')
++    expect(f).toContain('left=1420')
++    expect(chatWindowFeatures(undefined, undefined)).toContain(
++      'noopener,noreferrer',
++    )
++    expect(chatWindowFeatures(1000, 400)).toContain('height=520')
++  })
++  it('openOaChat gọi window.open đúng URL; thiếu window thì trả false', () => {
++    const calls = []
++    const win = {
++      screen: { availWidth: 1600, availHeight: 900 },
++      open: (...a) => calls.push(a),
++    }
++    expect(openOaChat(win)).toBe(true)
++    expect(calls[0][0]).toBe('https://oa.zalo.me/chat')
++    expect(calls[0][1]).toBe('_blank')
++    expect(calls[0][2]).toContain('noopener,noreferrer')
++    expect(openOaChat(null)).toBe(false)
++    expect(openOaChat({})).toBe(false)
++  })
++  it('rút gọn mã Zalo', () => {
++    expect(shortZaloId('2716764713514648383')).toBe('2716…8383')
++    expect(shortZaloId('12345')).toBe('12345')
++    expect(shortZaloId(null)).toBe('')
++  })
++  it('sao chép có xử lý lỗi', async () => {
++    const ok = { clipboard: { writeText: async () => {} } }
++    expect(await copyToClipboard('abc', ok)).toEqual({ ok: true, error: null })
++    const denied = {
++      clipboard: {
++        writeText: async () => {
++          throw Object.assign(new Error('x'), { name: 'NotAllowedError' })
++        },
++      },
++    }
++    expect(await copyToClipboard('abc', denied)).toEqual({
++      ok: false,
++      error: 'NotAllowedError',
++    })
++    expect((await copyToClipboard('abc', {})).error).toBe('unsupported')
++    expect((await copyToClipboard('', ok)).error).toBe('empty')
 +  })
 +})

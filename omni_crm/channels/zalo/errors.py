@@ -23,6 +23,10 @@ _TABLE: dict[int, tuple[str, str]] = {
 	-102: (PERMANENT, "Thiếu tham số bắt buộc khi gọi API Zalo"),
 	-108: (PERMANENT, "Mã tệp gửi Zalo không hợp lệ"),
 	-235: (PERMANENT, "Loại Official Account không hỗ trợ thao tác này"),
+	-224: (
+		PERMANENT,
+		"Gói OA hiện tại không hỗ trợ gửi tin qua API; hãy nhắn từ trang Zalo OA (oa.zalo.me/chat)",
+	),
 	-213: (PERMANENT, "Người dùng chưa quan tâm hoặc đã bỏ quan tâm OA"),
 	-230: (WINDOW, "Quá khung thời gian được gửi tin tư vấn cho người dùng này"),
 	-233: (WINDOW, "Quá khung thời gian được gửi tin tư vấn cho người dùng này"),

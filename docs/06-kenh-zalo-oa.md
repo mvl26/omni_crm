@@ -108,6 +108,8 @@ App `crm` hiển thị email, bình luận, cuộc gọi, ghi chú, công việc
 - Cập nhật tức thời qua sự kiện realtime `omni_inbox_update` (chỉ có `{lead, channels}`, không có nội dung) và tải lại qua API có kiểm quyền; thăm dò dự phòng 60 giây.
 - Quyền: cần quyền trên tài liệu đang mở **và** trên Lead gốc (như Hộp thư). Tắt bằng `Omni Settings.zalo_tab_disabled` (docs/09). Chưa có trên giao diện di động của CRM.
 
+**Nhắn từ trang chính thức của Zalo OA (V3-01, bổ sung).** OA gói Cơ bản không gửi được qua API (Zalo trả `-224`; docs/12 C-V3-01b), nên nhân viên nhắn từ https://oa.zalo.me/chat. Trong tab Zalo có nút **Mở chat Zalo OA** (cửa sổ mới, `noopener,noreferrer`, rộng 480 px để đặt cạnh Lead) và dòng hướng dẫn tìm khách theo **tên** (tên Lead, `display_name` định danh) hoặc **mã người dùng Zalo** (rút gọn, có nút **Sao chép**). **Nhúng iframe `oa.zalo.me/chat` KHÔNG khả thi** (đã thử 2026-11-04, Zalo chặn) và đường dẫn `?uid=&oaId=` không mở được hội thoại cụ thể (Zalo bỏ tham số), nên nhân viên phải tự tìm khách trong danh sách chat. Tin nhắn từ trang OA quay lại Lead nhờ sự kiện `oa_echo` (bong bóng bên phải). Khách đã từ chối liên hệ hoặc Lead không có định danh Zalo: không hiện khối này. Khi OA nâng gói, khung gửi qua API trong tab hoạt động bình thường. Mã lỗi `-224` hiện thành "Gói OA hiện tại không hỗ trợ gửi tin qua API; hãy nhắn từ trang Zalo OA".
+
 Tên người gửi tin vào ở dòng thời gian: `Omni Identity.display_name`, rồi tên Lead/Deal (ví dụ "Khách Zalo OA 8383"), rồi mã rút gọn `Zalo OA …8383`; không bao giờ hiện mã số thô. Tin cũ sửa bằng lệnh chạy tay `omni_crm.ops.backfill_sender.run` (mặc định chỉ xem trước). Cách áp patch và build: `omni_crm/crm_frontend_patch/README.md`.
 
 ## 9. Test bắt buộc

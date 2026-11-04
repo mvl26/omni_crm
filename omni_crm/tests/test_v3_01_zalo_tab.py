@@ -346,6 +346,53 @@ class TestConversationApi(ZaloTabCase):
 			inbox.send_reply(self.lead1, "Email", "ok")
 
 
+class TestOaChatContactAndQuotaError(ZaloTabCase):
+	def test_contact_has_names_and_zalo_id_only(self):
+		self.as_user(SALE1)
+		contact = zalo_tab.get_conversation("CRM Lead", self.lead1)["contact"]
+		self.assertEqual(set(contact), {"lead_name", "display_name", "zalo_user_id"})
+		self.assertEqual(contact["display_name"], "Mai Zalo")
+		self.assertEqual(contact["zalo_user_id"], "TD106Z1")
+		self.assertTrue(contact["lead_name"])
+
+	def test_contact_absent_without_zalo_identity_or_when_refused(self):
+		lead = self.make_lead("TD106 Chi Email 2", SALE1)
+		self.make_identity("td106only2@example.com", "Email", lead, "Chị Mail")
+		frappe.db.commit()
+		self.as_user(SALE1)
+		self.assertIsNone(zalo_tab.get_conversation("CRM Lead", lead)["contact"])
+		with mock.patch(
+			"omni_crm.api.customer.get_mini_profile",
+			return_value={"person_refused": True},
+		):
+			self.assertIsNone(zalo_tab.get_conversation("CRM Lead", self.lead1)["contact"])
+
+	def test_contact_follows_permissions(self):
+		self.as_user(SALE2)
+		with self.assertRaises(frappe.PermissionError):
+			zalo_tab.get_conversation("CRM Lead", self.lead1)
+
+	def test_error_224_is_permanent_with_clear_vietnamese_message(self):
+		from omni_crm.channels.zalo import errors
+
+		kind, message = errors.classify(-224)
+		self.assertEqual(kind, errors.PERMANENT)
+		self.assertIn("không hỗ trợ gửi tin qua API", message)
+		self.assertNotIn("224", message)
+
+	def test_failed_message_shows_message_not_code(self):
+		reason = "Gói OA hiện tại không hỗ trợ gửi tin qua API; hãy nhắn từ trang Zalo OA"
+		out = self.make_outbound(self.lead1, "Dạ em chào", 3, status="Failed")
+		frappe.db.set_value("Omni Outbound Message", out, "last_error", reason)
+		self.as_user(SALE1)
+		msg = next(
+			m for m in zalo_tab.get_conversation("CRM Lead", self.lead1)["messages"] if m["name"] == out
+		)
+		self.assertEqual(msg["status"], "Failed")
+		self.assertEqual(msg["error"], reason)
+		self.assertTrue(zalo_tab.get_conversation("CRM Lead", self.lead1)["compose"]["can_send"])
+
+
 class TestTabSwitch(BridgeTestCase):
 	def setUp(self):
 		super().setUp()

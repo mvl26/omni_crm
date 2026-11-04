@@ -67,6 +67,29 @@ def _message(item: dict) -> dict:
 	}
 
 
+def _contact(lead: str, data: dict) -> dict | None:
+	"""Thông tin để nhân viên tự tìm khách trong trang chat Zalo OA chính thức (Zalo không mở thẳng hội thoại theo tham số).
+
+	Chỉ gồm tên khách (Lead, định danh) và mã người dùng Zalo; None khi Lead không có định danh Zalo hoặc khách đã từ chối liên hệ.
+	"""
+	if (data.get("profile") or {}).get("person_refused"):
+		return None
+	rows = frappe.get_all(
+		"Omni Identity",
+		filters={"lead": lead, "channel_type": CHANNEL},
+		fields=["external_id", "display_name"],
+		order_by="last_inbound_at desc, creation desc",
+		limit_page_length=1,
+	)
+	if not rows:
+		return None
+	return {
+		"lead_name": data["lead"].get("lead_name") or "",
+		"display_name": rows[0].display_name or "",
+		"zalo_user_id": rows[0].external_id or "",
+	}
+
+
 def _compose(data: dict, can_write: bool) -> dict:
 	"""Trạng thái khung soạn: luôn có `locked` + `reason` khi không gửi được (không có định danh Zalo, từ chối liên hệ...)."""
 	zalo = (data.get("compose") or {}).get("zalo")
@@ -129,6 +152,7 @@ def get_conversation(doctype: str, name: str) -> dict:
 		"lead": lead,
 		"customer_name": (zalo_names[0] if zalo_names else None) or data["lead"].get("lead_name") or "",
 		"messages": rows,
+		"contact": _contact(lead, data),
 		"truncated": bool(data.get("truncated")),
 		"compose": _compose(data, can_write),
 	}

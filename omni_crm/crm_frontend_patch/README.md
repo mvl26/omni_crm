@@ -57,9 +57,14 @@ git worktree remove --force <bench>/worktrees/crm-x
 
 Không đưa `auto-imports.d.ts`, `components.d.ts` hay thư mục build vào patch.
 
+## Nhắn từ trang Zalo OA
+
+Tab có nút **Mở chat Zalo OA** (https://oa.zalo.me/chat, cửa sổ mới 480 px) và khối tên/mã Zalo + **Sao chép**. Nhúng iframe KHÔNG khả thi (Zalo chặn, đã thử 2026-11-04). Tắt cả tab bằng `zalo_tab_disabled`.
+
 ## Kiểm sau khi build (làm bằng mắt, chưa ai làm trên site thật)
 
 1. Mở một Lead có tin Zalo: thấy tab **Zalo** cuối dãy tab; hội thoại hiện bong bóng, khách bên trái.
 2. Site đang sandbox: gửi thử một tin, bong bóng hiện bên phải với nhãn "Thử nghiệm (sandbox), chưa gửi tới khách".
 3. Lead chỉ có email: khung soạn bị khóa kèm lý do.
 4. Tích `zalo_tab_disabled`, tải lại: tab biến mất.
+5. Bấm **Mở chat Zalo OA**: cửa sổ nhỏ mở trang oa.zalo.me/chat; **Sao chép** chép được mã Zalo; mở cửa sổ đúng trang chat.
