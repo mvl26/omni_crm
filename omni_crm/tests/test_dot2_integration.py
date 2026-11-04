@@ -493,9 +493,12 @@ class TestB04BudgetExhausted(BotE2E):
 			analyze.analyze_batch(batch)
 			batches.append(batch)
 			comms = frappe.get_all(
-				"Communication", filters={"reference_name": lead, "omni_inbound_message": ["is", "set"]}
+				"Communication",
+				filters={"reference_name": lead, "omni_inbound_message": ["is", "set"]},
+				fields=["communication_type"],
 			)
 			self.assertEqual(len(comms), i + 1, "kênh vẫn chạy: Lead và dòng thời gian vẫn đủ")
+			self.assertEqual({c.communication_type for c in comms}, {"Chat"}, "ADR 0017: tin Zalo là Chat")
 		runs = frappe.get_all(BOT_RUN, filters={"batch_id": ["in", batches]}, pluck="status")
 		self.assertEqual(sorted(runs), ["Skipped Budget"] * 3)
 		self.assertEqual(self.fake.calls, [], "hết hạn mức: không gọi AI")
