@@ -6,7 +6,7 @@ Ngoại lệ có chủ đích của quy tắc "không sửa app `crm`": chỉ **
 
 | Tệp | Việc |
 | --- | --- |
-| `0001-zalo-tab.patch` | `git diff` của crm v1.73.0: 5 tệp mới (`ZaloTab.vue`, `ZaloIcon.vue`, `composables/zalo.js`, `utils/zaloThread.js`, `tests/unit/zaloThread.test.js`) và 4 tệp sửa vài dòng (`pages/Lead.vue`, `pages/Deal.vue`, `Activities.vue`, `ActivityHeader.vue`) |
+| `0001-zalo-tab.patch` | `git diff` của crm v1.73.0: 5 tệp mới (`ZaloTab.vue`, `ZaloIcon.vue`, `composables/zalo.js`, `utils/zaloThread.js`, `tests/unit/zaloThread.test.js`) và 5 tệp sửa vài dòng (`pages/Lead.vue`, `pages/Deal.vue`, `Activities.vue`, `ActivityHeader.vue`, `SidePanelLayout.vue` chỉ thêm CSS, ADR 0016 mục 12) |
 | `apply.sh` | Áp / kiểm (`--check`) / gỡ (`--revert`) patch. Idempotent. Từ chối nếu crm không đúng commit, nếu tệp đích đang bị sửa, hoặc patch không khớp |
 | `build.sh` | Dựng lại giao diện (`yarn build`) bằng Node >= 20.19; sao lưu giao diện đang chạy và tự phục hồi nếu build lỗi |
 | `CRM_VERSION` | tag và commit crm mà patch dành cho |
@@ -14,7 +14,7 @@ Ngoại lệ có chủ đích của quy tắc "không sửa app `crm`": chỉ **
 ## Yêu cầu
 
 - Node >= 20.19 (đã thử với 20.20.2) và yarn. Node 18 (Node mặc định của bench này) KHÔNG đủ. Không cài vào hệ thống: dùng nvm trong thư mục người dùng (`nvm install 20`); `build.sh` tự tìm trong PATH rồi `~/.nvm/versions/node/*`, hoặc đặt `NODE_BIN_DIR=/đường/dẫn/tới/bin`.
-- `apps/crm` đúng commit trong `CRM_VERSION`, sạch ở 4 tệp bị sửa. (`frontend/node_modules` đã có từ lần cài crm; thiếu thì `build.sh` chạy `yarn install --frozen-lockfile`.)
+- `apps/crm` đúng commit trong `CRM_VERSION`, sạch ở 5 tệp bị sửa. (`frontend/node_modules` đã có từ lần cài crm; thiếu thì `build.sh` chạy `yarn install --frozen-lockfile`.)
 - App `omni_crm` đã cài trên site (API `omni_crm.api.zalo_tab`) và đã `bench migrate` (trường `zalo_tab_disabled`). Không có `omni_crm` thì tab tự ẩn.
 
 ## Cách áp trên một bench khác
@@ -34,11 +34,11 @@ Sau đó tải lại trang CRM bằng Ctrl+Shift+R (CRM là PWA, có thể giữ
 - `vite build` xóa thư mục `crm/public/frontend` rồi ghi mới. Nếu bị ngắt giữa chừng (Ctrl+C, mất điện, hết bộ nhớ) giao diện CRM của mọi người dùng hỏng cho tới khi build lại. `build.sh` đã chép bản đang chạy vào `<crm>/.omni_zalo_backup/` và tự phục hồi khi build **báo lỗi**; nếu tiến trình bị giết cứng thì phục hồi tay: `rm -rf crm/public/frontend && cp -a .omni_zalo_backup/frontend crm/public/frontend && cp -a .omni_zalo_backup/crm.html crm/www/crm.html`.
 - Nên làm ngoài giờ làm việc, hoặc build thử ở một worktree riêng rồi mới chép.
 - Gỡ hẳn: `./apply.sh --revert && ./build.sh`. Chỉ ẩn tab (không build lại): tích `zalo_tab_disabled` trong Omni Settings.
-- Giao diện đã build nằm ngoài git của crm: `bench update` có thể ghi đè mã nguồn (mất tab sau lần build kế tiếp) hoặc báo xung đột ở 4 tệp bị sửa.
+- Giao diện đã build nằm ngoài git của crm: `bench update` có thể ghi đè mã nguồn (mất tab sau lần build kế tiếp) hoặc báo xung đột ở 5 tệp bị sửa.
 
 ## Nâng cấp crm sau này
 
-1. `./apply.sh --revert` (đưa 4 tệp về nguyên bản; tệp mới bị xóa).
+1. `./apply.sh --revert` (đưa 5 tệp về nguyên bản; tệp mới bị xóa).
 2. Nâng cấp crm (`bench update --apps crm` hoặc cách của bạn).
 3. Tạo lại patch cho bản mới (mục dưới); sửa tay phần xung đột nếu `git apply --check` báo (thường chỉ là `tabs` trong `Lead.vue`/`Deal.vue`).
 4. Sửa `CRM_VERSION`, `./apply.sh`, `./build.sh`.

@@ -111,6 +111,30 @@ def _name_note(identity_key: str) -> str:
 	return _("Chưa lấy được tên Zalo: {0}").format(reason)
 
 
+def _bot(lead: str, info: dict) -> dict | None:
+	"""Thẻ tóm tắt của bot cho đầu tab Zalo: tóm tắt, ý định, mức gấp, điểm, giờ phân tích gần nhất; None khi bot chưa ghi gì.
+
+	`info` là khối `lead` của `inbox.thread_data` (đã kiểm quyền đọc Lead, điểm đã qua `scoring.score_view`).
+	"""
+	summary = (info.get("omni_bot_summary") or "").strip()
+	intent = info.get("omni_intent") or ""
+	if not summary and not intent:
+		return None
+	analyzed_at = frappe.db.get_value(
+		"Omni Bot Run",
+		{"lead": lead, "kind": "Analyze", "status": "Success"},
+		"creation",
+		order_by="creation desc",
+	)
+	return {
+		"summary": summary,
+		"intent": intent,
+		"urgency": frappe.db.get_value(LEAD, lead, "omni_urgency") or "",
+		"score": info.get("omni_score"),
+		"analyzed_at": analyzed_at,
+	}
+
+
 def _compose(data: dict, can_write: bool) -> dict:
 	"""Trạng thái khung soạn: luôn có `locked` + `reason` khi không gửi được (không có định danh Zalo, từ chối liên hệ...)."""
 	zalo = (data.get("compose") or {}).get("zalo")
@@ -164,6 +188,7 @@ def get_conversation(doctype: str, name: str) -> dict:
 			"lead": None,
 			"customer_name": "",
 			"messages": [],
+			"bot": None,
 			"truncated": False,
 			"compose": _compose({}, False),
 		}
@@ -184,6 +209,7 @@ def get_conversation(doctype: str, name: str) -> dict:
 		"customer_name": (zalo_names[0] if zalo_names else None) or data["lead"].get("lead_name") or "",
 		"messages": rows,
 		"contact": _contact(lead, data),
+		"bot": _bot(lead, data["lead"]),
 		"truncated": bool(data.get("truncated")),
 		"compose": _compose(data, can_write),
 	}
