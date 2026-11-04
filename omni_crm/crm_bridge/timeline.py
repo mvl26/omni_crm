@@ -39,6 +39,43 @@ def resolve_target(target: str | None) -> tuple[str, str] | None:
 	return None
 
 
+def short_external_id(channel_type: str | None, external_id: str | None) -> str:
+	"""Mã rút gọn để làm nhãn dự phòng, ví dụ "Zalo OA …8383"; không bao giờ trả mã dài nguyên vẹn."""
+	tail = "".join(ch for ch in str(external_id or "") if ch.isalnum())[-4:]
+	label = channel_type or _("Khách")
+	return f"{label} …{tail}" if tail else str(label)
+
+
+def sender_label(
+	display_name: str | None,
+	fallback_name: str | None,
+	channel_type: str | None,
+	external_id: str | None,
+) -> str:
+	"""Tên người gửi tin vào: `Omni Identity.display_name`, rồi tên hiển thị của Lead/Deal, cuối cùng mã rút gọn."""
+	for candidate in (display_name, fallback_name):
+		if candidate and str(candidate).strip():
+			return str(candidate).strip()
+	return short_external_id(channel_type, external_id)
+
+
+def target_display_name(target: tuple[str, str] | None) -> str | None:
+	"""Tên hiển thị của Lead/Deal (trường `lead_name`); None nếu không có."""
+	if not target:
+		return None
+	return frappe.db.get_value(target[0], target[1], "lead_name") or None
+
+
+def _identity_display_name(row: Any) -> str | None:
+	"""`display_name` của định danh gửi tin. Worker chỉ ghi `identity` lên tin SAU khi ghi dòng thời gian, nên lần đầu
+	phải tra theo `identity_key`."""
+	if row.identity:
+		return frappe.db.get_value("Omni Identity", row.identity, "display_name")
+	if row.identity_key:
+		return frappe.db.get_value("Omni Identity", {"identity_key": row.identity_key}, "display_name")
+	return None
+
+
 def render_text(text: str | None, attachments: list[dict] | None = None) -> str:
 	"""HTML an toàn cho nội dung tin: thoát ký tự, xuống dòng thành <br>, đính kèm là liên kết http(s)."""
 	html = escape_html(text or "").replace("\r\n", "\n").replace("\n", "<br>")
@@ -162,11 +199,13 @@ def append(target: str | None, msgs: list[Any]) -> int:
 			"communication",
 			"received_at",
 			"identity",
+			"identity_key",
 			"external_sender_id",
 		],
 		order_by="received_at asc, name asc",
 	)
 	done = 0
+	target_name = target_display_name(tgt)
 	for row in rows:
 		if row.channel_type == EMAIL:
 			done += int(_link_email(tgt, row))
@@ -176,9 +215,12 @@ def append(target: str | None, msgs: list[Any]) -> int:
 		if frappe.db.exists(COMMUNICATION, {"omni_inbound_message": row.name}):
 			continue  # đã ghi ở lượt trước
 		echo = row.event_type == "oa_echo"
-		who = (
-			frappe.db.get_value("Omni Identity", row.identity, "display_name") if row.identity else None
-		) or row.external_sender_id
+		who = sender_label(
+			_identity_display_name(row),
+			target_name,
+			row.channel_type,
+			row.external_sender_id,
+		)
 		_insert_communication(
 			{
 				"sent_or_received": "Sent" if echo else "Received",

@@ -290,11 +290,16 @@ def check_lead_access(lead: str) -> None:
 @frappe.whitelist()
 def get_thread(lead: str) -> dict:
 	"""Toàn bộ hội thoại của Lead trên mọi kênh, theo thời gian tăng dần (không kèm payload gốc)."""
+	check_lead_access(lead)
+	return thread_data(lead)
+
+
+def thread_data(lead: str) -> dict:
+	"""Dữ liệu hội thoại của Lead; người gọi PHẢI đã gọi `check_lead_access` (dùng chung với tab Zalo, V3-01)."""
 	from omni_crm.api import bot_control  # import trễ: drafts.py dùng lại các hàm của module này
 	from omni_crm.api import customer as customer_api
 	from omni_crm.api import drafts as drafts_mod
 
-	check_lead_access(lead)
 	inbound = frappe.get_all(
 		INBOUND,
 		filters={"lead": lead, "event_type": ["in", sorted(TIMELINE_EVENTS)], "status": ["!=", "Ignored"]},
@@ -339,6 +344,7 @@ def get_thread(lead: str) -> dict:
 		r.name: r.display_name
 		for r in frappe.get_all(IDENTITY, filters={"lead": lead}, fields=["name", "display_name"])
 	}
+	lead_label = frappe.db.get_value(LEAD, lead, "lead_name")
 	call_rows = frappe.get_all(
 		CALL,
 		filters={
@@ -374,7 +380,10 @@ def get_thread(lead: str) -> dict:
 				"channel_type": m.channel_type,
 				"sender": _("Nhân viên (ngoài hệ thống)")
 				if echo
-				else names.get(m.identity) or m.external_sender_id,
+				else timeline.sender_label(
+					names.get(m.identity), lead_label, m.channel_type, m.external_sender_id
+				),
+				"kind": "echo" if echo else "customer",
 				"text": m.text or "",
 				"attachments": _safe_attachments(m.attachments),
 				"at": m.received_at,
@@ -407,6 +416,8 @@ def get_thread(lead: str) -> dict:
 				"error": o.last_error if o.status in ("Failed", "Blocked") else None,
 				"queued": o.status == "Queued",
 				"bot_sent": o.source == "Bot",
+				"source": o.source,
+				"kind": "bot" if o.source == "Bot" else "sale",
 				"bot": bot_meta.get(o.bot_draft) if o.source == "Bot" else None,
 			}
 		)
@@ -594,6 +605,11 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 		frappe.throw(_("Email được trả lời bằng trình soạn thư của CRM; hãy mở Lead trong CRM."))
 	if channel != "Zalo OA":
 		frappe.throw(_("Kênh {0} chưa hỗ trợ trả lời từ Hộp thư").format(channel))
+	return send_zalo(lead, text, confirm_paid)
+
+
+def send_zalo(lead: str, text: str, confirm_paid: int | str = 0) -> dict:
+	"""Gửi tin Sale qua Zalo OA của Lead (kiểm nội dung, từ chối liên hệ, khung gửi); người gọi PHẢI đã kiểm quyền ghi."""
 	text = (text or "").strip()
 	if not text:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))

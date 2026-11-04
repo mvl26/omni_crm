@@ -182,6 +182,18 @@ def meta_requeue_enabled() -> bool:
 	return not (row and cint(row[0][0]))
 
 
+def zalo_tab_enabled() -> bool:
+	"""Có hiện tab "Zalo" (bong bóng chat + khung trả lời) trong trang Lead/Deal của CRM không (V3-01). Cực tính NGƯỢC
+	(`zalo_tab_disabled`): chưa lưu hoặc 0 = hiện, 1 = ẩn. Lỗi đọc = ẩn."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'zalo_tab_disabled'"
+		)
+	except Exception:
+		return False
+	return not (row and cint(row[0][0]))
+
+
 def dashboard_enabled() -> bool:
 	"""Công tắc Dashboard CSKH (V2-04); chưa từng lưu = bật."""
 	return bool(care_setting("dashboard_enabled"))

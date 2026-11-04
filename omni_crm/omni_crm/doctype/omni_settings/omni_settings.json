@@ -88,6 +88,7 @@
   "meta_requeue_batch",
   "meta_requeue_disabled",
   "webhook_spool_disabled",
+  "zalo_tab_disabled",
   "sec_release_gate",
   "q1_allowed",
   "q11_allowed",
@@ -590,6 +591,13 @@
    "label": "Tắt hàng dự phòng webhook",
    "default": "0",
    "description": "Bật: khi DB không ghi được tin, webhook trả 503 như trước V21-04 (không ghi hàng dự phòng); tác vụ quét vẫn chèn lại các tin đã có trong hàng. Chưa từng lưu hoặc 0 = dùng hàng dự phòng (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
+  },
+  {
+   "fieldname": "zalo_tab_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt tab Zalo trong trang Lead/Deal",
+   "default": "0",
+   "description": "Bật: ẩn tab Zalo (bong bóng chat + khung trả lời) trong giao diện CRM. Chưa từng lưu hoặc 0 = hiện (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt). Hộp thư và dòng thời gian không bị ảnh hưởng."
   },
   {
    "fieldname": "sec_release_gate",
