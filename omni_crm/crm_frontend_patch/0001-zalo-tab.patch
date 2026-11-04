@@ -39,10 +39,10 @@ index bc2f6dc..522d37c 100644
          <Button
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..593dd1e
+index 0000000..a86454a
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,356 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <div
@@ -141,12 +141,19 @@ index 0000000..593dd1e
 +    >
 +      <div class="flex flex-wrap items-center gap-2">
 +        <Button :label="__('Mở chat Zalo OA')" @click="openChat" />
++        <span v-if="panelMode === 'direct' && contactNames">{{
++          __('Mở chat với {0}', [contactNames])
++        }}</span>
 +      </div>
-+      <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
++      <!-- Dự phòng khi thiếu mã Zalo hoặc mã OA: không mở thẳng được hội thoại, phải tìm tay -->
++      <div
++        v-if="panelMode === 'fallback'"
++        class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1"
++      >
 +        <span>{{
-+          directLink
-+            ? __('Mở đúng hội thoại của khách:')
-+            : __('Trong danh sách chat, tìm khách theo tên hoặc mã Zalo:')
++          __(
++            'Chưa mở thẳng được hội thoại. Trong danh sách chat, tìm khách theo tên hoặc mã Zalo:',
++          )
 +        }}</span>
 +        <span v-if="contactNames" class="font-medium text-ink-gray-9">{{
 +          contactNames
@@ -232,8 +239,8 @@ index 0000000..593dd1e
 +  canSubmit,
 +  dayLabel,
 +  groupByDay,
++  chatPanelMode,
 +  copyToClipboard,
-+  hasDirectChatLink,
 +  isRelevantUpdate,
 +  openOaChat,
 +  shortZaloId,
@@ -286,7 +293,7 @@ index 0000000..593dd1e
 +// Nhắn từ trang chính thức của Zalo OA (OA gói Cơ bản không gửi được qua API). Zalo không mở thẳng hội thoại theo
 +// tham số, nên chỉ hiện thông tin để nhân viên tự tìm khách. Zalo chặn nhúng trang chat vào khung (đã thử): chỉ có nút mở cửa sổ riêng.
 +const contact = computed(() => conversation.data?.contact || null)
-+const directLink = computed(() => hasDirectChatLink(contact.value))
++const panelMode = computed(() => chatPanelMode(contact.value))
 +const contactNames = computed(() => {
 +  const c = contact.value
 +  if (!c) return ''
@@ -506,10 +513,10 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..fccac9d
+index 0000000..e774bf6
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,158 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -629,6 +636,15 @@ index 0000000..fccac9d
 +  return buildOaChatUrl(contact) !== OA_CHAT_URL
 +}
 +
++/**
++ * Chế độ khối "Mở chat Zalo OA": 'none' (không có thông tin khách), 'direct' (mở thẳng hội thoại, chỉ cần nút),
++ * 'fallback' (thiếu uid hoặc oaid: hiện hướng dẫn tìm tay + mã để sao chép).
++ */
++export function chatPanelMode(contact) {
++  if (!contact) return 'none'
++  return hasDirectChatLink(contact) ? 'direct' : 'fallback'
++}
++
 +/** Mở trang chat Zalo OA (đúng hội thoại nếu đủ thông tin) ở cửa sổ mới; trả true nếu gọi được window.open. */
 +export function openOaChat(contact = null, win = globalThis.window) {
 +  if (!win || typeof win.open !== 'function') return false
@@ -661,14 +677,15 @@ index 0000000..fccac9d
 +}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..2b17adc
+index 0000000..0b168cb
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,214 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
 +  buildOaChatUrl,
++  chatPanelMode,
 +  hasDirectChatLink,
 +  bubbleSide,
 +  chatWindowFeatures,
@@ -814,6 +831,13 @@ index 0000000..2b17adc
 +      expect(buildOaChatUrl(bad)).toBe('https://oa.zalo.me/chat')
 +      expect(hasDirectChatLink(bad)).toBe(false)
 +    }
++  })
++  it('đủ uid+oaid: chỉ nút (direct), không hướng dẫn tìm tay; thiếu một trong hai: fallback', () => {
++    expect(chatPanelMode({ zalo_user_id: '1', oa_id: '2' })).toBe('direct')
++    expect(chatPanelMode({ zalo_user_id: '1', oa_id: '' })).toBe('fallback')
++    expect(chatPanelMode({ zalo_user_id: '', oa_id: '2' })).toBe('fallback')
++    expect(chatPanelMode({ zalo_user_id: 'x1', oa_id: '2' })).toBe('fallback')
++    expect(chatPanelMode(null)).toBe('none')
 +  })
 +  it('openOaChat mở URL của khách', () => {
 +    const calls = []

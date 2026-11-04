@@ -59,7 +59,7 @@ Không đưa `auto-imports.d.ts`, `components.d.ts` hay thư mục build vào pa
 
 ## Nhắn từ trang Zalo OA
 
-Tab có nút **Mở chat Zalo OA** (https://oa.zalo.me/chat, cửa sổ mới 480 px) và khối tên/mã Zalo + **Sao chép**. Mở đúng hội thoại bằng `?uid=<mã Zalo>&oaid=<mã OA>` (oaid chữ thường; thiếu thông tin thì mở trang chung). Nhúng iframe KHÔNG khả thi (Chrome chặn, thử 2026-11-04). Tắt cả tab bằng `zalo_tab_disabled`.
+Tab có nút **Mở chat Zalo OA** (https://oa.zalo.me/chat, cửa sổ mới 480 px) (đủ uid+oaid thì chỉ nút và dòng "Mở chat với <tên>"; thiếu thì hiện hướng dẫn tìm tay, mã Zalo + **Sao chép**). Mở đúng hội thoại bằng `?uid=<mã Zalo>&oaid=<mã OA>` (oaid chữ thường; thiếu thông tin thì mở trang chung). Nhúng iframe KHÔNG khả thi (Chrome chặn, thử 2026-11-04). Tắt cả tab bằng `zalo_tab_disabled`.
 
 ## Kiểm sau khi build (làm bằng mắt, chưa ai làm trên site thật)
 
@@ -67,4 +67,4 @@ Tab có nút **Mở chat Zalo OA** (https://oa.zalo.me/chat, cửa sổ mới 48
 2. Site đang sandbox: gửi thử một tin, bong bóng hiện bên phải với nhãn "Thử nghiệm (sandbox), chưa gửi tới khách".
 3. Lead chỉ có email: khung soạn bị khóa kèm lý do.
 4. Tích `zalo_tab_disabled`, tải lại: tab biến mất.
-5. Bấm **Mở chat Zalo OA**: cửa sổ nhỏ mở trang oa.zalo.me/chat; **Sao chép** chép được mã Zalo; mở cửa sổ đúng hội thoại của khách (kiểm địa chỉ có `uid=` và `oaid=`).
+5. Bấm **Mở chat Zalo OA**: cửa sổ nhỏ mở trang oa.zalo.me/chat; khi thiếu uid/oaid: hướng dẫn tìm tay + **Sao chép** chép được mã Zalo; mở cửa sổ đúng hội thoại của khách (kiểm địa chỉ có `uid=` và `oaid=`).
