@@ -493,6 +493,71 @@ class TestProfileReasonAndRefresh(ZaloTabCase):
 		self.assertEqual(again["updated"], 0)
 
 
+class TestRefreshSafety(ZaloTabCase):
+	def blank_names(self):
+		frappe.db.set_value("Omni Identity", self.ident1, "display_name", None)
+		frappe.db.set_value("Omni Identity", self.ident2, "display_name", None)
+		frappe.db.commit()
+		for ident in (self.ident1, self.ident2):
+			key = frappe.db.get_value("Omni Identity", ident, "identity_key")
+			self.addCleanup(worker_hooks.note_profile_reason, key, None)
+			self.addCleanup(frappe.cache().delete_value, f"omni:zalo:profile_fail:{key}")
+
+	def test_skips_identities_of_refused_leads(self):
+		self.blank_names()
+		self.sandbox(False)
+		seen = []
+
+		def fake(msg, channel_doc, ignore_cooldown=False, error_sink=None):
+			seen.append(msg.external_sender_id)
+			return {"display_name": "Tên"}
+
+		def refused(lead):
+			return {"refused": lead == self.lead1, "erased": False}
+
+		with (
+			mock.patch("omni_crm.api.customer._person_flags", side_effect=refused),
+			mock.patch.object(worker_hooks, "fetch_profile", side_effect=fake),
+		):
+			res = profile_refresh.run(dry_run=0)
+		self.assertNotIn("TD106Z1", seen)
+		self.assertIn("TD106Z2", seen)
+		self.assertFalse(frappe.db.get_value("Omni Identity", self.ident1, "display_name"))
+		self.assertEqual(frappe.db.get_value("Omni Identity", self.ident2, "display_name"), "Tên")
+		self.assertGreaterEqual(res["updated"], 1)
+
+	def test_stops_on_rate_limit_or_token_error(self):
+		for err in (errors.to_error(-223), errors.to_error(-216)):
+			self.blank_names()
+			self.sandbox(False)
+			calls = []
+
+			def fake(msg, channel_doc, ignore_cooldown=False, error_sink=None, _err=err):
+				calls.append(msg.external_sender_id)
+				error_sink.append(_err)
+				return {}
+
+			with mock.patch.object(worker_hooks, "fetch_profile", side_effect=fake):
+				res = profile_refresh.run(dry_run=0)
+			self.assertEqual(len(calls), 1, err.kind)  # dừng ngay sau lỗi đầu tiên
+			self.assertEqual(res["stopped"], err.kind)
+
+	def test_permanent_error_continues_to_next_customer(self):
+		self.blank_names()
+		self.sandbox(False)
+		calls = []
+
+		def fake(msg, channel_doc, ignore_cooldown=False, error_sink=None):
+			calls.append(1)
+			error_sink.append(errors.to_error(-213))
+			return {}
+
+		with mock.patch.object(worker_hooks, "fetch_profile", side_effect=fake):
+			res = profile_refresh.run(dry_run=0)
+		self.assertGreaterEqual(len(calls), 2)
+		self.assertNotIn("stopped", res)
+
+
 class TestTabSwitch(BridgeTestCase):
 	def setUp(self):
 		super().setUp()

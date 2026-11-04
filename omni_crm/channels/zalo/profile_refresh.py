@@ -14,7 +14,7 @@ import frappe
 from frappe.utils import cint
 
 from omni_crm import flags
-from omni_crm.channels.zalo import worker_hooks
+from omni_crm.channels.zalo import errors, worker_hooks
 from omni_crm.pipeline.retry import redact
 
 IDENTITY = "Omni Identity"
@@ -29,14 +29,38 @@ class _Msg:
 		self.identity_key, self.external_sender_id, self.channel = identity_key, external_id, channel
 
 
+STOP_KINDS = (errors.TRANSIENT, errors.TOKEN)  # quá hạn mức / token hỏng: dừng cả lượt, không dội tiếp
+
+
+def _refused(lead: str | None, cache: dict[str, bool]) -> bool:
+	"""Lead của định danh đã từ chối nhận liên hệ / đã bị xóa dữ liệu (cùng hàm kiểm với Hộp thư)."""
+	if not lead:
+		return False
+	if lead not in cache:
+		from omni_crm.api import customer as customer_api
+
+		cache[lead] = bool(customer_api._person_flags(lead)["refused"])
+	return cache[lead]
+
+
 def _missing(limit: int) -> list[dict]:
-	return frappe.get_all(
+	"""Định danh Zalo thiếu tên, bỏ qua khách đã từ chối / đã bị xóa dữ liệu; tối đa `limit`."""
+	out: list[dict] = []
+	cache: dict[str, bool] = {}
+	rows = frappe.get_all(
 		IDENTITY,
 		filters=[["channel_type", "=", "Zalo OA"], ["display_name", "is", "not set"]],
-		fields=["name", "identity_key", "external_id"],
+		fields=["name", "identity_key", "external_id", "lead"],
 		order_by="last_inbound_at desc, creation desc",
-		limit_page_length=limit,
+		limit_page_length=limit * 4 + 20,  # dư để bù số bị loại
 	)
+	for row in rows:
+		if _refused(row.lead, cache):
+			continue
+		out.append(row)
+		if len(out) >= limit:
+			break
+	return out
 
 
 def run(dry_run: int | str = 1, limit: int | str = DEFAULT_LIMIT) -> dict:
@@ -62,8 +86,9 @@ def run(dry_run: int | str = 1, limit: int | str = DEFAULT_LIMIT) -> dict:
 			continue
 		channel_doc = frappe.get_doc("Omni Channel", channel)
 		msg = _Msg(row.identity_key, row.external_id, channel)
+		sink: list = []
 		try:
-			profile = worker_hooks.fetch_profile(msg, channel_doc, ignore_cooldown=True)
+			profile = worker_hooks.fetch_profile(msg, channel_doc, ignore_cooldown=True, error_sink=sink)
 		except Exception as e:  # fetch_profile không ném; phòng hờ để lô không dừng giữa chừng
 			frappe.logger("omni").warning("omni zalo: cập nhật tên lỗi: %s", redact(str(e))[:200])
 			profile = {}
@@ -73,6 +98,9 @@ def run(dry_run: int | str = 1, limit: int | str = DEFAULT_LIMIT) -> dict:
 			result["updated"] += 1
 		else:
 			result["failed"] += 1
-		frappe.db.commit()  # mỗi khách một đơn vị việc; API ngoài đã gọi xong, không giữ khóa
+		frappe.db.commit()
+		if sink and getattr(sink[0], "kind", None) in STOP_KINDS:
+			result["stopped"] = sink[0].kind  # dừng lượt: quá hạn mức hoặc token hỏng
+			break  # mỗi khách một đơn vị việc; API ngoài đã gọi xong, không giữ khóa
 	print(result)
 	return result
