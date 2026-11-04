@@ -191,6 +191,7 @@ class TestConversationApi(ZaloTabCase):
 		self.as_user(SALE1)
 		res = zalo_tab.get_conversation("CRM Deal", doc.name)
 		self.assertEqual(res["messages"], [])
+		self.assertIsNone(res["bot"])
 		self.assertFalse(res["compose"]["can_send"])
 		with self.assertRaises(frappe.ValidationError):
 			zalo_tab.send("CRM Deal", doc.name, "x")
@@ -581,3 +582,60 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 
 	def test_compose_exposes_max_chars(self):
 		self.assertEqual(zalo_tab._compose({}, False)["max_chars"], outbound.MAX_TEXT_CHARS)
+
+
+class TestBotSummaryCard(ZaloTabCase):
+	"""V3-03: thẻ tóm tắt của bot ở đầu tab Zalo (khối `bot` của get_conversation)."""
+
+	def _run(self, lead, status, minutes_ago):
+		doc = frappe.get_doc({"doctype": "Omni Bot Run", "kind": "Analyze", "status": status, "lead": lead})
+		doc.insert(ignore_permissions=True)
+		self.addCleanup(
+			lambda n=doc.name: (frappe.db.delete("Omni Bot Run", {"name": n}), frappe.db.commit())
+		)
+		frappe.db.set_value(
+			"Omni Bot Run",
+			doc.name,
+			"creation",
+			frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=-minutes_ago),
+			update_modified=False,
+		)
+		return doc.name
+
+	def test_bot_block_absent_until_bot_writes(self):
+		self.as_user(SALE1)
+		self.assertIsNone(zalo_tab.get_conversation("CRM Lead", self.lead1)["bot"])
+
+	def test_bot_block_has_full_summary_and_latest_success_run(self):
+		long = "Khách cần báo giá hệ thống SPD cho bệnh viện. " * 40
+		frappe.db.set_value(
+			"CRM Lead",
+			self.lead1,
+			{"omni_bot_summary": long, "omni_intent": "Tư vấn", "omni_urgency": "Cao"},
+			update_modified=False,
+		)
+		self._run(self.lead1, "Success", 30)
+		newest_ok = self._run(self.lead1, "Success", 10)
+		self._run(self.lead1, "Skipped Switch", 1)  # lượt bị bỏ qua không tính là giờ phân tích
+		frappe.db.commit()
+		self.as_user(SALE1)
+		bot = zalo_tab.get_conversation("CRM Lead", self.lead1)["bot"]
+		self.assertEqual(set(bot), {"summary", "intent", "urgency", "score", "analyzed_at"})
+		self.assertEqual(bot["summary"], long.strip())  # không cắt
+		self.assertEqual(bot["intent"], "Tư vấn")
+		self.assertEqual(bot["urgency"], "Cao")
+		self.assertEqual(
+			str(bot["analyzed_at"]), str(frappe.db.get_value("Omni Bot Run", newest_ok, "creation"))
+		)
+
+	def test_bot_block_via_deal_and_follows_permissions(self):
+		frappe.db.set_value("CRM Lead", self.lead1, "omni_intent", "Hỏi giá", update_modified=False)
+		deal = self.make_deal(self.lead1, SALE1)
+		frappe.db.commit()
+		self.as_user(SALE1)
+		bot = zalo_tab.get_conversation("CRM Deal", deal)["bot"]
+		self.assertEqual(bot["intent"], "Hỏi giá")
+		self.assertEqual(bot["summary"], "")
+		self.as_user(SALE2)
+		with self.assertRaises(frappe.PermissionError):
+			zalo_tab.get_conversation("CRM Lead", self.lead1)

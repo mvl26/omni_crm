@@ -39,12 +39,38 @@ index bc2f6dc..522d37c 100644
          <Button
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..a86454a
+index 0000000..8710c0c
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,391 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
++    <!-- Thẻ tóm tắt của bot: chữ xuống dòng theo nội dung, không cắt; quá dài thì cuộn trong thẻ -->
++    <div
++      v-if="bot"
++      class="mx-3 mt-3 shrink-0 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2.5 sm:mx-10"
++    >
++      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
++        <span class="text-sm font-semibold text-ink-gray-9">{{
++          __('Tóm tắt của bot AI')
++        }}</span>
++        <span
++          v-for="chip in bot.chips"
++          :key="chip.key"
++          class="rounded bg-surface-gray-3 px-1.5 py-0.5 text-xs text-ink-gray-8"
++          >{{ chipLabel(chip) }}</span
++        >
++        <span v-if="bot.analyzedAt" class="ml-auto text-xs text-ink-gray-5">{{
++          __('Phân tích lúc {0}', [bot.analyzedAt])
++        }}</span>
++      </div>
++      <div
++        v-if="bot.summary"
++        class="mt-1.5 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words text-base leading-relaxed text-ink-gray-8"
++      >
++        {{ bot.summary }}
++      </div>
++    </div>
 +    <div
 +      ref="scroller"
 +      class="min-h-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-10"
@@ -235,6 +261,7 @@ index 0000000..a86454a
 +import {
 +  POLL_MS,
 +  ZALO_EVENT,
++  botCard,
 +  bubbleSide,
 +  canSubmit,
 +  dayLabel,
@@ -293,6 +320,14 @@ index 0000000..a86454a
 +// Nhắn từ trang chính thức của Zalo OA (OA gói Cơ bản không gửi được qua API). Zalo không mở thẳng hội thoại theo
 +// tham số, nên chỉ hiện thông tin để nhân viên tự tìm khách. Zalo chặn nhúng trang chat vào khung (đã thử): chỉ có nút mở cửa sổ riêng.
 +const contact = computed(() => conversation.data?.contact || null)
++
++// Tóm tắt, ý định, mức gấp, điểm do bot phân tích ghi vào Lead (omni_crm.api.zalo_tab._bot).
++const bot = computed(() => botCard(conversation.data?.bot))
++function chipLabel(chip) {
++  if (chip.key === 'intent') return __('Ý định: {0}', [chip.value])
++  if (chip.key === 'urgency') return __('Mức gấp: {0}', [chip.value])
++  return __('Điểm: {0}', [chip.value])
++}
 +const panelMode = computed(() => chatPanelMode(contact.value))
 +const contactNames = computed(() => {
 +  const c = contact.value
@@ -513,10 +548,10 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..e774bf6
+index 0000000..0225fd0
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,181 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -675,18 +710,42 @@ index 0000000..e774bf6
 +    return { ok: false, error: e?.name || 'failed' }
 +  }
 +}
++
++/**
++ * Dữ liệu cho thẻ tóm tắt của bot ở đầu tab Zalo; null khi bot chưa ghi tóm tắt hay ý định.
++ * Trả { summary, chips: [{ key, value }], analyzedAt } (key: intent | urgency | score; bỏ mục trống; điểm 0 vẫn hiện).
++ */
++export function botCard(bot) {
++  if (!bot) return null
++  const summary = String(bot.summary || '').trim()
++  const intent = String(bot.intent || '').trim()
++  if (!summary && !intent) return null
++  const chips = []
++  if (intent) chips.push({ key: 'intent', value: intent })
++  const urgency = String(bot.urgency || '').trim()
++  if (urgency) chips.push({ key: 'urgency', value: urgency })
++  if (bot.score !== null && bot.score !== undefined && bot.score !== '')
++    chips.push({ key: 'score', value: String(bot.score) })
++  const at = bot.analyzed_at
++  return {
++    summary,
++    chips,
++    analyzedAt: parseAt(at) ? `${timeLabel(at)} ${dayLabel(dayKey(at))}` : '',
++  }
++}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..0b168cb
+index 0000000..40ea5e6
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,250 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
 +  buildOaChatUrl,
 +  chatPanelMode,
 +  hasDirectChatLink,
++  botCard,
 +  bubbleSide,
 +  chatWindowFeatures,
 +  copyToClipboard,
@@ -893,5 +952,40 @@ index 0000000..0b168cb
 +    })
 +    expect((await copyToClipboard('abc', {})).error).toBe('unsupported')
 +    expect((await copyToClipboard('', ok)).error).toBe('empty')
++  })
++})
++
++describe('botCard', () => {
++  it('null khi bot chưa ghi tóm tắt hay ý định', () => {
++    expect(botCard(null)).toBe(null)
++    expect(botCard({ summary: '  ', intent: '', score: 5 })).toBe(null)
++  })
++  it('giữ nguyên tóm tắt dài, chips theo thứ tự, điểm 0 vẫn hiện', () => {
++    const long = 'Khách cần báo giá.\n'.repeat(30)
++    const card = botCard({
++      summary: long,
++      intent: 'Tư vấn',
++      urgency: 'Cao',
++      score: 0,
++      analyzed_at: '2026-11-04 11:34:43.412426',
++    })
++    expect(card.summary).toBe(long.trim())
++    expect(card.chips).toEqual([
++      { key: 'intent', value: 'Tư vấn' },
++      { key: 'urgency', value: 'Cao' },
++      { key: 'score', value: '0' },
++    ])
++    expect(card.analyzedAt).toBe('11:34 04/11/2026')
++  })
++  it('bỏ mục trống và giờ không đọc được', () => {
++    const card = botCard({
++      summary: 'Tóm tắt',
++      intent: '',
++      urgency: null,
++      score: null,
++      analyzed_at: 'x',
++    })
++    expect(card.chips).toEqual([])
++    expect(card.analyzedAt).toBe('')
 +  })
 +})
