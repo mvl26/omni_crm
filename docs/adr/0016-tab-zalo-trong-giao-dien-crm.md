@@ -27,6 +27,8 @@ Tab hội thoại mới không làm được bằng Custom Field, hook, Property
 - Tab chỉ có cho giao diện máy tính (Lead/Deal); trang di động (`MobileLead.vue`, `MobileDeal.vue`) chưa có.
 - `get_docinfo` của CRM vẫn chỉ nạp 21 Communication; tab Zalo đọc từ Omni Inbound/Outbound Message (tối đa 300 tin mỗi loại), không bị giới hạn đó.
 
+- **Các điểm còn lại sau review (đã biết, chấp nhận):** (a) `get_conversation` gọi cả `inbox.thread_data` (đo ~160 truy vấn, ~131 ms) dù tab chỉ cần phần Zalo; chấp nhận để dùng một nguồn dữ liệu và guard, tối ưu sau nếu cần. (b) `build.sh` chỉ phục hồi khi build BÁO LỖI (trap ERR), không bắt INT/TERM: Ctrl+C hoặc bị giết giữa chừng thì phải phục hồi tay (lệnh có trong README). (c) Thư mục sao lưu `.omni_zalo_backup/` nằm trong `apps/crm` và chưa nằm trong `.gitignore` của crm (làm `git status` của crm bẩn; xóa khi build đã ổn). (d) `send` không có idempotency phía máy chủ: bấm gửi hai lần ở hai tab/lần gọi khác nhau tạo hai tin; giao diện chỉ chặn trong cùng một tab (cờ `sending` giữ đến khi xong, kể cả bước xác nhận phí).
+
 ## Cách giảm rủi ro
 - Patch nhỏ, ghim đúng commit; `apply.sh` kiểm commit, kiểm patch khớp, từ chối nếu tệp đích đang bị sửa; idempotent (`--check`, `--revert`).
 - `build.sh` sao lưu giao diện đang chạy trước khi build và tự phục hồi nếu build lỗi; build thử trước ở worktree riêng, không build thẳng trên bench thật.
