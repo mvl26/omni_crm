@@ -456,6 +456,26 @@ index 0000000..0db54de
 +    />
 +  </svg>
 +</template>
+diff --git a/frontend/src/components/SidePanelLayout.vue b/frontend/src/components/SidePanelLayout.vue
+index 592f215..4c01da7 100644
+--- a/frontend/src/components/SidePanelLayout.vue
++++ b/frontend/src/components/SidePanelLayout.vue
+@@ -629,6 +629,15 @@ function firstVisibleIndex() {
+   margin: 2px;
+ }
+ 
++/* omni_crm (ADR 0016 mục 12): ô chữ nhiều dòng (Tóm tắt của bot, Nhu cầu...) cao theo nội dung thay vì cố định 3 dòng.
++   Trình duyệt chưa hỗ trợ field-sizing giữ 3 dòng và kéo giãn tay được. */
++:deep(.form-control textarea) {
++  field-sizing: content;
++  min-height: 2.25rem;
++  max-height: 60vh;
++  resize: vertical;
++}
++
+ :deep(.form-control input:not([type='checkbox'])),
+ :deep(.form-control select),
+ :deep(.form-control textarea),
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
 index 0000000..5e7db68

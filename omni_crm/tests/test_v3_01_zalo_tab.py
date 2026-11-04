@@ -546,6 +546,7 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 			"frontend/src/components/Activities/Activities.vue",
 			"frontend/src/components/Activities/ZaloTab.vue",
 			"frontend/src/components/Icons/ZaloIcon.vue",
+			"frontend/src/components/SidePanelLayout.vue",  # V3-03: ô chữ cột phải cao theo nội dung (ADR 0016 mục 12)
 			"frontend/src/composables/zalo.js",
 			"frontend/src/pages/Deal.vue",
 			"frontend/src/pages/Lead.vue",
@@ -565,6 +566,20 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 
 		files = set(re.findall(r"^diff --git a/(\S+) b/", self.patch, flags=re.M))
 		self.assertEqual(files, self.ALLOWED)
+
+	def test_side_panel_change_is_css_only(self):
+		"""SidePanelLayout.vue chỉ được thêm khối CSS cho ô chữ (ADR 0016 mục 12), không đổi template hay script."""
+		part = self.patch.split("diff --git a/frontend/src/components/SidePanelLayout.vue")[1].split(
+			"diff --git"
+		)[0]
+		added = [
+			line[1:] for line in part.splitlines() if line.startswith("+") and not line.startswith("+++")
+		]
+		removed = [line for line in part.splitlines() if line.startswith("-") and not line.startswith("---")]
+		self.assertEqual(removed, [])
+		self.assertIn("field-sizing: content;", "\n".join(added))
+		for line in added:
+			self.assertNotRegex(line, r"<template|<script|v-|@|import ")
 
 	def test_added_code_has_no_v_html_or_eval(self):
 		added = "\n".join(line for line in self.patch.splitlines() if line.startswith("+"))
