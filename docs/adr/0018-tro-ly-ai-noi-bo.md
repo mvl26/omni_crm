@@ -23,6 +23,7 @@ Nhân viên muốn gõ một câu tiếng Việt ("ghi log cuộc gọi ngày 6/
 6. Cổng Q11 giữ nguyên như bot phân tích: client thật chỉ gọi khi `omni_ai_allow_customer_data` bật; SĐT/email chỉ gửi nguyên vẹn khi `omni_ai_unmask_pii` bật (không thì chỉ 3 ký tự cuối).
 
 7. **Bổ sung 2026-11-06 (anh Việt yêu cầu, thay mục "không lưu lịch sử" của brief):** lịch sử trò chuyện được lưu ở `Omni Assistant Session.transcript` (câu lệnh, câu trả lời, thao tác; tối đa 400 dòng). Mở lại tab Trợ lý trên một Lead thì nạp lại phiên gần nhất của CHÍNH người dùng trên Lead đó (người khác không thấy), trạng thái thẻ duyệt đọc lại từ Omni Assistant Action. Nút **Cuộc trò chuyện mới** mở phiên mới, phiên cũ vẫn giữ. Phiên mở lại giữ nguyên `allowed_leads` của chính phiên đó (quy tắc 6 không đổi). Khung chat rộng hơn, ô nhập tối thiểu 4 dòng, cao theo nội dung tới 40% màn hình.
+8. **Bổ sung 2026-11-06 (anh Việt yêu cầu):** tool thứ 8 `create_call_log`: ghi cuộc gọi tay vào **CRM Call Log** (tab Cuộc gọi của Lead trong Frappe CRM, `telephony_medium = Manual`, như nút tạo cuộc gọi của CRM), có nội dung thì kèm **FCRM Note** gắn vào cuộc gọi; quyền tạo của chính người dùng, Lead phải trong phiên và sửa được. Vẫn KHÔNG ghi vào Omni Call (dữ liệu tổng đài). Link trong khung chat không mở giao diện quản trị `/app` nữa: Cuộc gọi, Ghi chú, Việc chuyển sang tab tương ứng của trang Lead; nhật ký chăm sóc (CRM không có tab) hiện nội dung ngay trong dòng.
 
 ## Rủi ro
 

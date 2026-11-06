@@ -51,6 +51,8 @@ def cleanup() -> None:
 		frappe.db.delete(dt, {f: ["in", refs]})
 	frappe.db.delete("CRM Notification", {"reference_name": ["in", refs]})
 	frappe.db.delete("CRM Notification", {"to_user": ["in", list(USERS)]})
+	frappe.db.delete("CRM Call Log", {"reference_docname": ["in", leads or [""]]})
+	frappe.db.delete("FCRM Note", {"reference_docname": ["in", leads or [""]]})
 	frappe.db.delete("Omni Care Log", {"name": ["in", logs or [""]]})
 	frappe.db.delete("CRM Task", {"name": ["in", tasks or [""]]})
 	frappe.db.delete("Omni Assistant Action", {"session": ["in", sessions or [""]]})
@@ -420,6 +422,7 @@ class TestSecurity(AssistantCase):
 					"list_care_logs",
 					"search_leads",
 					"create_care_log",
+					"create_call_log",
 					"upsert_task",
 					"update_lead_fields",
 				]
@@ -607,3 +610,78 @@ class TestHistory(AssistantCase):
 		fresh = self.as_user(SALE1, api.start_session, lead, 1)
 		self.assertNotEqual(fresh["session"], s1["session"])
 		self.assertEqual(fresh["history"], [])
+
+
+class TestCallLog(AssistantCase):
+	def test_call_log_in_crm_calls_tab_with_note(self):
+		lead = self.make_lead("Gọi Đến", mobile_no="0988806848")
+		r = self.chat(
+			SALE1,
+			"ghi cuộc gọi đến lúc 11h hôm nay, khách đặt 2000 bơm kim tiêm",
+			lead=lead,
+			script=[
+				[
+					tu(
+						"create_call_log",
+						lead=lead,
+						type="Incoming",
+						start_time=f"{today()} 00:00:01",
+						duration_minutes=3,
+						note="khách đặt mua 2000 cái bơm kim tiêm",
+					)
+				],
+				"Đã ghi cuộc gọi.",
+			],
+		)
+		card = r["actions"][0]
+		self.assertEqual(card["status"], "Success")
+		tabs = {x["doctype"]: x.get("tab") for x in card["links"]}
+		self.assertEqual(tabs, {"CRM Call Log": "calls", "FCRM Note": "notes"})
+		call = frappe.get_all("CRM Call Log", filters={"reference_docname": lead}, fields=["*"])
+		self.assertEqual(len(call), 1)
+		c = call[0]
+		self.assertEqual((c.type, c.status, c.receiver, c.duration), ("Incoming", "Completed", SALE1, 180))
+		self.assertIn("988806848", c["from"])
+		self.assertEqual(c.telephony_medium, "Manual")
+		self.assertIn("2000", frappe.db.get_value("FCRM Note", c.note, "content"))
+		from crm.api.activities import get_linked_calls
+
+		self.assertIn(c.name, [x["name"] for x in get_linked_calls(lead)["calls"]])  # hiện ở tab Cuộc gọi của CRM
+		self.assertEqual(self.actions(r["session"])[0].target_doctype, "CRM Call Log")
+
+	def test_call_log_needs_write_and_session_lead(self):
+		mine = self.make_lead("Của Sale1 Gọi", owner=SALE1)
+		r = self.chat(
+			SALE2,
+			"ghi cuộc gọi",
+			script=[
+				[tu("create_call_log", lead=mine, type="Outgoing", start_time=f"{today()} 08:00:00")],
+				"x",
+			],
+		)
+		self.assertEqual(self.actions(r["session"])[0].status, "Denied")
+		self.assertEqual(frappe.db.count("CRM Call Log", {"reference_docname": mine}), 0)
+
+	def test_care_log_card_has_inline_detail_not_desk_link(self):
+		lead = self.make_lead("Chi Tiết")
+		r = self.chat(
+			SALE1,
+			"ghi log",
+			lead=lead,
+			script=[
+				[
+					tu(
+						"create_care_log",
+						lead=lead,
+						channel="Điện thoại",
+						started_at=f"{today()} 00:00:01",
+						outcome="Đã chốt đơn",
+					)
+				],
+				"ok",
+			],
+		)
+		link = r["actions"][0]["links"][0]
+		self.assertEqual(link["doctype"], "Omni Care Log")
+		self.assertIn("Đã chốt đơn", link["detail"])
+		self.assertNotIn("tab", link)

@@ -163,11 +163,29 @@ def _card(action: dict) -> dict:
 		out.update({"lead": action["lead"], "changes": action["changes"]})
 	elif action["status"] == tools.DONE:
 		res = action.get("result") or {}
+		# `tab`: tab của trang Lead trong Frappe CRM để mở khi bấm (không đưa sang giao diện quản trị /app)
 		links = []
 		if res.get("care_log"):
-			links.append({"doctype": tools.LOG, "name": res["care_log"], "label": _("Nhật ký chăm sóc")})
+			# Frappe CRM không có tab cho Omni Care Log: hiện nội dung ngay trong khung chat, không mở trang khác
+			detail = " · ".join(
+				x for x in (res.get("channel"), res.get("outcome"), res.get("next_action")) if x
+			)
+			links.append(
+				{
+					"doctype": tools.LOG,
+					"name": res["care_log"],
+					"label": _("Nhật ký chăm sóc"),
+					"detail": detail,
+				}
+			)
+		if res.get("call_log"):
+			links.append(
+				{"doctype": tools.CALL_LOG, "name": res["call_log"], "label": _("Cuộc gọi"), "tab": "calls"}
+			)
+		if res.get("note"):
+			links.append({"doctype": tools.NOTE, "name": res["note"], "label": _("Ghi chú"), "tab": "notes"})
 		if res.get("crm_task"):
-			links.append({"doctype": tools.TASK, "name": res["crm_task"], "label": _("Việc")})
+			links.append({"doctype": tools.TASK, "name": res["crm_task"], "label": _("Việc"), "tab": "tasks"})
 		out["links"] = links
 	else:
 		out["error"] = action.get("error") or ""

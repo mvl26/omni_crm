@@ -1,8 +1,8 @@
 diff --git a/frontend/src/components/Activities/Activities.vue b/frontend/src/components/Activities/Activities.vue
-index e262752..f523356 100644
+index e262752..dbee5c7 100644
 --- a/frontend/src/components/Activities/Activities.vue
 +++ b/frontend/src/components/Activities/Activities.vue
-@@ -10,7 +10,20 @@
+@@ -10,7 +10,21 @@
      :whatsappBox="whatsappBox"
      :modalRef="modalRef"
    />
@@ -19,12 +19,13 @@ index e262752..f523356 100644
 +    :doctype="doctype"
 +    :docname="docname"
 +    @changed="all_activities.reload()"
++    @open-tab="changeTabTo"
 +  />
 +  <FadedScrollableDiv v-else class="flex flex-col h-full overflow-y-auto">
      <div
        v-if="all_activities?.loading"
        class="flex flex-1 flex-col items-center justify-center gap-3 text-xl font-medium text-ink-gray-4"
-@@ -466,6 +479,8 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+@@ -466,6 +480,8 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
  import WhatsAppArea from '@/components/Activities/WhatsAppArea.vue'
  import WhatsAppBox from '@/components/Activities/WhatsAppBox.vue'
@@ -48,10 +49,10 @@ index bc2f6dc..ec52ba8 100644
          <Button
 diff --git a/frontend/src/components/Activities/AssistantTab.vue b/frontend/src/components/Activities/AssistantTab.vue
 new file mode 100644
-index 0000000..31978e6
+index 0000000..252ac19
 --- /dev/null
 +++ b/frontend/src/components/Activities/AssistantTab.vue
-@@ -0,0 +1,320 @@
+@@ -0,0 +1,328 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <div
@@ -178,11 +179,19 @@ index 0000000..31978e6
 +              · {{ toolText(act.tool) }}
 +              <template v-for="link in act.links || []" :key="link.name">
 +                ·
-+                <a
-+                  :href="recordUrl(link.doctype, link.name)"
-+                  target="_blank"
++                <button
++                  v-if="linkTab(link)"
++                  type="button"
 +                  class="underline"
-+                  >{{ link.label }} {{ link.name }}</a
++                  @click="emit('open-tab', linkTab(link))"
++                >
++                  {{ link.label }} {{ link.name }}
++                </button>
++                <span v-else class="text-ink-gray-8"
++                  >{{ link.label }} {{ link.name
++                  }}<template v-if="link.detail">
++                    ({{ link.detail }})</template
++                  ></span
 +                >
 +              </template>
 +              <span v-if="act.error"> · {{ act.error }}</span>
@@ -233,7 +242,7 @@ index 0000000..31978e6
 +import {
 +  canSend,
 +  hasWrites,
-+  recordUrl,
++  linkTab,
 +  shown,
 +  statusText,
 +  toolText,
@@ -244,7 +253,7 @@ index 0000000..31978e6
 +  doctype: { type: String, required: true },
 +  docname: { type: String, required: true },
 +})
-+const emit = defineEmits(['changed'])
++const emit = defineEmits(['changed', 'open-tab'])
 +
 +const API = 'omni_crm.assistant.api.'
 +const session = ref('')
@@ -944,10 +953,10 @@ index d363cbf..22fbf9a 100644
  })
 diff --git a/frontend/src/utils/assistantChat.js b/frontend/src/utils/assistantChat.js
 new file mode 100644
-index 0000000..0e084de
+index 0000000..22a3c2b
 --- /dev/null
 +++ b/frontend/src/utils/assistantChat.js
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,70 @@
 +// Hàm thuần cho tab "Trợ lý" (omni_crm V3-05): đường dẫn bản ghi, trạng thái thao tác, kiểm câu lệnh.
 +// Dữ liệu và mọi kiểm tra quyền nằm ở máy chủ (omni_crm.assistant.api); ở đây chỉ hiển thị.
 +
@@ -967,6 +976,15 @@ index 0000000..0e084de
 +  return route ? `/app/${route}/${id}` : ''
 +}
 +
++// Tab của trang Lead trong Frappe CRM để mở khi bấm vào bản ghi trợ lý vừa tạo (máy chủ gửi `tab`).
++// Không mở giao diện quản trị /app. Bản ghi không có tab trong CRM (nhật ký chăm sóc) thì không bấm được.
++const CRM_TABS = ['calls', 'tasks', 'notes', 'activity', 'emails', 'comments']
++
++export function linkTab(link) {
++  const tab = String(link?.tab || '').toLowerCase()
++  return CRM_TABS.includes(tab) ? tab : ''
++}
++
 +const STATUS_TEXT = {
 +  Success: 'Đã ghi',
 +  Pending: 'Chờ duyệt',
@@ -984,6 +1002,7 @@ index 0000000..0e084de
 +  create_care_log: 'Ghi nhật ký chăm sóc',
 +  upsert_task: 'Tạo/sửa việc',
 +  update_lead_fields: 'Đề xuất sửa Lead',
++  create_call_log: 'Ghi cuộc gọi',
 +}
 +
 +export function toolText(tool) {
@@ -1197,15 +1216,16 @@ index 0000000..0225fd0
 +}
 diff --git a/frontend/tests/unit/assistantChat.test.js b/frontend/tests/unit/assistantChat.test.js
 new file mode 100644
-index 0000000..7c9a9a5
+index 0000000..0f81817
 --- /dev/null
 +++ b/frontend/tests/unit/assistantChat.test.js
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,69 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  MAX_COMMAND_CHARS,
 +  canSend,
 +  hasWrites,
++  linkTab,
 +  recordUrl,
 +  shown,
 +  statusText,
@@ -1257,6 +1277,16 @@ index 0000000..7c9a9a5
 +    expect(hasWrites([{ status: 'Pending' }, { status: 'Denied' }])).toBe(false)
 +    expect(hasWrites([{ status: 'Success' }])).toBe(true)
 +    expect(hasWrites(null)).toBe(false)
++  })
++})
++
++describe('linkTab', () => {
++  it('chỉ mở tab có thật của trang Lead trong CRM', () => {
++    expect(linkTab({ tab: 'calls' })).toBe('calls')
++    expect(linkTab({ tab: 'Tasks' })).toBe('tasks')
++    expect(linkTab({ tab: 'javascript:alert(1)' })).toBe('')
++    expect(linkTab({ doctype: 'Omni Care Log' })).toBe('')
++    expect(linkTab(null)).toBe('')
 +  })
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js

@@ -30,6 +30,10 @@ from omni_crm.identity.normalize import normalize_email, normalize_phone
 
 LEAD = "CRM Lead"
 TASK = "CRM Task"
+CALL_LOG = "CRM Call Log"
+NOTE = "FCRM Note"
+CALL_TYPES = ("Incoming", "Outgoing")
+CALL_STATUSES = ("Completed", "No Answer", "Busy", "Failed", "Canceled")
 LOG = "Omni Care Log"
 SESSION = "Omni Assistant Session"
 ACTION = "Omni Assistant Action"
@@ -402,7 +406,15 @@ def create_care_log(
 		add_comment(TASK, res["task"], ctx.user)
 	timeline.notify(name, None)
 	frappe.db.commit()  # một thao tác ghi = một đơn vị việc
-	return {"care_log": log, "crm_task": res.get("task"), "lead": name, "started_at": str(at)}
+	return {
+		"care_log": log,
+		"crm_task": res.get("task"),
+		"lead": name,
+		"started_at": str(at),
+		"channel": channel,
+		"outcome": outcome,
+		"next_action": (next_action or "").strip(),
+	}
 
 
 def upsert_task(
@@ -467,6 +479,75 @@ def upsert_task(
 	add_comment(TASK, doc.name, ctx.user, verb)
 	frappe.db.commit()
 	return {"crm_task": doc.name, "lead": name, "status": doc.status, "due_date": str(doc.due_date or "")}
+
+
+def create_call_log(
+	ctx: Ctx,
+	lead: str,
+	type: str,
+	start_time: str,
+	status: str = "Completed",
+	duration_minutes: int | None = None,
+	note: str | None = None,
+) -> dict:
+	"""Ghi một cuộc gọi tay vào tab Cuộc gọi của Lead (CRM Call Log, như nút tạo cuộc gọi của CRM); có ghi chú thì kèm FCRM Note."""
+	name = _writable(ctx, lead)
+	if type not in CALL_TYPES:
+		raise ToolError(_("type phải là Incoming (khách gọi đến) hoặc Outgoing (gọi cho khách)"))
+	if status not in CALL_STATUSES:
+		raise ToolError(_("status phải là một trong: {0}").format(", ".join(CALL_STATUSES)))
+	if not start_time:
+		raise ToolError(_("Thiếu thời điểm cuộc gọi (start_time)"))
+	at = care_log.clamp_contact_time(name, _datetime(start_time, "start_time"))
+	minutes = cint(duration_minutes)
+	if minutes < 0 or minutes > 600:
+		raise ToolError(_("duration_minutes phải trong khoảng 0-600"))
+	if not frappe.has_permission(CALL_LOG, "create", user=ctx.user):
+		raise Denied(_("Bạn không có quyền tạo cuộc gọi"))
+	note_text = (note or "").strip()[:TEXT_LIMIT]
+	if note_text and not frappe.has_permission(NOTE, "create", user=ctx.user):
+		raise Denied(_("Bạn không có quyền tạo ghi chú"))
+	_count_write(ctx)
+	deal = lead_bridge.get_deal_for_lead(name)
+	ref_dt, ref_name = ("CRM Deal", deal) if deal else (LEAD, name)
+	row = frappe.db.get_value(LEAD, name, ["mobile_no", "phone"], as_dict=True) or {}
+	customer = row.get("mobile_no") or row.get("phone") or "unknown"
+	staff = frappe.db.get_value("User", ctx.user, "mobile_no") or ctx.user
+	incoming = type == "Incoming"
+	note_name = None
+	if note_text:
+		note_doc = frappe.get_doc(
+			{
+				"doctype": NOTE,
+				"title": _("Cuộc gọi {0}").format(frappe.utils.format_datetime(at, "dd/MM/yyyy HH:mm")),
+				"content": f"<p>{frappe.utils.escape_html(note_text)}</p>",
+				"reference_doctype": ref_dt,
+				"reference_docname": ref_name,
+			}
+		)
+		note_doc.insert()
+		note_name = note_doc.name
+	doc = frappe.get_doc(
+		{
+			"doctype": CALL_LOG,
+			"type": type,
+			"status": status,
+			"from": customer if incoming else staff,
+			"to": staff if incoming else customer,
+			"receiver": ctx.user if incoming else None,
+			"caller": None if incoming else ctx.user,
+			"start_time": at,
+			"duration": minutes * 60 if minutes else None,
+			"telephony_medium": "Manual",
+			"note": note_name,
+			"reference_doctype": ref_dt,
+			"reference_docname": ref_name,
+		}
+	)
+	doc.insert()
+	add_comment(CALL_LOG, doc.name, ctx.user)
+	frappe.db.commit()
+	return {"call_log": doc.name, "note": note_name, "lead": name, "start_time": str(at)}
 
 
 def _validate_lead_values(fields: Any) -> dict:
@@ -623,6 +704,24 @@ TOOLS: dict[str, Tool] = {
 		),
 		writes=True,
 	),
+	"create_call_log": Tool(
+		create_call_log,
+		"Ghi một cuộc gọi vào tab Cuộc gọi (Call Log) của Lead trong Frappe CRM. type: Incoming = khách gọi đến, "
+		"Outgoing = nhân viên gọi cho khách. note là nội dung trao đổi. Dùng khi nhân viên muốn có bản ghi cuộc gọi; "
+		"muốn ghi cả kết quả chăm sóc thì gọi thêm create_care_log (mỗi tool tính một thao tác ghi).",
+		_schema(
+			{
+				"lead": LEAD_ID,
+				"type": {"type": "string", "enum": list(CALL_TYPES)},
+				"start_time": DATETIME,
+				"status": {"type": "string", "enum": list(CALL_STATUSES)},
+				"duration_minutes": {"type": "integer", "minimum": 0, "maximum": 600},
+				"note": STR,
+			},
+			["lead", "type", "start_time"],
+		),
+		writes=True,
+	),
 	"upsert_task": Tool(
 		upsert_task,
 		"Tạo việc (CRM Task) cho Lead; truyền task để sửa việc đã có.",
@@ -662,7 +761,7 @@ TOOLS: dict[str, Tool] = {
 
 
 def tool_specs() -> list[dict]:
-	"""Danh sách tool gửi cho mô hình (đúng 7 tool, không có tool xóa)."""
+	"""Danh sách tool gửi cho mô hình (8 tool, không có tool xóa)."""
 	return [{"name": n, "description": t.description, "input_schema": t.schema} for n, t in TOOLS.items()]
 
 
@@ -671,6 +770,8 @@ def _target(name: str, result: dict) -> tuple[str, str] | None:
 		return (LOG, result["care_log"])
 	if name == "upsert_task":
 		return (TASK, result["crm_task"])
+	if name == "create_call_log":
+		return (CALL_LOG, result["call_log"])
 	if name == "update_lead_fields":
 		return (LEAD, result["lead"])
 	return None
