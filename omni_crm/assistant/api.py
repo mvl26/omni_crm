@@ -24,6 +24,7 @@ RATE_PER_HOUR = 20
 TRANSCRIPT_MAX_TURNS = 400  # số dòng lịch sử hiển thị giữ lại mỗi phiên (cũ nhất bị bỏ trước)
 MAX_COMMAND_CHARS = 2000
 SETTINGS_URL = "/app/omni-settings"
+LINK_TABS = {"CRM Task": "tasks", "CRM Call Log": "calls", "FCRM Note": "notes"}
 
 
 def _require_enabled() -> None:
@@ -116,6 +117,10 @@ def history(session: str) -> list[dict]:
 		for a in t.get("actions") or []:
 			if a.get("action") in status:
 				a["status"] = status[a["action"]]
+			for link in (
+				a.get("links") or []
+			):  # dòng lưu trước khi có `tab`: mở đúng tab của CRM, không sang /app
+				link.setdefault("tab", LINK_TABS.get(link.get("doctype")))
 	return turns
 
 

@@ -596,6 +596,26 @@ class TestHistory(AssistantCase):
 		self.assertEqual([t["role"] for t in s2["history"]], ["user", "assistant"])
 		self.assertEqual(s2["history"][0]["text"], "đổi đơn vị")
 		card = s2["history"][1]["actions"][0]
+		# dòng cũ (trước khi có `tab`) vẫn mở tab Việc trong CRM
+		old = [
+			{
+				"role": "assistant",
+				"text": "x",
+				"actions": [
+					{
+						"status": "Success",
+						"links": [
+							{"doctype": "CRM Task", "name": "T1"},
+							{"doctype": "Omni Care Log", "name": "L1"},
+						],
+					}
+				],
+			}
+		]
+		frappe.db.set_value("Omni Assistant Session", s1["session"], "transcript", json.dumps(old))
+		links = api.history(s1["session"])[0]["actions"][0]["links"]
+		self.assertEqual([x.get("tab") for x in links], ["tasks", None])
+		frappe.db.set_value("Omni Assistant Session", s1["session"], "transcript", json.dumps(s2["history"]))
 		self.assertEqual(card["status"], "Pending")
 		self.as_user(SALE1, api.approve, card["action"])
 		s3 = self.as_user(SALE1, api.start_session, lead)
@@ -646,7 +666,9 @@ class TestCallLog(AssistantCase):
 		self.assertIn("2000", frappe.db.get_value("FCRM Note", c.note, "content"))
 		from crm.api.activities import get_linked_calls
 
-		self.assertIn(c.name, [x["name"] for x in get_linked_calls(lead)["calls"]])  # hiện ở tab Cuộc gọi của CRM
+		self.assertIn(
+			c.name, [x["name"] for x in get_linked_calls(lead)["calls"]]
+		)  # hiện ở tab Cuộc gọi của CRM
 		self.assertEqual(self.actions(r["session"])[0].target_doctype, "CRM Call Log")
 
 	def test_call_log_needs_write_and_session_lead(self):
