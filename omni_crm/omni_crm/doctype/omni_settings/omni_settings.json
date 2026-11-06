@@ -42,6 +42,12 @@
   "reply_prompt_version",
   "summarize_prompt_version",
   "kb_version",
+  "sec_assistant",
+  "assistant_enabled",
+  "assistant_model",
+  "col_assistant",
+  "assistant_daily_token_limit",
+  "assistant_max_writes_per_turn",
   "sec_prospect",
   "fit_scoring_enabled",
   "prospect_import_enabled",
@@ -372,6 +378,41 @@
    "description": "{gio_lam_viec_ke_tiep} được thay bằng thời điểm mở cửa kế tiếp"
   },
   {
+   "fieldname": "sec_assistant",
+   "fieldtype": "Section Break",
+   "label": "Trợ lý AI nội bộ (V3-05)"
+  },
+  {
+   "fieldname": "assistant_enabled",
+   "fieldtype": "Check",
+   "label": "Bật trợ lý AI nội bộ",
+   "default": "0",
+   "description": "Công tắc tổng của tab Trợ lý trên trang Lead. Tắt thì tab ẩn và API từ chối ngay."
+  },
+  {
+   "fieldname": "assistant_model",
+   "fieldtype": "Data",
+   "label": "Mô hình của trợ lý",
+   "default": "claude-sonnet-5-5"
+  },
+  {
+   "fieldname": "col_assistant",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "assistant_daily_token_limit",
+   "fieldtype": "Int",
+   "label": "Hạn mức token/ngày của trợ lý",
+   "default": "300000",
+   "description": "Tổng token vào + ra mỗi ngày của trợ lý, toàn hệ thống."
+  },
+  {
+   "fieldname": "assistant_max_writes_per_turn",
+   "fieldtype": "Int",
+   "label": "Số thao tác ghi tối đa mỗi lượt",
+   "default": "5"
+  },
+  {
    "fieldname": "sec_prospect",
    "fieldtype": "Section Break",
    "label": "Nhà thầu B2B (V2-02)"
@@ -660,5 +701,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "modified": "2026-11-06 12:00:00.000000"
 }

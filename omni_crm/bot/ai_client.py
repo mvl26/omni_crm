@@ -38,6 +38,8 @@ SETTINGS_PROMPT_FIELD = {
 	"Reply": "reply_prompt_version",
 	"Summarize": "summarize_prompt_version",
 }
+CHAT_RETRIES = 1  # trợ lý nội bộ (V3-05): chạy trong request nên chỉ thử lại 1 lần, chờ ngắn
+CHAT_BACKOFF_SECONDS = 1
 
 _client_override: AIClient | None = None
 
@@ -63,6 +65,17 @@ class AIResponse:
 	output_tokens: int = 0
 	cache_read_tokens: int = 0
 	cache_creation_tokens: int = 0
+
+
+@dataclass
+class ChatResponse:
+	"""Kết quả một lượt hội thoại nhiều tool (trợ lý nội bộ): khối nội dung dạng dict (text / tool_use) và số token."""
+
+	content: list[dict]
+	stop_reason: str = ""
+	input_tokens: int = 0
+	output_tokens: int = 0
+	cache_read_tokens: int = 0
 
 
 class AIClient(Protocol):
@@ -141,6 +154,55 @@ class AnthropicClient:
 			output_tokens=cint(usage.output_tokens),
 			cache_read_tokens=cint(getattr(usage, "cache_read_input_tokens", 0)),
 			cache_creation_tokens=cint(getattr(usage, "cache_creation_input_tokens", 0)),
+		)
+
+	def converse(
+		self,
+		*,
+		model: str,
+		system: str,
+		messages: list[dict],
+		tools: list[dict],
+		max_tokens: int,
+		timeout: float,
+		tool_choice: dict | None = None,
+	) -> ChatResponse:
+		"""Một lượt Messages API cho trợ lý nội bộ: nhiều tool, mô hình tự chọn (auto) hoặc cấm tool ({"type": "none"})."""
+		import anthropic
+
+		client = anthropic.Anthropic(api_key=self._api_key, timeout=timeout, max_retries=0)
+		system_blocks = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+		try:
+			resp = client.messages.create(
+				model=model,
+				max_tokens=max_tokens,
+				system=system_blocks,
+				messages=messages,
+				tools=tools,
+				tool_choice=tool_choice or {"type": "auto"},
+			)
+		except anthropic.APITimeoutError as e:
+			raise TransientAIError(self._clean(e), status=408) from None
+		except anthropic.APIConnectionError as e:
+			raise TransientAIError(self._clean(e)) from None
+		except anthropic.APIStatusError as e:
+			status = int(e.status_code)
+			if status in (408, 409, 429) or status >= 500:
+				raise TransientAIError(self._clean(e), status=status) from None
+			raise AIError(f"HTTP {status}: {self._clean(e)}") from None
+		content: list[dict] = []
+		for b in resp.content:
+			if b.type == "text":
+				content.append({"type": "text", "text": b.text})
+			elif b.type == "tool_use":
+				content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+		usage = resp.usage
+		return ChatResponse(
+			content=content,
+			stop_reason=str(resp.stop_reason or ""),
+			input_tokens=cint(usage.input_tokens),
+			output_tokens=cint(usage.output_tokens),
+			cache_read_tokens=cint(getattr(usage, "cache_read_input_tokens", 0)),
 		)
 
 	def _clean(self, exc: BaseException) -> str:
@@ -304,6 +366,8 @@ def switch_on(kind: str) -> bool:
 		return flags.bot_reply_mode() != "Off"
 	if kind == "Summarize":
 		return flags.recording_enabled()
+	if kind == "Assistant":
+		return flags.assistant_enabled()
 	return kind == "Judge"  # bộ đề: chạy tay, chỉ chịu hạn mức token
 
 
@@ -496,3 +560,95 @@ def call_tool(
 			schema_left -= 1
 			continue
 		return finish("Invalid Output", problem)
+
+
+# --- Trợ lý nội bộ (V3-05): một lượt hội thoại nhiều tool -------------------------------------------------------
+
+
+@dataclass
+class ChatOutcome:
+	"""Kết quả `call_chat`: `response` None khi bị bỏ qua hoặc lỗi; `error` là thông điệp đã lọc bí mật."""
+
+	response: ChatResponse | None
+	status: str
+	error: str = ""
+
+
+def call_chat(
+	model: str,
+	system: str,
+	messages: list[dict],
+	tools: list[dict],
+	*,
+	lead: str | None = None,
+	batch_id: str | None = None,
+	max_tokens: int = DEFAULT_MAX_TOKENS,
+	timeout: float = DEFAULT_TIMEOUT_SECONDS,
+	tool_choice: dict | None = None,
+) -> ChatOutcome:
+	"""Một lượt gọi mô hình cho trợ lý nội bộ, qua đúng các cổng của `call_tool`: công tắc, khóa, Q11, ngắt mạch.
+
+	Hạn mức token riêng của trợ lý do người gọi kiểm trước (`assistant/loop.py`); token vẫn cộng vào bộ đếm chung.
+	Ghi một Omni Bot Run kind=Assistant (không chứa nội dung hội thoại). Thử lại 1 lần khi lỗi tạm thời.
+	"""
+	outcome = _Outcome()
+	meta = {"lead": lead, "batch_id": batch_id, "digest": _digest(batch_id, system, messages, None)}
+
+	def finish(status: str, error: str = "", response: ChatResponse | None = None) -> ChatOutcome:
+		outcome.status, outcome.error = status, error
+		outcome.output = {"stop_reason": response.stop_reason} if response else None
+		_add_tokens(outcome.input_tokens + outcome.output_tokens)
+		try:
+			_record("Assistant", model, outcome, **meta)
+		except Exception as e:
+			try:
+				frappe.db.rollback()
+				frappe.log_error(
+					title="Omni: không ghi được Omni Bot Run",
+					message=redact(f"{type(e).__name__}: {e}")[:ERROR_MAX_CHARS],
+				)
+				frappe.db.commit()
+			except Exception:
+				pass
+		return ChatOutcome(response, status, error)
+
+	if not switch_on("Assistant"):
+		return finish("Skipped Switch", _("Trợ lý AI đang tắt"))
+	client = get_client()
+	if client is None:
+		return finish("Skipped Switch", _("Chưa cấu hình khóa Claude API"))
+	if client.is_real and not cint(frappe.conf.get(ALLOW_DATA_CONF)):
+		return finish("Skipped Switch", _("Chính sách gửi dữ liệu khách sang AI (Q11) chưa được chốt"))
+	if breaker_open():
+		return finish("Skipped Switch", _("Ngắt mạch: AI lỗi liên tiếp, tạm ngừng gọi"))
+	frappe.db.commit()  # nhả khóa DB trước khi gọi API ngoài
+	retries = CHAT_RETRIES
+	while True:
+		try:
+			resp = client.converse(
+				model=model,
+				system=system,
+				messages=messages,
+				tools=tools,
+				max_tokens=max_tokens,
+				timeout=timeout,
+				tool_choice=tool_choice,
+			)
+		except TransientAIError as e:
+			if retries > 0:
+				retries -= 1
+				_sleep(CHAT_BACKOFF_SECONDS)
+				continue
+			_breaker_record(ok=False)
+			return finish("Error", redact(str(e)))
+		except AIError as e:
+			_breaker_record(ok=False)
+			return finish("Error", redact(str(e)))
+		except Exception as e:
+			_breaker_record(ok=False)
+			return finish("Error", f"{type(e).__name__}: {redact(str(e))}")
+		_breaker_record(ok=True)
+		outcome.input_tokens += resp.input_tokens
+		outcome.output_tokens += resp.output_tokens
+		outcome.cache_read_tokens += resp.cache_read_tokens
+		return finish("Success", response=resp)

@@ -217,6 +217,11 @@ def care_log_enabled() -> bool:
 	return bool(care_setting("care_log_enabled"))
 
 
+def assistant_enabled() -> bool:
+	"""Công tắc tổng của trợ lý AI nội bộ (V3-05); mặc định tắt, lỗi đọc = tắt."""
+	return _settings_flag("assistant_enabled")
+
+
 def _settings_flag(fieldname: str) -> bool:
 	try:
 		return bool(frappe.get_cached_doc("Omni Settings").get(fieldname))

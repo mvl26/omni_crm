@@ -32,7 +32,7 @@
    "fieldtype": "Select",
    "label": "Loại",
    "read_only": 1,
-   "options": "Analyze\nReply\nSummarize\nJudge",
+   "options": "Analyze\nReply\nSummarize\nJudge\nAssistant",
    "in_list_view": 1,
    "search_index": 1
   },
@@ -156,7 +156,7 @@
   }
  ],
  "in_create": 0,
- "modified": "2026-10-30 12:00:00.000000",
+ "modified": "2026-11-06 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Omni CRM",
  "name": "Omni Bot Run",

@@ -1,0 +1,157 @@
+{
+ "actions": [],
+ "autoname": "ASA-.YYYY.-.#######",
+ "naming_rule": "Expression (old style)",
+ "creation": "2026-11-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "session",
+  "tool_name",
+  "status",
+  "command",
+  "col_a",
+  "requires_approval",
+  "approved_by",
+  "approved_at",
+  "reported",
+  "target_doctype",
+  "target_name",
+  "sec_data",
+  "arguments",
+  "result"
+ ],
+ "fields": [
+  {
+   "fieldname": "session",
+   "fieldtype": "Link",
+   "label": "Phiên",
+   "read_only": 1,
+   "options": "Omni Assistant Session",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "tool_name",
+   "fieldtype": "Data",
+   "label": "Tool",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "read_only": 1,
+   "options": "Success\nDenied\nError\nPending\nRejected\nLimit",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "command",
+   "fieldtype": "Small Text",
+   "label": "Câu lệnh gốc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "requires_approval",
+   "fieldtype": "Check",
+   "label": "Cần duyệt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Người duyệt",
+   "read_only": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Lúc duyệt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reported",
+   "fieldtype": "Check",
+   "label": "Đã báo lại cho mô hình",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Loại bản ghi",
+   "read_only": 1,
+   "options": "DocType"
+  },
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Bản ghi",
+   "read_only": 1,
+   "options": "target_doctype",
+   "search_index": 1
+  },
+  {
+   "fieldname": "sec_data",
+   "fieldtype": "Section Break",
+   "label": "Dữ liệu"
+  },
+  {
+   "fieldname": "arguments",
+   "fieldtype": "JSON",
+   "label": "Tham số",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "JSON",
+   "label": "Kết quả",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "modified": "2026-11-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Assistant Action",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "delete": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "if_owner": 1,
+   "report": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "if_owner": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "description": "Một lần trợ lý AI gọi tool (nhật ký kiểm toán và hàng đợi duyệt)",
+ "track_changes": 0
+}
