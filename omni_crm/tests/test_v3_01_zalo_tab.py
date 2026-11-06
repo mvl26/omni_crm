@@ -544,6 +544,9 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 		{
 			"frontend/src/components/Activities/ActivityHeader.vue",
 			"frontend/src/components/Activities/Activities.vue",
+			"frontend/src/components/Activities/CallArea.vue",  # V3-05: hiện nội dung cuộc gọi (ADR 0016 mục 14)
+			"frontend/src/utils/callNotes.js",  # V3-05
+			"frontend/tests/unit/callNotes.test.js",  # V3-05
 			"frontend/src/components/Activities/AssistantTab.vue",  # V3-05: tab Trợ lý (ADR 0016 mục 13, ADR 0018)
 			"frontend/src/composables/assistant.js",  # V3-05
 			"frontend/src/utils/assistantChat.js",  # V3-05

@@ -381,6 +381,44 @@ index 0000000..252ac19
 +  line-height: 1.5;
 +}
 +</style>
+diff --git a/frontend/src/components/Activities/CallArea.vue b/frontend/src/components/Activities/CallArea.vue
+index 0fa6fcb..bb95934 100644
+--- a/frontend/src/components/Activities/CallArea.vue
++++ b/frontend/src/components/Activities/CallArea.vue
+@@ -80,6 +80,17 @@
+           :theme="statusColorMap[call.status]"
+         />
+       </div>
++      <!-- omni_crm V3-05: nội dung cuộc gọi (ghi chú gắn với cuộc gọi), chữ thuần -->
++      <div
++        v-for="n in notes"
++        :key="n.name"
++        class="whitespace-pre-wrap break-words border-t border-outline-gray-1 pt-2 text-base leading-relaxed text-ink-gray-8"
++      >
++        <div v-if="n.title" class="mb-0.5 text-sm font-medium text-ink-gray-6">
++          {{ n.title }}
++        </div>
++        {{ n.text }}
++      </div>
+       <div
+         v-if="
+           call.show_recording &&
+@@ -108,7 +119,8 @@ import CallLogDetailModal from '@/components/Modals/CallLogDetailModal.vue'
+ import { statusLabelMap, statusColorMap } from '@/utils/callLog.js'
+ import { formatDate, timeAgo } from '@/utils'
+ import { Avatar, Badge, Tooltip, createResource } from 'frappe-ui'
+-import { reactive, ref } from 'vue'
++import { computed, reactive, ref } from 'vue'
++import { callNotes } from '@/utils/callNotes'
+ 
+ const props = defineProps({
+   activity: { type: Object, default: () => ({}) },
+@@ -123,4 +135,5 @@ const callLog = createResource({
+   auto: true,
+ })
+ const showCallLogDetailModal = ref(false)
++const notes = computed(() => callNotes(callLog.data?._notes))
+ </script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
 index 0000000..8710c0c
@@ -1027,6 +1065,37 @@ index 0000000..22a3c2b
 +  const v = value == null ? '' : String(value)
 +  return v === '' ? '(trống)' : v
 +}
+diff --git a/frontend/src/utils/callNotes.js b/frontend/src/utils/callNotes.js
+new file mode 100644
+index 0000000..6383c9d
+--- /dev/null
++++ b/frontend/src/utils/callNotes.js
+@@ -0,0 +1,25 @@
++// Nội dung ghi chú của cuộc gọi (omni_crm V3-05, ADR 0016 mục 14): FCRM Note.content là HTML của trình soạn thảo.
++// Chuyển thành chữ thuần để hiện trong thẻ cuộc gọi (không chèn HTML thô vào trang: nội dung có thể do bot hoặc khách tạo).
++
++export function htmlToText(html) {
++  if (!html) return ''
++  const withBreaks = String(html)
++    .replace(/<br\s*\/?>/gi, '\n')
++    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
++  const doc = new DOMParser().parseFromString(withBreaks, 'text/html')
++  return (doc.body.textContent || '')
++    .replace(/\u00a0/g, ' ')
++    .replace(/\n{3,}/g, '\n\n')
++    .trim()
++}
++
++// Danh sách {name, title, text} từ `_notes` của get_call_log; bỏ ghi chú rỗng.
++export function callNotes(notes) {
++  return (notes || [])
++    .map((n) => ({
++      name: n?.name || '',
++      title: n?.title || '',
++      text: htmlToText(n?.content),
++    }))
++    .filter((n) => n.text || n.title)
++}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
 index 0000000..0225fd0
@@ -1287,6 +1356,38 @@ index 0000000..0f81817
 +    expect(linkTab({ tab: 'javascript:alert(1)' })).toBe('')
 +    expect(linkTab({ doctype: 'Omni Care Log' })).toBe('')
 +    expect(linkTab(null)).toBe('')
++  })
++})
+diff --git a/frontend/tests/unit/callNotes.test.js b/frontend/tests/unit/callNotes.test.js
+new file mode 100644
+index 0000000..3e67f48
+--- /dev/null
++++ b/frontend/tests/unit/callNotes.test.js
+@@ -0,0 +1,26 @@
++import { describe, expect, it } from 'vitest'
++import { callNotes, htmlToText } from '@/utils/callNotes'
++
++describe('htmlToText', () => {
++  it('giữ xuống dòng, bỏ thẻ, không chạy mã', () => {
++    expect(htmlToText('<p>Khách đặt 2000 cái</p><p>Giao 20/11</p>')).toBe(
++      'Khách đặt 2000 cái\nGiao 20/11',
++    )
++    expect(htmlToText('a<br>b')).toBe('a\nb')
++    expect(htmlToText('<img src=x onerror=alert(1)>chữ')).toBe('chữ')
++    expect(htmlToText('&lt;script&gt;')).toBe('<script>')
++    expect(htmlToText(null)).toBe('')
++  })
++})
++
++describe('callNotes', () => {
++  it('lấy tiêu đề + nội dung, bỏ ghi chú rỗng', () => {
++    expect(
++      callNotes([
++        { name: 'N1', title: 'Cuộc gọi 06/11', content: '<p>đặt hàng</p>' },
++        { name: 'N2', title: '', content: '<p></p>' },
++      ]),
++    ).toEqual([{ name: 'N1', title: 'Cuộc gọi 06/11', text: 'đặt hàng' }])
++    expect(callNotes(undefined)).toEqual([])
 +  })
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
