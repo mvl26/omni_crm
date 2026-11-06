@@ -574,3 +574,36 @@ class TestOperations(AssistantCase):
 		r = self.chat(SALE1, "x", script=["fatal"])
 		self.assertIn("Không gọi được AI", r["reply"])
 		self.assertEqual(frappe.db.get_value("Omni Bot Run", {"batch_id": r["session"]}, "status"), "Error")
+
+
+class TestHistory(AssistantCase):
+	def test_reopen_tab_shows_history_and_new_starts_fresh(self):
+		lead = self.make_lead("Lịch Sử", organization="Cũ")
+		s1 = self.as_user(SALE1, api.start_session, lead)
+		self.assertEqual(s1["history"], [])
+		self.chat(
+			SALE1,
+			"đổi đơn vị",
+			session=s1["session"],
+			script=[[tu("update_lead_fields", lead=lead, fields={"organization": "Mới"})], "Đã trình duyệt."],
+		)
+		self.as_user(SALE1, api.close_session, s1["session"])
+		s2 = self.as_user(SALE1, api.start_session, lead)
+		self.assertEqual(s2["session"], s1["session"])
+		self.assertEqual([t["role"] for t in s2["history"]], ["user", "assistant"])
+		self.assertEqual(s2["history"][0]["text"], "đổi đơn vị")
+		card = s2["history"][1]["actions"][0]
+		self.assertEqual(card["status"], "Pending")
+		self.as_user(SALE1, api.approve, card["action"])
+		s3 = self.as_user(SALE1, api.start_session, lead)
+		self.assertEqual(s3["history"][1]["actions"][0]["status"], "Success")  # trạng thái đọc lại từ Action
+		self.assertEqual(self.chat(SALE1, "tiếp", session=s3["session"], script=["ok"])["reply"], "ok")
+		# người khác mở cùng Lead không thấy lịch sử của SALE1; "Cuộc trò chuyện mới" tạo phiên mới
+		self.as_user("Administrator", lambda: frappe.db.set_value("CRM Lead", lead, "lead_owner", SALE2))
+		other = self.as_user(SALE2, api.start_session, lead)
+		self.assertNotEqual(other["session"], s1["session"])
+		self.assertEqual(other["history"], [])
+		self.as_user("Administrator", lambda: frappe.db.set_value("CRM Lead", lead, "lead_owner", SALE1))
+		fresh = self.as_user(SALE1, api.start_session, lead, 1)
+		self.assertNotEqual(fresh["session"], s1["session"])
+		self.assertEqual(fresh["history"], [])

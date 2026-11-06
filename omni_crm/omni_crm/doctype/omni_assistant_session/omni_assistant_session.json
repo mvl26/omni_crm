@@ -15,7 +15,8 @@
   "last_turn_at",
   "sec_data",
   "allowed_leads",
-  "messages"
+  "messages",
+  "transcript"
  ],
  "fields": [
   {
@@ -84,10 +85,16 @@
    "fieldtype": "JSON",
    "label": "Lịch sử hội thoại gửi cho mô hình",
    "read_only": 1
+  },
+  {
+   "fieldname": "transcript",
+   "fieldtype": "JSON",
+   "label": "Lịch sử hiển thị (câu lệnh, trả lời, thao tác)",
+   "read_only": 1
   }
  ],
  "in_create": 1,
- "modified": "2026-11-06 12:00:00.000000",
+ "modified": "2026-11-06 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Omni CRM",
  "name": "Omni Assistant Session",

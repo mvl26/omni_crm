@@ -13,7 +13,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.assistant import loop, tools
@@ -21,6 +21,7 @@ from omni_crm.bot import ai_client
 from omni_crm.crm_bridge import lead as lead_bridge
 
 RATE_PER_HOUR = 20
+TRANSCRIPT_MAX_TURNS = 400  # số dòng lịch sử hiển thị giữ lại mỗi phiên (cũ nhất bị bỏ trước)
 MAX_COMMAND_CHARS = 2000
 SETTINGS_URL = "/app/omni-settings"
 
@@ -92,11 +93,67 @@ def tab_state() -> dict:
 	return {"enabled": bool(flags.assistant_enabled() and frappe.session.user != "Guest")}
 
 
+def _latest_session(lead: str | None) -> str | None:
+	"""Phiên gần nhất của CHÍNH người dùng trên Lead này (Lead đã gộp thì theo Lead chính)."""
+	if not lead or not frappe.db.exists("CRM Lead", lead):
+		return None
+	lead = lead_bridge.follow_merged(lead) or lead
+	return frappe.db.get_value(
+		tools.SESSION, {"user": frappe.session.user, "lead": lead}, "name", order_by="modified desc"
+	)
+
+
+def history(session: str) -> list[dict]:
+	"""Lịch sử hiển thị của phiên; trạng thái thẻ duyệt đọc lại từ Omni Assistant Action (đã duyệt/bỏ ở lần trước)."""
+	turns = json.loads(frappe.db.get_value(tools.SESSION, session, "transcript") or "[]")
+	names = [a["action"] for t in turns for a in t.get("actions") or [] if a.get("action")]
+	status = dict(
+		frappe.get_all(
+			tools.ACTION, filters={"name": ["in", names or [""]]}, fields=["name", "status"], as_list=True
+		)
+	)
+	for t in turns:
+		for a in t.get("actions") or []:
+			if a.get("action") in status:
+				a["status"] = status[a["action"]]
+	return turns
+
+
+def _append_history(session: str, *turns: dict) -> None:
+	rows = json.loads(frappe.db.get_value(tools.SESSION, session, "transcript") or "[]")
+	rows.extend(turns)
+	tools._sys_update(
+		tools.SESSION,
+		session,
+		{"transcript": json.dumps(rows[-TRANSCRIPT_MAX_TURNS:], ensure_ascii=False, default=str)},
+	)
+	frappe.db.commit()
+
+
 @frappe.whitelist(methods=["POST"])
-def start_session(lead: str | None = None) -> dict:
-	"""Mở phiên mới cho Lead đang xem; báo kèm có khóa AI chưa (thiếu thì giao diện hiện link tới Omni Settings)."""
+def start_session(lead: str | None = None, new: int | str = 0) -> dict:
+	"""Mở lại phiên gần nhất của người dùng trên Lead này (kèm lịch sử), hoặc phiên mới khi `new=1` / chưa có phiên.
+
+	Báo kèm có khóa AI chưa (thiếu thì giao diện hiện link tới Omni Settings).
+	"""
 	_require_enabled()
-	return {"session": _new_session(lead), "has_key": _has_key(), "settings_url": SETTINGS_URL}
+	session = None if cint(new) else _latest_session(lead)
+	if session:
+		if lead and not frappe.has_permission(
+			"CRM Lead", "read", doc=frappe.db.get_value(tools.SESSION, session, "lead")
+		):
+			frappe.throw(_("Bạn không có quyền xem Lead này"), frappe.PermissionError)
+		if frappe.db.get_value(tools.SESSION, session, "status") != "Open":
+			tools._sys_update(tools.SESSION, session, {"status": "Open"})
+			frappe.db.commit()
+	else:
+		session = _new_session(lead)
+	return {
+		"session": session,
+		"history": history(session),
+		"has_key": _has_key(),
+		"settings_url": SETTINGS_URL,
+	}
 
 
 def _card(action: dict) -> dict:
@@ -146,12 +203,14 @@ def chat(message: str, session_id: str | None = None, lead: str | None = None) -
 			"error": _("Trợ lý đã dùng hết hạn mức token hôm nay, mai dùng tiếp được."),
 		}
 	result = loop.run_turn(session, text)
-	return {
-		"session": session,
-		"reply": result["reply"],
-		"stopped": result["stopped"],
-		"actions": [_card(a) for a in result["actions"]],
-	}
+	cards = [_card(a) for a in result["actions"]]
+	now = str(now_datetime())
+	_append_history(
+		session,
+		{"role": "user", "text": text, "at": now},
+		{"role": "assistant", "text": result["reply"], "actions": cards, "at": now},
+	)
+	return {"session": session, "reply": result["reply"], "stopped": result["stopped"], "actions": cards}
 
 
 def _pending_action(action_name: str) -> Any:

@@ -22,6 +22,8 @@ Nhân viên muốn gõ một câu tiếng Việt ("ghi log cuộc gọi ngày 6/
 5. Chống chèn lệnh: system prompt là hằng số; ngữ cảnh Lead và mọi kết quả tool đọc dữ liệu CRM nằm trong `<du_lieu_khach_hang>`; chuỗi bên ngoài được NFKC, xóa mọi biến thể thẻ dữ liệu rồi thoát `< >`. Tool ghi chỉ nhận Lead trong `allowed_leads` (Lead đang mở đã kiểm quyền đọc, hoặc do `find_lead`/`search_leads` trả về trong phiên); ngoài tập thì Denied + Error Log.
 6. Cổng Q11 giữ nguyên như bot phân tích: client thật chỉ gọi khi `omni_ai_allow_customer_data` bật; SĐT/email chỉ gửi nguyên vẹn khi `omni_ai_unmask_pii` bật (không thì chỉ 3 ký tự cuối).
 
+7. **Bổ sung 2026-11-06 (anh Việt yêu cầu, thay mục "không lưu lịch sử" của brief):** lịch sử trò chuyện được lưu ở `Omni Assistant Session.transcript` (câu lệnh, câu trả lời, thao tác; tối đa 400 dòng). Mở lại tab Trợ lý trên một Lead thì nạp lại phiên gần nhất của CHÍNH người dùng trên Lead đó (người khác không thấy), trạng thái thẻ duyệt đọc lại từ Omni Assistant Action. Nút **Cuộc trò chuyện mới** mở phiên mới, phiên cũ vẫn giữ. Phiên mở lại giữ nguyên `allowed_leads` của chính phiên đó (quy tắc 6 không đổi). Khung chat rộng hơn, ô nhập tối thiểu 4 dòng, cao theo nội dung tới 40% màn hình.
+
 ## Rủi ro
 
 - Mô hình thật có thể vẫn "nghe" câu lệnh trong dữ liệu; lớp chặn là backend (tập Lead của phiên, quyền user, duyệt tay khi sửa Lead), không phải lời nhắc.

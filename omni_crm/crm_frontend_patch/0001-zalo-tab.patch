@@ -48,15 +48,32 @@ index bc2f6dc..ec52ba8 100644
          <Button
 diff --git a/frontend/src/components/Activities/AssistantTab.vue b/frontend/src/components/Activities/AssistantTab.vue
 new file mode 100644
-index 0000000..f4eb2f8
+index 0000000..31978e6
 --- /dev/null
 +++ b/frontend/src/components/Activities/AssistantTab.vue
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,320 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <div
++      v-if="session"
++      class="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1.5 sm:px-5"
++    >
++      <span class="text-sm text-ink-gray-5">{{
++        turns.length
++          ? __('Lịch sử trò chuyện với trợ lý trên Lead này')
++          : __('Cuộc trò chuyện mới')
++      }}</span>
++      <Button
++        size="sm"
++        variant="ghost"
++        :label="__('Cuộc trò chuyện mới')"
++        :disabled="busy || !turns.length"
++        @click="startNew"
++      />
++    </div>
++    <div
 +      ref="scroller"
-+      class="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-10"
++      class="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5"
 +    >
 +      <div
 +        v-if="startError"
@@ -86,7 +103,7 @@ index 0000000..f4eb2f8
 +      <div v-for="(turn, i) in turns" :key="i" class="mb-3">
 +        <div v-if="turn.role === 'user'" class="flex justify-end">
 +          <div
-+            class="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-gray-3 px-3 py-2 text-base text-ink-gray-9"
++            class="max-w-[95%] whitespace-pre-wrap break-words rounded-lg bg-surface-gray-3 px-3 py-2 text-base text-ink-gray-9"
 +          >
 +            {{ turn.text }}
 +          </div>
@@ -94,7 +111,7 @@ index 0000000..f4eb2f8
 +        <div v-else class="flex flex-col items-start gap-1.5">
 +          <div
 +            v-if="turn.text"
-+            class="max-w-[85%] whitespace-pre-wrap break-words rounded-lg border border-outline-gray-2 px-3 py-2 text-base text-ink-gray-8"
++            class="max-w-[95%] whitespace-pre-wrap break-words rounded-lg border border-outline-gray-2 px-3 py-2 text-base text-ink-gray-8"
 +            :class="turn.error ? 'text-ink-red-4' : ''"
 +          >
 +            {{ turn.text }}
@@ -110,7 +127,7 @@ index 0000000..f4eb2f8
 +            <!-- Thao tác chờ duyệt: chưa bấm thì không có gì thay đổi trong CSDL -->
 +            <div
 +              v-if="act.changes"
-+              class="w-full max-w-[85%] rounded-lg border border-outline-amber-2 px-3 py-2 text-sm"
++              class="w-full max-w-[95%] rounded-lg border border-outline-amber-2 px-3 py-2 text-sm"
 +            >
 +              <div class="mb-1 font-medium text-ink-gray-9">
 +                {{ toolText(act.tool) }} ·
@@ -181,13 +198,13 @@ index 0000000..f4eb2f8
 +        <span>{{ __('Trợ lý đang xử lý...') }}</span>
 +      </div>
 +    </div>
-+    <div class="border-t px-3 py-2.5 sm:px-10">
++    <div class="shrink-0 border-t px-3 py-2.5 sm:px-5">
 +      <div class="flex items-end gap-2">
 +        <Textarea
 +          v-model="text"
 +          type="textarea"
-+          class="min-h-8 w-full"
-+          :rows="2"
++          class="assistant-input w-full"
++          :rows="4"
 +          :disabled="!session"
 +          :placeholder="
 +            busy
@@ -261,12 +278,28 @@ index 0000000..f4eb2f8
 +      lead: props.doctype === 'CRM Lead' ? props.docname : null,
 +    })
 +    session.value = res.session
++    turns.value = res.history || []
 +    hasKey.value = res.has_key
 +    settingsUrl.value = res.settings_url || settingsUrl.value
 +  } catch (err) {
 +    startError.value = errorText(err)
 +  }
++  scrollToBottom()
 +})
++
++// "Cuộc trò chuyện mới": phiên mới cho Lead này; lịch sử cũ vẫn lưu ở máy chủ (Omni Assistant Session)
++async function startNew() {
++  try {
++    const res = await call(API + 'start_session', {
++      lead: props.doctype === 'CRM Lead' ? props.docname : null,
++      new: 1,
++    })
++    session.value = res.session
++    turns.value = res.history || []
++  } catch (err) {
++    turns.value.push({ role: 'assistant', text: errorText(err), error: true })
++  }
++}
 +
 +// Rời trang (đổi tab, đổi Lead, đóng trang): đóng phiên
 +function closeSession() {
@@ -327,6 +360,18 @@ index 0000000..f4eb2f8
 +  }
 +}
 +</script>
++
++<style scoped>
++/* Ô nhập cao theo nội dung (tối thiểu 4 dòng, tối đa 40% màn hình), kéo giãn được */
++.assistant-input :deep(textarea) {
++  field-sizing: content;
++  min-height: 6.5rem;
++  max-height: 40vh;
++  resize: vertical;
++  font-size: 0.95rem;
++  line-height: 1.5;
++}
++</style>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
 index 0000000..8710c0c
