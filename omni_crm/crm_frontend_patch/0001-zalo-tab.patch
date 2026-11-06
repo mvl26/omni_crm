@@ -891,6 +891,60 @@ index 0000000..5d4499f
 +    assistantEnabled.value = false
 +  },
 +})
+diff --git a/frontend/src/composables/leadContact.js b/frontend/src/composables/leadContact.js
+new file mode 100644
+index 0000000..7b6f7fc
+--- /dev/null
++++ b/frontend/src/composables/leadContact.js
+@@ -0,0 +1,48 @@
++import { call, createResource, toast } from 'frappe-ui'
++import { ref } from 'vue'
++
++// Nút "Tạo liên hệ" trên trang Lead (omni_crm V3-06). Chỉ hiện khi omni_crm đã cài và công tắc
++// Omni Settings.lead_contact_button_disabled không bật. Không có omni_crm thì lời gọi lỗi và nút không hiện.
++export const leadContactEnabled = ref(false)
++export const leadContactBusy = ref(false)
++
++createResource({
++  url: 'omni_crm.api.lead_contact.state',
++  cache: 'Omni Lead Contact Enabled',
++  auto: true,
++  onSuccess: (data) => {
++    leadContactEnabled.value = Boolean(data?.enabled)
++  },
++  onError: () => {
++    leadContactEnabled.value = false
++  },
++})
++
++// Tạo (hoặc cập nhật) Liên hệ từ Lead rồi mở trang Liên hệ trong CRM.
++export async function syncContactFromLead(lead, router) {
++  if (!lead || leadContactBusy.value) return
++  leadContactBusy.value = true
++  try {
++    const res = await call('omni_crm.api.lead_contact.sync_from_lead', {
++      lead,
++    })
++    const added = (res.added || []).join(', ')
++    toast.success(
++      res.created
++        ? __('Đã tạo liên hệ {0}', [res.contact])
++        : added
++          ? __('Đã cập nhật liên hệ {0}: thêm {1}', [res.contact, added])
++          : __('Liên hệ {0} đã đủ dữ liệu của Lead', [res.contact]),
++    )
++    router.push({ name: 'Contact', params: { contactId: res.contact } })
++  } catch (err) {
++    toast.error(
++      (err?.messages?.[0] || __('Không tạo được liên hệ')).replace(
++        /<[^>]*>/g,
++        '',
++      ),
++    )
++  } finally {
++    leadContactBusy.value = false
++  }
++}
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
 index 0000000..5e7db68
@@ -949,10 +1003,23 @@ index 77cd4b7..6c14517 100644
    return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
  })
 diff --git a/frontend/src/pages/Lead.vue b/frontend/src/pages/Lead.vue
-index d363cbf..22fbf9a 100644
+index d363cbf..58148bd 100644
 --- a/frontend/src/pages/Lead.vue
 +++ b/frontend/src/pages/Lead.vue
-@@ -246,6 +246,8 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+@@ -34,6 +34,12 @@
+           </Button>
+         </template>
+       </Dropdown>
++      <Button
++        v-if="leadContactEnabled"
++        :label="__('Tạo liên hệ')"
++        :loading="leadContactBusy"
++        @click="syncContactFromLead(doc.name, router)"
++      />
+       <Button
+         :label="__('Convert to Deal')"
+         variant="solid"
+@@ -246,6 +252,8 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
  import TaskIcon from '@/components/Icons/TaskIcon.vue'
  import NoteIcon from '@/components/Icons/NoteIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
@@ -961,16 +1028,21 @@ index d363cbf..22fbf9a 100644
  import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
  import CameraIcon from '@/components/Icons/CameraIcon.vue'
  import LinkIcon from '@/components/Icons/LinkIcon.vue'
-@@ -273,6 +275,8 @@ import { statusesStore } from '@/stores/statuses'
+@@ -273,6 +281,13 @@ import { statusesStore } from '@/stores/statuses'
  import { getMeta } from '@/stores/meta'
  import { useDocument } from '@/data/document'
  import { whatsappEnabled } from '@/composables/whatsapp'
 +import { zaloEnabled } from '@/composables/zalo'
 +import { assistantEnabled } from '@/composables/assistant'
++import {
++  leadContactBusy,
++  leadContactEnabled,
++  syncContactFromLead,
++} from '@/composables/leadContact'
  import { callEnabled } from '@/composables/telephony'
  import {
    createResource,
-@@ -453,6 +457,18 @@ const tabs = computed(() => {
+@@ -453,6 +468,18 @@ const tabs = computed(() => {
        icon: WhatsAppIcon,
        condition: () => whatsappEnabled.value,
      },

@@ -96,6 +96,7 @@
   "webhook_spool_disabled",
   "zalo_tab_disabled",
   "zalo_in_activity_enabled",
+  "lead_contact_button_disabled",
   "sec_release_gate",
   "q1_allowed",
   "q11_allowed",
@@ -649,6 +650,13 @@
    "description": "Bật: tin Zalo OA GHI MỚI vẫn hiện thành thẻ trong tab Hoạt động/Email của Lead/Deal như trước V3-02. Chưa từng lưu hoặc 0 (mặc định) = ẩn: tin Zalo chỉ ở tab Zalo và Hộp thư. Công tắc này chỉ áp cho tin ghi sau đó; tin cũ đổi bằng lệnh omni_crm.ops.hide_zalo_activity.run (tham số reverse). Email không bị ảnh hưởng."
   },
   {
+   "fieldname": "lead_contact_button_disabled",
+   "fieldtype": "Check",
+   "label": "Ẩn nút Tạo liên hệ trên Lead",
+   "default": "0",
+   "description": "V3-06: nút tạo/cập nhật Liên hệ từ dữ liệu Lead (không cần chuyển Deal). Tích để ẩn nút và chặn API."
+  },
+  {
    "fieldname": "sec_release_gate",
    "fieldtype": "Section Break",
    "label": "Quyết định phát hành (V21-08)",
@@ -702,5 +710,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "modified": "2026-11-06 12:00:00.000000"
+ "modified": "2026-11-06 16:00:00.000000"
 }

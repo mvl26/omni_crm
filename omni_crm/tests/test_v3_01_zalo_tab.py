@@ -549,6 +549,7 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 			"frontend/tests/unit/callNotes.test.js",  # V3-05
 			"frontend/src/components/Activities/AssistantTab.vue",  # V3-05: tab Trợ lý (ADR 0016 mục 13, ADR 0018)
 			"frontend/src/composables/assistant.js",  # V3-05
+			"frontend/src/composables/leadContact.js",  # V3-06: nút Tạo liên hệ (ADR 0016 mục 15)
 			"frontend/src/utils/assistantChat.js",  # V3-05
 			"frontend/tests/unit/assistantChat.test.js",  # V3-05
 			"frontend/src/components/Activities/ZaloTab.vue",

@@ -194,6 +194,18 @@ def zalo_tab_enabled() -> bool:
 	return not (row and cint(row[0][0]))
 
 
+def lead_contact_button_enabled() -> bool:
+	"""Có hiện nút "Tạo liên hệ" trên trang Lead không (V3-06). Cực tính NGƯỢC (`lead_contact_button_disabled`):
+	chưa lưu hoặc 0 = hiện, 1 = ẩn. Lỗi đọc = ẩn."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'lead_contact_button_disabled'"
+		)
+	except Exception:
+		return False
+	return not (row and cint(row[0][0]))
+
+
 def zalo_in_activity_enabled() -> bool:
 	"""Có ghi tin Zalo OA mới vào tab Hoạt động/Email của Lead/Deal không (V3-02, ADR 0017). Mặc định TẮT (tin Zalo
 	chỉ ở tab Zalo và Hộp thư): Single không áp default JSON nên "chưa từng lưu" = không có hàng = tắt, và lưu 0 cũng
