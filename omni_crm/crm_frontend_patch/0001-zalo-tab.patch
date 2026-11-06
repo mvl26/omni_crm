@@ -1,8 +1,8 @@
 diff --git a/frontend/src/components/Activities/Activities.vue b/frontend/src/components/Activities/Activities.vue
-index e262752..a9244a8 100644
+index e262752..f523356 100644
 --- a/frontend/src/components/Activities/Activities.vue
 +++ b/frontend/src/components/Activities/Activities.vue
-@@ -10,7 +10,13 @@
+@@ -10,7 +10,20 @@
      :whatsappBox="whatsappBox"
      :modalRef="modalRef"
    />
@@ -13,30 +13,320 @@ index e262752..a9244a8 100644
 +    :doctype="doctype"
 +    :docname="docname"
 +  />
++  <AssistantTab
++    v-else-if="title == 'Assistant'"
++    :key="'assistant' + doctype + docname"
++    :doctype="doctype"
++    :docname="docname"
++    @changed="all_activities.reload()"
++  />
 +  <FadedScrollableDiv v-else class="flex flex-col h-full overflow-y-auto">
      <div
        v-if="all_activities?.loading"
        class="flex flex-1 flex-col items-center justify-center gap-3 text-xl font-medium text-ink-gray-4"
-@@ -466,6 +472,7 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+@@ -466,6 +479,8 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
  import WhatsAppArea from '@/components/Activities/WhatsAppArea.vue'
  import WhatsAppBox from '@/components/Activities/WhatsAppBox.vue'
 +import ZaloTab from '@/components/Activities/ZaloTab.vue'
++import AssistantTab from '@/components/Activities/AssistantTab.vue'
  import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
  import EmptyState from '@/components/ListViews/EmptyState.vue'
  import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 diff --git a/frontend/src/components/Activities/ActivityHeader.vue b/frontend/src/components/Activities/ActivityHeader.vue
-index bc2f6dc..522d37c 100644
+index bc2f6dc..ec52ba8 100644
 --- a/frontend/src/components/Activities/ActivityHeader.vue
 +++ b/frontend/src/components/Activities/ActivityHeader.vue
-@@ -58,6 +58,7 @@
+@@ -58,6 +58,8 @@
          @click="whatsappBox.show()"
        />
      </div>
 +    <div v-else-if="title == 'Zalo'" />
++    <div v-else-if="title == 'Assistant'" />
      <Dropdown v-else :options="defaultActions" @click.stop>
        <template #default="{ open }">
          <Button
+diff --git a/frontend/src/components/Activities/AssistantTab.vue b/frontend/src/components/Activities/AssistantTab.vue
+new file mode 100644
+index 0000000..f4eb2f8
+--- /dev/null
++++ b/frontend/src/components/Activities/AssistantTab.vue
+@@ -0,0 +1,275 @@
++<template>
++  <div class="flex h-full min-h-0 flex-col overflow-hidden">
++    <div
++      ref="scroller"
++      class="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-10"
++    >
++      <div
++        v-if="startError"
++        class="rounded bg-surface-red-1 px-3 py-2 text-base text-ink-red-4"
++      >
++        {{ startError }}
++      </div>
++      <div
++        v-else-if="!hasKey && session"
++        class="mb-3 rounded border border-outline-amber-2 bg-surface-amber-1 px-3 py-2 text-base text-ink-gray-8"
++      >
++        {{ __('Trợ lý chưa cấu hình khoá AI.') }}
++        <a :href="settingsUrl" class="underline" target="_blank">{{
++          __('Mở Omni Settings')
++        }}</a>
++      </div>
++      <div
++        v-if="!turns.length && !startError"
++        class="py-6 text-center text-base text-ink-gray-5"
++      >
++        {{
++          __(
++            'Gõ một câu lệnh, ví dụ: "ghi log cuộc gọi hôm nay cho khách này". Trợ lý thao tác bằng quyền của bạn và không gửi gì cho khách.',
++          )
++        }}
++      </div>
++      <div v-for="(turn, i) in turns" :key="i" class="mb-3">
++        <div v-if="turn.role === 'user'" class="flex justify-end">
++          <div
++            class="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-gray-3 px-3 py-2 text-base text-ink-gray-9"
++          >
++            {{ turn.text }}
++          </div>
++        </div>
++        <div v-else class="flex flex-col items-start gap-1.5">
++          <div
++            v-if="turn.text"
++            class="max-w-[85%] whitespace-pre-wrap break-words rounded-lg border border-outline-gray-2 px-3 py-2 text-base text-ink-gray-8"
++            :class="turn.error ? 'text-ink-red-4' : ''"
++          >
++            {{ turn.text }}
++            <a
++              v-if="turn.settingsUrl"
++              :href="turn.settingsUrl"
++              class="underline"
++              target="_blank"
++              >{{ __('Mở Omni Settings') }}</a
++            >
++          </div>
++          <template v-for="act in turn.actions || []" :key="act.action">
++            <!-- Thao tác chờ duyệt: chưa bấm thì không có gì thay đổi trong CSDL -->
++            <div
++              v-if="act.changes"
++              class="w-full max-w-[85%] rounded-lg border border-outline-amber-2 px-3 py-2 text-sm"
++            >
++              <div class="mb-1 font-medium text-ink-gray-9">
++                {{ toolText(act.tool) }} ·
++                <span
++                  :class="
++                    act.status === 'Pending'
++                      ? 'text-ink-amber-3'
++                      : 'text-ink-gray-6'
++                  "
++                  >{{ statusText(act.status) }}</span
++                >
++              </div>
++              <table class="w-full text-ink-gray-8">
++                <tr v-for="c in act.changes" :key="c.field">
++                  <td class="pr-2 align-top text-ink-gray-6">{{ c.label }}</td>
++                  <td class="pr-2 align-top line-through decoration-ink-gray-4">
++                    {{ shown(c.old) }}
++                  </td>
++                  <td class="align-top font-medium">→ {{ shown(c.new) }}</td>
++                </tr>
++              </table>
++              <div v-if="act.status === 'Pending'" class="mt-2 flex gap-2">
++                <Button
++                  size="sm"
++                  variant="solid"
++                  :label="__('Duyệt')"
++                  :loading="deciding === act.action"
++                  @click="decide(act, 'approve')"
++                />
++                <Button
++                  size="sm"
++                  :label="__('Bỏ')"
++                  :disabled="deciding === act.action"
++                  @click="decide(act, 'reject')"
++                />
++              </div>
++            </div>
++            <!-- Thao tác đã ghi: link tới bản ghi để kiểm ngay -->
++            <div v-else class="text-sm text-ink-gray-7">
++              <span
++                :class="
++                  act.status === 'Success'
++                    ? 'text-ink-green-3'
++                    : 'text-ink-red-4'
++                "
++                >{{ statusText(act.status) }}</span
++              >
++              · {{ toolText(act.tool) }}
++              <template v-for="link in act.links || []" :key="link.name">
++                ·
++                <a
++                  :href="recordUrl(link.doctype, link.name)"
++                  target="_blank"
++                  class="underline"
++                  >{{ link.label }} {{ link.name }}</a
++                >
++              </template>
++              <span v-if="act.error"> · {{ act.error }}</span>
++            </div>
++          </template>
++        </div>
++      </div>
++      <div
++        v-if="busy"
++        class="flex items-center gap-2 text-base text-ink-gray-5"
++      >
++        <LoadingIndicator class="h-4 w-4" />
++        <span>{{ __('Trợ lý đang xử lý...') }}</span>
++      </div>
++    </div>
++    <div class="border-t px-3 py-2.5 sm:px-10">
++      <div class="flex items-end gap-2">
++        <Textarea
++          v-model="text"
++          type="textarea"
++          class="min-h-8 w-full"
++          :rows="2"
++          :disabled="!session"
++          :placeholder="
++            busy
++              ? __('Đang chờ trợ lý trả lời...')
++              : __(
++                  'Nhập câu lệnh cho trợ lý (Enter để gửi, Shift+Enter xuống dòng)',
++                )
++          "
++          @keydown.enter.exact.prevent="submit"
++        />
++        <Button
++          variant="solid"
++          :label="__('Gửi')"
++          :loading="busy"
++          :disabled="!canSend(text, busy, session)"
++          @click="submit"
++        />
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
++import { Button, LoadingIndicator, Textarea, call } from 'frappe-ui'
++import {
++  canSend,
++  hasWrites,
++  recordUrl,
++  shown,
++  statusText,
++  toolText,
++} from '@/utils/assistantChat'
++
++// Trợ lý AI nội bộ (omni_crm V3-05): mọi kiểm tra quyền, trần ghi, chờ duyệt nằm ở omni_crm.assistant.api.
++const props = defineProps({
++  doctype: { type: String, required: true },
++  docname: { type: String, required: true },
++})
++const emit = defineEmits(['changed'])
++
++const API = 'omni_crm.assistant.api.'
++const session = ref('')
++const hasKey = ref(true)
++const settingsUrl = ref('/app/omni-settings')
++const startError = ref('')
++const turns = ref([])
++const text = ref('')
++const busy = ref(false)
++const deciding = ref('')
++const scroller = ref(null)
++
++function errorText(err) {
++  return (
++    err?.messages?.[0] ||
++    err?.message ||
++    __('Có lỗi, thử lại sau.')
++  ).replace(/<[^>]*>/g, '')
++}
++
++function scrollToBottom() {
++  nextTick(() => {
++    const el = scroller.value
++    if (el) el.scrollTop = el.scrollHeight
++  })
++}
++
++onMounted(async () => {
++  try {
++    const res = await call(API + 'start_session', {
++      lead: props.doctype === 'CRM Lead' ? props.docname : null,
++    })
++    session.value = res.session
++    hasKey.value = res.has_key
++    settingsUrl.value = res.settings_url || settingsUrl.value
++  } catch (err) {
++    startError.value = errorText(err)
++  }
++})
++
++// Rời trang (đổi tab, đổi Lead, đóng trang): đóng phiên
++function closeSession() {
++  if (!session.value) return
++  const id = session.value
++  session.value = ''
++  call(API + 'close_session', { session_id: id }).catch(() => {})
++}
++onBeforeUnmount(closeSession)
++window.addEventListener('pagehide', closeSession)
++onBeforeUnmount(() => window.removeEventListener('pagehide', closeSession))
++
++async function submit() {
++  if (!canSend(text.value, busy.value, session.value)) return
++  const message = text.value.trim()
++  turns.value.push({ role: 'user', text: message })
++  text.value = ''
++  busy.value = true
++  scrollToBottom()
++  try {
++    const res = await call(API + 'chat', {
++      session_id: session.value,
++      message,
++    })
++    if (res.error) {
++      turns.value.push({
++        role: 'assistant',
++        text: res.error,
++        error: true,
++        settingsUrl: res.settings_url,
++      })
++    } else {
++      turns.value.push({
++        role: 'assistant',
++        text: res.reply,
++        actions: res.actions,
++      })
++      if (hasWrites(res.actions)) emit('changed')
++    }
++  } catch (err) {
++    turns.value.push({ role: 'assistant', text: errorText(err), error: true })
++  } finally {
++    busy.value = false
++    scrollToBottom()
++  }
++}
++
++async function decide(act, kind) {
++  deciding.value = act.action
++  try {
++    const res = await call(API + kind, { action_name: act.action })
++    act.status = res.status
++    if (res.status === 'Success') emit('changed')
++  } catch (err) {
++    turns.value.push({ role: 'assistant', text: errorText(err), error: true })
++  } finally {
++    deciding.value = ''
++  }
++}
++</script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
 index 0000000..8710c0c
@@ -485,6 +775,30 @@ index 592f215..809b322 100644
  :deep(.form-control input:not([type='checkbox'])),
  :deep(.form-control select),
  :deep(.form-control textarea),
+diff --git a/frontend/src/composables/assistant.js b/frontend/src/composables/assistant.js
+new file mode 100644
+index 0000000..5d4499f
+--- /dev/null
++++ b/frontend/src/composables/assistant.js
+@@ -0,0 +1,18 @@
++import { createResource } from 'frappe-ui'
++import { ref } from 'vue'
++
++// Tab "Trợ lý" (omni_crm V3-05) chỉ hiện khi app omni_crm đã cài và công tắc Omni Settings.assistant_enabled bật.
++// Không có omni_crm thì lời gọi lỗi và tab không hiện (CRM chạy như cũ).
++export const assistantEnabled = ref(false)
++
++createResource({
++  url: 'omni_crm.assistant.api.tab_state',
++  cache: 'Omni Assistant Tab Enabled',
++  auto: true,
++  onSuccess: (data) => {
++    assistantEnabled.value = Boolean(data?.enabled)
++  },
++  onError: () => {
++    assistantEnabled.value = false
++  },
++})
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
 index 0000000..5e7db68
@@ -543,26 +857,28 @@ index 77cd4b7..6c14517 100644
    return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
  })
 diff --git a/frontend/src/pages/Lead.vue b/frontend/src/pages/Lead.vue
-index d363cbf..d56df0a 100644
+index d363cbf..22fbf9a 100644
 --- a/frontend/src/pages/Lead.vue
 +++ b/frontend/src/pages/Lead.vue
-@@ -246,6 +246,7 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+@@ -246,6 +246,8 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
  import TaskIcon from '@/components/Icons/TaskIcon.vue'
  import NoteIcon from '@/components/Icons/NoteIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 +import ZaloIcon from '@/components/Icons/ZaloIcon.vue'
++import AssistantIcon from '~icons/lucide/bot'
  import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
  import CameraIcon from '@/components/Icons/CameraIcon.vue'
  import LinkIcon from '@/components/Icons/LinkIcon.vue'
-@@ -273,6 +274,7 @@ import { statusesStore } from '@/stores/statuses'
+@@ -273,6 +275,8 @@ import { statusesStore } from '@/stores/statuses'
  import { getMeta } from '@/stores/meta'
  import { useDocument } from '@/data/document'
  import { whatsappEnabled } from '@/composables/whatsapp'
 +import { zaloEnabled } from '@/composables/zalo'
++import { assistantEnabled } from '@/composables/assistant'
  import { callEnabled } from '@/composables/telephony'
  import {
    createResource,
-@@ -453,6 +455,12 @@ const tabs = computed(() => {
+@@ -453,6 +457,18 @@ const tabs = computed(() => {
        icon: WhatsAppIcon,
        condition: () => whatsappEnabled.value,
      },
@@ -572,9 +888,81 @@ index d363cbf..d56df0a 100644
 +      icon: ZaloIcon,
 +      condition: () => zaloEnabled.value,
 +    },
++    {
++      name: 'Assistant',
++      label: __('Trợ lý'),
++      icon: AssistantIcon,
++      condition: () => assistantEnabled.value,
++    },
    ]
    return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
  })
+diff --git a/frontend/src/utils/assistantChat.js b/frontend/src/utils/assistantChat.js
+new file mode 100644
+index 0000000..0e084de
+--- /dev/null
++++ b/frontend/src/utils/assistantChat.js
+@@ -0,0 +1,60 @@
++// Hàm thuần cho tab "Trợ lý" (omni_crm V3-05): đường dẫn bản ghi, trạng thái thao tác, kiểm câu lệnh.
++// Dữ liệu và mọi kiểm tra quyền nằm ở máy chủ (omni_crm.assistant.api); ở đây chỉ hiển thị.
++
++export const MAX_COMMAND_CHARS = 2000
++
++const DESK_ROUTES = {
++  'Omni Care Log': 'omni-care-log',
++  'CRM Task': 'crm-task',
++}
++
++// Link tới bản ghi vừa tạo/sửa: Lead mở trong CRM, bản ghi khác mở trong desk.
++export function recordUrl(doctype, name) {
++  if (!doctype || !name) return ''
++  const id = encodeURIComponent(name)
++  if (doctype === 'CRM Lead') return `/crm/leads/${id}`
++  const route = DESK_ROUTES[doctype]
++  return route ? `/app/${route}/${id}` : ''
++}
++
++const STATUS_TEXT = {
++  Success: 'Đã ghi',
++  Pending: 'Chờ duyệt',
++  Denied: 'Bị từ chối',
++  Error: 'Lỗi',
++  Limit: 'Chưa làm (chạm trần)',
++  Rejected: 'Đã bỏ',
++}
++
++export function statusText(status) {
++  return STATUS_TEXT[status] || status || ''
++}
++
++const TOOL_TEXT = {
++  create_care_log: 'Ghi nhật ký chăm sóc',
++  upsert_task: 'Tạo/sửa việc',
++  update_lead_fields: 'Đề xuất sửa Lead',
++}
++
++export function toolText(tool) {
++  return TOOL_TEXT[tool] || tool || ''
++}
++
++// Có gửi được câu lệnh không: không rỗng, không quá dài, không đang chờ, phiên đã mở.
++export function canSend(text, busy, session) {
++  const t = (text || '').trim()
++  return (
++    Boolean(session) && !busy && t.length > 0 && t.length <= MAX_COMMAND_CHARS
++  )
++}
++
++// Có thao tác nào đã ghi vào CSDL (để các tab khác của trang Lead tự nạp lại).
++export function hasWrites(actions) {
++  return (actions || []).some((a) => a && a.status === 'Success')
++}
++
++// Giá trị hiển thị trong thẻ duyệt: rỗng thì ghi rõ "(trống)".
++export function shown(value) {
++  const v = value == null ? '' : String(value)
++  return v === '' ? '(trống)' : v
++}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
 index 0000000..0225fd0
@@ -762,6 +1150,70 @@ index 0000000..0225fd0
 +    analyzedAt: parseAt(at) ? `${timeLabel(at)} ${dayLabel(dayKey(at))}` : '',
 +  }
 +}
+diff --git a/frontend/tests/unit/assistantChat.test.js b/frontend/tests/unit/assistantChat.test.js
+new file mode 100644
+index 0000000..7c9a9a5
+--- /dev/null
++++ b/frontend/tests/unit/assistantChat.test.js
+@@ -0,0 +1,58 @@
++import { describe, expect, it } from 'vitest'
++import {
++  MAX_COMMAND_CHARS,
++  canSend,
++  hasWrites,
++  recordUrl,
++  shown,
++  statusText,
++  toolText,
++} from '@/utils/assistantChat'
++
++describe('recordUrl', () => {
++  it('Lead mở trong CRM, nhật ký và việc mở trong desk', () => {
++    expect(recordUrl('CRM Lead', 'CRM-LEAD-2026-00003')).toBe(
++      '/crm/leads/CRM-LEAD-2026-00003',
++    )
++    expect(recordUrl('Omni Care Log', 'OCL-2026-0000001')).toBe(
++      '/app/omni-care-log/OCL-2026-0000001',
++    )
++    expect(recordUrl('CRM Task', 'TASK 1')).toBe('/app/crm-task/TASK%201')
++  })
++  it('loại lạ hoặc thiếu tên thì không có link', () => {
++    expect(recordUrl('User', 'x')).toBe('')
++    expect(recordUrl('CRM Task', '')).toBe('')
++  })
++})
++
++describe('canSend', () => {
++  it('cần phiên, không chờ, có chữ, không quá dài', () => {
++    expect(canSend('ghi log', false, 'AST-1')).toBe(true)
++    expect(canSend('  ', false, 'AST-1')).toBe(false)
++    expect(canSend('x', true, 'AST-1')).toBe(false)
++    expect(canSend('x', false, '')).toBe(false)
++    expect(canSend('x'.repeat(MAX_COMMAND_CHARS + 1), false, 'AST-1')).toBe(
++      false,
++    )
++  })
++})
++
++describe('nhãn', () => {
++  it('trạng thái và tool có nhãn tiếng Việt, lạ thì giữ nguyên', () => {
++    expect(statusText('Pending')).toBe('Chờ duyệt')
++    expect(statusText('Limit')).toBe('Chưa làm (chạm trần)')
++    expect(statusText('X')).toBe('X')
++    expect(toolText('create_care_log')).toBe('Ghi nhật ký chăm sóc')
++    expect(toolText('find_lead')).toBe('find_lead')
++  })
++  it('giá trị rỗng hiện (trống)', () => {
++    expect(shown('')).toBe('(trống)')
++    expect(shown(null)).toBe('(trống)')
++    expect(shown(0)).toBe('0')
++  })
++  it('hasWrites chỉ tính thao tác đã ghi', () => {
++    expect(hasWrites([{ status: 'Pending' }, { status: 'Denied' }])).toBe(false)
++    expect(hasWrites([{ status: 'Success' }])).toBe(true)
++    expect(hasWrites(null)).toBe(false)
++  })
++})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
 index 0000000..40ea5e6

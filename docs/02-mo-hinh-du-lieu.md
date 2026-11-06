@@ -27,6 +27,8 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | Omni Score Rule | Bảng con của Omni Settings | 2 | Bảng điểm Lead |
 | Omni Bot Run | Thường | 2 | Nhật ký mỗi lần gọi AI |
 | Omni Bot Draft | Thường | 2 | Câu trả lời bot soạn (ngầm, nháp, tự động) |
+| Omni Assistant Session | Thường | V3-05 | Phiên hội thoại với trợ lý AI nội bộ (ADR 0018) |
+| Omni Assistant Action | Thường | V3-05 | Mỗi lần trợ lý gọi tool: kiểm toán + hàng đợi duyệt (ADR 0018) |
 | Omni Eval Case | Thường | 2 | Một ca trong bộ đề |
 | Omni Eval Run | Thường | 2 | Một lần chạy bộ đề và kết quả |
 

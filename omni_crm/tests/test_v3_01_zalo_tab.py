@@ -544,6 +544,10 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 		{
 			"frontend/src/components/Activities/ActivityHeader.vue",
 			"frontend/src/components/Activities/Activities.vue",
+			"frontend/src/components/Activities/AssistantTab.vue",  # V3-05: tab Trợ lý (ADR 0016 mục 13, ADR 0018)
+			"frontend/src/composables/assistant.js",  # V3-05
+			"frontend/src/utils/assistantChat.js",  # V3-05
+			"frontend/tests/unit/assistantChat.test.js",  # V3-05
 			"frontend/src/components/Activities/ZaloTab.vue",
 			"frontend/src/components/Icons/ZaloIcon.vue",
 			"frontend/src/components/SidePanelLayout.vue",  # V3-03: ô chữ cột phải cao theo nội dung (ADR 0016 mục 12)

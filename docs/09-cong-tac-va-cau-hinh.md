@@ -62,6 +62,7 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | `raw_payload_retention_days` = 0 | Omni Settings | Tác vụ đêm không xóa `raw_payload`. Tác vụ đêm xóa theo `creation` (không theo `modified`) và chỉ với tin đã xử lý xong (bỏ qua New/Processing/Retry) | 1 |
 | `q1_allowed`, `q11_allowed` | Omni Settings | V21-08: chỉ GHI NHẬN quyết định Q1/Q11 đã chốt (máy đọc được, thay cho việc đoán từ `docs/12`); tắt/bật chúng KHÔNG đổi hành vi hệ thống. Lệnh kiểm trước phát hành đòi: `omni_auto_send_allowed` chỉ có khi `q1_allowed = 1`; `omni_ai_allow_customer_data` phải khớp `q11_allowed`. Chưa từng lưu = 0. **Người chốt quyết định cập nhật các trường này khi quyết định đổi.** | 1 (V21-08) |
 | `gate_phan_tich_passed_at`, `gate_nhap_passed_at` | Omni Settings | V21-08: thời điểm cổng bot đạt (trống = chưa). Lệnh kiểm đòi `gate_phan_tich_passed_at` để `bot_analyze_enabled = 1` và `gate_nhap_passed_at` để `bot_reply_mode` khác Off ở production. Chỉ ghi nhận, không mở khóa gì. Người phụ trách cổng cập nhật sau khi đo bằng AI thật | 1 (V21-08) |
+| `assistant_enabled` | Omni Settings | V3-05: công tắc tổng của trợ lý AI nội bộ (tab **Trợ lý** trên trang Lead). Mặc định 0: tab ẩn, mọi API của trợ lý từ chối. Kèm `assistant_model` (trống = `reply_model`), `assistant_daily_token_limit` (300000 token/ngày toàn hệ thống, kiểm trước mỗi lần gọi), `assistant_max_writes_per_turn` (5). Vẫn chịu cổng Q11 (`omni_ai_allow_customer_data`) như bot phân tích. ADR 0018 | 3 (V3-05) |
 
 ### 1.1 Phần không có công tắc riêng và cách tắt thay thế (V2-01, ADR 0009)
 
