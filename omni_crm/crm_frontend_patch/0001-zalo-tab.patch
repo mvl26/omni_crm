@@ -609,18 +609,36 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..295d0c9
+index 0000000..c0b99df
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,329 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
 +export const POLL_MS = 60000
 +
-+/** Chỉ cho phép liên kết http(s); mọi thứ khác (javascript:, data:, /files/...) bị bỏ. */
++/** Có ký tự điều khiển, khoảng trắng hoặc `\` (trình duyệt coi `\` như `/`, nên `https://evil.com\@zdn.vn` trỏ tới evil.com). */
++function hasBadChars(url) {
++  for (const ch of String(url)) {
++    const code = ch.codePointAt(0)
++    if (
++      ch === '\\' ||
++      code <= 0x20 ||
++      (code >= 0x7f && code <= 0xa0) ||
++      code === 0x2028 ||
++      code === 0x2029 ||
++      code === 0xfeff
++    )
++      return true
++  }
++  return false
++}
++
++/** Chỉ cho phép liên kết http(s) sạch; mọi thứ khác (javascript:, data:, /files/...) bị bỏ. Không `\`, ký tự điều khiển, khoảng trắng. */
 +export function isSafeUrl(url) {
-+  return /^https?:\/\//i.test(String(url || '').trim())
++  const value = String(url || '')
++  return /^https?:\/\//i.test(value) && !hasBadChars(value)
 +}
 +
 +/** Danh sách đính kèm đã lọc: chỉ URL http(s), mỗi mục có name để hiển thị; giữ type và thumb nếu có. */
@@ -661,15 +679,31 @@ index 0000000..295d0c9
 +  file: 'Tệp',
 +}
 +
-+/** Chỉ https tới host thuộc CDN Zalo (đúng host hoặc tên miền con) mới được vẽ thành ảnh; còn lại chỉ là liên kết. */
++/**
++ * Được vẽ thành ảnh nội tuyến khi: (1) https tới host CDN Zalo (đúng host hoặc tên miền con), không userinfo, không cổng khác
++ * 443, không `\`/ký tự điều khiển/khoảng trắng; hoặc (2) đường dẫn nội bộ /files, /private/files không có `..` hay `//`
++ * (giống máy chủ `omni_crm/utils/media.py`; tab Zalo hiện tại không nhận /files nhưng hai bên giữ cùng luật).
++ */
 +export function isInlineImageUrl(url) {
++  const value = String(url || '')
++  if (!value || hasBadChars(value)) return false
++  if (/^\/(?:private\/)?files\//.test(value)) {
++    const path = value.split(/[?#]/)[0].toLowerCase()
++    return (
++      !path.includes('//') &&
++      !path
++        .split('/')
++        .some((seg) => ['..', '%2e%2e', '.%2e', '%2e.'].includes(seg))
++    )
++  }
 +  let u
 +  try {
-+    u = new URL(String(url || '').trim())
++    u = new URL(value)
 +  } catch {
 +    return false
 +  }
 +  if (u.protocol !== 'https:' || u.username || u.password) return false
++  if (u.port && u.port !== '443') return false
 +  const host = u.hostname.toLowerCase()
 +  return ZALO_MEDIA_HOST_SUFFIXES.some(
 +    (suffix) => host === suffix || host.endsWith('.' + suffix),
@@ -910,10 +944,10 @@ index 0000000..295d0c9
 +}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..f469a53
+index 0000000..ac6df59
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,452 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
@@ -946,7 +980,8 @@ index 0000000..f469a53
 +describe('isSafeUrl / safeAttachments', () => {
 +  it('chỉ nhận http(s)', () => {
 +    expect(isSafeUrl('https://x.example/a.png')).toBe(true)
-+    expect(isSafeUrl(' HTTP://x.example ')).toBe(true)
++    expect(isSafeUrl('HTTP://x.example')).toBe(true)
++    expect(isSafeUrl(' HTTP://x.example ')).toBe(false) // V3-05: không khoảng trắng
 +    for (const bad of [
 +      'javascript:alert(1)',
 +      'data:text/html,x',
@@ -1239,7 +1274,6 @@ index 0000000..f469a53
 +      'http://photo-stal-27.zdn.vn/a.jpg',
 +      'javascript:alert(1)',
 +      'data:image/png;base64,AAAA',
-+      '/files/a.png',
 +      '',
 +      null,
 +    ]) {
@@ -1316,5 +1350,53 @@ index 0000000..f469a53
 +      }),
 +    ).toBe('[Ảnh]')
 +    expect(displayText({ text: 'xin chào' })).toBe('xin chào')
++  })
++})
++
++describe('URL nghiêm ngặt, nhất quán với máy chủ (V3-05)', () => {
++  const BAD = [
++    'https://evil.com\\@zdn.vn/x.jpg',
++    'https://evil.com\\.zdn.vn/x.jpg',
++    'https://photo.zdn.vn/a\\b.jpg',
++    'https://photo.zdn.vn/a\u0001.jpg',
++    'https://photo.zdn.vn/a\u007f.jpg',
++    'https://photo.zdn.vn/a b.jpg',
++    'https://photo.zdn.vn/a\u00a0b.jpg',
++    'https://photo.zdn.vn/a\nb.jpg',
++    ' https://photo.zdn.vn/a.jpg',
++  ]
++  const INLINE_ONLY_BAD = [
++    'https://photo.zdn.vn:8443/a.jpg',
++    'https://user:pw@photo.zdn.vn/a.jpg',
++  ]
++  it('isInlineImageUrl và isSafeUrl loại URL có \\, ký tự điều khiển, khoảng trắng', () => {
++    for (const bad of BAD) {
++      expect(isInlineImageUrl(bad), bad).toBe(false)
++      expect(isSafeUrl(bad), bad).toBe(false)
++    }
++    for (const bad of INLINE_ONLY_BAD) {
++      expect(isInlineImageUrl(bad), bad).toBe(false)
++    }
++  })
++  it('/files: nhận đường sạch, loại .., //, khoảng trắng, ký tự lạ', () => {
++    expect(isInlineImageUrl('/files/a.png')).toBe(true)
++    expect(isInlineImageUrl('/private/files/a.png')).toBe(true)
++    for (const bad of [
++      '/files/../private/x.png',
++      '/files/%2e%2e/x.png',
++      '/private/files/a/../../x',
++      '/files//x.png',
++      '/files/a b.png',
++      '/files/a\\b.png',
++      '/files/a\u0001.png',
++      '//photo.zdn.vn/a.jpg',
++    ]) {
++      expect(isInlineImageUrl(bad), bad).toBe(false)
++    }
++  })
++  it('cổng 443 tường minh vẫn được', () => {
++    expect(isInlineImageUrl('https://photo-stal-27.zdn.vn:443/a.jpg')).toBe(
++      true,
++    )
 +  })
 +})
