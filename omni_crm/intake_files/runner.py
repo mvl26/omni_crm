@@ -2,8 +2,9 @@
 
 Cấu hình qua site_config (hạ tầng, không thêm trường vào DocType):
 - `omni_intake_dir`: thư mục spool của miyano-intake (chứa `inbox/`). Vắng = tắt, không làm gì.
-- `omni_intake_channels` (tùy chọn): {"Email": "<Omni Channel>", "Telephony": "...", "Web Form": "..."}. Vắng thì dùng
-  kênh DUY NHẤT đang bật của loại đó; không có hoặc có nhiều hơn một thì file giữ nguyên trong inbox (không đoán).
+- `omni_intake_channels` (tùy chọn): {"Telephony": "<Omni Channel>", "Web Form": "..."}. Vắng thì dùng kênh DUY NHẤT
+  đang bật của loại đó; không có hoặc có nhiều hơn một thì file giữ nguyên trong inbox (không đoán).
+- Email không cần khai: thư vào Email Account có `email_id` trùng hộp thư của file (`source.account`).
 
 Sau khi nạp, file chuyển sang `archive/` (cùng cấu trúc ngày), giống quy ước trong README của miyano-intake;
 file hỏng sang `dead_crm/` kèm tệp `.loi.txt`; loại tin CRM chưa hỗ trợ (Messenger) sang `chua_nap/` để nạp sau.
@@ -19,6 +20,7 @@ from typing import Any
 
 import frappe
 
+from omni_crm.channels.email import adapter as email_adapter
 from omni_crm.channels.registry import get_adapter
 from omni_crm.ingest import gateway
 from omni_crm.intake_files import mapper
@@ -50,6 +52,35 @@ def resolve_channel(channel_type: str) -> str | None:
 	return names[0] if len(names) == 1 else None
 
 
+def ingest_email(env: dict) -> str:
+	"""Thư Gmail của intake -> Communication của Email Account có sẵn; hook omni_crm lo phần còn lại.
+
+	- Không nạp thư intake đánh dấu tự động/hàng loạt (newsletter): CRM không cần và Communication không giữ header để lọc lại.
+	- Email Account đang bật nhận thư (enable_incoming) nghĩa là CRM tự kéo hộp thư này: bỏ qua để không có hai đường.
+	- Không có Email Account khớp địa chỉ hộp thư, hoặc chưa có Omni Channel Email đang bật cho nó: giữ nguyên file.
+	"""
+	if env.get("ignored") or env.get("ignore_reasons"):
+		return "bo_qua"
+	mailbox = str((env.get("source") or {}).get("account") or "").strip().lower()
+	account = frappe.db.get_value(
+		"Email Account",
+		{"email_id": mailbox},
+		["name", "email_id", "enable_incoming"],
+		as_dict=True,
+	)
+	if not mailbox or not account or not email_adapter.find_channel(account.name):
+		return "thieu_kenh"
+	if account.enable_incoming:
+		return "bo_qua"
+	values = mapper.communication_values(env, account.name, account.email_id)
+	if frappe.db.exists("Communication", {"message_id": values["message_id"], "email_account": account.name}):
+		return "trung"
+	frappe.get_doc(values).insert(
+		ignore_permissions=True
+	)  # after_insert -> on_communication_insert -> cổng tiếp nhận
+	return "moi"
+
+
 def _move(root: Path, src: Path, bucket: str, note: str | None = None) -> None:
 	rel = src.relative_to(root / "inbox")
 	dst = root / bucket / rel
@@ -66,6 +97,8 @@ def ingest_envelope(env: Any) -> str:
 		return "chua_ho_tro"
 	if mapped.skip:
 		return "bo_qua"
+	if mapped.channel_type == "Email":
+		return ingest_email(env)
 	channel = resolve_channel(mapped.channel_type)
 	if not channel:
 		return "thieu_kenh"

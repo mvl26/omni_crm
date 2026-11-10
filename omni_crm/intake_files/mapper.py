@@ -3,7 +3,7 @@
 Hàm thuần: không đọc DB, không ghi gì. Nơi lưu JSON gốc là `Omni Inbound Message.raw_payload` (khóa `intake`),
 nên không cần DocType mới. Chống trùng dùng đúng `dedupe_key` của cổng (`{kênh}:{external_message_id}`), chọn
 `external_message_id` trùng với đường nhận trực tiếp để một tin đi cả hai đường vẫn chỉ vào một lần:
-- email: Message-ID của thư (giống hook Communication);
+- email: đi qua Communication + Email Account có sẵn của CRM (không có đường email thứ hai), khóa là Message-ID;
 - cuộc gọi: call_id;
 - form landing: sha1(event_key) làm submission_id (giống relay của miyano-intake).
 """
@@ -15,11 +15,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from omni_crm.channels.email.adapter import DATA_LEN, external_message_id
-from omni_crm.channels.email.clean import clean_email
+from omni_crm.channels.email.adapter import DATA_LEN
 from omni_crm.channels.telephony.base import INBOUND, OUTBOUND, CallEvent
 from omni_crm.channels.telephony.calls import serialize_event
-from omni_crm.identity.extract import extract_contacts
 from omni_crm.ingest.events import InboundEvent
 
 SCHEMA = "1"
@@ -99,54 +97,36 @@ def webform_body(env: dict) -> dict:
 	return {k: v for k, v in out.items() if v not in (None, "")}
 
 
-def _email(env: dict, channel: str) -> Mapped:
+def communication_values(env: dict, email_account: str, account_email: str) -> dict:
+	"""Giá trị Communication (thư đến) cho một envelope email; hook `Communication.after_insert` của omni_crm lo phần còn lại.
+
+	Dùng đường email có sẵn của CRM (Communication + Email Account) thay vì tự dựng sự kiện: thư hiện ở tab email của Lead,
+	chống trùng theo Message-ID, làm sạch/lọc thư tự động đều do code hiện có. Địa chỉ người gửi là `identifiers.email`
+	(Reply-To nếu có, vì form website gửi từ địa chỉ công ty), tên hiển thị lấy từ `sender.display_name`.
+	"""
 	ident = env.get("identifiers") or {}
-	sender = (env.get("sender") or {}).get("value") or ident.get("email") or ""
-	sender = sender.strip().lower()[:DATA_LEN]
-	raw = env.get("raw") or {}
+	sender = (ident.get("email") or (env.get("sender") or {}).get("value") or "").strip().lower()
+	text = str((env.get("content") or {}).get("text") or "")[:MAX_TEXT]
+	subject = _s((env.get("raw") or {}).get("subject"), 140)
+	if subject and text.startswith(subject):  # intake ghép "tiêu đề\n\nnội dung"
+		text = text[len(subject) :].lstrip("\n")
 	key = str(env.get("event_key") or "")
-	mid = key.split(":", 1)[1] if key.startswith("gmail:") else key
-	reasons = env.get("ignore_reasons") or []
-	body, signature = clean_email((env.get("content") or {}).get("text"))
-	profile: dict = {}
-	name = (env.get("sender") or {}).get("display_name")
-	if name and "@" not in name:
-		profile["display_name"] = name
-	# Gmail đặt địa chỉ khách ở Reply-To khi form website gửi từ địa chỉ công ty: `identifiers.email` là địa chỉ hiệu lực
-	if ident.get("email") and ident["email"].lower() != sender:
-		profile["reply_to_email"] = ident["email"].lower()
-	found = extract_contacts(signature)
-	if found["phones"]:
-		profile["signature_phones"] = found["phones"]
-	if found["emails"]:
-		profile["signature_emails"] = found["emails"]
-	atts = [
-		{
-			"file": a.get("path") or a.get("file"),
-			"name": a.get("filename") or a.get("name"),
-			"mime": a.get("mime_type"),
-		}
-		for a in (env.get("content") or {}).get("attachments") or []
-		if isinstance(a, dict)
-	]
-	event = InboundEvent(
-		channel=channel,
-		channel_type="Email",
-		event_type="ignored" if (env.get("ignored") or reasons) else "message",
-		external_message_id=external_message_id(channel, mid, key),
-		external_sender_id=(ident.get("email") or sender)[:DATA_LEN].lower(),
-		received_at=_dt(env.get("occurred_at")) or _dt(env.get("received_at")) or datetime.now(),
-		text=(body or "")[:MAX_TEXT],
-		attachments=atts,
-		sender_profile=profile,
-		raw={
-			"subject": raw.get("subject"),
-			"in_reply_to": None,
-			"ignored": ", ".join(reasons) or None,
-			"intake": env,
-		},
-	)
-	return Mapped("Email", event)
+	return {
+		"doctype": "Communication",
+		"communication_type": "Communication",
+		"communication_medium": "Email",
+		"sent_or_received": "Received",
+		"email_account": email_account,
+		"sender": sender,
+		"sender_full_name": (env.get("sender") or {}).get("display_name") or None,
+		"recipients": account_email,
+		"subject": subject or "(không có tiêu đề)",
+		"content": text,
+		"text_content": text,
+		"message_id": (key.split(":", 1)[1] if key.startswith("gmail:") else key)[:DATA_LEN],
+		"communication_date": _dt(env.get("occurred_at")) or _dt(env.get("received_at")),
+		"status": "Open",
+	}
 
 
 def _call(env: dict, channel: str) -> Mapped:
@@ -214,9 +194,7 @@ def map_envelope(env: Any) -> Mapped:
 
 
 def with_channel(env: dict, mapped: Mapped, channel: str) -> Mapped:
-	"""Dựng InboundEvent cho các loại cần tên kênh (Email, Telephony)."""
-	if mapped.channel_type == "Email":
-		return _email(env, channel)
+	"""Dựng InboundEvent cho loại cần tên kênh (Telephony)."""
 	if mapped.channel_type == "Telephony":
 		return _call(env, channel)
 	return mapped
