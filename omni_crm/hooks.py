@@ -171,6 +171,7 @@ scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"omni_crm.ingest.spool.drain",  # V21-04: chèn lại tin trong hàng dự phòng webhook (kiểm chữ ký, chống trùng)
+			"omni_crm.intake_files.runner.run",  # nạp file JSON của miyano-intake (tắt khi chưa đặt site_config omni_intake_dir)
 		],
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",

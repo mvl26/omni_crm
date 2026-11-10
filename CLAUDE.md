@@ -91,6 +91,7 @@ Một nhiệm vụ chỉ được coi là xong khi đủ cả:
 | `docs/15-nguon-lead-quang-cao.md` | Lead từ Meta, Google Ads, form website, dữ liệu mua sắm công; chiến dịch, quy kết, SLA phản hồi |
 | `docs/14-nha-thau-b2b.md` | Mô hình khách nhà thầu B2B, gói thầu, điểm phù hợp, giai đoạn, nguồn Lead, tuân thủ |
 | `mau/Mau_DanhSach_NhaThau_TiemNang.xlsx` | Mẫu danh sách nhà thầu — tên sheet và mã trường dòng 2 là hợp đồng dữ liệu cho importer |
+| `docs/16-nap-file-intake.md` | Nạp file JSON của miyano-intake vào cổng tiếp nhận |
 | `docs/adr/` | Ghi quyết định kiến trúc |
 
 ## Ghi chú từ v1
