@@ -164,6 +164,18 @@ class TestParseZaloMedia(BridgeTestCase):
 		)
 		self.assertEqual([a["url"] for a in ev.attachments], [None, JPG])
 
+	def test_attachments_not_a_list_does_not_make_event_unparsed(self):
+		ev = parse_event(
+			Chan(),
+			{
+				"event_name": "user_send_gif",
+				"sender": {"id": "u1"},
+				"timestamp": "1",
+				"message": {"msg_id": "m", "attachments": {"type": "gif"}},
+			},
+		)
+		self.assertEqual((ev.event_type, ev.text, ev.attachments), ("message", "[GIF]", []))
+
 	def test_event_without_text_or_attachments_still_gets_label(self):
 		self.assertEqual(parsed("user_send_gif", []).text, "[GIF]")
 		self.assertEqual(parsed("user_send_business_card", []).text, "[Danh thiếp]")
@@ -268,5 +280,6 @@ class TestReport(BridgeTestCase):
 		self.assertEqual(hosts, ["photo-stal-27.zdn.vn", "evil.example"])
 		self.assertEqual([a["filtered"] for a in row["attachments"]], [False, False])
 		self.assertEqual([a["inline"] for a in row["attachments"]], [True, False])
+		self.assertIn("unparsed_7d", zalo_media_report.run(limit=1))
 		self.assertNotIn("secret.png", json.dumps(row))
 		self.assertNotIn(JPG, json.dumps(row))

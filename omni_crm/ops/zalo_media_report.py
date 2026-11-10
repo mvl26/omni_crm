@@ -103,6 +103,14 @@ def run(limit: int | str = 20) -> dict:
 		limit_page_length=2000,
 	):
 		ignored[_event_name(r.raw_payload) or "(không tên)"] += 1
+	unparsed = frappe.db.count(
+		"Omni Inbound Message",
+		{
+			"channel_type": "Zalo OA",
+			"event_type": "unparsed",
+			"received_at": [">=", add_days(now_datetime(), -7)],
+		},
+	)
 	with_media = [m for m in messages if m["has_attachments"]]
 	return {
 		"scanned": len(messages),
@@ -111,5 +119,6 @@ def run(limit: int | str = 20) -> dict:
 		"filtered_attachments": sum(1 for m in messages for a in m["attachments"] if a["filtered"]),
 		"event_names": dict(Counter(m["event_name"] or "(không rõ)" for m in messages)),
 		"ignored_event_names_7d": dict(ignored),
+		"unparsed_7d": unparsed,  # payload không parse được (trạng thái Manual): xem Error Log "Omni webhook: parse_that_bai"
 		"messages": messages,
 	}

@@ -68,8 +68,18 @@ def _ts(data: dict) -> datetime:
 
 
 def _attachments(message: dict) -> list[dict]:
+	"""Đính kèm của tin; hình dạng lạ không bao giờ làm cả sự kiện thành `unparsed` (tin vẫn lưu, kèm nhãn theo sự kiện)."""
+	try:
+		return _attachments_unsafe(message)
+	except Exception:
+		_record_rejection(CHANNEL_TYPE, "attachments_parse_loi")
+		return []
+
+
+def _attachments_unsafe(message: dict) -> list[dict]:
 	out: list[dict] = []
-	for att in message.get("attachments") or []:
+	raw = message.get("attachments")
+	for att in raw if isinstance(raw, list) else []:
 		if not isinstance(att, dict):
 			continue
 		kind = att.get("type")
