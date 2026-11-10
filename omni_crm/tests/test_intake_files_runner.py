@@ -17,7 +17,14 @@ class TestRunner(unittest.TestCase):
 		d.mkdir(parents=True)
 		self.d = d
 		patches = [
-			mock.patch.object(runner.frappe, "conf", {"omni_intake_dir": str(self.root)}),
+			mock.patch.object(
+				runner.frappe,
+				"conf",
+				{
+					"omni_intake_dir": str(self.root),
+					"omni_intake_kinds": ["email", "call", "web_form", "messenger"],
+				},
+			),
 			mock.patch.object(runner.frappe, "db", mock.MagicMock()),
 			mock.patch.object(runner.frappe, "log_error"),
 			mock.patch.object(runner.frappe, "get_traceback", return_value="tb"),
@@ -64,6 +71,20 @@ class TestRunner(unittest.TestCase):
 		with mock.patch.object(runner, "ingest_envelope", side_effect=[RuntimeError("DB"), "moi"]):
 			stats = runner.run()
 		self.assertEqual((stats["loi"], stats["moi"]), (1, 1))
+
+	def test_mac_dinh_chi_doc_thu_muc_email(self):
+		other = self.root / "inbox" / "2026" / "11" / "03" / "web_form"
+		other.mkdir(parents=True)
+		(other / "f.json").write_text("{}", encoding="utf-8")
+		self.put("g.json", {})
+		conf = {"omni_intake_dir": str(self.root)}  # không khai omni_intake_kinds
+		with (
+			mock.patch.object(runner.frappe, "conf", conf),
+			mock.patch.object(runner, "ingest_envelope", return_value="moi") as ing,
+		):
+			self.assertEqual(runner.run()["moi"], 1)
+			self.assertEqual(ing.call_count, 1)
+		self.assertTrue((other / "f.json").exists())  # thư mục form không bị đọc hay di chuyển
 
 	def test_gioi_han_moi_lan(self):
 		for i in range(5):

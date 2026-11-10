@@ -92,7 +92,13 @@ class TestIntakeFilesIntegration(FrappeTestCase):
 		self.addCleanup(self.tmp.cleanup)
 		self.root = Path(self.tmp.name)
 		self.dir = self.root / "inbox" / "2026" / "11" / "03"
-		patch = mock.patch.dict(frappe.conf, {"omni_intake_dir": str(self.root)})
+		patch = mock.patch.dict(
+			frappe.conf,
+			{
+				"omni_intake_dir": str(self.root),
+				"omni_intake_kinds": ["email", "call", "web_form", "messenger"],
+			},
+		)
 		patch.start()
 		self.addCleanup(patch.stop)
 		acc = frappe.get_doc(

@@ -4,6 +4,8 @@ Cấu hình qua site_config (hạ tầng, không thêm trường vào DocType):
 - `omni_intake_dir`: thư mục spool của miyano-intake (chứa `inbox/`). Vắng = tắt, không làm gì.
 - `omni_intake_channels` (tùy chọn): {"Telephony": "<Omni Channel>", "Web Form": "..."}. Vắng thì dùng kênh DUY NHẤT
   đang bật của loại đó; không có hoặc có nhiều hơn một thì file giữ nguyên trong inbox (không đoán).
+- `omni_intake_kinds` (tùy chọn): danh sách loại cần nạp, mặc định `["email"]`; các giá trị: `email` (thư mục `gmail`),
+  `call` (`voice`), `web_form` (`web_form`), `messenger` (`messenger`). Thư mục không nằm trong danh sách thì không đọc, không đụng.
 - Email không cần khai: thư vào Email Account có `email_id` trùng hộp thư của file (`source.account`).
 
 Sau khi nạp, file chuyển sang `archive/` (cùng cấu trúc ngày), giống quy ước trong README của miyano-intake;
@@ -26,6 +28,8 @@ from omni_crm.ingest import gateway
 from omni_crm.intake_files import mapper
 from omni_crm.pipeline.retry import redact
 
+KIND_DIRS = {"email": "gmail", "call": "voice", "web_form": "web_form", "messenger": "messenger"}
+DEFAULT_KINDS = ("email",)
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_PER_RUN = 200
 RESULTS = ("moi", "trung", "bo_qua", "chua_ho_tro", "thieu_kenh", "loi")
@@ -38,6 +42,12 @@ def spool_root() -> Path | None:
 		return None
 	root = Path(str(value))
 	return root if (root / "inbox").is_dir() else None
+
+
+def enabled_dirs() -> set[str]:
+	"""Tên thư mục kênh trong `inbox/` được phép nạp theo `omni_intake_kinds` (mặc định chỉ email)."""
+	kinds = frappe.conf.get("omni_intake_kinds") or DEFAULT_KINDS
+	return {KIND_DIRS[k] for k in kinds if k in KIND_DIRS}
 
 
 def resolve_channel(channel_type: str) -> str | None:
@@ -123,7 +133,12 @@ def run(limit: int = MAX_PER_RUN) -> dict[str, int]:
 	root = spool_root()
 	if root is None:
 		return stats
-	files = sorted(p for p in (root / "inbox").rglob("*.json") if p.is_file() and not p.name.startswith("."))
+	allowed = enabled_dirs()
+	files = sorted(
+		p
+		for p in (root / "inbox").rglob("*.json")
+		if p.parent.name in allowed and p.is_file() and not p.name.startswith(".")
+	)
 	for path in files[:limit]:
 		try:
 			if path.stat().st_size > MAX_FILE_BYTES:
