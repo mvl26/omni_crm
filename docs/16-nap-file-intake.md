@@ -53,48 +53,9 @@ Hiện trạng site yhct (ảnh chụp 10/11/2026): có 3 Omni Channel là `zalo
 2. **Email qua Gmail API**: hộp thư chỉ đọc qua intake cần một Email Account "vỏ" (`enable_incoming` tắt, `email_id` = địa chỉ hộp thư) và một Omni Channel Email trỏ vào nó. Nếu CRM đã tự kéo hộp thư đó thì file Gmail bị bỏ qua, không cần làm gì.
 3. **Đính kèm**: file đính kèm của intake nằm trong `<spool>/attachments/`, mới được ghi là tham chiếu đường dẫn, chưa chép vào File của Frappe.
 
-## Triển khai lên server (email thử nghiệm, từng bước)
+## Triển khai lên server (email thử nghiệm)
 
-Thay `<BENCH>` (thư mục bench có site CRM), `<SITE>` (tên site), `<MAILBOX>` (hộp thư thử nghiệm). Mặc định chỉ nạp **email** (`omni_intake_kinds`), form/cuộc gọi/Messenger không bị đọc.
-
-**A. Trên máy dev (một lần):** `cd ~/omni_crm && git push -u origin feat/nap-file-intake`.
-
-**B. Tìm bench và đọc hiện trạng (chỉ đọc):**
-```bash
-ssh mvl@103.1.237.204
-ls ~/*/sites -d; ls ~/*/apps -d          # tìm bench có apps/omni_crm
-cd <BENCH>
-bench --site <SITE> execute frappe.get_all --kwargs '{"doctype":"CRM Lead Status","pluck":"name"}'   # phải có "Tiềm năng"
-ls /opt/miyano-intake/var/spool/inbox/*/*/*/ | sort | uniq -c | head          # thư mục kênh có trong spool
-ls /opt/miyano-intake/var/spool/inbox/*/*/*/gmail 2>/dev/null | head -3
-```
-Mở một file trong `gmail/` và xem `source.account`: phải đúng `<MAILBOX>`. Nếu không, intake chưa đọc hộp thư thử nghiệm: dừng ở đây (xem README của miyano-intake, mục Gmail).
-
-**C. Lấy code và áp dụng (cần chủ site đồng ý, đây là site đang chạy):**
-```bash
-cd <BENCH>/apps/omni_crm && git fetch origin && git checkout feat/nap-file-intake && cd ../..
-bench --site <SITE> migrate
-sudo supervisorctl restart all            # hoặc cách khởi động lại bench đang dùng: hooks.py có thêm một cron
-```
-
-**D. Dựng kênh email (xem kế hoạch trước, rồi ghi):**
-```bash
-bench --site <SITE> execute omni_crm.intake_files.setup.ensure_email_channel --kwargs '{"mailbox": "<MAILBOX>"}'
-bench --site <SITE> execute omni_crm.intake_files.setup.ensure_email_channel --kwargs '{"mailbox": "<MAILBOX>", "apply": 1}'
-```
-
-**E. Quyền tệp (bước dễ vấp nhất):** người dùng chạy bench phải đọc và **di chuyển** file trong spool của intake (chạy bằng người dùng `miyano-intake`, thư mục 0750, file 0640). Chưa có cách nào đã kiểm; xem mục "Quyền tệp" dưới.
-
-**F. Bật:**
-```bash
-bench --site <SITE> set-config omni_intake_dir /opt/miyano-intake/var/spool
-bench --site <SITE> execute omni_crm.intake_files.runner.run      # chạy tay một lần, xem số "moi"/"bo_qua"/"loi"
-```
-Từ đó cron mỗi phút tự chạy (cần scheduler bật).
-
-**G. Kiểm:** `/app/omni-inbound-message` có tin kênh `email-...`; Lead mới có thư ở tab email; `ls /opt/miyano-intake/var/spool/archive/...` có file đã nạp.
-
-**H. Tắt/quay lui:** `bench --site <SITE> remove-config omni_intake_dir` (dừng nạp); tắt Omni Channel email (bỏ tích Bật kênh). File đã nạp nằm ở `archive/`, thư lỗi ở `dead_crm/`.
+Xem lệnh từng bước trong lời hướng dẫn kèm commit; tóm tắt: lấy code (bản vá `git apply`, không phụ thuộc commit nền của server), `migrate` + khởi động lại, `ensure_email_channel`, cấp quyền ĐỌC spool cho người chạy bench bằng ACL, `set-config omni_intake_dir`, chạy tay một lần.
 
 ### Quyền tệp
-`os.replace` cần quyền ghi trên thư mục `inbox/.../gmail`. Intake tạo thư mục 0750 / file 0640 nên người dùng bench không ghi được, và ACL không giúp vì `chmod` của intake đặt lại mặt nạ. Hai hướng: (1) sửa `DIR_MODE`/`FILE_MODE` của intake thành 0770/0660, thêm người dùng bench vào nhóm `miyano-intake`, đặt setgid cho `spool/`; (2) chạy bench bằng chính người dùng `miyano-intake`. Hướng (1) sửa code intake, cần anh đồng ý.
+Người dùng chạy bench (`mvl`) không cần ghi vào spool của intake (thư mục 0750, file 0640, chủ `miyano-intake`). Khi không ghi được, runner không di chuyển file mà ghi dấu "đã xử lý" vào Redis 14 ngày và chỉ quét `omni_intake_days` (mặc định 3) ngày gần nhất; chạy lại vô hại nhờ chống trùng. Chỉ cần quyền đọc: `setfacl -m u:mvl:rX` (ACL đọc không bị mặt nạ `chmod` của intake làm mất hiệu lực, khác với quyền ghi).
