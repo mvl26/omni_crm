@@ -67,6 +67,7 @@ def cleanup():
 	frappe.db.delete("CRM Call Log", {"reference_docname": ["in", lead_list]})
 	frappe.db.delete("Omni Care Log", {"lead": ["in", lead_list]})
 	frappe.db.delete("Omni Inbound Message", {"channel": ["in", channels]})
+	frappe.db.delete("Communication", {"email_account": ACCOUNT})
 	frappe.db.delete("Omni Call", {"call_id": ["like", f"{PREFIX.lower()}%"]})
 	frappe.db.delete("Omni Duplicate Candidate", {"lead_a": ["in", lead_list]})
 	frappe.db.delete("Omni Duplicate Candidate", {"lead_b": ["in", lead_list]})
@@ -75,7 +76,9 @@ def cleanup():
 		frappe.delete_doc("CRM Lead", lead, force=True, ignore_permissions=True, delete_permanently=True)
 	for name in channels:
 		frappe.db.delete("Omni Channel", {"channel_name": name})
-	frappe.db.delete("Omni Lead Form", {"form_name": ["like", f"{PREFIX}%"]})
+	frappe.db.delete(
+		"Omni Lead Form", {"external_form_id": "spd", "form_name": ["like", "TD505%"]}
+	)  # make_form dùng PREFIX TD505
 	frappe.db.delete("Email Account", {"name": ACCOUNT})
 	frappe.db.commit()
 
@@ -143,6 +146,7 @@ class TestIntakeFilesIntegration(FrappeTestCase):
 				"event_type",
 				"identity_key",
 				"lead",
+				"communication",
 				"raw_payload",
 				"external_message_id",
 			],

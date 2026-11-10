@@ -85,9 +85,15 @@ def ensure_email_channel(mailbox: str, apply: int = 0, channel_name: str | None 
 	return plan
 
 
-def _show(plan: dict) -> None:
+def _show(plan: dict, nothing: bool = False) -> None:
 	print(
-		("ĐÃ LÀM" if plan["apply"] else 'KẾ HOẠCH (chưa ghi, thêm "apply": 1 để ghi)')
+		(
+			"KHÔNG GHI GÌ"
+			if nothing
+			else "ĐÃ LÀM"
+			if plan["apply"]
+			else 'KẾ HOẠCH (chưa ghi, thêm "apply": 1 để ghi)'
+		)
 		+ f" - hộp thư {plan['mailbox']}"
 	)
 	for step in plan["steps"]:
