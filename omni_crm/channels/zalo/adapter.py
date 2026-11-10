@@ -24,7 +24,17 @@ REJECT_TTL = 86400
 USER_EVENT_PREFIX = "user_send_"
 OA_EVENT_PREFIX = "oa_send_"
 # loại đính kèm -> nhãn mô tả ngắn đặt vào `text`
-LABELS = {"image": "Ảnh", "file": "Tệp", "sticker": "Sticker", "location": "Vị trí", "audio": "Tin thoại"}
+LABELS = {
+	"image": "Ảnh",
+	"gif": "GIF",
+	"file": "Tệp",
+	"sticker": "Sticker",
+	"location": "Vị trí",
+	"audio": "Tin thoại",
+	"video": "Video",
+	"link": "Liên kết",
+	"business_card": "Danh thiếp",
+}
 
 
 def _env_allows_skip() -> bool:
@@ -43,6 +53,12 @@ def _record_rejection(channel: str, reason: str) -> None:
 		pass
 
 
+def _record_ignored(channel: str, event_name: str) -> None:
+	"""Đếm sự kiện bị bỏ qua theo tên (Redis, 24 giờ, chỉ ký tự an toàn); không ném lỗi."""
+	safe = "".join(c for c in str(event_name).lower() if c.isalnum() or c == "_")[:48] or "khong_ten"
+	_record_rejection(channel, f"ignored:{safe}")
+
+
 def _ts(data: dict) -> datetime:
 	try:
 		seconds = float(data.get("timestamp")) / 1000
@@ -54,8 +70,10 @@ def _ts(data: dict) -> datetime:
 def _attachments(message: dict) -> list[dict]:
 	out: list[dict] = []
 	for att in message.get("attachments") or []:
+		if not isinstance(att, dict):
+			continue
 		kind = att.get("type")
-		payload = att.get("payload") or {}
+		payload = att.get("payload") if isinstance(att.get("payload"), dict) else {}
 		if kind == "location":
 			coords = payload.get("coordinates") or {}
 			lat, lon = coords.get("latitude"), coords.get("longitude")
@@ -65,16 +83,27 @@ def _attachments(message: dict) -> list[dict]:
 				item["url"] = f"https://www.google.com/maps?q={lat},{lon}"
 			out.append(item)
 			continue
-		url = payload.get("url") or payload.get("thumbnail")
-		out.append(
-			{
-				"type": kind,
-				"url": url,
-				"name": payload.get("name") or url,
-				"mime": payload.get("mime") or None,
-			}
-		)
+		out.append(_normalize(kind, payload))
 	return out
+
+
+def _normalize(kind: Any, payload: dict) -> dict:
+	"""Một đính kèm Zalo thành {type, url, name, mime, thumb?}.
+
+	`url` là địa chỉ gốc (thiếu thì dùng thumbnail để vẫn có liên kết), `thumb` là thumbnail nếu khác `url`. GIF có thể
+	đến với type "image" nhưng URL đuôi .gif: gán lại thành "gif".
+	"""
+	kind = str(kind or "").strip().lower()[:30] or "file"
+	url = payload.get("url") or None
+	thumb = payload.get("thumbnail") or None
+	url = url or thumb
+	if kind == "image" and url and str(url).lower().split("?", 1)[0].endswith(".gif"):
+		kind = "gif"
+	name = str(payload.get("name") or payload.get("title") or payload.get("description") or "")[:200] or None
+	item = {"type": kind, "url": url, "name": name or url, "mime": payload.get("mime") or None}
+	if thumb and thumb != url:
+		item["thumb"] = thumb
+	return item
 
 
 def _describe(message: dict, attachments: list[dict]) -> str:
@@ -88,6 +117,18 @@ def _describe(message: dict, attachments: list[dict]) -> str:
 		name = att.get("name")
 		labels.append(f"[{label}: {name}]" if att.get("type") == "file" and name else f"[{label}]")
 	return " ".join(labels) + (f" {text}" if text else "")
+
+
+def _text_for(name: str, message: dict, attachments: list[dict]) -> str:
+	"""`text` của tin; tin không chữ không đính kèm (payload lạ) vẫn có nhãn theo tên sự kiện để không hiện bong bóng trống."""
+	text = _describe(message, attachments)
+	if text:
+		return text
+	suffix = name.rsplit("_", 1)[-1] if name.startswith(USER_EVENT_PREFIX) else ""
+	if name.endswith("business_card"):
+		suffix = "business_card"
+	label = LABELS.get(suffix)
+	return f"[{_(label)}]" if label else ""
 
 
 def _event(channel_doc, data: dict, *, event_type: str, user_id: str, text: str | None, **kw) -> InboundEvent:
@@ -120,7 +161,7 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 			data,
 			event_type="message",
 			user_id=sender,
-			text=_describe(message, atts),
+			text=_text_for(name, message, atts),
 			attachments=atts,
 		)
 	if name.startswith(OA_EVENT_PREFIX) and recipient:  # nhân viên trả lời ngoài hệ thống: khách là recipient
@@ -156,7 +197,8 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 		user = (data.get("follower") or {}).get("id") or sender
 		if user:
 			return _event(channel_doc, data, event_type=name, user_id=user, text=None)
-	# Sự kiện khác: lưu để tra cứu, không xử lý
+	# Sự kiện khác: lưu để tra cứu, không xử lý (đếm theo tên để người vận hành thấy sự kiện lạ, V3-05)
+	_record_ignored(channel_doc.name, name)
 	user = sender or recipient or "unknown"
 	return _event(channel_doc, data, event_type="ignored", user_id=user, text=None)
 
