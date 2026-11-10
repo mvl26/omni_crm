@@ -147,6 +147,8 @@ def _compose(data: dict, can_write: bool) -> dict:
 		"max_chars": outbound_pipeline.MAX_TEXT_CHARS,
 		"quota": None,
 		"linked": zalo is not None,
+		"can_request_phone": False,
+		"phone_request_reason": "",
 	}
 	if zalo is None:
 		state["reason"] = _(
@@ -165,7 +167,9 @@ def _compose(data: dict, can_write: bool) -> dict:
 		state["paid"] = bool(zalo["paid"])
 		state["message"] = zalo.get("message") or ""
 	if zalo is not None:
-		state["quota"] = zalo.get("quota")
+		state["quota"] = zalo.get("quota")  # V3-07: chỉ có khi khách đã ngoài 48 giờ
+		state["can_request_phone"] = bool(can_write and zalo.get("can_request_phone"))
+		state["phone_request_reason"] = zalo.get("phone_request_reason") or ""
 	return state
 
 
@@ -213,3 +217,12 @@ def send(doctype: str, name: str, text: str, confirm_paid: int | str = 0) -> dic
 		frappe.throw(_("Không có Lead gốc để gắn hội thoại Zalo"))
 	lead = inbox.check_lead_write(lead)
 	return inbox.send_zalo(lead, text, confirm_paid)
+
+
+@frappe.whitelist(methods=["POST"])
+def request_phone(doctype: str, name: str) -> dict:
+	"""Sale bấm "Xin số điện thoại" trên tab Zalo (V3-07): gửi thẻ request_user_info, mọi điều kiện kiểm ở máy chủ."""
+	lead = resolve_lead(doctype, name, "write")
+	if not lead:
+		frappe.throw(_("Không có Lead gốc để gắn hội thoại Zalo"))
+	return inbox.request_phone(lead)

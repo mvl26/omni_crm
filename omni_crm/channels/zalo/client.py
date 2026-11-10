@@ -42,11 +42,18 @@ def split_text(text: str, limit: int | None = None) -> list[str]:
 	return parts
 
 
+def _quota_type(data: dict) -> str | None:
+	"""Nguồn quota trong phản hồi gửi tin (`data.quota.quota_type`: reply, sub_quota, purchase_quota...)."""
+	q = data.get("quota") if isinstance(data, dict) else None
+	return str(q.get("quota_type")) if isinstance(q, dict) and q.get("quota_type") else None
+
+
 class ZaloClient:
 	"""Gọi API Zalo cho một Omni Channel (token đọc mới từ DB mỗi lần gọi)."""
 
 	def __init__(self, channel: str):
 		self.channel = channel
+		self.last_quota_type: str | None = None  # V3-07: nguồn quota Zalo báo cho lần gửi gần nhất
 
 	# --- nền ---
 	def _access_token(self) -> str:
@@ -129,18 +136,31 @@ class ZaloClient:
 				e.sent_ids = sent
 				raise
 			sent.append(str(data.get("message_id") or ""))
+			self.last_quota_type = _quota_type(data)
 		return sent
 
 	def send_request_user_info(
 		self, user_id: str, title: str, subtitle: str, image_url: str | None = None
 	) -> str:
-		"""Gửi tin yêu cầu thông tin người dùng (xin SĐT); trả mã tin. Sandbox: không gọi HTTP."""
+		"""Gửi tin yêu cầu thông tin người dùng (xin SĐT); trả mã tin. Sandbox: không gọi HTTP.
+
+		Danh sách trắng (V3-07): công tắc `phone_request_enabled` tắt thì chỉ tài khoản Zalo thử nghiệm nhận được thẻ,
+		mọi người khác bị chặn NGAY Ở ĐÂY, trước cả nhánh sandbox.
+		"""
+		from omni_crm.channels.zalo import phone_request
+
+		if not phone_request.recipient_allowed(user_id):
+			raise ZaloError(
+				None,
+				"permanent",
+				_("Luồng xin số điện thoại đang tắt: chỉ tài khoản Zalo thử nghiệm nhận được thẻ xin số."),
+			)
 		if flags.sandbox():
 			frappe.logger("omni").info(
 				"omni sandbox: bỏ qua gửi yêu cầu thông tin Zalo (kênh %s)", self.channel
 			)
 			return f"sandbox:{uuid.uuid4().hex[:16]}"
-		element: dict = {"title": title, "subtitle": subtitle}
+		element: dict = {"title": title[:100], "subtitle": subtitle[:500]}
 		if image_url:
 			element["image_url"] = image_url
 		data = self._request(
@@ -156,6 +176,7 @@ class ZaloClient:
 				},
 			},
 		)
+		self.last_quota_type = _quota_type(data)
 		return str(data.get("message_id") or "")
 
 	def get_user_profile(self, user_id: str) -> dict:
@@ -172,3 +193,11 @@ class ZaloClient:
 		if shared.get("email"):
 			profile["email"] = str(shared["email"])
 		return profile
+
+	def get_cs_quota(self) -> list[dict]:
+		"""Quỹ tin tư vấn của OA theo Zalo (POST /v3.0/oa/quota/message): [{quota_type, total, remain, valid_through}]."""
+		data = self._request(
+			"POST", config.get("quota_path"), body={"quota_owner": "OA", "product_type": "cs"}
+		)
+		rows = data if isinstance(data, list) else []
+		return [r for r in rows if isinstance(r, dict)]

@@ -168,8 +168,8 @@ class TestSendOutbound(OutboundTestCase):
 	def test_leased_row_is_not_blocked_or_failed_by_other_job(self):
 		"""Job khác đang gửi (lease còn hạn): các nhánh Blocked/Failed bỏ qua, không ghi đè kết quả."""
 		self.sandbox(False)
-		self.set_last_inbound(hours_ago=24 * 9)  # nếu không có lease thì sẽ bị Blocked
 		name = self.queue()
+		self.set_last_inbound(hours_ago=24 * 9)  # nếu không có lease thì sẽ bị Blocked
 		frappe.db.set_value(
 			OUT,
 			name,
@@ -358,10 +358,17 @@ class TestSendOutbound(OutboundTestCase):
 		self.assertEqual(outbound.send_outbound(name), "Sent")
 
 	def test_paid_without_confirmation_flag_is_blocked(self):
+		# V3-07: xếp hàng lúc còn 48 giờ (tin miễn phí), lúc gửi khách đã ngoài khung: không tự chuyển sang tin tốn quỹ
 		self.sandbox(True)
-		self.set_last_inbound(hours_ago=72)
 		name = self.queue()
+		self.set_last_inbound(hours_ago=72)
 		self.assertEqual(outbound.send_outbound(name), "Blocked")
+
+	def test_unconfirmed_paid_refused_at_queue_time(self):
+		"""V3-07: ngoài 48 giờ mà chưa có người xác nhận thì không tạo tin ra (pick_message_kind ném NeedsApproval)."""
+		self.set_last_inbound(hours_ago=72)
+		with self.assertRaises(frappe.ValidationError):
+			self.queue()
 
 	def test_send_reply_confirm_paid_sets_flag(self):
 		self.sandbox(True)
@@ -492,7 +499,7 @@ class TestSendReply(OutboundTestCase):
 		self.as_user(SALE1)
 		res = self.reply()
 		self.assertEqual(res["status"], "confirm_required")
-		self.assertIn("tính phí", res["warning"])
+		self.assertIn("quỹ tin ngoài khung", res["warning"])  # V3-07: nêu số tin còn lại của quỹ
 		self.assertFalse(frappe.db.exists(OUT, {"lead": self.lead1, "sent_by": SALE1}))
 		res = self.reply(confirm_paid=1)
 		self.assertEqual(res["status"], "Queued")
@@ -523,20 +530,29 @@ class TestSendReply(OutboundTestCase):
 		self.assertTrue(data["compose"]["email"])
 
 	def test_compose_flags_paid_and_phone_button(self):
-		self.set_last_inbound(hours_ago=72)
-		z = inbox.compose_state(self.lead1)["zalo"]
-		self.assertTrue(z["can_send"] and z["paid"])
-		self.assertTrue(z["can_request_phone"])
+		with mock.patch("omni_crm.channels.zalo.phone_request.enabled", return_value=True):
+			self.assertTrue(inbox.compose_state(self.lead1)["zalo"]["can_request_phone"])
+			self.set_last_inbound(hours_ago=72)
+			z = inbox.compose_state(self.lead1)["zalo"]
+			self.assertTrue(z["can_send"] and z["paid"])
+			self.assertFalse(z["can_request_phone"])  # V3-07: thẻ xin số chỉ trong 48 giờ
+			self.set_last_inbound(minutes_ago=5)
+			frappe.db.set_value("Omni Identity", self.ident1, "phone_e164", "+84912345678")
+			z = inbox.compose_state(self.lead1)["zalo"]
+			self.assertFalse(z["can_request_phone"])  # V3-07: định danh Zalo đã có số
 		frappe.db.set_value("CRM Lead", self.lead1, "mobile_no", "0912345678")
-		z = inbox.compose_state(self.lead1)["zalo"]
-		self.assertFalse(z["can_request_phone"])
-		self.assertTrue(z["has_phone"])
+		self.assertTrue(inbox.compose_state(self.lead1)["zalo"]["has_phone"])
 
 
 class TestRequestPhone(OutboundTestCase):
+	"""Nút xin số của Hộp thư (V3-07: chung luồng với tab Zalo, xem test_v3_07_zalo_growth)."""
+
 	def setUp(self):
 		super().setUp()
 		self.sandbox(True)
+		p = mock.patch("omni_crm.channels.zalo.phone_request.enabled", return_value=True)
+		p.start()
+		self.addCleanup(p.stop)
 
 	def call(self):
 		with mock.patch("frappe.enqueue"):
@@ -552,34 +568,29 @@ class TestRequestPhone(OutboundTestCase):
 		r = self.row(res["outbound"])
 		self.assertEqual((r.status, r.is_sandbox, r.sent_by), ("Sent", 1, SALE1))
 
-	def test_second_request_within_seven_days_rejected(self):
+	def test_second_request_in_same_session_rejected(self):
 		self.as_user(SALE1)
 		self.call()
 		with self.assertRaises(frappe.ValidationError):
 			self.call()
 		self.assertEqual(frappe.db.count(OUT, {"lead": self.lead1}), 1)
 
-	def test_after_seven_days_allowed_again(self):
+	def test_after_session_allowed_again(self):
 		self.as_user(SALE1)
 		self.call()
 		frappe.db.set_value(
-			"Omni Identity", self.ident1, "phone_requested_at", add_to_date(now_datetime(), days=-8)
+			"Omni Identity", self.ident1, "phone_requested_at", add_to_date(now_datetime(), days=-3)
 		)
 		frappe.db.commit()
 		self.assertEqual(self.call()["status"], "Sent")
 
-	def test_paid_window_needs_confirmation(self):
+	def test_paid_window_refused(self):
 		self.set_last_inbound(hours_ago=72)
 		self.as_user(SALE1)
-		res = self.call()
-		self.assertEqual(res["status"], "confirm_required")
-		self.assertIn("tính phí", res["warning"])
+		with self.assertRaises(frappe.ValidationError):
+			self.call()
 		self.assertIsNone(frappe.db.get_value("Omni Identity", self.ident1, "phone_requested_at"))
 		self.assertEqual(frappe.db.count(OUT, {"lead": self.lead1}), 0)
-		with mock.patch("frappe.enqueue"):
-			res = inbox.request_phone(self.lead1, confirm_paid=1)
-			frappe.db.commit()
-		self.assertEqual(res["status"], "Sent")
 
 	def test_window_closed_rejected(self):
 		self.set_last_inbound(hours_ago=24 * 9)
@@ -598,7 +609,7 @@ class TestRequestPhone(OutboundTestCase):
 				"identity": self.ident1,
 				"lead": self.lead1,
 				"text": "echo",
-				"source": "Sale",
+				"source": "Bot",
 				"status": "Sent",
 				"external_message_id": "zl-info-1",
 			}
@@ -609,8 +620,8 @@ class TestRequestPhone(OutboundTestCase):
 		self.assertFalse(frappe.db.exists(OUT, echo.name))
 		self.assertEqual(self.row(res["outbound"]).external_message_id, "zl-info-1")
 
-	def test_lead_with_phone_rejected(self):
-		frappe.db.set_value("CRM Lead", self.lead1, "mobile_no", "0912345678")
+	def test_identity_with_phone_rejected(self):
+		frappe.db.set_value("Omni Identity", self.ident1, "phone_e164", "+84912345678")
 		frappe.db.commit()
 		self.as_user(SALE1)
 		with self.assertRaises(frappe.ValidationError):
@@ -623,11 +634,11 @@ class TestRequestPhone(OutboundTestCase):
 
 	def test_failure_restores_phone_requested_at(self):
 		self.as_user(SALE1)
-		with mock.patch.object(ZaloAdapter, "request_user_info", side_effect=RuntimeError("0912345678")):
+		with mock.patch.object(ZaloAdapter, "request_user_info", side_effect=ValueError("0912345678")):
 			with self.assertRaises(frappe.ValidationError):
 				self.call()
 		self.assertIsNone(frappe.db.get_value("Omni Identity", self.ident1, "phone_requested_at"))
-		self.assertEqual(frappe.db.count(OUT, {"lead": self.lead1}), 0)
+		self.assertEqual(frappe.db.count(OUT, {"lead": self.lead1, "status": "Sent"}), 0)
 
 
 class TestConversationTurns(OutboundTestCase):

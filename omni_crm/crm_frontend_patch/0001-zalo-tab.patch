@@ -421,10 +421,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..8710c0c
+index 0000000..f9950d2
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,391 @@
+@@ -0,0 +1,433 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot: chữ xuống dòng theo nội dung, không cắt; quá dài thì cuộn trong thẻ -->
@@ -604,8 +604,29 @@ index 0000000..8710c0c
 +          __('Chế độ thử: tin gửi chỉ được ghi lại, không gửi thật tới khách.')
 +        }}
 +      </div>
-+      <div v-if="compose.quota" class="mb-1 text-xs text-ink-gray-5">
++      <!-- V3-07: quỹ tin ngoài khung 48 giờ, máy chủ chỉ trả khi khách đã quá 48 giờ không nhắn -->
++      <div
++        v-if="compose.quota"
++        class="mb-1 text-xs"
++        :class="
++          compose.quota.level === 'ok' ? 'text-ink-gray-5' : 'text-ink-red-3'
++        "
++      >
 +        {{ compose.quota.text }}
++      </div>
++      <div
++        v-if="compose.can_request_phone"
++        class="mb-2 flex flex-wrap items-center gap-2 text-sm text-ink-gray-7"
++      >
++        <Button
++          size="sm"
++          :label="__('Xin số điện thoại')"
++          :loading="requestingPhone"
++          @click="requestPhone"
++        />
++        <span>{{
++          __('Gửi thẻ để khách bấm chia sẻ số điện thoại qua Zalo')
++        }}</span>
 +      </div>
 +      <div class="flex items-end gap-2">
 +        <Textarea
@@ -667,6 +688,7 @@ index 0000000..8710c0c
 +
 +const text = ref('')
 +const sending = ref(false)
++const requestingPhone = ref(false)
 +const scroller = ref(null)
 +const loadFailed = ref(false)
 +
@@ -787,6 +809,26 @@ index 0000000..8710c0c
 +    )
 +  } finally {
 +    sending.value = false
++    conversation.reload()
++  }
++}
++
++// V3-07: gửi thẻ request_user_info; điều kiện (chưa có số, trong 48 giờ, chưa xin trong phiên) kiểm ở máy chủ.
++async function requestPhone() {
++  if (requestingPhone.value) return
++  requestingPhone.value = true
++  try {
++    await call('omni_crm.api.zalo_tab.request_phone', {
++      doctype: props.doctype,
++      name: props.docname,
++    })
++    toast.success(__('Đã gửi thẻ xin số điện thoại'))
++  } catch (error) {
++    toast.error(
++      error?.messages?.[0] || error?.message || __('Không gửi được thẻ xin số'),
++    )
++  } finally {
++    requestingPhone.value = false
 +    conversation.reload()
 +  }
 +}

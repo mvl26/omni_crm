@@ -249,6 +249,40 @@ Bước 0 của D1-08 không làm được: developers.zalo.me là trang SPA, We
 
 - C-V3-05 (2026-11-06, V3-05 trợ lý AI nội bộ, đã đọc mã crm v1.73.0 và omni_crm đang chạy): (a) CRM Lead dùng `email` (brief ghi `email_id`); `status` là Link `CRM Lead Status`, `source` là Link `CRM Lead Source`, `organization` là Data. (b) CRM Task: `title`, `status` (Backlog/Todo/In Progress/Done/Canceled), `assigned_to`, `due_date` (Datetime), `reference_doctype`/`reference_docname`; Sales User có tạo/sửa. (c) Omni Care Log: Sales User chỉ có quyền ĐỌC; nút "Ghi nhật ký chăm sóc" kiểm quyền sửa Lead rồi hệ thống ghi. `care_log.validate_outcome` bắt buộc bước tiếp theo + hạn với mọi kết quả trừ "Đã chốt đơn"/"Không có nhu cầu", và `clamp_contact_time` kẹp thời điểm vào [lúc tạo Lead, bây giờ]: trợ lý theo đúng hai quy tắc này. (d) Site trên máy chủ tên `miyano` (brief ghi `crm.miyano.com.vn`); nginx `proxy_read_timeout` 120 giây, gunicorn `-t 120`.
 
+- C-V3-07 (2026-11-10, tài liệu chính thức Zalo, đọc trang gốc `stc-developers.zdn.vn/docs/v2/...` mà developers.zalo.me nhúng; bảng giá zalo.solutions/oa/pricing áp dụng từ 01/06/2026):
+  (1) **Sự kiện khách đồng ý chia sẻ.**
+  - Tên sự kiện là `user_submit_info`. SĐT trả THẲNG trong `info.phone`, dạng "84912345678", không phải token đổi thêm (trang `official-account/webhook/quan-ly/su-kien-nguoi-dung-dong-y-chia-se-thong-tin`).
+  - Ví dụ trong tài liệu dùng `info.full_address{user_city,user_ward,user_address}` và `user_dob`, `gender`; bảng mô tả lại ghi trường phẳng. Code đọc cả hai.
+  - API `user/detail` cũng trả `shared_info.phone`.
+
+  (2) **Thẻ `request_user_info` gửi qua `/v3.0/oa/message/cs` như tin tư vấn.**
+  - Tài liệu của chính API này liệt kê các nguồn quota trả về: `reply` (trong 48 giờ), `sub_quota` (quỹ gói), `purchase_quota`, `reward_quota`. Nghĩa là gửi ngoài 48 giờ thì có trừ quỹ. Điều này suy ra từ cấu trúc phản hồi; không có câu nào nêu đích danh thẻ này.
+  - Ảnh `image_url` bắt buộc; tiêu đề tối đa 100 ký tự, phụ đề tối đa 500.
+  - Từ 1/1/2026 tin trong 48 giờ miễn phí không giới hạn.
+
+  (3) **ZBS Template.**
+  - Gửi theo SĐT: `POST https://business.openapi.zalo.me/message/template` (phone, template_id, template_data, tracking_id; `mode: development` chỉ tới admin).
+  - Gửi theo user_id: `POST https://openapi.zalo.me/v3.0/oa/message/template` (mẫu tạo trước 10/12/2025 và mẫu OTP không dùng được, lỗi -249).
+  - Danh sách mẫu: `GET /template/all`. Mẫu tạo xong ở trạng thái PENDING_REVIEW, có webhook báo khi đổi trạng thái.
+  - Thời gian duyệt và cách nạp số dư: CHƯA XÁC MINH. Không có API đọc số dư (lỗi -115 khi thiếu tiền).
+
+  (4) **Liên kết.**
+  - Cần OA + Zalo App đã được OA cấp quyền + tài khoản ZBS liên kết với App. Liên kết App qua API cần gói Tăng trưởng/Toàn diện.
+  - Người thao tác phải là admin (hoặc người quản lý gói và liên kết) của OA, đồng thời là admin/editor tài khoản ZBS.
+  - Chưa có API kiểm trạng thái liên kết; chỉ biết qua lỗi -223/-136/-320. CHƯA XÁC MINH trên OA Miyano, nên chưa viết phần gửi ZBS.
+
+  (5) **Giới hạn tốc độ.**
+  - 4.000 request/phút cho mỗi ứng dụng.
+  - Theo OA: gói Tăng trưởng 100 request/phút (gửi ZBS không tính vào đây). Vượt thì lỗi -32; header `X-RateLimit-*`.
+  - Luồng xin số gửi mỗi lần một khách nên không cần xếp hàng.
+  - Hạn mức đọc bằng `POST /v3.0/oa/quota/message` {"quota_owner":"OA","product_type":"cs"}.
+
+  (6) **Tin do OA gửi (`oa_send_*`).**
+  - `sender.admin_id` CHỈ có khi admin gõ trên công cụ chat OA. Tài liệu không có trường đánh dấu tin do kịch bản chatbot gửi.
+  - Code coi `oa_echo` không có `admin_id` (và không phải tin hệ thống gửi) là tin tự động (nguồn Bot). CHƯA kiểm bằng sự kiện thật.
+
+  (7) **Bảng giá.** Gói Tăng trưởng ghi "500 tin tư vấn ngoài khung 48h/tháng", brief ghi /năm. Đã để sửa được (`zalo_quota_total`) và job đối chiếu báo số Zalo thực tế.
+
 ## D. Phát hiện ngoài phạm vi
 
 | Ngày | Phát hiện | Mức độ | Đề xuất | Prompt phát hiện |

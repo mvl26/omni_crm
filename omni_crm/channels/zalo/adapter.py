@@ -90,6 +90,22 @@ def _describe(message: dict, attachments: list[dict]) -> str:
 	return " ".join(labels) + (f" {text}" if text else "")
 
 
+def shared_phone(raw, channel: str) -> str | None:
+	"""SĐT khách chia sẻ qua thẻ xin số ("84988806848") -> E.164 "+84988806848"; số không chuẩn hóa được thì bỏ và ghi Error Log (đã che)."""
+	from omni_crm.identity.normalize import normalize_phone
+	from omni_crm.utils.pii import mask_phone
+
+	if raw in (None, ""):
+		return None
+	phone = normalize_phone(str(raw))
+	if not phone:
+		frappe.log_error(
+			title="Omni: SĐT Zalo khách chia sẻ không hợp lệ",
+			message=f"kenh={channel} so={mask_phone(str(raw))}: bỏ qua, không lưu",
+		)
+	return phone
+
+
 def _event(channel_doc, data: dict, *, event_type: str, user_id: str, text: str | None, **kw) -> InboundEvent:
 	name = data.get("event_name") or ""
 	message = data.get("message") or {}
@@ -126,6 +142,9 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 	if name.startswith(OA_EVENT_PREFIX) and recipient:  # nhân viên trả lời ngoài hệ thống: khách là recipient
 		message = data.get("message") or {}
 		atts = _attachments(message)
+		# V3-07: `sender.admin_id` chỉ có khi một admin OA gõ tin trên công cụ chat OA (tài liệu webhook "OA gửi tin");
+		# tin gửi qua API hoặc kịch bản tự động không có trường này.
+		admin_id = (data.get("sender") or {}).get("admin_id")
 		return _event(
 			channel_doc,
 			data,
@@ -133,16 +152,24 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 			user_id=recipient,
 			text=_describe(message, atts),
 			attachments=atts,
+			sender_profile={"admin_id": str(admin_id)} if admin_id else {},
 		)
 	if name == "user_submit_info" and sender:
 		info = data.get("info") or {}
+		full = info.get("full_address") if isinstance(info.get("full_address"), dict) else {}
 		profile = {
 			"display_name": info.get("name"),
-			"phone": info.get("phone"),
+			"phone": shared_phone(info.get("phone"), channel_doc.name),
 			"email": info.get("email"),
+			# Tài liệu có hai dạng: ví dụ dùng full_address{user_address, user_ward, user_city}, bảng mô tả dùng trường phẳng.
 			"address": ", ".join(
-				filter(None, (info.get(k) for k in ("address", "ward", "district", "city")))
+				filter(
+					None,
+					[full.get(k) for k in ("user_address", "user_ward", "user_district", "user_city")]
+					+ [info.get(k) for k in ("address", "ward", "district", "city")],
+				)
 			),
+			"zalo_shared": 1,
 		}
 		return _event(
 			channel_doc,
@@ -234,17 +261,26 @@ class ZaloAdapter:
 		user_id = frappe.db.get_value("Omni Identity", req.identity, "external_id")
 		if not user_id:
 			raise ValueError(_("Định danh chưa có mã người dùng Zalo"))
-		ids = ZaloClient(channel_doc.name).send_text(user_id, req.text)
+		client = ZaloClient(channel_doc.name)
+		ids = client.send_text(user_id, req.text)
+		req.meta["quota_type"] = client.last_quota_type
 		return ids[0]
 
-	def request_user_info(self, identity_doc, channel_doc) -> tuple[str, str]:
-		"""Gửi tin yêu cầu thông tin người dùng (xin SĐT); trả (mã tin, nội dung hiển thị). Sandbox: không gọi HTTP."""
-		title = _("Miyano Việt Nam")
-		subtitle = _("Vui lòng chia sẻ số điện thoại để nhân viên tư vấn hỗ trợ bạn nhanh hơn.")
+	def request_user_info(self, identity_doc, channel_doc, meta: dict | None = None) -> tuple[str, str]:
+		"""Gửi thẻ xin SĐT (request_user_info); trả (mã tin, nội dung hiển thị). Sandbox: không gọi HTTP.
+
+		Chữ và ảnh lấy từ Omni Settings (phone_request_*); danh sách trắng kiểm trong ZaloClient.
+		"""
+		from omni_crm.channels.zalo import phone_request
+
+		title, subtitle, image_url = phone_request.card_texts()
 		user_id = identity_doc.get("external_id")
 		if not user_id:
 			raise ValueError(_("Định danh chưa có mã người dùng Zalo"))
-		message_id = ZaloClient(channel_doc.name).send_request_user_info(user_id, title, subtitle)
+		client = ZaloClient(channel_doc.name)
+		message_id = client.send_request_user_info(user_id, title, subtitle, image_url)
+		if meta is not None:
+			meta["quota_type"] = client.last_quota_type
 		return message_id, f"{title}: {subtitle}"
 
 	# Điểm nối với worker (không thuộc Protocol bắt buộc)

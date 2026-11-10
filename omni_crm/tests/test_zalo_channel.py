@@ -23,6 +23,7 @@ from omni_crm.channels.zalo.client import ZaloClient, split_text
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.tests.zalo_helpers import (
 	APP_ID,
+	OA_ID,
 	OA_SECRET,
 	OK_SEND,
 	PREFIX,
@@ -148,8 +149,8 @@ class TestParse(ZaloTestCase):
 		e = self.parse("user_submit_info")
 		self.assertEqual(e.event_type, "user_info")
 		self.assertEqual(e.sender_profile["display_name"], "Nguyễn Văn An")
-		self.assertEqual(e.sender_profile["phone"], "0912345678")
-		self.assertNotIn("0912345678", e.text)  # SĐT chỉ ở sender_profile, không để trong text
+		self.assertEqual(e.sender_profile["phone"], "+84912345678")  # V3-07: chuẩn hóa E.164 ngay khi nhận
+		self.assertNotIn("912345678", e.text)  # SĐT chỉ ở sender_profile, không để trong text
 		self.assertEqual(len(e.external_message_id), 64)  # không có msg_id: mã băm ổn định
 
 	def test_follow_unfollow_stable_ids(self):
@@ -342,6 +343,7 @@ class TestClientAndSend(ZaloTestCase):
 
 	def test_sandbox_makes_no_http(self):
 		with (
+			mock.patch("omni_crm.channels.zalo.phone_request.enabled", return_value=True),
 			mock.patch("omni_crm.flags.sandbox", return_value=True),
 			mock.patch(REQ) as http,
 			mock.patch("omni_crm.channels.zalo.client.requests.get") as g,
@@ -442,7 +444,10 @@ class TestClientAndSend(ZaloTestCase):
 
 	def test_request_user_info_body(self):
 		self._not_sandbox()
-		with mock.patch(REQ, return_value=response(OK_SEND)) as http:
+		with (
+			mock.patch("omni_crm.channels.zalo.phone_request.enabled", return_value=True),
+			mock.patch(REQ, return_value=response(OK_SEND)) as http,
+		):
 			ZaloClient(self.channel.name).send_request_user_info(
 				USER, "Tiêu đề", "Phụ đề", "https://x.invalid/a.png"
 			)
@@ -777,7 +782,17 @@ class TestWorkerFlows(ZaloTestCase):
 		m_in = self.deliver(load("user_send_text"), profile={})
 		lead = self.lead_of(m_in)
 		last_inbound = self.identity().last_inbound_at
-		echo = self.deliver(load("oa_send_text", timestamp=str(int(time.time() * 1000) + 5000)), profile={})
+		echo = self.deliver(
+			load(
+				"oa_send_text",
+				timestamp=str(int(time.time() * 1000) + 5000),
+				sender={
+					"id": OA_ID,
+					"admin_id": "td108-admin",
+				},  # V3-07: admin gõ trên công cụ chat OA = Sale
+			),
+			profile={},
+		)
 		self.assertEqual(self.lead_of(echo), lead)
 		out = frappe.get_all(
 			"Omni Outbound Message",

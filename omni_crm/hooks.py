@@ -171,6 +171,7 @@ scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"omni_crm.ingest.spool.drain",  # V21-04: chèn lại tin trong hàng dự phòng webhook (kiểm chữ ký, chống trùng)
+			"omni_crm.channels.zalo.phone_request.run_due",  # V3-07: gửi thẻ xin số đã đến hẹn (60 giây sau tin khách)
 		],
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",
@@ -188,6 +189,9 @@ scheduler_events = {
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
 		"45 17 * * *": ["omni_crm.crm_bridge.care_log.end_of_day_digest"],  # V2-04: phiên chưa ghi kết quả
+		"15 7 * * *": [
+			"omni_crm.channels.zalo.quota_watch.daily"
+		],  # V3-07: đối chiếu quỹ tin ngoài 48 giờ với số Zalo báo, cảnh báo 80%
 		"20 2 * * *": [
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi

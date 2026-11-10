@@ -97,6 +97,14 @@
   "zalo_tab_disabled",
   "zalo_in_activity_enabled",
   "lead_contact_button_disabled",
+  "sec_zalo_growth",
+  "phone_request_enabled",
+  "phone_request_title",
+  "phone_request_subtitle",
+  "phone_request_image_url",
+  "col_zalo_growth",
+  "zalo_quota_total",
+  "zalo_quota_cycle_end",
   "sec_release_gate",
   "q1_allowed",
   "q11_allowed",
@@ -657,6 +665,56 @@
    "description": "V3-06: nút tạo/cập nhật Liên hệ từ dữ liệu Lead (không cần chuyển Deal). Tích để ẩn nút và chặn API."
   },
   {
+   "fieldname": "sec_zalo_growth",
+   "fieldtype": "Section Break",
+   "label": "Zalo gói Tăng trưởng (V3-07)",
+   "description": "Xin số điện thoại qua Zalo, hạn mức tin tư vấn ngoài khung 48 giờ. Sửa tay các trường hạn mức khi gia hạn gói OA."
+  },
+  {
+   "fieldname": "phone_request_enabled",
+   "fieldtype": "Check",
+   "label": "Bật luồng xin số điện thoại qua Zalo",
+   "default": "0",
+   "description": "Tắt (mặc định): thẻ xin số (gửi tự động lẫn nút bấm) chỉ tới được tài khoản Zalo thử nghiệm ghi cứng trong code, mọi khách khác bị chặn ở tầng gửi. Bật: tự gửi thẻ xin số sau tin của khách (đủ điều kiện) và sale bấm nút được với mọi khách."
+  },
+  {
+   "fieldname": "phone_request_title",
+   "fieldtype": "Data",
+   "label": "Tiêu đề thẻ xin số",
+   "length": 100,
+   "description": "Tối đa 100 ký tự. Trống = \"Miyano xin phép nhận thông tin liên hệ\"."
+  },
+  {
+   "fieldname": "phone_request_subtitle",
+   "fieldtype": "Small Text",
+   "label": "Nội dung thẻ xin số",
+   "description": "Tối đa 500 ký tự. Trống = câu mặc định của brief V3-07."
+  },
+  {
+   "fieldname": "phone_request_image_url",
+   "fieldtype": "Data",
+   "label": "Ảnh thẻ xin số (URL HTTPS công khai)",
+   "description": "Zalo bắt buộc có ảnh. Trống = logo trên miyano.com.vn."
+  },
+  {
+   "fieldname": "col_zalo_growth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "zalo_quota_total",
+   "fieldtype": "Int",
+   "label": "Quỹ tin tư vấn ngoài khung 48 giờ (tin/năm)",
+   "default": "500",
+   "description": "Trống hoặc 0 = 500. Cảnh báo ở 80%, chỉ Omni Admin gửi được từ 95%, từ chối ở 100%."
+  },
+  {
+   "fieldname": "zalo_quota_cycle_end",
+   "fieldtype": "Date",
+   "label": "Ngày hết hạn gói OA (cuối chu kỳ quỹ)",
+   "default": "2027-11-09",
+   "description": "Chu kỳ quỹ là 1 năm kết thúc ở ngày này (không phải năm dương lịch). Trống = 09/11/2027."
+  },
+  {
    "fieldname": "sec_release_gate",
    "fieldtype": "Section Break",
    "label": "Quyết định phát hành (V21-08)",
@@ -710,5 +768,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "modified": "2026-11-06 16:00:00.000000"
+ "modified": "2026-11-10 16:00:00.000000"
 }

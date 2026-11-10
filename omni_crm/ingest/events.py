@@ -36,6 +36,11 @@ class OutboundRequest:
 	reply_to_external_id: str | None
 	source: str  # "Sale" | "Bot" | "System"
 	bot_draft: str | None = None  # Omni Bot Draft nếu tin xuất phát từ nháp của bot (Đợt 3)
+	purpose: str = "reply"  # V3-07: reply | followup | transaction | request_info (routing.pick_message_kind)
+	route: object | None = None  # V3-07: routing.Route đã chọn (người gọi đã qua pick_message_kind)
+	meta: dict = field(
+		default_factory=dict
+	)  # adapter ghi kết quả phụ của lần gửi (vd quota_type Zalo trả về)
 
 
 def stable_message_id(*parts: object) -> str:

@@ -171,6 +171,22 @@ def pause_lead(lead: str, hours: int | None = None) -> datetime:
 	return until
 
 
+SALE_PAUSE_HOURS = 24  # V3-07 brief mục C: sale nhắn khách -> bot phía mình im 24 giờ
+
+
+def pause_identity_for_sale(identity: str) -> datetime:
+	"""Sale vừa gửi tin cho khách (CRM hoặc màn hình Zalo OA): tạm dừng bot của định danh 24 giờ, không rút ngắn hạn đang có.
+
+	Trong thời gian này hệ thống không tự gửi gì cho khách (thẻ xin số, nháp bot). Khách nhắn lại không xóa tạm dừng.
+	"""
+	until = add_to_date(now_datetime(), hours=SALE_PAUSE_HOURS)
+	current = frappe.db.get_value(IDENTITY, identity, "bot_paused_until")
+	if current and get_datetime(current) >= until:
+		return get_datetime(current)
+	frappe.db.set_value(IDENTITY, identity, "bot_paused_until", until, update_modified=False)
+	return until
+
+
 def resume_lead(lead: str) -> int:
 	"""Xóa `bot_paused_until` của mọi định danh của Lead; trả số định danh đang bị tạm dừng đã mở lại."""
 	done = 0

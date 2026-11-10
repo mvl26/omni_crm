@@ -98,89 +98,23 @@ class _Base(FrappeTestCase):
 
 
 class TestQuotaCount(_Base):
-	def test_month_boundaries(self):
-		for sent in (
-			datetime(2026, 2, 28, 23, 59, 59),
-			datetime(2026, 3, 1, 0, 0, 0),
-			datetime(2026, 3, 31, 23, 59, 59),
-			datetime(2026, 4, 1, 0, 0, 0),
-		):
-			self.out(self.identity(), sent)  # khách chưa từng nhắn: luôn ngoài khung
-		self.assertEqual(self.used(NOW), 2)  # chỉ 1/3 00:00:00 và 31/3 23:59:59
-		self.assertEqual(self.used(datetime(2026, 2, 10)), 1)
-		self.assertEqual(self.used(datetime(2026, 4, 30, 8)), 1)
-		self.assertEqual(quota.month_bounds(datetime(2026, 12, 31, 23))[1], datetime(2027, 1, 1))
+	"""V3-07 thay cách đếm theo tháng bằng quỹ theo năm của gói (`quota.count_used`, test_v3_07_zalo_growth)."""
 
-	def test_window_edge_is_inclusive_like_send_window(self):
-		sent = datetime(2026, 3, 10, 12, 0, 0)
-		for delta in (timedelta(hours=47, minutes=59), timedelta(hours=48), timedelta(hours=48, seconds=1)):
-			ident = self.identity()
-			self.inbound(ident, sent - delta)
-			self.out(ident, sent)
-		self.assertEqual(self.used(), 1)  # chỉ tin mà khách nhắn cuối cách 48 giờ + 1 giây
-
-	def test_inbound_after_send_does_not_count_as_window(self):
-		ident = self.identity()
-		self.inbound(ident, datetime(2026, 3, 10, 12, 0, 1))
-		self.out(ident, datetime(2026, 3, 10, 12, 0, 0))
-		self.assertEqual(self.used(), 1)
-
-	def test_echo_and_unfollow_do_not_open_the_window(self):
-		ident = self.identity()
-		self.inbound(ident, datetime(2026, 3, 10, 11, 0, 0), "oa_echo")
-		self.inbound(ident, datetime(2026, 3, 10, 11, 30, 0), "unfollow")
-		self.out(ident, datetime(2026, 3, 10, 12, 0, 0))
-		self.assertEqual(self.used(), 1)
-		self.inbound(ident, datetime(2026, 3, 10, 11, 45, 0), "follow")
-		self.assertEqual(self.used(), 0)
-
-	def test_only_sent_sale_api_messages_non_sandbox_of_this_channel(self):
-		when = datetime(2026, 3, 10, 12)
-		ident = self.identity()
-		self.out(ident, when)  # đếm
-		self.out(ident, when, is_sandbox=1)
-		self.out(ident, when, sent_by=None)  # tin sale trả lời thẳng trên ứng dụng Zalo (oa_echo)
-		self.out(ident, when, source="Bot")
-		self.out(ident, when, status="Failed")
-		self.out(ident, when, status="Blocked")
-		self.assertEqual(self.used(), 1)
-		other = make_channel(f"{PREFIX} kenh2", zalo_app_id=APP_ID)
-		self.assertEqual(quota.count_out_of_window(other.name, 48, NOW), 0)
-
-	def test_usage_text_known_unknown_and_over(self):
-		for _i in range(3):
-			self.out(self.identity(), datetime(2026, 3, 10, 12))
+	def test_compose_quota_never_breaks_compose_and_does_not_block(self):
+		info = inbox_api._quota_safe()
+		self.assertEqual(info["total"], 500)
+		with mock.patch("omni_crm.channels.zalo.quota.usage", side_effect=RuntimeError("x")):
+			self.assertIsNone(inbox_api._quota_safe())
 		doc = frappe.get_doc("Omni Channel", self.channel.name)
-		doc.zalo_cs_paid_quota_month = 500
-		info = quota.usage(doc, NOW)
-		self.assertEqual((info["used"], info["quota"], info["over"]), (3, 500, False))
-		self.assertIn("Đã dùng 3 / 500 tin ngoài 48 giờ", info["text"])
-		doc.zalo_cs_paid_quota_month = 3
-		self.assertTrue(quota.usage(doc, NOW)["over"])  # chỉ báo, không có gì bị chặn
-		doc.zalo_cs_paid_quota_month = None
-		info = quota.usage(doc, NOW)
-		self.assertIsNone(info["quota"])
-		self.assertIn("chưa biết hạn mức", info["text"])
-		doc.zalo_cs_paid_quota_month = 0
-		self.assertIsNone(quota.usage(doc, NOW)["quota"])
+		ident = frappe._dict(last_inbound_at=now_datetime() - timedelta(hours=60))
+		ok, _why = ZaloAdapter().can_send_now(ident, doc)
+		self.assertTrue(ok)
 
 	def test_negative_quota_rejected_and_defaults(self):
 		doc = frappe.get_doc("Omni Channel", self.channel.name)
 		self.assertEqual(doc.zalo_oa_package, "Chưa xác nhận")
 		doc.zalo_cs_paid_quota_month = -1
 		self.assertRaises(frappe.ValidationError, doc.save)
-
-	def test_compose_quota_never_breaks_compose_and_does_not_block(self):
-		doc = frappe.get_doc("Omni Channel", self.channel.name)
-		info = inbox_api._quota_safe(doc)
-		self.assertEqual(info["used"], 0)
-		with mock.patch("omni_crm.channels.zalo.quota.usage", side_effect=RuntimeError("x")):
-			self.assertIsNone(inbox_api._quota_safe(doc))
-		# vượt hạn mức không đổi kết quả can_send_now
-		doc.zalo_cs_paid_quota_month = 1
-		ident = frappe._dict(last_inbound_at=now_datetime() - timedelta(hours=60))
-		ok, _why = ZaloAdapter().can_send_now(ident, doc)
-		self.assertTrue(ok)
 
 
 class TestPackageWarning(_Base):

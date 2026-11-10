@@ -79,12 +79,24 @@ EXPECTED_WHITELISTED = {
 		"tab_state",
 		"get_conversation",
 		"send",
+		"request_phone",  # V3-07: thẻ xin số cho 1 Lead/lần, chỉ trong 48 giờ, chưa có số
 	},  # V3-01: tab Zalo, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
+	"api/lead_contact.py": {
+		"state",
+		"sync_from_lead",
+	},  # V3-06: tạo/cập nhật Liên hệ từ 1 Lead, không gửi tin
+	# V3-05: trợ lý nội bộ, chỉ thao tác CRM theo quyền người dùng, không gửi tin cho khách
+	"assistant/api.py": {"tab_state", "start_session", "chat", "approve", "reject", "close_session"},
 }
 BULK_NAME = re.compile(r"bulk|broadcast|mass|blast|newsletter|campaign_send|send_all|send_many", re.I)
 # Tệp được phép TẠO Omni Outbound Message (mỗi tin gắn với đúng một Lead/khách).
-OUTBOUND_CREATORS = {"api/inbox.py", "channels/zalo/worker_hooks.py", "pipeline/outbound.py"}
+OUTBOUND_CREATORS = {
+	"api/inbox.py",
+	"channels/zalo/worker_hooks.py",
+	"pipeline/outbound.py",
+	"channels/zalo/phone_request.py",  # V3-07: thẻ xin số, mỗi lần MỘT định danh (hẹn theo lô tin vừa Done)
+}
 
 
 def whitelisted_functions() -> dict[str, dict[str, list[str]]]:

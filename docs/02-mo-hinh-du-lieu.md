@@ -172,6 +172,13 @@ D1-06 bổ sung: chỉ mục ghép (`lead`, `received_at`) cho Hộp thư; `raw_
 | `sent_at` | Datetime | | |
 | `last_error` | Small Text | | |
 | `is_sandbox` | Check | | Tạo khi `sandbox_mode` bật |
+| `message_kind` | Select | CS 48h / CS ngoai 48h / ZBS Template | V3-07: do `routing.pick_message_kind` chọn |
+| `purpose` | Select | reply / followup / transaction / request_info | V3-07 |
+| `zbs_template_id` | Data | | V3-07: chỉ khi là ZBS |
+| `quota_consumed` | Check | | V3-07: tin ăn vào quỹ ngoài 48 giờ (Zalo trả `quota_type` thì theo Zalo) |
+| `approved_by` | Link | User | V3-07: người đồng ý tiêu quỹ |
+
+V3-07 (ADR 0019): `source = Bot` không có `bot_draft` là tin OA gửi ngoài hệ thống không do admin gõ (kịch bản chatbot Zalo); không tính là sale phản hồi.
 
 D1-06 bổ sung: chỉ mục ghép (`lead`, `creation`) cho Hộp thư.
 

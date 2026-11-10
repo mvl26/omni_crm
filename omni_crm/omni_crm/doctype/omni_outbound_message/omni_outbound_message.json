@@ -22,7 +22,14 @@
   "next_attempt_at",
   "external_message_id",
   "sent_at",
-  "last_error"
+  "last_error",
+  "sec_kind",
+  "message_kind",
+  "purpose",
+  "zbs_template_id",
+  "col_kind",
+  "quota_consumed",
+  "approved_by"
  ],
  "fields": [
   {
@@ -124,6 +131,49 @@
    "label": "Nháp của bot",
    "options": "Omni Bot Draft",
    "description": "Với tin từ bot (Đợt 3)"
+  },
+  {
+   "fieldname": "sec_kind",
+   "fieldtype": "Section Break",
+   "label": "Loại tin (V3-07)"
+  },
+  {
+   "fieldname": "message_kind",
+   "fieldtype": "Select",
+   "label": "Loại tin",
+   "options": "\nCS 48h\nCS ngoai 48h\nZBS Template",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purpose",
+   "fieldtype": "Select",
+   "label": "Mục đích",
+   "options": "\nreply\nfollowup\ntransaction\nrequest_info",
+   "read_only": 1
+  },
+  {
+   "fieldname": "zbs_template_id",
+   "fieldtype": "Data",
+   "label": "Mã mẫu ZBS",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_kind",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quota_consumed",
+   "fieldtype": "Check",
+   "label": "Ăn vào quỹ tin ngoài 48 giờ",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Người đồng ý tiêu hạn mức",
+   "options": "User",
+   "read_only": 1
   }
  ],
  "permissions": [

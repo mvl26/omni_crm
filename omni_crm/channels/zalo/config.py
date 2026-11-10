@@ -13,6 +13,7 @@ DEFAULTS: dict = {
 	"oauth_base": "https://oauth.zaloapp.com",
 	"send_path": "/v3.0/oa/message/cs",
 	"profile_path": "/v3.0/oa/user/detail",
+	"quota_path": "/v3.0/oa/quota/message",  # V3-07: tài liệu "Kiểm tra hạn mức tin nhắn OA" (POST)
 	"oauth_permission_path": "/v4/oa/permission",
 	"oauth_token_path": "/v4/oa/access_token",
 	"max_text_length": 2000,  # độ dài tối đa một tin văn bản tư vấn (chưa xác nhận)

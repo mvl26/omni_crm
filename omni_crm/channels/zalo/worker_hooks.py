@@ -168,9 +168,51 @@ def prepare_batch(msgs: list[Any], channel_doc: Any) -> list[Any]:
 	return remaining
 
 
-def _create_echo_outbound(msg: Any, res: Any) -> None:
+def agent_user(channel_doc: Any, admin_id: str | None) -> str | None:
+	"""User CRM của admin OA (`sender.admin_id` của oa_echo) theo bảng Omni Agent Map của kênh (cột agent_ref)."""
+	ref = (admin_id or "").strip()
+	if not ref:
+		return None
+	for row in channel_doc.get("agent_map") or []:
+		if (row.get("agent_ref") or "").strip() == ref and row.get("user"):
+			return row.user
+	return None
+
+
+def _echo_route(msg: Any, identity: str | None) -> dict:
+	"""Loại tin của tin OA gõ ngoài hệ thống (V3-07): trong 48 giờ kể từ tin khách gần nhất trước nó thì miễn phí,
+	ngoài khung thì Zalo trừ quỹ nên đánh dấu `quota_consumed` để bộ đếm khớp số Zalo tính."""
+	from omni_crm.channels.zalo import routing
+
+	last = None
+	if identity:
+		last = frappe.db.get_value(
+			"Omni Inbound Message",
+			{
+				"identity": identity,
+				"event_type": ["not in", ["oa_echo", "unfollow"]],  # như pipeline.worker.NON_INBOUND_EVENTS
+				"received_at": ["<=", msg.received_at],
+			},
+			"received_at",
+			order_by="received_at desc",
+		)
+	free_hours = 48
+	inside = bool(last) and (msg.received_at - last).total_seconds() <= free_hours * 3600
+	return {
+		"message_kind": routing.CS_48H if inside else routing.CS_PAID,
+		"purpose": "reply",
+		"quota_consumed": 0 if inside else 1,
+	}
+
+
+def _create_echo_outbound(msg: Any, res: Any, channel_doc: Any = None) -> None:
+	"""Ghi tin OA gửi ngoài hệ thống. Có `admin_id` = nhân viên gõ trên công cụ chat OA: nguồn Sale, `sent_by` theo
+	Omni Agent Map, tạm dừng bot 24 giờ. Không có `admin_id` = kịch bản chatbot Zalo / ứng dụng khác: nguồn Bot, không
+	tính là sale phản hồi (V3-07 mục C)."""
 	if _is_own_send(msg):
 		return
+	admin_id = _profile_of(msg).get("admin_id")
+	human = bool(admin_id)
 	frappe.get_doc(
 		{
 			"doctype": OUTBOUND,
@@ -178,12 +220,18 @@ def _create_echo_outbound(msg: Any, res: Any) -> None:
 			"identity": res.identity,
 			"lead": res.lead,
 			"text": msg.text,
-			"source": "Sale",
+			"source": "Sale" if human else "Bot",
+			"sent_by": agent_user(channel_doc, admin_id) if (human and channel_doc is not None) else None,
 			"status": "Sent",
 			"external_message_id": msg.external_message_id,
 			"sent_at": msg.received_at,
+			**_echo_route(msg, res.identity),
 		}
 	).insert(ignore_permissions=True)
+	if human and res.identity:
+		from omni_crm.bot import handoff
+
+		handoff.pause_identity_for_sale(res.identity)
 
 
 def after_resolve(res: Any, msgs: list[Any], channel_doc: Any) -> None:
@@ -192,4 +240,4 @@ def after_resolve(res: Any, msgs: list[Any], channel_doc: Any) -> None:
 		if m.event_type == "follow":
 			_set_follower(m.identity_key, True)
 		elif m.event_type == "oa_echo":
-			_create_echo_outbound(m, res)
+			_create_echo_outbound(m, res, channel_doc)
