@@ -31,6 +31,18 @@ Vì khóa trùng với đường trực tiếp, một tin đi cả hai đường
 
 `archive/` (đã nạp hoặc trùng hoặc bỏ qua có chủ đích), `chua_nap/` (loại chưa hỗ trợ, giữ để nạp sau), `dead_crm/` + `.loi.txt` (hỏng, quá 2 MB, lỗi DB), nằm lại `inbox/` (thiếu kênh). Cùng cấu trúc ngày để tra cứu.
 
+## Dựng kênh email cho hộp thư chỉ đọc qua intake
+
+Không sửa code CRM, không có đường email thứ hai. Lệnh sau mặc định chỉ IN kế hoạch; thêm `"apply": 1` mới ghi:
+
+```bash
+bench --site <site> execute omni_crm.intake_files.setup.ensure_email_channel --kwargs '{"mailbox": "info@miyano.com.vn"}'
+```
+
+Nó tạo một Email Account "vỏ" (không nhận, không gửi, không tạo Lead) và Omni Channel Email `email-<tên>` trỏ vào đó. Nếu Email Account của hộp thư đã `enable_incoming` thì CRM tự kéo thư, lệnh không làm gì. Lưu ý: vì vỏ không có SMTP, sale chưa trả lời khách từ CRM qua hộp thư này được; muốn trả lời thì Email Account phải có cấu hình gửi.
+
+Hiện trạng site yhct (ảnh chụp 10/11/2026): có 3 Omni Channel là `zalo-mvl` (Zalo OA), `web-landing` (Web Form), `meta-mvl` (Meta Lead Ads); **chưa có kênh Email và Telephony**.
+
 ## Kiểm tra site trước khi bật (chỉ đọc)
 
 `bench --site <site> execute omni_crm.intake_files.inspect_site.report` liệt kê kênh, Email Account (không mật khẩu), biểu mẫu Website và khóa `omni_intake_*`.
