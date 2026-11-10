@@ -19,6 +19,7 @@ from omni_crm.crm_bridge.timeline import TIMELINE_EVENTS, parse_attachments
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline import outbound as outbound_pipeline
 from omni_crm.pipeline.retry import redact
+from omni_crm.utils import media
 
 LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
@@ -271,11 +272,29 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 
 
 def _safe_attachments(raw: Any) -> list[dict]:
+	"""Đính kèm đã lọc URL: {url, name} (+ type, thumb, inline nếu có). `inline` = được vẽ thành ảnh (ADR 0018)."""
 	out = []
 	for a in parse_attachments(raw):
 		url = str(a.get("url") or "")
-		if url.startswith(SAFE_FILE_PREFIXES):
-			out.append({"url": url, "name": str(a.get("name") or url.rsplit("/", 1)[-1])})
+		if not media.is_safe_link(url):
+			continue
+		kind = str(a.get("type") or "").strip().lower()[:30]
+		name = str(a.get("name") or "")
+		if not name or name == url:
+			name = (
+				""
+				if kind in media.INLINE_IMAGE_TYPES
+				else media.filename_from_url(url) or url.rsplit("/", 1)[-1]
+			)
+		item = {"url": url, "name": name}
+		if kind:
+			item["type"] = kind
+		thumb = str(a.get("thumb") or "")
+		if thumb and media.is_inline_image_url(thumb):
+			item["thumb"] = thumb
+		if kind in media.INLINE_IMAGE_TYPES and media.is_inline_image_url(url):
+			item["inline"] = True
+		out.append(item)
 	return out
 
 
