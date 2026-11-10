@@ -53,10 +53,51 @@ def _record_rejection(channel: str, reason: str) -> None:
 		pass
 
 
+_MEDIA_KINDS = (
+	"text",
+	"image",
+	"gif",
+	"file",
+	"sticker",
+	"location",
+	"audio",
+	"video",
+	"link",
+	"business_card",
+	"list",
+)
+# Tên sự kiện được đếm riêng (tập hữu hạn nên số khóa Redis có trần); tên khác gộp vào "khac".
+KNOWN_EVENT_NAMES = frozenset(
+	[
+		f"{p}{k}"
+		for p in ("user_send_", "user_send_group_", "oa_send_", "anonymous_send_")
+		for k in _MEDIA_KINDS
+	]
+	+ [
+		"user_submit_info",
+		"user_received_message",
+		"user_seen_message",
+		"user_click_chatnow",
+		"user_reacted_message",
+		"user_feedback",
+		"add_user_to_tag",
+		"oa_reacted_message",
+		"follow",
+		"unfollow",
+	]
+)
+OTHER_EVENT = "khac"
+
+
+def ignored_bucket(event_name: str) -> str:
+	"""Khóa đếm của sự kiện bị bỏ qua: chính tên nếu thuộc `KNOWN_EVENT_NAMES`, còn lại "khac"."""
+	name = str(event_name or "").strip().lower()
+	return name if name in KNOWN_EVENT_NAMES else OTHER_EVENT
+
+
 def _record_ignored(channel: str, event_name: str) -> None:
-	"""Đếm sự kiện bị bỏ qua theo tên (Redis, 24 giờ, chỉ ký tự an toàn); không ném lỗi."""
-	safe = "".join(c for c in str(event_name).lower() if c.isalnum() or c == "_")[:48] or "khong_ten"
-	_record_rejection(channel, f"ignored:{safe}")
+	"""Đếm sự kiện bị bỏ qua theo nhóm tên đã biết (Redis, 24 giờ, số khóa có trần); không ném lỗi."""
+	_record_rejection(channel, f"ignored:{ignored_bucket(event_name)}")
 
 
 def _ts(data: dict) -> datetime:
