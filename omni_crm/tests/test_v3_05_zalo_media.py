@@ -64,6 +64,41 @@ class TestMediaHelpers(BridgeTestCase):
 		):
 			self.assertFalse(media.is_inline_image_url(url), url)
 
+	def test_backslash_control_and_whitespace_rejected(self):
+		for url in (
+			"https://evil.com\\@zdn.vn/x.jpg",
+			"https://evil.com\\.zdn.vn/x.jpg",
+			"https://photo.zdn.vn/a\\b.jpg",
+			"https://photo.zdn.vn/a\x01.jpg",
+			"https://photo.zdn.vn/a\x7f.jpg",
+			"https://photo.zdn.vn/a b.jpg",
+			"https://photo.zdn.vn/a\u00a0b.jpg",
+			" https://photo.zdn.vn/a.jpg",
+			"/files/a\\b.png",
+			"/files/a\x01.png",
+			"/files/a b.png",  # ảnh nội tuyến nghiêm ngặt: không khoảng trắng
+			"https://photo.zdn.vn:8443/a.jpg",
+			"https://user:pw@photo.zdn.vn/a.jpg",
+		):
+			self.assertFalse(media.is_inline_image_url(url), repr(url))
+		for url in ("https://x.example/a\\b", "https://x.example/a\x01", "https://x.example/a b"):
+			self.assertFalse(media.is_safe_link(url), repr(url))
+
+	def test_files_paths_no_traversal_but_plain_spaces_stay_linkable(self):
+		for url in (
+			"/files/../private/x.png",
+			"/files/%2e%2e/x.png",
+			"/private/files/a/../../x",
+			"/files//x.png",
+		):
+			self.assertFalse(media.is_safe_link(url), url)
+			self.assertFalse(media.is_inline_image_url(url), url)
+		self.assertTrue(
+			media.is_safe_link("/files/bao gia.pdf")
+		)  # tên tệp Frappe có thể có dấu cách: vẫn là liên kết
+		self.assertTrue(media.is_inline_image_url("/files/a.png"))
+		self.assertTrue(media.is_inline_image_url("https://photo-stal-27.zdn.vn:443/a.jpg"))
+
 	def test_safe_link(self):
 		self.assertTrue(media.is_safe_link("https://x.example/a"))
 		self.assertFalse(media.is_safe_link("javascript:alert(1)"))
@@ -181,14 +216,35 @@ class TestParseZaloMedia(BridgeTestCase):
 		self.assertEqual(parsed("user_send_business_card", []).text, "[Danh thiếp]")
 		self.assertEqual(parsed("user_send_text", []).text, "")
 
-	def test_ignored_event_is_counted(self):
-		ev = parse_event(Chan(), {"event_name": "mot_su_kien_la", "sender": {"id": "u"}, "timestamp": "1"})
-		self.assertEqual(ev.event_type, "ignored")
+	def _count_key(self, bucket: str) -> str:
+		return frappe.cache().make_key(f"omni:zalo:reject:{Chan.name}:ignored:{bucket}")
+
+	def test_ignored_event_is_counted_in_capped_buckets(self):
 		cache = frappe.cache()
-		key = cache.make_key(f"omni:zalo:reject:{Chan.name}:ignored:mot_su_kien_la")
-		self.assertGreaterEqual(int(cache.get(key) or 0), 1)
-		cache.delete(key)
-		self.assertTrue(adapter_mod.USER_EVENT_PREFIX)
+		keys = [self._count_key("user_received_message"), self._count_key("khac")]
+		for k in keys:
+			cache.delete(k)
+		self.addCleanup(lambda: [cache.delete(k) for k in keys])
+		known = parse_event(
+			Chan(), {"event_name": "user_received_message", "sender": {"id": "u"}, "timestamp": "1"}
+		)
+		self.assertEqual(known.event_type, "ignored")
+		for i in range(50):  # 50 tên lạ khác nhau chỉ tạo MỘT khóa "khac"
+			parse_event(Chan(), {"event_name": f"su_kien_la_{i}", "sender": {"id": "u"}, "timestamp": "1"})
+		self.assertEqual(int(cache.get(keys[0]) or 0), 1)
+		self.assertEqual(int(cache.get(keys[1]) or 0), 50)
+		self.assertIsNone(cache.get(self._count_key("su_kien_la_0")))
+		ttl = cache.ttl(keys[1]) if hasattr(cache, "ttl") else None
+		if ttl is not None:
+			self.assertTrue(0 < ttl <= adapter_mod.REJECT_TTL)
+
+	def test_ignored_bucket_function(self):
+		b = adapter_mod.ignored_bucket
+		self.assertEqual(b("user_send_gif"), "user_send_gif")
+		self.assertEqual(b(" USER_SEND_GIF "), "user_send_gif")
+		for odd in ("user_send_" + "x" * 500, "", None, "a:b", "../x", "user_send_hologram"):
+			self.assertEqual(b(odd), "khac")
+		self.assertLess(len(adapter_mod.KNOWN_EVENT_NAMES), 100)
 
 
 class TestSafeAttachments(BridgeTestCase):
