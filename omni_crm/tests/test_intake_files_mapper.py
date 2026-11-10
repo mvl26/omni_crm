@@ -54,29 +54,30 @@ class TestMapper(unittest.TestCase):
 			mapper.map_envelope(env(kind="lead_form", channel="meta")).skip, mapper.SKIP_LIVE_PATH
 		)
 
-	def test_email(self):
+	def test_email_dung_communication(self):
 		m = mapper.map_envelope(env())
-		self.assertEqual(m.channel_type, "Email")
-		ev = mapper.with_channel(env(), m, "Hộp thư bán hàng").event
-		self.assertEqual(ev.channel_type, "Email")
-		self.assertEqual(ev.event_type, "message")
-		self.assertEqual(ev.external_message_id, "abc123@mail.example")  # bỏ tiền tố gmail:, trùng Message-ID
-		self.assertEqual(ev.external_sender_id, "khach@cty.vn")
-		self.assertEqual(ev.received_at.year, 2026)
-		self.assertIsNone(ev.received_at.tzinfo)
-		self.assertEqual(ev.sender_profile["display_name"], "Lê Khách")
-		self.assertEqual(ev.raw["intake"]["event_key"], "gmail:abc123@mail.example")  # JSON gốc được giữ
+		self.assertEqual((m.channel_type, m.event, m.skip), ("Email", None, None))
+		v = mapper.communication_values(env(), "Hộp thư bán hàng", "info@miyano.com.vn")
+		self.assertEqual(v["doctype"], "Communication")
+		self.assertEqual((v["communication_medium"], v["sent_or_received"]), ("Email", "Received"))
+		self.assertEqual(v["email_account"], "Hộp thư bán hàng")
+		self.assertEqual(v["message_id"], "abc123@mail.example")  # bỏ tiền tố gmail:, trùng Message-ID
+		self.assertEqual(v["sender"], "khach@cty.vn")
+		self.assertEqual(v["sender_full_name"], "Lê Khách")
+		self.assertEqual(v["recipients"], "info@miyano.com.vn")
+		self.assertEqual(v["subject"], "Báo giá")
+		self.assertEqual(v["communication_date"].year, 2026)
+		self.assertIsNone(v["communication_date"].tzinfo)
 
-	def test_email_bi_loai(self):
-		e = env(ignored=True, ignore_reasons=["bulk"])
-		ev = mapper.with_channel(e, mapper.map_envelope(e), "K").event
-		self.assertEqual(ev.event_type, "ignored")
+	def test_email_bo_tieu_de_khoi_noi_dung(self):
+		e = env(content={"text": "Báo giá\n\nChào anh, cần báo giá.", "attachments": []})
+		v = mapper.communication_values(e, "A", "a@x.vn")
+		self.assertEqual(v["content"], "Chào anh, cần báo giá.")
 
-	def test_email_reply_to_la_dinh_danh(self):
-		e = env(sender={"type": "email", "value": "form@cty.vn"}, identifiers={"email": "that@khach.vn"})
-		ev = mapper.with_channel(e, mapper.map_envelope(e), "K").event
-		self.assertEqual(ev.external_sender_id, "that@khach.vn")
-		self.assertEqual(ev.sender_profile["reply_to_email"], "that@khach.vn")
+	def test_email_reply_to_la_nguoi_gui(self):
+		e = env(sender={"type": "email", "value": "form@cty.vn"}, identifiers={"email": "THAT@khach.vn"})
+		v = mapper.communication_values(e, "A", "a@x.vn")
+		self.assertEqual(v["sender"], "that@khach.vn")
 
 	def test_cuoc_goi(self):
 		e = call()

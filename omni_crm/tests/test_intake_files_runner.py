@@ -81,8 +81,8 @@ class TestRunner(unittest.TestCase):
 				runner.ingest_envelope({"schema": "1", "kind": "email", "event_key": "gmail:x"}), "thieu_kenh"
 			)
 
-	def test_ingest_email_goi_cong_tiep_nhan(self):
-		env = {
+	def _email_env(self, **over):
+		e = {
 			"schema": "1",
 			"event_key": "gmail:m1@x",
 			"channel": "gmail",
@@ -90,17 +90,52 @@ class TestRunner(unittest.TestCase):
 			"occurred_at": "2026-11-01T18:01:56+07:00",
 			"sender": {"value": "a@b.vn"},
 			"identifiers": {"email": "a@b.vn"},
-			"content": {"text": "xin chào"},
+			"content": {"text": "s\n\nxin chào"},
 			"raw": {"subject": "s"},
+			"source": {"account": "Info@Miyano.com.vn"},
 		}
+		e.update(over)
+		return e
+
+	def test_email_tao_communication_khi_chua_co_duong_khac(self):
+		acc = mock.MagicMock(email_id="info@miyano.com.vn", enable_incoming=0)
+		acc.name = "TK"
+		doc = mock.MagicMock()
 		with (
-			mock.patch.object(runner, "resolve_channel", return_value="K"),
-			mock.patch.object(runner.gateway, "save_inbound", side_effect=["OIN-1", None]) as save,
+			mock.patch.object(runner.frappe.db, "get_value", return_value=acc),
+			mock.patch.object(runner.frappe.db, "exists", side_effect=[None, "COMM-1"]),
+			mock.patch.object(runner.email_adapter, "find_channel", return_value="K"),
+			mock.patch.object(runner.frappe, "get_doc", return_value=doc) as get_doc,
 		):
-			self.assertEqual(runner.ingest_envelope(env), "moi")
-			self.assertEqual(runner.ingest_envelope(env), "trung")  # cổng trả None = đã nhận
-		self.assertEqual(save.call_args.args[0].channel, "K")
-		self.assertIn("intake", save.call_args.args[0].raw)
+			self.assertEqual(runner.ingest_envelope(self._email_env()), "moi")
+			self.assertEqual(get_doc.call_args.args[0]["email_account"], "TK")
+			doc.insert.assert_called_once_with(ignore_permissions=True)
+			self.assertEqual(
+				runner.ingest_envelope(self._email_env()), "trung"
+			)  # đã có Communication cùng Message-ID
+
+	def test_email_bo_qua_khi_crm_tu_keo_hop_thu_hoac_thu_tu_dong(self):
+		acc = mock.MagicMock(email_id="info@miyano.com.vn", enable_incoming=1)
+		acc.name = "TK"
+		with (
+			mock.patch.object(runner.frappe.db, "get_value", return_value=acc),
+			mock.patch.object(runner.email_adapter, "find_channel", return_value="K"),
+			mock.patch.object(runner.frappe, "get_doc") as get_doc,
+		):
+			self.assertEqual(runner.ingest_envelope(self._email_env()), "bo_qua")  # CRM tự nhận hộp thư này
+			self.assertEqual(runner.ingest_envelope(self._email_env(ignored=True)), "bo_qua")
+			get_doc.assert_not_called()
+
+	def test_email_thieu_tai_khoan_hoac_kenh(self):
+		with mock.patch.object(runner.frappe.db, "get_value", return_value=None):
+			self.assertEqual(runner.ingest_envelope(self._email_env()), "thieu_kenh")
+		acc = mock.MagicMock(email_id="info@miyano.com.vn", enable_incoming=0)
+		acc.name = "TK"
+		with (
+			mock.patch.object(runner.frappe.db, "get_value", return_value=acc),
+			mock.patch.object(runner.email_adapter, "find_channel", return_value=None),
+		):
+			self.assertEqual(runner.ingest_envelope(self._email_env()), "thieu_kenh")
 
 	def test_ingest_web_form_dung_adapter(self):
 		env = {
