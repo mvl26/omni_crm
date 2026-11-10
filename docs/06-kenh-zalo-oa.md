@@ -35,7 +35,7 @@ Tên sự kiện cần xác nhận lại; bảng dưới là ánh xạ mong mu�
 | Sự kiện Zalo (tham khảo) | `event_type` nội bộ | Xử lý |
 | --- | --- | --- |
 | `user_send_text` | message | Văn bản → `text` |
-| `user_send_image`, `user_send_file`, `user_send_sticker`, `user_send_location`, `user_send_audio` | message | `text` = mô tả ngắn ("[Ảnh]", "[Tệp: tên]"); đính kèm vào `attachments` |
+| `user_send_image`, `user_send_gif`, `user_send_file`, `user_send_sticker`, `user_send_location`, `user_send_audio`, `user_send_video`, `user_send_link`, `user_send_business_card` (mọi `user_send_*` có `sender.id`) | message | `text` = mô tả ngắn ("[Ảnh]", "[GIF]", "[Tệp: tên]"...); đính kèm vào `attachments` dạng `{type, url, name, mime, thumb?}` (V3-05, ADR 0018) |
 | `user_submit_info` | user_info | SĐT, tên, địa chỉ khách gửi → `sender_profile`, tín hiệu **mạnh** |
 | `follow` / `unfollow` | follow / unfollow | Cập nhật `Omni Identity.is_follower`; follow tạo Lead **chỉ khi** cấu hình cho phép (mặc định: không tạo Lead chỉ vì follow) |
 | `oa_send_text`, `oa_send_image`… | oa_echo | Tin nhân viên gửi từ ứng dụng Zalo OA, không qua CRM → ghi vào dòng thời gian như tin ra `source = Sale (ngoài hệ thống)`; dùng làm "câu sale trả lời" để so với bot |
