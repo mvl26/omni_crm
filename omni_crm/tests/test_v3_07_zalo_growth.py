@@ -506,6 +506,13 @@ class TestSalePause(test_outbound.OutboundTestCase):
 		delta = (until - now_datetime()).total_seconds()
 		self.assertTrue(23.9 * 3600 < delta <= 24 * 3600 + 5, delta)
 
+	def test_sale_sending_bot_draft_does_not_pause_bot(self):
+		self.sandbox(True)
+		name = self.queue()
+		frappe.db.set_value(OUT, name, "bot_draft", "NHAP-V307", update_modified=False)
+		outbound.send_outbound(name)
+		self.assertFalse(frappe.db.get_value(IDENTITY, self.ident1, "bot_paused_until"))
+
 
 class TestEcho(ZaloTestCase):
 	def setUp(self):

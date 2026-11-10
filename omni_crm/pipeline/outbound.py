@@ -308,7 +308,7 @@ def _sent(row: Any, external_id: str | None, sandbox: bool, quota_type: str | No
 	"""Ghi Sent + mã tin + dòng thời gian trong MỘT commit (mã tin phải có ngay để nhận ra echo).
 
 	V3-07: Zalo báo nguồn quota của tin vừa gửi (`reply` = trong 48 giờ, `sub_quota`/... = ăn vào quỹ): ghi đúng theo Zalo
-	vào `quota_consumed` để bộ đếm khớp số Zalo tính. Tin của Sale đặt tạm dừng bot 24 giờ cho khách (brief mục C).
+	vào `quota_consumed` để bộ đếm khớp số Zalo tính. Tin Sale tự soạn (không phải nháp bot) đặt tạm dừng bot 24 giờ cho khách (brief mục C).
 	"""
 	sent_at = now_datetime()
 	extra: dict[str, Any] = {}
@@ -325,7 +325,8 @@ def _sent(row: Any, external_id: str | None, sandbox: bool, quota_type: str | No
 		last_error=None,
 		**extra,
 	)
-	if row.source == "Sale" and row.identity:
+	if row.source == "Sale" and row.identity and not row.get("bot_draft"):
+		# sale tự nhắn mới dừng bot; sale bấm gửi nháp của bot thì chế độ Draft vẫn chạy tiếp
 		from omni_crm.bot import handoff
 
 		handoff.pause_identity_for_sale(row.identity)
