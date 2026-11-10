@@ -1,8 +1,10 @@
 """Nạp file intake: luồng tệp (archive / dead_crm / chua_nap / giữ nguyên) với DB và cổng được thay bằng giả."""
 
 import json
+import os
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -85,6 +87,50 @@ class TestRunner(unittest.TestCase):
 			self.assertEqual(runner.run()["moi"], 1)
 			self.assertEqual(ing.call_count, 1)
 		self.assertTrue((other / "f.json").exists())  # thư mục form không bị đọc hay di chuyển
+
+	def test_spool_chi_doc_khong_di_chuyen_va_khong_nap_lai(self):
+		a = self.put("a.json", {})
+		done = set()
+		ledger = mock.MagicMock()
+		ledger.get_value.side_effect = lambda k: 1 if k in done else None
+		ledger.set_value.side_effect = lambda k, v, expires_in_sec=None: done.add(k)
+		real_access = os.access
+		with (
+			mock.patch.object(runner.frappe, "cache", return_value=ledger),
+			mock.patch.object(
+				runner.os, "access", side_effect=lambda p, m: False if m == os.W_OK else real_access(p, m)
+			),
+			mock.patch.object(runner, "_in_window", return_value=True),
+			mock.patch.object(runner, "ingest_envelope", return_value="moi") as ing,
+		):
+			self.assertEqual(runner.run()["moi"], 1)
+			self.assertEqual(runner.run()["moi"], 0)  # lần hai: đã có dấu, bỏ qua
+			self.assertEqual(ing.call_count, 1)
+		self.assertTrue(a.exists())  # không di chuyển được thì để nguyên
+
+	def test_thieu_kenh_o_che_do_chi_doc_duoc_thu_lai(self):
+		self.put("a.json", {})
+		ledger = mock.MagicMock()
+		ledger.get_value.return_value = None
+		real_access = os.access
+		with (
+			mock.patch.object(runner.frappe, "cache", return_value=ledger),
+			mock.patch.object(
+				runner.os, "access", side_effect=lambda p, m: False if m == os.W_OK else real_access(p, m)
+			),
+			mock.patch.object(runner, "_in_window", return_value=True),
+			mock.patch.object(runner, "ingest_envelope", return_value="thieu_kenh"),
+		):
+			runner.run()
+		ledger.set_value.assert_not_called()  # không ghi dấu: lần sau thử lại khi đã có kênh
+
+	def test_cua_so_ngay(self):
+		today = date.today()
+		old = self.root / "inbox" / "2020" / "01" / "01" / "gmail" / "x.json"
+		new = self.root / "inbox" / f"{today:%Y/%m/%d}" / "gmail" / "x.json"
+		with mock.patch.object(runner.frappe, "conf", {"omni_intake_days": 3}):
+			self.assertFalse(runner._in_window(self.root, old))
+			self.assertTrue(runner._in_window(self.root, new))
 
 	def test_gioi_han_moi_lan(self):
 		for i in range(5):

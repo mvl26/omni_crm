@@ -8,15 +8,21 @@ Cấu hình qua site_config (hạ tầng, không thêm trường vào DocType):
   `call` (`voice`), `web_form` (`web_form`), `messenger` (`messenger`). Thư mục không nằm trong danh sách thì không đọc, không đụng.
 - Email không cần khai: thư vào Email Account có `email_id` trùng hộp thư của file (`source.account`).
 
-Sau khi nạp, file chuyển sang `archive/` (cùng cấu trúc ngày), giống quy ước trong README của miyano-intake;
+Nếu người dùng chạy bench KHÔNG có quyền ghi vào spool (chỉ đọc), file không bị di chuyển: tiến trình ghi dấu "đã xử lý"
+vào Redis (14 ngày) và chỉ quét các thư mục ngày trong `omni_intake_days` (mặc định 3) ngày gần nhất. Mất dấu thì nạp lại cũng
+vô hại vì chống trùng ở cổng và ở Communication.
+
+Có quyền ghi: sau khi nạp, file chuyển sang `archive/` (cùng cấu trúc ngày), giống quy ước trong README của miyano-intake;
 file hỏng sang `dead_crm/` kèm tệp `.loi.txt`; loại tin CRM chưa hỗ trợ (Messenger) sang `chua_nap/` để nạp sau.
 Chạy lại an toàn: chống trùng bằng `dedupe_key` của cổng (cùng khóa với đường trực tiếp).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +36,8 @@ from omni_crm.pipeline.retry import redact
 
 KIND_DIRS = {"email": "gmail", "call": "voice", "web_form": "web_form", "messenger": "messenger"}
 DEFAULT_KINDS = ("email",)
+DEFAULT_DAYS = 3
+DONE_TTL = 14 * 86400
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_PER_RUN = 200
 RESULTS = ("moi", "trung", "bo_qua", "chua_ho_tro", "thieu_kenh", "loi")
@@ -91,6 +99,41 @@ def ingest_email(env: dict) -> str:
 	return "moi"
 
 
+def _done_key(path: Path) -> str:
+	return "omni:intake:done:" + hashlib.sha1(str(path).encode()).hexdigest()
+
+
+def _is_done(path: Path) -> bool:
+	return bool(frappe.cache().get_value(_done_key(path)))
+
+
+def _mark_done(path: Path) -> None:
+	frappe.cache().set_value(_done_key(path), 1, expires_in_sec=DONE_TTL)
+
+
+def _day_of(root: Path, path: Path) -> date | None:
+	"""Ngày trong đường dẫn `inbox/<năm>/<tháng>/<ngày>/<kênh>/<file>`; None nếu không đọc được."""
+	try:
+		year, month, day = path.relative_to(root / "inbox").parts[:3]
+		return date(int(year), int(month), int(day))
+	except (ValueError, TypeError):
+		return None
+
+
+def _in_window(root: Path, path: Path) -> bool:
+	days = int(frappe.conf.get("omni_intake_days") or DEFAULT_DAYS)
+	day = _day_of(root, path)
+	return day is None or day >= date.today() - timedelta(days=days)
+
+
+def _finish(root: Path, path: Path, bucket: str, note: str | None = None) -> None:
+	"""Di chuyển file sang `bucket` nếu được phép ghi; nếu spool chỉ đọc thì ghi dấu đã xử lý."""
+	if os.access(path.parent, os.W_OK):
+		_move(root, path, bucket, note)
+	else:
+		_mark_done(path)
+
+
 def _move(root: Path, src: Path, bucket: str, note: str | None = None) -> None:
 	rel = src.relative_to(root / "inbox")
 	dst = root / bucket / rel
@@ -139,6 +182,7 @@ def run(limit: int = MAX_PER_RUN) -> dict[str, int]:
 		for p in (root / "inbox").rglob("*.json")
 		if p.parent.name in allowed and p.is_file() and not p.name.startswith(".")
 	)
+	files = [p for p in files if os.access(p.parent, os.W_OK) or (_in_window(root, p) and not _is_done(p))]
 	for path in files[:limit]:
 		try:
 			if path.stat().st_size > MAX_FILE_BYTES:
@@ -149,7 +193,7 @@ def run(limit: int = MAX_PER_RUN) -> dict[str, int]:
 		except Exception as e:
 			frappe.db.rollback()
 			stats["loi"] += 1
-			_move(root, path, "dead_crm", redact(f"{type(e).__name__}: {e}")[:500])
+			_finish(root, path, "dead_crm", redact(f"{type(e).__name__}: {e}")[:500])
 			frappe.log_error(
 				title="Omni: lỗi nạp file intake",
 				message=redact(f"{path.name}\n{frappe.get_traceback(with_context=False)[-1200:]}"),
@@ -158,8 +202,8 @@ def run(limit: int = MAX_PER_RUN) -> dict[str, int]:
 			continue
 		stats[result] += 1
 		if result in ("moi", "trung", "bo_qua"):
-			_move(root, path, "archive")
+			_finish(root, path, "archive")
 		elif result == "chua_ho_tro":
-			_move(root, path, "chua_nap")
+			_finish(root, path, "chua_nap")
 		# thieu_kenh: giữ nguyên trong inbox, nạp lại khi đã bật kênh
 	return stats
