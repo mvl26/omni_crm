@@ -39,10 +39,10 @@ index bc2f6dc..522d37c 100644
          <Button
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..14ec23c
+index 0000000..efdaa01
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,401 @@
+@@ -0,0 +1,432 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot: chữ xuống dòng theo nội dung, không cắt; quá dài thì cuộn trong thẻ -->
@@ -127,20 +127,41 @@ index 0000000..14ec23c
 +              <div class="mb-0.5 text-xs text-ink-gray-5">
 +                {{ senderLabel(msg) }}
 +              </div>
-+              <div v-if="msg.text" class="whitespace-pre-wrap break-words">
-+                {{ msg.text }}
++              <div
++                v-if="displayText(msg)"
++                class="whitespace-pre-wrap break-words"
++              >
++                {{ displayText(msg) }}
 +              </div>
 +              <div
-+                v-for="att in safeAttachments(msg.attachments)"
-+                :key="att.url"
++                v-for="att in attachmentViews(msg.attachments)"
++                :key="att.index"
 +                class="mt-1 text-sm"
 +              >
 +                <a
++                  v-if="att.src && !brokenImages[`${msg.name}:${att.index}`]"
++                  :href="att.url"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  class="block"
++                  :title="__('Mở ảnh gốc')"
++                >
++                  <img
++                    :src="att.src"
++                    :alt="__(att.label)"
++                    loading="lazy"
++                    referrerpolicy="no-referrer"
++                    class="max-h-60 max-w-[240px] rounded object-contain"
++                    @error="brokenImages[`${msg.name}:${att.index}`] = true"
++                  />
++                </a>
++                <a
++                  v-else
 +                  :href="att.url"
 +                  target="_blank"
 +                  rel="noopener noreferrer"
 +                  class="text-ink-blue-3 underline"
-+                  >{{ att.name }}</a
++                  >{{ att.src ? __(att.label) : att.text }}</a
 +                >
 +              </div>
 +              <div
@@ -248,7 +269,15 @@ index 0000000..14ec23c
 +</template>
 +
 +<script setup>
-+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
++import {
++  computed,
++  nextTick,
++  onBeforeUnmount,
++  onMounted,
++  reactive,
++  ref,
++  watch,
++} from 'vue'
 +import {
 +  Button,
 +  LoadingIndicator,
@@ -272,7 +301,8 @@ index 0000000..14ec23c
 +  sendWithConfirm,
 +  openOaChat,
 +  shortZaloId,
-+  safeAttachments,
++  attachmentViews,
++  displayText,
 +  sourceOf,
 +  timeLabel,
 +} from '@/utils/zaloThread'
@@ -288,6 +318,7 @@ index 0000000..14ec23c
 +const sending = ref(false)
 +const scroller = ref(null)
 +const loadFailed = ref(false)
++const brokenImages = reactive({}) // ảnh tải lỗi: rơi về liên kết có nhãn
 +
 +// Dữ liệu và mọi guard (khung 48 giờ, hạn mức, từ chối liên hệ, sandbox) nằm ở máy chủ: omni_crm.api.zalo_tab.
 +const conversation = createResource({
@@ -578,10 +609,10 @@ index d363cbf..d56df0a 100644
  })
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..15c0fab
+index 0000000..295d0c9
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,295 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -592,7 +623,7 @@ index 0000000..15c0fab
 +  return /^https?:\/\//i.test(String(url || '').trim())
 +}
 +
-+/** Danh sách đính kèm đã lọc: chỉ URL http(s), mỗi mục có name để hiển thị. */
++/** Danh sách đính kèm đã lọc: chỉ URL http(s), mỗi mục có name để hiển thị; giữ type và thumb nếu có. */
 +export function safeAttachments(list) {
 +  if (!Array.isArray(list)) return []
 +  return list
@@ -600,7 +631,110 @@ index 0000000..15c0fab
 +    .map((a) => ({
 +      url: String(a.url).trim(),
 +      name: String(a.name || a.url).slice(0, 120),
++      ...(a.type ? { type: String(a.type).toLowerCase().slice(0, 30) } : {}),
++      ...(a.thumb && isSafeUrl(a.thumb)
++        ? { thumb: String(a.thumb).trim() }
++        : {}),
 +    }))
++}
++
++// --- Ảnh / GIF / sticker / tệp khách gửi (V3-05, ADR 0018) ---
++
++/** Hậu tố host CDN Zalo được phép làm src ảnh nội tuyến (khớp danh sách ở máy chủ: omni_crm/utils/media.py). */
++export const ZALO_MEDIA_HOST_SUFFIXES = [
++  'zdn.vn',
++  'zadn.vn',
++  'zaloapp.com',
++  'zalo.me',
++]
++export const INLINE_IMAGE_TYPES = ['image', 'gif', 'sticker']
++
++const TYPE_LABELS = {
++  image: 'Ảnh',
++  gif: 'GIF',
++  sticker: 'Sticker',
++  video: 'Video',
++  link: 'Liên kết',
++  business_card: 'Danh thiếp',
++  audio: 'Tin thoại',
++  location: 'Vị trí',
++  file: 'Tệp',
++}
++
++/** Chỉ https tới host thuộc CDN Zalo (đúng host hoặc tên miền con) mới được vẽ thành ảnh; còn lại chỉ là liên kết. */
++export function isInlineImageUrl(url) {
++  let u
++  try {
++    u = new URL(String(url || '').trim())
++  } catch {
++    return false
++  }
++  if (u.protocol !== 'https:' || u.username || u.password) return false
++  const host = u.hostname.toLowerCase()
++  return ZALO_MEDIA_HOST_SUFFIXES.some(
++    (suffix) => host === suffix || host.endsWith('.' + suffix),
++  )
++}
++
++/** Nhãn tiếng Việt của loại đính kèm ('Tệp' cho loại lạ hoặc thiếu). */
++export function attachmentLabel(type) {
++  return TYPE_LABELS[String(type || '').toLowerCase()] || 'Tệp'
++}
++
++/** Tên tệp cuối đường dẫn của URL (bỏ query); '' nếu không có. */
++export function fileNameFromUrl(url) {
++  try {
++    const path = new URL(String(url)).pathname.replace(/\/+$/, '')
++    return decodeURIComponent(path.slice(path.lastIndexOf('/') + 1)).slice(
++      0,
++      80,
++    )
++  } catch {
++    return ''
++  }
++}
++
++/** Tên thân thiện: tên khách gửi nếu không phải URL; nếu không thì tên tệp trong URL; cuối cùng là nhãn loại. Không bao giờ in URL dài. */
++export function friendlyName(att) {
++  const name = String(att?.name || '').trim()
++  if (name && !/^https?:\/\//i.test(name)) return name.slice(0, 80)
++  return fileNameFromUrl(att?.url) || attachmentLabel(att?.type)
++}
++
++/**
++ * Mô hình hiển thị cho từng đính kèm: { index, url, label, text, src }.
++ * `src` khác rỗng khi vẽ được thành ảnh (loại ảnh/GIF/sticker và host được phép); ảnh dùng thumbnail nếu host của nó cũng được
++ * phép, GIF và sticker dùng ảnh gốc (để chuyển động). Không có `src` thì chỉ hiện liên kết có nhãn `text`.
++ */
++export function attachmentViews(list) {
++  return safeAttachments(list).map((att, index) => {
++    const label = attachmentLabel(att.type)
++    const media = INLINE_IMAGE_TYPES.includes(att.type)
++    let src = ''
++    if (media && isInlineImageUrl(att.url)) {
++      src =
++        att.type === 'image' && att.thumb && isInlineImageUrl(att.thumb)
++          ? att.thumb
++          : att.url
++    }
++    return {
++      index,
++      url: att.url,
++      type: att.type || 'file',
++      label,
++      src,
++      text: media ? label : friendlyName(att),
++    }
++  })
++}
++
++const MEDIA_TAG = /\[(?:Ảnh|GIF|Sticker)\]\s*/g
++
++/** Nội dung chữ của bong bóng: bỏ nhãn thừa "[Ảnh]" / "[GIF]" / "[Sticker]" khi đã có ảnh hiển thị; giữ chú thích của khách. */
++export function displayText(msg) {
++  const text = String(msg?.text || '')
++  if (!attachmentViews(msg?.attachments).some((v) => v.src)) return text
++  return text.replace(MEDIA_TAG, '').trim()
 +}
 +
 +/** 'left' cho khách, 'right' cho nhân viên / bot / nhân viên trả lời ngoài hệ thống. */
@@ -776,10 +910,10 @@ index 0000000..15c0fab
 +}
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..ef0d24a
+index 0000000..f469a53
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,404 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
@@ -800,6 +934,11 @@ index 0000000..ef0d24a
 +  sendWithConfirm,
 +  isSafeUrl,
 +  safeAttachments,
++  attachmentViews,
++  attachmentLabel,
++  displayText,
++  friendlyName,
++  isInlineImageUrl,
 +  sourceOf,
 +  timeLabel,
 +} from '@/utils/zaloThread'
@@ -1073,5 +1212,109 @@ index 0000000..ef0d24a
 +    })
 +    expect(card.chips).toEqual([])
 +    expect(card.analyzedAt).toBe('')
++  })
++})
++
++const GIF = 'https://zgif-v2.zdn.vn/abc123.gif'
++const JPG = 'https://photo-stal-27.zdn.vn/no/jpg/ffee/987.jpg'
++const THUMB = 'https://photo-stal-27.zdn.vn/no/jpg/ffee/thumb.jpg'
++
++describe('isInlineImageUrl (danh sách host ảnh)', () => {
++  it('nhận CDN Zalo qua https, kể cả tên miền con', () => {
++    for (const ok of [
++      GIF,
++      JPG,
++      'https://f20-zpc.zdn.vn/a.png',
++      'https://a.zadn.vn/x',
++    ]) {
++      expect(isInlineImageUrl(ok)).toBe(true)
++    }
++  })
++  it('từ chối host lạ, host giả hậu tố, http, scheme nguy hiểm, userinfo', () => {
++    for (const bad of [
++      'https://evil.example/a.png',
++      'https://zdn.vn.evil.example/a.png',
++      'https://evilzdn.vn/a.png',
++      'https://zdn.vn@evil.example/a.png',
++      'http://photo-stal-27.zdn.vn/a.jpg',
++      'javascript:alert(1)',
++      'data:image/png;base64,AAAA',
++      '/files/a.png',
++      '',
++      null,
++    ]) {
++      expect(isInlineImageUrl(bad)).toBe(false)
++    }
++  })
++})
++
++describe('safeAttachments giữ type và thumb', () => {
++  it('giữ type, bỏ thumb không an toàn', () => {
++    const out = safeAttachments([
++      { url: JPG, type: 'IMAGE', thumb: THUMB },
++      { url: JPG, type: 'image', thumb: 'javascript:x' },
++    ])
++    expect(out[0]).toEqual({ url: JPG, name: JPG, type: 'image', thumb: THUMB })
++    expect(out[1].thumb).toBeUndefined()
++  })
++})
++
++describe('attachmentViews / friendlyName / displayText', () => {
++  it('ảnh dùng thumbnail, GIF và sticker dùng ảnh gốc', () => {
++    const v = attachmentViews([
++      { url: JPG, type: 'image', thumb: THUMB },
++      { url: GIF, type: 'gif', thumb: THUMB },
++      { url: JPG, type: 'sticker' },
++    ])
++    expect(v.map((x) => x.src)).toEqual([THUMB, GIF, JPG])
++    expect(v.map((x) => x.label)).toEqual(['Ảnh', 'GIF', 'Sticker'])
++  })
++  it('thumbnail host lạ thì dùng ảnh gốc; ảnh host lạ chỉ là liên kết nhãn', () => {
++    const [a, b] = attachmentViews([
++      { url: JPG, type: 'image', thumb: 'https://evil.example/t.jpg' },
++      { url: 'https://evil.example/a.png', type: 'image' },
++    ])
++    expect(a.src).toBe(JPG)
++    expect(b.src).toBe('')
++    expect(b.text).toBe('Ảnh')
++  })
++  it('tệp: tên thân thiện, không in URL dài; loại lạ có nhãn Tệp', () => {
++    const [f, u] = attachmentViews([
++      {
++        url: 'https://f1-zpc.zdn.vn/x/bao%20gia.pdf?sig=1',
++        name: 'https://f1-zpc.zdn.vn/x/bao%20gia.pdf?sig=1',
++        type: 'file',
++      },
++      { url: 'https://x.example/', type: 'hologram' },
++    ])
++    expect(f.text).toBe('bao gia.pdf')
++    expect(f.src).toBe('')
++    expect(u.text).toBe('Tệp')
++    expect(
++      friendlyName({ name: 'Báo giá.pdf', url: 'https://x.example/a' }),
++    ).toBe('Báo giá.pdf')
++    expect(attachmentLabel('business_card')).toBe('Danh thiếp')
++  })
++  it('loại ảnh với scheme nguy hiểm bị loại hẳn', () => {
++    expect(
++      attachmentViews([{ url: 'javascript:alert(1)', type: 'image' }]),
++    ).toEqual([])
++  })
++  it('bỏ nhãn thừa khi đã có ảnh, giữ chú thích; không bỏ khi chưa có ảnh', () => {
++    const withImg = {
++      text: '[Ảnh] xem giúp em',
++      attachments: [{ url: JPG, type: 'image' }],
++    }
++    expect(displayText(withImg)).toBe('xem giúp em')
++    expect(
++      displayText({ text: '[Ảnh]', attachments: [{ url: GIF, type: 'gif' }] }),
++    ).toBe('')
++    expect(
++      displayText({
++        text: '[Ảnh]',
++        attachments: [{ url: 'https://evil.example/a.png', type: 'image' }],
++      }),
++    ).toBe('[Ảnh]')
++    expect(displayText({ text: 'xin chào' })).toBe('xin chào')
 +  })
 +})

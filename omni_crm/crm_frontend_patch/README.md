@@ -70,3 +70,4 @@ Lưu ý: `build.sh` chỉ phục hồi khi build báo lỗi (không bắt Ctrl+C
 3. Lead chỉ có email: khung soạn bị khóa kèm lý do.
 4. Tích `zalo_tab_disabled`, tải lại: tab biến mất.
 5. Bấm **Mở chat Zalo OA**: cửa sổ nhỏ mở trang oa.zalo.me/chat; khi thiếu uid/oaid: hướng dẫn tìm tay + **Sao chép** chép được mã Zalo; mở cửa sổ đúng hội thoại của khách (kiểm địa chỉ có `uid=` và `oaid=`).
+6. (V3-05) Tin khách gửi ảnh/GIF/sticker từ CDN Zalo (host *.zdn.vn...) hiện thành ảnh thu nhỏ trong bong bóng, bấm mở ảnh gốc tab mới; tệp hiện tên tệp; host lạ hoặc ảnh lỗi tải chỉ hiện liên kết có nhãn. Làm bằng mắt, chưa ai làm.
