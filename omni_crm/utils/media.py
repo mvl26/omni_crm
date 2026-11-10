@@ -16,9 +16,32 @@ LOCAL_PREFIXES = ("/files/", "/private/files/")
 SAFE_PREFIXES = ("http://", "https://", *LOCAL_PREFIXES)
 
 
+def _has_bad_chars(url: str, *, allow_space: bool = False) -> bool:
+	"""URL có ký tự điều khiển, khoảng trắng (trừ khi cho phép) hoặc `\\` (trình duyệt coi `\\` như `/`, parser Python thì không)."""
+	return any(
+		c == "\\" or ord(c) < 32 or ord(c) == 127 or (c.isspace() and not (allow_space and c == " "))
+		for c in url
+	)
+
+
+def _bad_local_path(url: str) -> bool:
+	"""Đường dẫn /files có đoạn `..` (kể cả mã hóa %2e) hoặc `//`."""
+	path = url.split("?", 1)[0].split("#", 1)[0].lower()
+	return any(seg in ("..", "%2e%2e", ".%2e", "%2e.") for seg in path.split("/")) or "//" in path
+
+
 def is_safe_link(url: str) -> bool:
-	"""URL có thể làm liên kết bấm được: http(s) hoặc /files, /private/files (không javascript:, data:, //host)."""
-	return isinstance(url, str) and url.startswith(SAFE_PREFIXES) and not any(c in url for c in "\r\n\t\0")
+	"""URL có thể làm liên kết bấm được: http(s) hoặc /files, /private/files (không javascript:, data:, //host, `\\`, `..`).
+
+	http(s) không được có khoảng trắng; đường /files cho phép dấu cách thường (tên tệp Frappe có thể chứa), còn ảnh nội tuyến
+	(`is_inline_image_url`) luôn đòi nghiêm ngặt hơn.
+	"""
+	if not isinstance(url, str) or not url.startswith(SAFE_PREFIXES):
+		return False
+	local = url.startswith(LOCAL_PREFIXES)
+	if _has_bad_chars(url, allow_space=local):
+		return False
+	return not (local and _bad_local_path(url))
 
 
 def url_host(url: str) -> str:
@@ -35,12 +58,24 @@ def host_allowed(host: str) -> bool:
 
 
 def is_inline_image_url(url: str) -> bool:
-	"""Được dùng làm src của ảnh nội tuyến: /files nội bộ hoặc https tới CDN Zalo cho phép."""
-	if not is_safe_link(url):
+	"""Được dùng làm src của ảnh nội tuyến: /files nội bộ hoặc https tới CDN Zalo cho phép.
+
+	Nghiêm ngặt: không khoảng trắng/ký tự điều khiển/`\\`, không userinfo, không cổng khác 443, không `..` trong /files.
+	Máy khách (`zaloThread.js::isInlineImageUrl`) áp đúng các luật này.
+	"""
+	if not is_safe_link(url) or _has_bad_chars(url):
 		return False
 	if url.startswith(LOCAL_PREFIXES):
 		return True
-	return url.startswith("https://") and host_allowed(url_host(url))
+	if not url.startswith("https://"):
+		return False
+	try:
+		parsed = urlparse(url)
+		if parsed.username is not None or parsed.password is not None or parsed.port not in (None, 443):
+			return False
+	except ValueError:
+		return False
+	return host_allowed(url_host(url))
 
 
 def filename_from_url(url: str) -> str:
