@@ -269,3 +269,57 @@ class TestIntakeFilesIntegration(FrappeTestCase):
 		self.assertTrue((self.root / "chua_nap" / "2026/11/03/messenger/m.json").exists())
 		self.assertTrue((self.dir / "web_form" / "f.json").exists())  # nạp lại được khi kênh sẵn sàng
 		self.assertEqual(runner.run()["moi"], 1)
+
+
+class TestEnsureEmailChannel(FrappeTestCase):
+	"""setup.ensure_email_channel: mặc định chỉ in kế hoạch; apply=1 tạo vỏ + kênh; chạy lại không nhân đôi."""
+
+	box = f"{PREFIX.lower()}.vo@example.org"
+
+	def setUp(self):
+		self._clean()
+		self.addCleanup(self._clean)
+
+	def _clean(self):
+		frappe.db.rollback()
+		frappe.db.delete("Omni Channel", {"channel_name": f"email-{PREFIX.lower()}.vo"})
+		frappe.db.delete("Email Account", {"email_id": self.box})
+		frappe.db.commit()
+
+	def test_ke_hoach_roi_ap_dung_roi_chay_lai(self):
+		from omni_crm.intake_files import setup
+
+		plan = setup.ensure_email_channel(self.box)
+		self.assertFalse(plan["apply"])
+		self.assertFalse(frappe.db.exists("Email Account", {"email_id": self.box}))
+		setup.ensure_email_channel(self.box, apply=1)
+		acc = frappe.get_doc("Email Account", {"email_id": self.box})
+		self.assertEqual(
+			(acc.enable_incoming, acc.enable_outgoing, acc.create_lead_from_incoming_email), (0, 0, 0)
+		)
+		channel = frappe.get_doc("Omni Channel", f"email-{PREFIX.lower()}.vo")
+		self.assertEqual(
+			(channel.channel_type, channel.email_account, channel.enabled), ("Email", acc.name, 1)
+		)
+		again = setup.ensure_email_channel(self.box, apply=1)
+		self.assertEqual(again["steps"], ["đã đủ, không có gì phải làm"])
+
+	def test_crm_tu_keo_thi_khong_tao_gi(self):
+		from omni_crm.intake_files import setup
+
+		acc = frappe.get_doc(
+			{
+				"doctype": "Email Account",
+				"email_account_name": self.box,
+				"email_id": self.box,
+				"enable_incoming": 0,
+				"password": "x",
+			}
+		)
+		acc.flags.ignore_validate = acc.flags.ignore_mandatory = True
+		acc.insert(ignore_permissions=True)
+		frappe.db.set_value("Email Account", acc.name, "enable_incoming", 1)
+		frappe.db.commit()
+		plan = setup.ensure_email_channel(self.box, apply=1)
+		self.assertFalse(frappe.db.exists("Omni Channel", f"email-{PREFIX.lower()}.vo"))
+		self.assertIn("CRM đã tự kéo", plan["steps"][0])
