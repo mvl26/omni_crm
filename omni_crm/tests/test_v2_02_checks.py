@@ -80,6 +80,7 @@ EXPECTED_WHITELISTED = {
 		"get_conversation",
 		"send",
 		"request_phone",  # V3-07: thẻ xin số cho 1 Lead/lần, chỉ trong 48 giờ, chưa có số
+		"send_attachment",  # V3-09: 1 ảnh/tệp của chính Lead tới 1 khách/lần, qua mọi guard của send_zalo
 	},  # V3-01: tab Zalo, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {

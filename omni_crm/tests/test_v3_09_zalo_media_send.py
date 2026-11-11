@@ -263,7 +263,9 @@ class TestEndToEnd(MediaCase):
 		msgs = zalo_tab.get_conversation("CRM Lead", self.lead1)["messages"]
 		frappe.set_user("Administrator")
 		mine = next(m for m in msgs if m["name"] == res["outbound"])
-		self.assertEqual(mine["attachments"], [{"url": url, "name": "mau-a.png", "type": "image", "inline": True}])
+		self.assertEqual(
+			mine["attachments"], [{"url": url, "name": "mau-a.png", "type": "image", "inline": True}]
+		)
 
 	def test_large_image_compressed_before_upload(self):
 		url = self.attach("lon.png", png_bytes(1400, 1000, noise=True))
@@ -272,7 +274,9 @@ class TestEndToEnd(MediaCase):
 			status, http = self.deliver(res["outbound"], [UPLOAD_IMG, SENT])
 		self.assertEqual(status, "Sent")
 		name, content = http.call_args_list[0].kwargs["files"]["file"]
-		self.assertTrue(name.startswith("lon") and name.endswith(".jpg"), name)  # Frappe có thể thêm hậu tố chống trùng
+		self.assertTrue(
+			name.startswith("lon") and name.endswith(".jpg"), name
+		)  # Frappe có thể thêm hậu tố chống trùng
 		self.assertLessEqual(len(content), media_out.MB)
 
 	def test_file_with_text_queues_text_first_then_file(self):

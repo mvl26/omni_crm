@@ -71,3 +71,4 @@ Lưu ý: `build.sh` chỉ phục hồi khi build báo lỗi (không bắt Ctrl+C
 4. Tích `zalo_tab_disabled`, tải lại: tab biến mất.
 5. Bấm **Mở chat Zalo OA**: cửa sổ nhỏ mở trang oa.zalo.me/chat; khi thiếu uid/oaid: hướng dẫn tìm tay + **Sao chép** chép được mã Zalo; mở cửa sổ đúng hội thoại của khách (kiểm địa chỉ có `uid=` và `oaid=`).
 6. (V3-05) Tin khách gửi ảnh/GIF/sticker từ CDN Zalo (host *.zdn.vn...) hiện thành ảnh thu nhỏ trong bong bóng, bấm mở ảnh gốc tab mới; tệp hiện tên tệp; host lạ hoặc ảnh lỗi tải chỉ hiện liên kết có nhãn. Làm bằng mắt, chưa ai làm.
+7. (V3-09) Khách đã liên kết Zalo, đang trong 48 giờ: bấm 📎, chọn ảnh JPG/PNG/GIF hoặc tệp PDF/DOC/DOCX/CSV, gõ chú thích (không bắt buộc), Gửi qua Zalo. Bong bóng bên phải hiện ảnh thu nhỏ hoặc tên tệp; tệp xuất hiện trong tab Đính kèm của Lead. Tệp sai loại hoặc quá 5 MB bị từ chối ngay khi chọn. Công tắc `zalo_media_send_enabled` tắt: nút 📎 chỉ hiện với tài khoản Zalo thử nghiệm.

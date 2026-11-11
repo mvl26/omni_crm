@@ -49,8 +49,16 @@ def resolve_lead(doctype: str, name: str, ptype: str = "read") -> str | None:
 
 
 def _http_only(attachments: list[dict]) -> list[dict]:
-	"""Đính kèm có URL hiện được: http(s), hoặc /files, /private/files của CRM (V3-09: ảnh/tệp sale gửi kèm)."""
-	return [a for a in attachments if media.is_safe_link(str(a.get("url") or ""))]
+	return [a for a in attachments if str(a.get("url") or "").startswith(("http://", "https://"))]
+
+
+def _visible_attachments(item: dict) -> list[dict]:
+	"""Đính kèm hiện trên tab Zalo: tin từ Zalo chỉ http(s) (V3-01); tin ra của hệ thống (V3-09, ảnh/tệp sale gửi kèm,
+	dòng Omni Outbound Message) được thêm đường dẫn /files, /private/files của CRM."""
+	attachments = item.get("attachments") or []
+	if item.get("doctype") == inbox.OUTBOUND:
+		return [a for a in attachments if media.is_safe_link(str(a.get("url") or ""))]
+	return _http_only(attachments)
 
 
 def _message(item: dict) -> dict:
@@ -60,7 +68,7 @@ def _message(item: dict) -> dict:
 		"direction": item["direction"],
 		"sender": item.get("sender") or "",
 		"text": item.get("text") or "",
-		"attachments": _http_only(item.get("attachments") or []),
+		"attachments": _visible_attachments(item),
 		"at": item["at"],
 		"status": item.get("status"),
 		"queued": bool(item.get("queued")),

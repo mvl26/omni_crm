@@ -421,10 +421,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..372d1d1
+index 0000000..2e438b0
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,474 @@
+@@ -0,0 +1,627 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot: chữ xuống dòng theo nội dung, không cắt; quá dài thì cuộn trong thẻ -->
@@ -649,21 +649,63 @@ index 0000000..372d1d1
 +          __('Gửi thẻ để khách bấm chia sẻ số điện thoại qua Zalo')
 +        }}</span>
 +      </div>
++      <!-- V3-09: ảnh / tệp đã chọn, chờ gửi -->
++      <div
++        v-if="pickedFile"
++        class="mb-2 flex items-center gap-2 rounded bg-surface-gray-2 px-2 py-1 text-sm text-ink-gray-8"
++      >
++        <span class="truncate">📎 {{ pickedFile.name }}</span>
++        <span class="shrink-0 text-xs text-ink-gray-5">{{ pickedHint }}</span>
++        <Button
++          size="sm"
++          variant="ghost"
++          :label="__('Bỏ')"
++          :disabled="sending"
++          @click="clearFile"
++        />
++      </div>
 +      <div class="flex items-end gap-2">
++        <input
++          ref="fileInput"
++          type="file"
++          class="hidden"
++          :accept="compose.media_accept || ''"
++          @change="onPickFile"
++        />
++        <Button
++          v-if="compose.can_send_media"
++          :title="__('Gửi ảnh hoặc tệp (JPG, PNG, GIF, PDF, DOC, DOCX, CSV)')"
++          :disabled="sending"
++          @click="fileInput?.click()"
++        >
++          📎
++        </Button>
 +        <Textarea
 +          v-model="text"
 +          type="textarea"
 +          class="min-h-8 w-full"
 +          :rows="3"
 +          :disabled="!compose.can_send"
-+          :placeholder="__('Nhập tin trả lời Zalo')"
++          :placeholder="
++            pickedFile
++              ? __('Chú thích (không bắt buộc)')
++              : __('Nhập tin trả lời Zalo')
++          "
 +          @keydown.enter.exact.prevent="submit()"
 +        />
 +        <Button
 +          variant="solid"
 +          :label="__('Gửi qua Zalo')"
 +          :loading="sending"
-+          :disabled="!canSubmit(compose, text, sending, compose.max_chars)"
++          :disabled="
++            !canSubmitWithFile(
++              compose,
++              text,
++              pickedFile,
++              sending,
++              compose.max_chars,
++            )
++          "
 +          @click="submit()"
 +        />
 +      </div>
@@ -696,6 +738,8 @@ index 0000000..372d1d1
 +  botCard,
 +  bubbleSide,
 +  canSubmit,
++  canSubmitWithFile,
++  checkMediaFile,
 +  dayLabel,
 +  groupByDay,
 +  chatPanelMode,
@@ -720,6 +764,9 @@ index 0000000..372d1d1
 +const text = ref('')
 +const sending = ref(false)
 +const requestingPhone = ref(false)
++const fileInput = ref(null)
++const pickedFile = ref(null) // V3-09: ảnh/tệp sale chọn, chưa gửi
++let uploaded = null // { file, url }: tệp đã tải lên CRM, dùng lại nếu sale bấm gửi lần nữa (không tải trùng)
 +const scroller = ref(null)
 +const loadFailed = ref(false)
 +const brokenImages = reactive({}) // ảnh tải lỗi: rơi về liên kết có nhãn
@@ -806,7 +853,113 @@ index 0000000..372d1d1
 +  conversation.reload()
 +}
 +
++const pickedHint = computed(() => {
++  const kind = pickedFile.value ? checkMediaFile(pickedFile.value).kind : ''
++  if (kind === 'file')
++    return __('Tệp: lời nhắn (nếu có) gửi thành tin riêng trước')
++  if (kind === 'image') return __('Ảnh trên 1 MB sẽ được nén trước khi gửi')
++  return ''
++})
++
++function onPickFile(event) {
++  const file = event.target.files?.[0]
++  event.target.value = '' // chọn lại cùng tệp vẫn kích hoạt change
++  if (!file) return
++  const check = checkMediaFile(file)
++  if (check.error) {
++    toast.error(__(check.error))
++    return
++  }
++  pickedFile.value = file
++}
++
++function clearFile() {
++  pickedFile.value = null
++}
++
++// Tải tệp lên CRM (gắn vào Lead/Deal đang mở, riêng tư), trả file_url. Máy chủ kiểm lại tệp thuộc Lead trước khi gửi Zalo.
++async function uploadToCrm(file) {
++  if (uploaded?.file === file) return uploaded.url
++  const form = new FormData()
++  form.append('file', file, file.name)
++  form.append('doctype', props.doctype)
++  form.append('docname', props.docname)
++  form.append('is_private', '1')
++  const resp = await fetch('/api/method/upload_file', {
++    method: 'POST',
++    headers: {
++      Accept: 'application/json',
++      'X-Frappe-CSRF-Token': window.csrf_token,
++    },
++    body: form,
++  })
++  const data = await resp.json().catch(() => ({}))
++  const url = data?.message?.file_url
++  if (!resp.ok || !url) {
++    let msg = ''
++    try {
++      msg = JSON.parse(
++        JSON.parse(data._server_messages || '[]')[0] || '{}',
++      ).message
++    } catch (e) {
++      msg = ''
++    }
++    throw new Error(msg || __('Không tải được tệp lên CRM'))
++  }
++  uploaded = { file, url }
++  return url
++}
++
++async function submitFile() {
++  const file = pickedFile.value
++  sending.value = true
++  try {
++    const fileUrl = await uploadToCrm(file)
++    const res = await sendWithConfirm(
++      (value, confirmPaid) =>
++        call('omni_crm.api.zalo_tab.send_attachment', {
++          doctype: props.doctype,
++          name: props.docname,
++          file_url: fileUrl,
++          text: value,
++          confirm_paid: confirmPaid,
++        }),
++      (warning) => window.confirm(`${warning}\n\n${__('Bạn vẫn muốn gửi?')}`),
++      text.value,
++    )
++    if (res?.status === 'Blocked') {
++      toast.error(res.reason || __('Tin bị chặn, chưa gửi'))
++    } else if (res) {
++      text.value = ''
++      pickedFile.value = null
++      uploaded = null
++    }
++  } catch (error) {
++    toast.error(
++      error?.messages?.[0] ||
++        error?.message ||
++        __('Không gửi được ảnh/tệp qua Zalo'),
++    )
++  } finally {
++    sending.value = false
++    conversation.reload()
++  }
++}
++
 +async function submit() {
++  if (pickedFile.value) {
++    if (
++      canSubmitWithFile(
++        compose.value,
++        text.value,
++        pickedFile.value,
++        sending.value,
++        compose.value.max_chars,
++      )
++    )
++      await submitFile()
++    return
++  }
 +  if (
 +    !canSubmit(
 +      compose.value,
@@ -1253,10 +1406,10 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..c0b99df
+index 0000000..a807b04
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,389 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -1586,6 +1739,66 @@ index 0000000..c0b99df
 +    analyzedAt: parseAt(at) ? `${timeLabel(at)} ${dayLabel(dayKey(at))}` : '',
 +  }
 +}
++
++// --- V3-09: sale gửi ảnh / tệp qua Zalo ---
++
++const MB = 1024 * 1024
++/** Loại Zalo theo đuôi tệp; giới hạn trùng `omni_crm.channels.zalo.media_out` (ảnh JPG/PNG > 1 MB máy chủ tự nén). */
++export const MEDIA_RULES = {
++  '.jpg': { kind: 'image', max: 15 * MB },
++  '.jpeg': { kind: 'image', max: 15 * MB },
++  '.png': { kind: 'image', max: 15 * MB },
++  '.gif': { kind: 'gif', max: 5 * MB },
++  '.pdf': { kind: 'file', max: 5 * MB },
++  '.doc': { kind: 'file', max: 5 * MB },
++  '.docx': { kind: 'file', max: 5 * MB },
++  '.csv': { kind: 'file', max: 5 * MB },
++}
++
++/** Đuôi tệp chữ thường ('.pdf'); rỗng nếu không có. */
++export function fileExtension(name) {
++  const value = String(name || '')
++  const dot = value.lastIndexOf('.')
++  return dot > 0 ? value.slice(dot).toLowerCase() : ''
++}
++
++/** Kiểm tệp sale chọn: trả { kind } nếu gửi được, hoặc { error } (chuỗi tiếng Việt chưa dịch). */
++export function checkMediaFile(file) {
++  if (!file) return { error: 'Chưa chọn tệp' }
++  const rule = MEDIA_RULES[fileExtension(file.name)]
++  if (!rule)
++    return { error: 'Zalo chỉ nhận ảnh JPG/PNG/GIF hoặc tệp PDF/DOC/DOCX/CSV' }
++  if (!file.size) return { error: 'Tệp rỗng' }
++  if (file.size > rule.max) {
++    const limit = Math.round(rule.max / MB)
++    return {
++      error:
++        rule.kind === 'image'
++          ? `Ảnh quá lớn (tối đa ${limit} MB)`
++          : `Tệp quá lớn: Zalo nhận tối đa ${limit} MB`,
++    }
++  }
++  return { kind: rule.kind }
++}
++
++/** Nút Gửi bật khi: có chữ (trong giới hạn) HOẶC có tệp hợp lệ và khung soạn cho gửi ảnh/tệp. */
++export function canSubmitWithFile(
++  compose,
++  text,
++  file,
++  sending,
++  maxChars = 6000,
++) {
++  if (!file) return canSubmit(compose, text, sending, maxChars)
++  const value = String(text || '').trim()
++  return Boolean(
++    compose?.can_send &&
++    compose?.can_send_media &&
++    !sending &&
++    !checkMediaFile(file).error &&
++    value.length <= Math.min(maxChars, 2000),
++  )
++}
 diff --git a/frontend/tests/unit/assistantChat.test.js b/frontend/tests/unit/assistantChat.test.js
 new file mode 100644
 index 0000000..0f81817
@@ -1695,10 +1908,10 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..ac6df59
+index 0000000..a453361
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,503 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
@@ -1712,6 +1925,9 @@ index 0000000..ac6df59
 +  openOaChat,
 +  shortZaloId,
 +  canSubmit,
++  canSubmitWithFile,
++  checkMediaFile,
++  fileExtension,
 +  dayKey,
 +  dayLabel,
 +  groupByDay,
@@ -2149,5 +2365,53 @@ index 0000000..ac6df59
 +    expect(isInlineImageUrl('https://photo-stal-27.zdn.vn:443/a.jpg')).toBe(
 +      true,
 +    )
++  })
++})
++
++describe('V3-09: gửi ảnh / tệp', () => {
++  const f = (name, size) => ({ name, size })
++  const open = { can_send: true, can_send_media: true }
++
++  it('nhận đúng loại Zalo cho phép, từ chối loại khác', () => {
++    expect(checkMediaFile(f('Bao gia.PDF', 1000))).toEqual({ kind: 'file' })
++    expect(checkMediaFile(f('a.jpeg', 1000))).toEqual({ kind: 'image' })
++    expect(checkMediaFile(f('b.gif', 1000))).toEqual({ kind: 'gif' })
++    expect(checkMediaFile(f('c.docx', 1000))).toEqual({ kind: 'file' })
++    expect(checkMediaFile(f('d.xlsx', 1000)).error).toMatch(/PDF\/DOC/)
++    expect(checkMediaFile(f('khongduoi', 1000)).error).toBeTruthy()
++    expect(checkMediaFile(f('.png', 1000)).error).toBeTruthy()
++    expect(checkMediaFile(null).error).toBeTruthy()
++    expect(checkMediaFile(f('rong.pdf', 0)).error).toBe('Tệp rỗng')
++  })
++
++  it('giới hạn dung lượng: tệp/GIF 5 MB, ảnh 15 MB (máy chủ nén xuống 1 MB)', () => {
++    const MB = 1024 * 1024
++    expect(checkMediaFile(f('a.pdf', 5 * MB)).kind).toBe('file')
++    expect(checkMediaFile(f('a.pdf', 5 * MB + 1)).error).toMatch(/5 MB/)
++    expect(checkMediaFile(f('a.gif', 5 * MB + 1)).error).toMatch(/5 MB/)
++    expect(checkMediaFile(f('a.png', 3 * MB)).kind).toBe('image')
++    expect(checkMediaFile(f('a.png', 15 * MB + 1)).error).toMatch(/15 MB/)
++  })
++
++  it('nút Gửi: có tệp thì không cần chữ, nhưng cần quyền gửi ảnh/tệp', () => {
++    expect(canSubmitWithFile(open, '', f('a.pdf', 10), false)).toBe(true)
++    expect(
++      canSubmitWithFile(open, 'kèm chú thích', f('a.png', 10), false),
++    ).toBe(true)
++    expect(
++      canSubmitWithFile({ can_send: true }, '', f('a.pdf', 10), false),
++    ).toBe(false)
++    expect(canSubmitWithFile(open, '', f('a.xlsx', 10), false)).toBe(false)
++    expect(canSubmitWithFile(open, '', f('a.pdf', 10), true)).toBe(false)
++    expect(
++      canSubmitWithFile(open, 'x'.repeat(2001), f('a.png', 10), false),
++    ).toBe(false)
++    expect(canSubmitWithFile(open, '', null, false)).toBe(false) // không tệp: như canSubmit cũ
++    expect(canSubmitWithFile(open, 'chào', null, false)).toBe(true)
++  })
++
++  it('đuôi tệp', () => {
++    expect(fileExtension('A.B.DOCX')).toBe('.docx')
++    expect(fileExtension('')).toBe('')
 +  })
 +})
