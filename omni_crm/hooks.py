@@ -206,6 +206,7 @@ scheduler_events = {
 # --------
 doc_events = {
 	"Communication": {
+		"before_insert": "omni_crm.crm_bridge.outgoing_email.on_communication_before_insert",  # thư CRM: nối luồng, đúng hộp thư
 		"after_insert": [
 			"omni_crm.channels.email.adapter.on_communication_insert",  # D1-07
 			"omni_crm.crm_bridge.first_response.on_communication_insert",  # V2-01: thư gửi đi = phản hồi đầu tiên

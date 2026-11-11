@@ -43,7 +43,8 @@ Thư đã là một `Communication`. Khi worker gắn được Lead: cập nhậ
 
 ## 5. Luồng ra
 
-- **Sale trả lời**: dùng trình soạn thư có sẵn của CRM trên Lead. `omni_crm` không can thiệp; chỉ ghi nhận thư đi (Communication `Sent`) để **so với nháp của bot ở chế độ ngầm** (Đợt 2).
+- **Sale trả lời**: dùng trình soạn thư có sẵn của CRM trên Lead. `omni_crm` ghi nhận thư đi (Communication `Sent`) để **so với nháp của bot ở chế độ ngầm** (Đợt 2), và trước khi Frappe dựng thư (ADR 0019, `crm_bridge.outgoing_email`): gắn `in_reply_to` vào thư khách gần nhất có Message-ID (thư đi có `In-Reply-To`, nằm đúng luồng ở hộp thư khách); ô FROM không phải hộp thư gửi được (CRM điền địa chỉ khách khi bấm Trả lời, hoặc email đăng nhập) thì đổi về hộp thư khách đã viết tới. Thư đi ngay sau khi bấm gửi (`crm_bridge.fast_email`, ADR 0018).
+- **Cấu hình Email Account gửi thư cho khách**: tắt *Track Email Status* (ảnh theo dõi trỏ về tên miền CRM là dấu hiệu thư rác), bật *Always use this email address as sender address*.
 - **Bot trả lời** (Đợt 3, chế độ tự động): `Omni Outbound Message` → adapter email gửi qua `frappe.sendmail` với `reference_doctype/name` là Lead, `in_reply_to` là thư khách gần nhất, cùng Email Account. Kiểm tra lại `sandbox_mode` trước khi gửi.
 
 ## 6. Test bắt buộc
