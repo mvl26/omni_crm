@@ -61,6 +61,8 @@ Không đưa `auto-imports.d.ts`, `components.d.ts` hay thư mục build vào pa
 
 Tab có nút **Mở chat Zalo OA** (https://oa.zalo.me/chat, cửa sổ mới 480 px) (đủ uid+oaid thì chỉ nút và dòng "Mở chat với <tên>"; thiếu thì hiện hướng dẫn tìm tay, mã Zalo + **Sao chép**). Mở đúng hội thoại bằng `?uid=<mã Zalo>&oaid=<mã OA>` (oaid chữ thường; thiếu thông tin thì mở trang chung). Nhúng iframe KHÔNG khả thi (Chrome chặn, thử 2026-11-04). Tắt cả tab bằng `zalo_tab_disabled`.
 
+Lưu ý: `build.sh` chỉ phục hồi khi build báo lỗi (không bắt Ctrl+C/kill) và thư mục `.omni_zalo_backup/` nằm trong `apps/crm`, chưa được crm ignore: xóa nó khi giao diện mới đã ổn.
+
 ## Kiểm sau khi build (làm bằng mắt, chưa ai làm trên site thật)
 
 1. Mở một Lead có tin Zalo: thấy tab **Zalo** cuối dãy tab; hội thoại hiện bong bóng, khách bên trái.
@@ -68,3 +70,4 @@ Tab có nút **Mở chat Zalo OA** (https://oa.zalo.me/chat, cửa sổ mới 48
 3. Lead chỉ có email: khung soạn bị khóa kèm lý do.
 4. Tích `zalo_tab_disabled`, tải lại: tab biến mất.
 5. Bấm **Mở chat Zalo OA**: cửa sổ nhỏ mở trang oa.zalo.me/chat; khi thiếu uid/oaid: hướng dẫn tìm tay + **Sao chép** chép được mã Zalo; mở cửa sổ đúng hội thoại của khách (kiểm địa chỉ có `uid=` và `oaid=`).
+6. (V3-05) Tin khách gửi ảnh/GIF/sticker từ CDN Zalo (host *.zdn.vn...) hiện thành ảnh thu nhỏ trong bong bóng, bấm mở ảnh gốc tab mới; tệp hiện tên tệp; host lạ hoặc ảnh lỗi tải chỉ hiện liên kết có nhãn. Làm bằng mắt, chưa ai làm.

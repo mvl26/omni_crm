@@ -19,6 +19,7 @@ from omni_crm.crm_bridge.timeline import TIMELINE_EVENTS, parse_attachments
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline import outbound as outbound_pipeline
 from omni_crm.pipeline.retry import redact
+from omni_crm.utils import media
 
 LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
@@ -270,11 +271,29 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 
 
 def _safe_attachments(raw: Any) -> list[dict]:
+	"""Đính kèm đã lọc URL: {url, name} (+ type, thumb, inline nếu có). `inline` = được vẽ thành ảnh (ADR 0020)."""
 	out = []
 	for a in parse_attachments(raw):
 		url = str(a.get("url") or "")
-		if url.startswith(SAFE_FILE_PREFIXES):
-			out.append({"url": url, "name": str(a.get("name") or url.rsplit("/", 1)[-1])})
+		if not media.is_safe_link(url):
+			continue
+		kind = str(a.get("type") or "").strip().lower()[:30]
+		name = str(a.get("name") or "")
+		if not name or name == url:
+			name = (
+				""
+				if kind in media.INLINE_IMAGE_TYPES
+				else media.filename_from_url(url) or url.rsplit("/", 1)[-1]
+			)
+		item = {"url": url, "name": name}
+		if kind:
+			item["type"] = kind
+		thumb = str(a.get("thumb") or "")
+		if thumb and media.is_inline_image_url(thumb):
+			item["thumb"] = thumb
+		if kind in media.INLINE_IMAGE_TYPES and media.is_inline_image_url(url):
+			item["inline"] = True
+		out.append(item)
 	return out
 
 
@@ -369,6 +388,9 @@ def thread_data(lead: str) -> dict:
 		if r.name in {o.channel for o in outbound}
 	}
 	items: list[dict] = []
+	user_names: dict[
+		str, str
+	] = {}  # tên người dùng theo lượt gọi: bỏ truy vấn User lặp lại cho mỗi tin/cuộc gọi
 	for m in inbound:
 		echo = m.event_type == "oa_echo"
 		items.append(
@@ -390,14 +412,14 @@ def thread_data(lead: str) -> dict:
 			}
 		)
 	for c in call_rows:
-		items.append(_call_item(c))
+		items.append(_call_item(c, user_names))
 	# Tin Sale trả lời ngoài hệ thống (oa_echo) có cả Omni Outbound Message cùng mã tin: chỉ hiện bản echo.
 	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
 	for o in outbound:
 		if o.external_message_id and o.external_message_id in echo_ids:
 			continue
 		if o.sent_by:
-			sender = frappe.db.get_value("User", o.sent_by, "full_name") or o.sent_by
+			sender = _user_full_name(o.sent_by, user_names)
 		else:
 			sender = _("Bot") if o.source == "Bot" else _("Hệ thống")
 		items.append(
@@ -472,7 +494,19 @@ def _duration_text(seconds: int | None) -> str:
 	return _("{0} phút {1} giây").format(minutes, secs) if secs else _("{0} phút").format(minutes)
 
 
-def _call_item(c: Any) -> dict:
+def _user_full_name(user: str | None, cache: dict[str, str] | None = None) -> str | None:
+	"""Tên đầy đủ của User (hoặc chính mã nếu trống); `cache` theo lượt gọi để không truy vấn lại cho cùng người."""
+	if not user:
+		return None
+	if cache is not None and user in cache:
+		return cache[user]
+	name = frappe.db.get_value("User", user, "full_name") or user
+	if cache is not None:
+		cache[user] = name
+	return name
+
+
+def _call_item(c: Any, names: dict[str, str] | None = None) -> dict:
 	"""Dòng cuộc gọi trong hội thoại: chiều, trạng thái, thời lượng, người nghe máy (không kèm số, ghi âm, sự kiện gốc)."""
 	inbound = c.direction != "Outbound"
 	labels = {
@@ -485,7 +519,7 @@ def _call_item(c: Any) -> dict:
 	parts = [_("Cuộc gọi đến") if inbound else _("Cuộc gọi đi"), labels.get(c.status, c.status)]
 	if c.status == "Answered" and c.duration_seconds is not None:
 		parts.append(_duration_text(c.duration_seconds))
-	agent = frappe.db.get_value("User", c.agent, "full_name") or c.agent if c.agent else None
+	agent = _user_full_name(c.agent, names)
 	if agent:
 		parts.append((_("Nghe máy: {0}") if inbound else _("Gọi bởi: {0}")).format(agent))
 	return {

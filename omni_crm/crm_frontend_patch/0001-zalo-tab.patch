@@ -421,10 +421,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..f9950d2
+index 0000000..372d1d1
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
-@@ -0,0 +1,433 @@
+@@ -0,0 +1,474 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot: chữ xuống dòng theo nội dung, không cắt; quá dài thì cuộn trong thẻ -->
@@ -509,20 +509,41 @@ index 0000000..f9950d2
 +              <div class="mb-0.5 text-xs text-ink-gray-5">
 +                {{ senderLabel(msg) }}
 +              </div>
-+              <div v-if="msg.text" class="whitespace-pre-wrap break-words">
-+                {{ msg.text }}
++              <div
++                v-if="displayText(msg)"
++                class="whitespace-pre-wrap break-words"
++              >
++                {{ displayText(msg) }}
 +              </div>
 +              <div
-+                v-for="att in safeAttachments(msg.attachments)"
-+                :key="att.url"
++                v-for="att in attachmentViews(msg.attachments)"
++                :key="att.index"
 +                class="mt-1 text-sm"
 +              >
 +                <a
++                  v-if="att.src && !brokenImages[`${msg.name}:${att.index}`]"
++                  :href="att.url"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  class="block"
++                  :title="__('Mở ảnh gốc')"
++                >
++                  <img
++                    :src="att.src"
++                    :alt="__(att.label)"
++                    loading="lazy"
++                    referrerpolicy="no-referrer"
++                    class="max-h-60 max-w-[240px] rounded object-contain"
++                    @error="brokenImages[`${msg.name}:${att.index}`] = true"
++                  />
++                </a>
++                <a
++                  v-else
 +                  :href="att.url"
 +                  target="_blank"
 +                  rel="noopener noreferrer"
 +                  class="text-ink-blue-3 underline"
-+                  >{{ att.name }}</a
++                  >{{ att.src ? __(att.label) : att.text }}</a
 +                >
 +              </div>
 +              <div
@@ -636,14 +657,14 @@ index 0000000..f9950d2
 +          :rows="3"
 +          :disabled="!compose.can_send"
 +          :placeholder="__('Nhập tin trả lời Zalo')"
-+          @keydown.enter.exact.prevent="submit(0)"
++          @keydown.enter.exact.prevent="submit()"
 +        />
 +        <Button
 +          variant="solid"
 +          :label="__('Gửi qua Zalo')"
 +          :loading="sending"
 +          :disabled="!canSubmit(compose, text, sending, compose.max_chars)"
-+          @click="submit(0)"
++          @click="submit()"
 +        />
 +      </div>
 +    </div>
@@ -651,7 +672,15 @@ index 0000000..f9950d2
 +</template>
 +
 +<script setup>
-+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
++import {
++  computed,
++  nextTick,
++  onBeforeUnmount,
++  onMounted,
++  reactive,
++  ref,
++  watch,
++} from 'vue'
 +import {
 +  Button,
 +  LoadingIndicator,
@@ -672,9 +701,11 @@ index 0000000..f9950d2
 +  chatPanelMode,
 +  copyToClipboard,
 +  isRelevantUpdate,
++  sendWithConfirm,
 +  openOaChat,
 +  shortZaloId,
-+  safeAttachments,
++  attachmentViews,
++  displayText,
 +  sourceOf,
 +  timeLabel,
 +} from '@/utils/zaloThread'
@@ -691,6 +722,7 @@ index 0000000..f9950d2
 +const requestingPhone = ref(false)
 +const scroller = ref(null)
 +const loadFailed = ref(false)
++const brokenImages = reactive({}) // ảnh tải lỗi: rơi về liên kết có nhãn
 +
 +// Dữ liệu và mọi guard (khung 48 giờ, hạn mức, từ chối liên hệ, sandbox) nằm ở máy chủ: omni_crm.api.zalo_tab.
 +const conversation = createResource({
@@ -774,7 +806,7 @@ index 0000000..f9950d2
 +  conversation.reload()
 +}
 +
-+async function submit(confirmPaid) {
++async function submit() {
 +  if (
 +    !canSubmit(
 +      compose.value,
@@ -785,22 +817,22 @@ index 0000000..f9950d2
 +  )
 +    return
 +  const body = text.value
-+  sending.value = true
++  sending.value = true // giữ cờ này đến khi CẢ hai lần gọi (nếu có xác nhận phí) kết thúc: không gửi đôi
 +  try {
-+    const res = await call('omni_crm.api.zalo_tab.send', {
-+      doctype: props.doctype,
-+      name: props.docname,
-+      text: body,
-+      confirm_paid: confirmPaid,
-+    })
-+    if (res?.status === 'confirm_required') {
-+      if (window.confirm(`${res.warning}\n\n${__('Bạn vẫn muốn gửi?')}`)) {
-+        sending.value = false
-+        return submit(1)
-+      }
-+    } else if (res?.status === 'Blocked') {
++    const res = await sendWithConfirm(
++      (value, confirmPaid) =>
++        call('omni_crm.api.zalo_tab.send', {
++          doctype: props.doctype,
++          name: props.docname,
++          text: value,
++          confirm_paid: confirmPaid,
++        }),
++      (warning) => window.confirm(`${warning}\n\n${__('Bạn vẫn muốn gửi?')}`),
++      body,
++    )
++    if (res?.status === 'Blocked') {
 +      toast.error(res.reason || __('Tin bị chặn, chưa gửi'))
-+    } else {
++    } else if (res) {
 +      text.value = ''
 +    }
 +  } catch (error) {
@@ -842,14 +874,23 @@ index 0000000..f9950d2
 +  timer = setTimeout(reload, 500)
 +}
 +
++function onVisible() {
++  if (!document.hidden) reload()
++}
++
 +onMounted(() => {
 +  $socket?.on(ZALO_EVENT, onUpdate)
-+  poll = setInterval(reload, POLL_MS) // dự phòng khi mất kết nối realtime
++  // Dự phòng khi mất kết nối realtime; tab trình duyệt ẩn thì không thăm dò, hiện lại thì tải ngay.
++  poll = setInterval(() => {
++    if (!document.hidden) reload()
++  }, POLL_MS)
++  document.addEventListener('visibilitychange', onVisible)
 +})
 +
 +onBeforeUnmount(() => {
 +  $socket?.off(ZALO_EVENT, onUpdate)
 +  clearInterval(poll)
++  document.removeEventListener('visibilitychange', onVisible)
 +  clearTimeout(timer)
 +})
 +
@@ -1212,21 +1253,39 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..0225fd0
+index 0000000..c0b99df
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,329 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
 +export const POLL_MS = 60000
 +
-+/** Chỉ cho phép liên kết http(s); mọi thứ khác (javascript:, data:, /files/...) bị bỏ. */
-+export function isSafeUrl(url) {
-+  return /^https?:\/\//i.test(String(url || '').trim())
++/** Có ký tự điều khiển, khoảng trắng hoặc `\` (trình duyệt coi `\` như `/`, nên `https://evil.com\@zdn.vn` trỏ tới evil.com). */
++function hasBadChars(url) {
++  for (const ch of String(url)) {
++    const code = ch.codePointAt(0)
++    if (
++      ch === '\\' ||
++      code <= 0x20 ||
++      (code >= 0x7f && code <= 0xa0) ||
++      code === 0x2028 ||
++      code === 0x2029 ||
++      code === 0xfeff
++    )
++      return true
++  }
++  return false
 +}
 +
-+/** Danh sách đính kèm đã lọc: chỉ URL http(s), mỗi mục có name để hiển thị. */
++/** Chỉ cho phép liên kết http(s) sạch; mọi thứ khác (javascript:, data:, /files/...) bị bỏ. Không `\`, ký tự điều khiển, khoảng trắng. */
++export function isSafeUrl(url) {
++  const value = String(url || '')
++  return /^https?:\/\//i.test(value) && !hasBadChars(value)
++}
++
++/** Danh sách đính kèm đã lọc: chỉ URL http(s), mỗi mục có name để hiển thị; giữ type và thumb nếu có. */
 +export function safeAttachments(list) {
 +  if (!Array.isArray(list)) return []
 +  return list
@@ -1234,7 +1293,126 @@ index 0000000..0225fd0
 +    .map((a) => ({
 +      url: String(a.url).trim(),
 +      name: String(a.name || a.url).slice(0, 120),
++      ...(a.type ? { type: String(a.type).toLowerCase().slice(0, 30) } : {}),
++      ...(a.thumb && isSafeUrl(a.thumb)
++        ? { thumb: String(a.thumb).trim() }
++        : {}),
 +    }))
++}
++
++// --- Ảnh / GIF / sticker / tệp khách gửi (V3-05, ADR 0018) ---
++
++/** Hậu tố host CDN Zalo được phép làm src ảnh nội tuyến (khớp danh sách ở máy chủ: omni_crm/utils/media.py). */
++export const ZALO_MEDIA_HOST_SUFFIXES = [
++  'zdn.vn',
++  'zadn.vn',
++  'zaloapp.com',
++  'zalo.me',
++]
++export const INLINE_IMAGE_TYPES = ['image', 'gif', 'sticker']
++
++const TYPE_LABELS = {
++  image: 'Ảnh',
++  gif: 'GIF',
++  sticker: 'Sticker',
++  video: 'Video',
++  link: 'Liên kết',
++  business_card: 'Danh thiếp',
++  audio: 'Tin thoại',
++  location: 'Vị trí',
++  file: 'Tệp',
++}
++
++/**
++ * Được vẽ thành ảnh nội tuyến khi: (1) https tới host CDN Zalo (đúng host hoặc tên miền con), không userinfo, không cổng khác
++ * 443, không `\`/ký tự điều khiển/khoảng trắng; hoặc (2) đường dẫn nội bộ /files, /private/files không có `..` hay `//`
++ * (giống máy chủ `omni_crm/utils/media.py`; tab Zalo hiện tại không nhận /files nhưng hai bên giữ cùng luật).
++ */
++export function isInlineImageUrl(url) {
++  const value = String(url || '')
++  if (!value || hasBadChars(value)) return false
++  if (/^\/(?:private\/)?files\//.test(value)) {
++    const path = value.split(/[?#]/)[0].toLowerCase()
++    return (
++      !path.includes('//') &&
++      !path
++        .split('/')
++        .some((seg) => ['..', '%2e%2e', '.%2e', '%2e.'].includes(seg))
++    )
++  }
++  let u
++  try {
++    u = new URL(value)
++  } catch {
++    return false
++  }
++  if (u.protocol !== 'https:' || u.username || u.password) return false
++  if (u.port && u.port !== '443') return false
++  const host = u.hostname.toLowerCase()
++  return ZALO_MEDIA_HOST_SUFFIXES.some(
++    (suffix) => host === suffix || host.endsWith('.' + suffix),
++  )
++}
++
++/** Nhãn tiếng Việt của loại đính kèm ('Tệp' cho loại lạ hoặc thiếu). */
++export function attachmentLabel(type) {
++  return TYPE_LABELS[String(type || '').toLowerCase()] || 'Tệp'
++}
++
++/** Tên tệp cuối đường dẫn của URL (bỏ query); '' nếu không có. */
++export function fileNameFromUrl(url) {
++  try {
++    const path = new URL(String(url)).pathname.replace(/\/+$/, '')
++    return decodeURIComponent(path.slice(path.lastIndexOf('/') + 1)).slice(
++      0,
++      80,
++    )
++  } catch {
++    return ''
++  }
++}
++
++/** Tên thân thiện: tên khách gửi nếu không phải URL; nếu không thì tên tệp trong URL; cuối cùng là nhãn loại. Không bao giờ in URL dài. */
++export function friendlyName(att) {
++  const name = String(att?.name || '').trim()
++  if (name && !/^https?:\/\//i.test(name)) return name.slice(0, 80)
++  return fileNameFromUrl(att?.url) || attachmentLabel(att?.type)
++}
++
++/**
++ * Mô hình hiển thị cho từng đính kèm: { index, url, label, text, src }.
++ * `src` khác rỗng khi vẽ được thành ảnh (loại ảnh/GIF/sticker và host được phép); ảnh dùng thumbnail nếu host của nó cũng được
++ * phép, GIF và sticker dùng ảnh gốc (để chuyển động). Không có `src` thì chỉ hiện liên kết có nhãn `text`.
++ */
++export function attachmentViews(list) {
++  return safeAttachments(list).map((att, index) => {
++    const label = attachmentLabel(att.type)
++    const media = INLINE_IMAGE_TYPES.includes(att.type)
++    let src = ''
++    if (media && isInlineImageUrl(att.url)) {
++      src =
++        att.type === 'image' && att.thumb && isInlineImageUrl(att.thumb)
++          ? att.thumb
++          : att.url
++    }
++    return {
++      index,
++      url: att.url,
++      type: att.type || 'file',
++      label,
++      src,
++      text: media ? label : friendlyName(att),
++    }
++  })
++}
++
++const MEDIA_TAG = /\[(?:Ảnh|GIF|Sticker)\]\s*/g
++
++/** Nội dung chữ của bong bóng: bỏ nhãn thừa "[Ảnh]" / "[GIF]" / "[Sticker]" khi đã có ảnh hiển thị; giữ chú thích của khách. */
++export function displayText(msg) {
++  const text = String(msg?.text || '')
++  if (!attachmentViews(msg?.attachments).some((v) => v.src)) return text
++  return text.replace(MEDIA_TAG, '').trim()
 +}
 +
 +/** 'left' cho khách, 'right' cho nhân viên / bot / nhân viên trả lời ngoài hệ thống. */
@@ -1376,6 +1554,17 @@ index 0000000..0225fd0
 +}
 +
 +/**
++ * Gửi tin, nếu máy chủ yêu cầu xác nhận phí thì hỏi rồi gửi lần hai. Trả kết quả cuối, hoặc null khi người dùng hủy.
++ * Lần hai được AWAIT trong cùng hàm nên người gọi giữ cờ "đang gửi" đến khi xong (không mở lại nút Gửi giữa chừng).
++ */
++export async function sendWithConfirm(sendFn, confirmFn, body) {
++  const first = await sendFn(body, 0)
++  if (first?.status !== 'confirm_required') return first
++  if (!confirmFn(first.warning)) return null
++  return await sendFn(body, 1)
++}
++
++/**
 + * Dữ liệu cho thẻ tóm tắt của bot ở đầu tab Zalo; null khi bot chưa ghi tóm tắt hay ý định.
 + * Trả { summary, chips: [{ key, value }], analyzedAt } (key: intent | urgency | score; bỏ mục trống; điểm 0 vẫn hiện).
 + */
@@ -1506,10 +1695,10 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..40ea5e6
+index 0000000..ac6df59
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,452 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
@@ -1527,8 +1716,14 @@ index 0000000..40ea5e6
 +  dayLabel,
 +  groupByDay,
 +  isRelevantUpdate,
++  sendWithConfirm,
 +  isSafeUrl,
 +  safeAttachments,
++  attachmentViews,
++  attachmentLabel,
++  displayText,
++  friendlyName,
++  isInlineImageUrl,
 +  sourceOf,
 +  timeLabel,
 +} from '@/utils/zaloThread'
@@ -1536,7 +1731,8 @@ index 0000000..40ea5e6
 +describe('isSafeUrl / safeAttachments', () => {
 +  it('chỉ nhận http(s)', () => {
 +    expect(isSafeUrl('https://x.example/a.png')).toBe(true)
-+    expect(isSafeUrl(' HTTP://x.example ')).toBe(true)
++    expect(isSafeUrl('HTTP://x.example')).toBe(true)
++    expect(isSafeUrl(' HTTP://x.example ')).toBe(false) // V3-05: không khoảng trắng
 +    for (const bad of [
 +      'javascript:alert(1)',
 +      'data:text/html,x',
@@ -1726,6 +1922,50 @@ index 0000000..40ea5e6
 +  })
 +})
 +
++describe('sendWithConfirm', () => {
++  it('không cần xác nhận: gửi đúng một lần', async () => {
++    const calls = []
++    const send = async (body, paid) => {
++      calls.push([body, paid])
++      return { status: 'Queued' }
++    }
++    const res = await sendWithConfirm(send, () => true, 'xin chào')
++    expect(res).toEqual({ status: 'Queued' })
++    expect(calls).toEqual([['xin chào', 0]])
++  })
++  it('cần xác nhận phí: hỏi, rồi gửi lần hai với confirm_paid=1 và CHỜ xong mới trả về', async () => {
++    const order = []
++    const send = async (body, paid) => {
++      order.push(`start${paid}`)
++      if (paid === 0) return { status: 'confirm_required', warning: 'có phí' }
++      await new Promise((r) => setTimeout(r, 10))
++      order.push('end1')
++      return { status: 'Queued' }
++    }
++    let asked = null
++    const res = await sendWithConfirm(send, (w) => ((asked = w), true), 'x')
++    order.push('returned')
++    expect(asked).toBe('có phí')
++    expect(res).toEqual({ status: 'Queued' })
++    expect(order).toEqual(['start0', 'start1', 'end1', 'returned'])
++  })
++  it('người dùng hủy: không gửi lần hai, trả null', async () => {
++    let n = 0
++    const send = async () => {
++      n += 1
++      return { status: 'confirm_required', warning: 'có phí' }
++    }
++    expect(await sendWithConfirm(send, () => false, 'x')).toBeNull()
++    expect(n).toBe(1)
++  })
++  it('lỗi ở lần gọi nào cũng ném ra cho người gọi', async () => {
++    const send = async () => {
++      throw new Error('mạng')
++    }
++    await expect(sendWithConfirm(send, () => true, 'x')).rejects.toThrow('mạng')
++  })
++})
++
 +describe('botCard', () => {
 +  it('null khi bot chưa ghi tóm tắt hay ý định', () => {
 +    expect(botCard(null)).toBe(null)
@@ -1758,5 +1998,156 @@ index 0000000..40ea5e6
 +    })
 +    expect(card.chips).toEqual([])
 +    expect(card.analyzedAt).toBe('')
++  })
++})
++
++const GIF = 'https://zgif-v2.zdn.vn/abc123.gif'
++const JPG = 'https://photo-stal-27.zdn.vn/no/jpg/ffee/987.jpg'
++const THUMB = 'https://photo-stal-27.zdn.vn/no/jpg/ffee/thumb.jpg'
++
++describe('isInlineImageUrl (danh sách host ảnh)', () => {
++  it('nhận CDN Zalo qua https, kể cả tên miền con', () => {
++    for (const ok of [
++      GIF,
++      JPG,
++      'https://f20-zpc.zdn.vn/a.png',
++      'https://a.zadn.vn/x',
++    ]) {
++      expect(isInlineImageUrl(ok)).toBe(true)
++    }
++  })
++  it('từ chối host lạ, host giả hậu tố, http, scheme nguy hiểm, userinfo', () => {
++    for (const bad of [
++      'https://evil.example/a.png',
++      'https://zdn.vn.evil.example/a.png',
++      'https://evilzdn.vn/a.png',
++      'https://zdn.vn@evil.example/a.png',
++      'http://photo-stal-27.zdn.vn/a.jpg',
++      'javascript:alert(1)',
++      'data:image/png;base64,AAAA',
++      '',
++      null,
++    ]) {
++      expect(isInlineImageUrl(bad)).toBe(false)
++    }
++  })
++})
++
++describe('safeAttachments giữ type và thumb', () => {
++  it('giữ type, bỏ thumb không an toàn', () => {
++    const out = safeAttachments([
++      { url: JPG, type: 'IMAGE', thumb: THUMB },
++      { url: JPG, type: 'image', thumb: 'javascript:x' },
++    ])
++    expect(out[0]).toEqual({ url: JPG, name: JPG, type: 'image', thumb: THUMB })
++    expect(out[1].thumb).toBeUndefined()
++  })
++})
++
++describe('attachmentViews / friendlyName / displayText', () => {
++  it('ảnh dùng thumbnail, GIF và sticker dùng ảnh gốc', () => {
++    const v = attachmentViews([
++      { url: JPG, type: 'image', thumb: THUMB },
++      { url: GIF, type: 'gif', thumb: THUMB },
++      { url: JPG, type: 'sticker' },
++    ])
++    expect(v.map((x) => x.src)).toEqual([THUMB, GIF, JPG])
++    expect(v.map((x) => x.label)).toEqual(['Ảnh', 'GIF', 'Sticker'])
++  })
++  it('thumbnail host lạ thì dùng ảnh gốc; ảnh host lạ chỉ là liên kết nhãn', () => {
++    const [a, b] = attachmentViews([
++      { url: JPG, type: 'image', thumb: 'https://evil.example/t.jpg' },
++      { url: 'https://evil.example/a.png', type: 'image' },
++    ])
++    expect(a.src).toBe(JPG)
++    expect(b.src).toBe('')
++    expect(b.text).toBe('Ảnh')
++  })
++  it('tệp: tên thân thiện, không in URL dài; loại lạ có nhãn Tệp', () => {
++    const [f, u] = attachmentViews([
++      {
++        url: 'https://f1-zpc.zdn.vn/x/bao%20gia.pdf?sig=1',
++        name: 'https://f1-zpc.zdn.vn/x/bao%20gia.pdf?sig=1',
++        type: 'file',
++      },
++      { url: 'https://x.example/', type: 'hologram' },
++    ])
++    expect(f.text).toBe('bao gia.pdf')
++    expect(f.src).toBe('')
++    expect(u.text).toBe('Tệp')
++    expect(
++      friendlyName({ name: 'Báo giá.pdf', url: 'https://x.example/a' }),
++    ).toBe('Báo giá.pdf')
++    expect(attachmentLabel('business_card')).toBe('Danh thiếp')
++  })
++  it('loại ảnh với scheme nguy hiểm bị loại hẳn', () => {
++    expect(
++      attachmentViews([{ url: 'javascript:alert(1)', type: 'image' }]),
++    ).toEqual([])
++  })
++  it('bỏ nhãn thừa khi đã có ảnh, giữ chú thích; không bỏ khi chưa có ảnh', () => {
++    const withImg = {
++      text: '[Ảnh] xem giúp em',
++      attachments: [{ url: JPG, type: 'image' }],
++    }
++    expect(displayText(withImg)).toBe('xem giúp em')
++    expect(
++      displayText({ text: '[Ảnh]', attachments: [{ url: GIF, type: 'gif' }] }),
++    ).toBe('')
++    expect(
++      displayText({
++        text: '[Ảnh]',
++        attachments: [{ url: 'https://evil.example/a.png', type: 'image' }],
++      }),
++    ).toBe('[Ảnh]')
++    expect(displayText({ text: 'xin chào' })).toBe('xin chào')
++  })
++})
++
++describe('URL nghiêm ngặt, nhất quán với máy chủ (V3-05)', () => {
++  const BAD = [
++    'https://evil.com\\@zdn.vn/x.jpg',
++    'https://evil.com\\.zdn.vn/x.jpg',
++    'https://photo.zdn.vn/a\\b.jpg',
++    'https://photo.zdn.vn/a\u0001.jpg',
++    'https://photo.zdn.vn/a\u007f.jpg',
++    'https://photo.zdn.vn/a b.jpg',
++    'https://photo.zdn.vn/a\u00a0b.jpg',
++    'https://photo.zdn.vn/a\nb.jpg',
++    ' https://photo.zdn.vn/a.jpg',
++  ]
++  const INLINE_ONLY_BAD = [
++    'https://photo.zdn.vn:8443/a.jpg',
++    'https://user:pw@photo.zdn.vn/a.jpg',
++  ]
++  it('isInlineImageUrl và isSafeUrl loại URL có \\, ký tự điều khiển, khoảng trắng', () => {
++    for (const bad of BAD) {
++      expect(isInlineImageUrl(bad), bad).toBe(false)
++      expect(isSafeUrl(bad), bad).toBe(false)
++    }
++    for (const bad of INLINE_ONLY_BAD) {
++      expect(isInlineImageUrl(bad), bad).toBe(false)
++    }
++  })
++  it('/files: nhận đường sạch, loại .., //, khoảng trắng, ký tự lạ', () => {
++    expect(isInlineImageUrl('/files/a.png')).toBe(true)
++    expect(isInlineImageUrl('/private/files/a.png')).toBe(true)
++    for (const bad of [
++      '/files/../private/x.png',
++      '/files/%2e%2e/x.png',
++      '/private/files/a/../../x',
++      '/files//x.png',
++      '/files/a b.png',
++      '/files/a\\b.png',
++      '/files/a\u0001.png',
++      '//photo.zdn.vn/a.jpg',
++    ]) {
++      expect(isInlineImageUrl(bad), bad).toBe(false)
++    }
++  })
++  it('cổng 443 tường minh vẫn được', () => {
++    expect(isInlineImageUrl('https://photo-stal-27.zdn.vn:443/a.jpg')).toBe(
++      true,
++    )
 +  })
 +})
