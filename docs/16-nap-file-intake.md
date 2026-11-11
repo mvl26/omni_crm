@@ -16,6 +16,8 @@ Dịch vụ `miyano-intake` ghi mỗi sự kiện (Gmail, Messenger, tổng đà
 | `lead_form` (meta) | — | bỏ qua | đã có webhook `meta_leads` (CRM tự lấy lead) |
 | `message` (messenger) | — | **chưa hỗ trợ** | xem dưới |
 
+Thư Gmail xếp vào Spam: intake (từ nhánh `feat/gmail-doc-spam`) vẫn ghi file với `review_reasons: ["gmail_spam"]`; khi nạp, tiêu đề Communication có tiền tố `[Gmail xếp vào Spam - cần xem lại]` để sale thấy ngay ở tab email của Lead. Spam là bản tin/thư tự động thì intake vẫn đánh dấu `ignored` và CRM bỏ qua.
+
 Email không có đường thứ hai: file Gmail thành Communication của Email Account có `email_id` trùng `source.account`. Bỏ qua khi (a) intake đánh dấu thư tự động/hàng loạt, hoặc (b) Email Account đó đang `enable_incoming` (CRM tự kéo hộp thư rồi, nạp nữa là trùng). Giữ nguyên file nếu chưa có Email Account khớp hoặc chưa có Omni Channel Email đang bật cho nó.
 
 Vì khóa trùng với đường trực tiếp, một tin đi cả hai đường (relay form, hook Communication) vẫn chỉ vào một lần.

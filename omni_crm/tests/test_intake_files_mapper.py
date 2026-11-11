@@ -74,6 +74,12 @@ class TestMapper(unittest.TestCase):
 		v = mapper.communication_values(e, "A", "a@x.vn")
 		self.assertEqual(v["content"], "Chào anh, cần báo giá.")
 
+	def test_email_gmail_xep_spam_gan_tien_to_xem_lai(self):
+		v = mapper.communication_values(env(review_reasons=["gmail_spam"]), "A", "a@x.vn")
+		self.assertTrue(v["subject"].startswith(mapper.SPAM_PREFIX))
+		self.assertTrue(v["subject"].endswith("Báo giá"))
+		self.assertEqual(mapper.communication_values(env(), "A", "a@x.vn")["subject"], "Báo giá")
+
 	def test_email_reply_to_la_nguoi_gui(self):
 		e = env(sender={"type": "email", "value": "form@cty.vn"}, identifiers={"email": "THAT@khach.vn"})
 		v = mapper.communication_values(e, "A", "a@x.vn")

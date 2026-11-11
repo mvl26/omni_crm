@@ -174,6 +174,22 @@ class TestIntakeFilesIntegration(FrappeTestCase):
 		self.assertTrue(lead, "worker phải tạo / gắn Lead")
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead, "email"), CUSTOMER_MAIL)
 
+	def test_thu_gmail_xep_spam_van_vao_crm_va_danh_dau(self):
+		env = envelope(
+			"email",
+			f"gmail:{PREFIX.lower()}-spam@mail.example",
+			channel="gmail",
+			review_reasons=["gmail_spam"],
+		)
+		self.put("gmail", "s1", env)
+		self.assertEqual(runner.run()["moi"], 1)
+		(msg,) = self.inbound(CH_MAIL)
+		subject = frappe.db.get_value("Communication", msg.communication, "subject")
+		self.assertTrue(subject.startswith("[Gmail xếp vào Spam"), subject)
+		self.assertEqual(msg.event_type, "message")  # không bị coi là thư tự động
+		work(msg.identity_key)
+		self.assertTrue(frappe.db.get_value("Omni Inbound Message", msg.name, "lead"))
+
 	def test_nap_hai_lan_khong_nhan_doi(self):
 		env = envelope("email", f"gmail:{PREFIX.lower()}-m2@mail.example", channel="gmail")
 		self.put("gmail", "m2", env)
