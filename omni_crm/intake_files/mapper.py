@@ -36,6 +36,9 @@ SKIP_NO_CHANNEL_TYPE = "kenh_chua_ho_tro"  # ví dụ Messenger: CRM chưa có l
 SKIP_LIVE_PATH = "da_co_duong_truc_tiep"  # lead Meta chạy qua webhook meta_leads, không nạp từ file
 SKIP_EMPTY = "khong_co_du_lieu"
 
+# Gmail xếp thư vào Spam (intake ghi `review_reasons: ["gmail_spam"]`): vẫn nạp, gắn tiền tố tiêu đề để sale xem lại.
+SPAM_PREFIX = "[Gmail xếp vào Spam - cần xem lại] "
+
 
 @dataclass(frozen=True)
 class Mapped:
@@ -111,6 +114,9 @@ def communication_values(env: dict, email_account: str, account_email: str) -> d
 	if subject and text.startswith(subject):  # intake ghép "tiêu đề\n\nnội dung"
 		text = text[len(subject) :].lstrip("\n")
 	key = str(env.get("event_key") or "")
+	subject = subject or "(không có tiêu đề)"
+	if "gmail_spam" in (env.get("review_reasons") or []):
+		subject = (SPAM_PREFIX + subject)[:140]
 	return {
 		"doctype": "Communication",
 		"communication_type": "Communication",
@@ -120,7 +126,7 @@ def communication_values(env: dict, email_account: str, account_email: str) -> d
 		"sender": sender,
 		"sender_full_name": (env.get("sender") or {}).get("display_name") or None,
 		"recipients": account_email,
-		"subject": subject or "(không có tiêu đề)",
+		"subject": subject,
 		"content": text,
 		"text_content": text,
 		"message_id": (key.split(":", 1)[1] if key.startswith("gmail:") else key)[:DATA_LEN],
