@@ -8,6 +8,8 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
+from frappe import _dict
+
 from omni_crm.intake_files import mapper, runner
 
 
@@ -22,10 +24,10 @@ class TestRunner(unittest.TestCase):
 			mock.patch.object(
 				runner.frappe,
 				"conf",
-				{
-					"omni_intake_dir": str(self.root),
-					"omni_intake_kinds": ["email", "call", "web_form", "messenger"],
-				},
+				_dict(  # make_key của khóa Redis đọc frappe.conf.db_name: cần _dict, không phải dict thường
+					omni_intake_dir=str(self.root),
+					omni_intake_kinds=["email", "call", "web_form", "messenger"],
+				),
 			),
 			mock.patch.object(runner.frappe, "db", mock.MagicMock()),
 			mock.patch.object(runner.frappe, "log_error"),
@@ -45,7 +47,7 @@ class TestRunner(unittest.TestCase):
 		return p
 
 	def test_tat_khi_chua_cau_hinh(self):
-		with mock.patch.object(runner.frappe, "conf", {}):
+		with mock.patch.object(runner.frappe, "conf", _dict()):
 			self.assertEqual(runner.run()["moi"], 0)
 
 	def test_ket_qua_di_dung_thu_muc(self):
@@ -74,12 +76,29 @@ class TestRunner(unittest.TestCase):
 			stats = runner.run()
 		self.assertEqual((stats["loi"], stats["moi"]), (1, 1))
 
+	def test_loi_tam_thoi_giu_file_de_thu_lai(self):
+		# Deadlock khi ghi DB: không được coi file là hỏng (spool chỉ đọc sẽ không bao giờ nạp lại thư đó).
+		f = self.put("t.json", {"kind": "email"})
+		with (
+			mock.patch.object(
+				runner, "ingest_envelope", side_effect=[runner.frappe.QueryDeadlockError("1213"), "moi"]
+			),
+			mock.patch.object(runner, "_finish") as fin,
+		):
+			first = runner._scan(10)
+			self.assertEqual((first["thu_lai"], first["loi"]), (1, 0))
+			fin.assert_not_called()
+			self.assertTrue(f.exists())
+			second = runner._scan(10)  # vòng sau nạp được
+		self.assertEqual(second["moi"], 1)
+		fin.assert_called_once_with(self.root, f, "archive")
+
 	def test_mac_dinh_chi_doc_thu_muc_email(self):
 		other = self.root / "inbox" / "2026" / "11" / "03" / "web_form"
 		other.mkdir(parents=True)
 		(other / "f.json").write_text("{}", encoding="utf-8")
 		self.put("g.json", {})
-		conf = {"omni_intake_dir": str(self.root)}  # không khai omni_intake_kinds
+		conf = _dict(omni_intake_dir=str(self.root))  # không khai omni_intake_kinds
 		with (
 			mock.patch.object(runner.frappe, "conf", conf),
 			mock.patch.object(runner, "ingest_envelope", return_value="moi") as ing,
@@ -128,7 +147,7 @@ class TestRunner(unittest.TestCase):
 		today = date.today()
 		old = self.root / "inbox" / "2020" / "01" / "01" / "gmail" / "x.json"
 		new = self.root / "inbox" / f"{today:%Y/%m/%d}" / "gmail" / "x.json"
-		with mock.patch.object(runner.frappe, "conf", {"omni_intake_days": 3}):
+		with mock.patch.object(runner.frappe, "conf", _dict(omni_intake_days=3)):
 			self.assertFalse(runner._in_window(self.root, old))
 			self.assertTrue(runner._in_window(self.root, new))
 
@@ -232,3 +251,70 @@ class TestRunner(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestRunnerLock(unittest.TestCase):
+	"""Một lượt nạp mỗi lúc: cron và watcher gọi chồng nhau không nạp đôi, file đến giữa chừng không phải chờ cron."""
+
+	def setUp(self):
+		self.cache = runner.frappe.cache()
+		self.lock_key = self.cache.make_key(runner.LOCK_KEY)
+		self.rerun_key = self.cache.make_key(runner.RERUN_KEY)
+		self.clear()
+		self.addCleanup(self.clear)
+
+	def clear(self):
+		self.cache.delete(self.lock_key, self.rerun_key)
+
+	def test_luot_khac_dang_giu_khoa_thi_khong_quet_ma_de_dau(self):
+		held = self.cache.lock(self.lock_key, timeout=30)
+		self.assertTrue(held.acquire(blocking=False))
+		self.addCleanup(held.release)
+		with mock.patch.object(runner, "_scan") as scan:
+			stats = runner.run()
+		scan.assert_not_called()
+		self.assertEqual(sum(stats.values()), 0)
+		self.assertTrue(self.cache.get(self.rerun_key))  # lượt đang giữ khóa sẽ quét thêm
+
+	def test_dau_dat_giua_luc_quet_lam_quet_them_mot_vong(self):
+		def scan(limit):
+			if scan.calls == 0:
+				runner.kick()  # file mới đến khi đang quét
+			scan.calls += 1
+			return {"moi": 1}
+
+		scan.calls = 0
+		with (
+			mock.patch.object(runner, "_scan", side_effect=scan),
+			mock.patch.object(runner.frappe, "enqueue"),
+		):
+			stats = runner.run()
+		self.assertEqual(scan.calls, 2)
+		self.assertEqual(stats["moi"], 2)
+		self.assertFalse(self.cache.get(self.rerun_key))
+		self.assertFalse(self.cache.get(self.lock_key))  # đã nhả khóa
+
+	def test_file_den_lien_tuc_dung_o_so_vong_toi_da(self):
+		def scan(limit):
+			self.cache.set(self.rerun_key, 1)
+			return {}
+
+		with mock.patch.object(runner, "_scan", side_effect=scan) as sc:
+			runner.run()
+		self.assertEqual(sc.call_count, runner.MAX_ROUNDS)
+
+	def test_loi_khi_quet_van_nha_khoa(self):
+		with (
+			mock.patch.object(runner, "_scan", side_effect=RuntimeError("x")),
+			self.assertRaises(RuntimeError),
+		):
+			runner.run()
+		self.assertFalse(self.cache.get(self.lock_key))
+
+	def test_kick_dat_dau_roi_day_job_khong_chong(self):
+		with mock.patch.object(runner.frappe, "enqueue") as enq:
+			runner.kick()
+		self.assertTrue(self.cache.get(self.rerun_key))
+		enq.assert_called_once_with(
+			runner.RUN_METHOD, queue="short", job_id=runner.KICK_JOB_ID, deduplicate=True
+		)

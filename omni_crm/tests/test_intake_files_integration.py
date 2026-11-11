@@ -158,6 +158,15 @@ class TestIntakeFilesIntegration(FrappeTestCase):
 			],
 		)
 
+	def test_nap_bang_guest_nhu_job_kick(self):
+		# ADR 0006: lượt nạp do watcher đẩy (runner.kick) chạy bằng người dùng của job; phải chạy được bằng Guest.
+		self.put("gmail", "g1", envelope("email", f"gmail:{PREFIX.lower()}-g1@mail.example", channel="gmail"))
+		frappe.set_user("Guest")
+		stats = runner.run()
+		frappe.set_user("Administrator")
+		self.assertEqual(stats["moi"], 1, stats)
+		self.assertEqual(len(self.inbound(CH_MAIL)), 1)
+
 	def test_email_goi_khach_thanh_lead(self):
 		env = envelope("email", f"gmail:{PREFIX.lower()}-m1@mail.example", channel="gmail")
 		self.put("gmail", "m1", env)

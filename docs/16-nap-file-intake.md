@@ -26,8 +26,37 @@ Vì khóa trùng với đường trực tiếp, một tin đi cả hai đường
 
 - `omni_intake_dir`: thư mục spool của intake (chứa `inbox/`). Vắng = tắt hoàn toàn.
 - `omni_intake_channels` (tùy chọn): `{"Telephony": "<Omni Channel>", "Web Form": "..."}` (email không cần khai). Vắng thì dùng kênh **duy nhất đang bật** của loại đó; không có hoặc nhiều hơn một thì file nằm lại trong `inbox/`, không đoán.
-- Chạy mỗi phút (cron `omni_crm.intake_files.runner.run`), tối đa 200 file/lần, cũ trước.
+- Chạy ngay khi có file nhờ tiến trình `watcher` (mục "Độ trễ thấp"); cron `omni_crm.intake_files.runner.run` mỗi phút là lưới an toàn. Mỗi lúc một lượt (khóa Redis), tối đa 200 file/vòng, cũ trước.
 - Thủ công: `bench --site <site> execute omni_crm.intake_files.runner.run`.
+
+## Độ trễ thấp (nạp ngay, gửi ngay)
+
+Đường thư khách -> CRM và CRM -> khách, mỗi chặng chờ bao lâu (ADR 0018):
+
+| Chặng | Trước | Nay | Cơ chế |
+|---|---|---|---|
+| Gmail -> file | 60 s | ≤ 5 s | `.env` của intake: `INTAKE_GMAIL_POLL_SECONDS=5` |
+| File -> Communication | ≤ 60 s (cron) | ~1 s | tiến trình `omni_crm.intake_files.watcher` thấy file mới thì `runner.kick()` |
+| Gộp tin trước khi xử lý | 5 s | 0 với Email | `worker.NO_DEBOUNCE_CHANNELS` (chat vẫn gộp theo Omni Settings) |
+| Danh sách `/crm/leads` | F5 | tự tải lại | `crm_bridge.list_refresh` (Lead mới) |
+| Trang Lead/Deal đang mở | F5 | tự tải lại | `timeline.refresh_activity`: `refetch_resource` khóa `["activity", tên]` vào phòng của tài liệu |
+| Sale gửi thư từ CRM | ≤ 4 phút (flush) | vài giây | `crm_bridge.fast_email`: Email Queue của CRM Lead/Deal đẩy job gửi ngay sau commit |
+
+**Tiến trình watcher** chạy dưới supervisor, tệp riêng (không bị `bench setup supervisor` ghi đè):
+
+```ini
+[program:omni-intake-watch]
+command=<bench>/env/bin/python -m frappe.utils.bench_helper frappe --site <site> execute omni_crm.intake_files.watcher.run
+directory=<bench>/sites
+user=<người chạy bench>
+autostart=true
+autorestart=true
+stopwaitsecs=5
+redirect_stderr=true
+stdout_logfile=<bench>/logs/omni-intake-watch.log
+```
+
+Cập nhật mã omni_crm thì khởi động lại cả nó: `sudo supervisorctl restart omni-intake-watch`. Tắt watcher thì mọi thứ vẫn chạy, chỉ quay về chờ cron (≤ 60 s). Watcher chỉ `stat` thư mục của hai ngày mới nhất; thư có ngày gửi cũ hơn vẫn do cron nạp.
 
 ## Số phận của file
 

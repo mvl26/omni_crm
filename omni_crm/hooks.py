@@ -227,6 +227,9 @@ doc_events = {
 		"on_update": "omni_crm.prospect.fit.on_award_change",  # V2-02: thêm/sửa gói -> tính lại điểm phù hợp
 		"after_delete": "omni_crm.prospect.fit.on_award_change",
 	},
+	"Email Queue": {
+		"after_insert": "omni_crm.crm_bridge.fast_email.on_email_queue_insert",  # thư sale gửi từ Lead/Deal đi ngay
+	},
 	"CRM Lead": {
 		"validate": [
 			"omni_crm.crm_bridge.lead.compute_normalized_fields",  # D1-05

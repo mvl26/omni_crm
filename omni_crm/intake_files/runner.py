@@ -15,10 +15,15 @@ vô hại vì chống trùng ở cổng và ở Communication.
 Có quyền ghi: sau khi nạp, file chuyển sang `archive/` (cùng cấu trúc ngày), giống quy ước trong README của miyano-intake;
 file hỏng sang `dead_crm/` kèm tệp `.loi.txt`; loại tin CRM chưa hỗ trợ (Messenger) sang `chua_nap/` để nạp sau.
 Chạy lại an toàn: chống trùng bằng `dedupe_key` của cổng (cùng khóa với đường trực tiếp).
+
+Hai nơi gọi `run`: cron mỗi phút (lưới an toàn) và `kick` do tiến trình `watcher` đẩy ngay khi thấy file mới. Mỗi lúc chỉ
+một lượt chạy (khóa Redis); lượt đến sau chỉ đánh dấu "chạy lại" để lượt đang chạy quét thêm một vòng, nên không có hai
+lượt cùng nạp một file và không file nào phải chờ cron.
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -32,7 +37,7 @@ from omni_crm.channels.email import adapter as email_adapter
 from omni_crm.channels.registry import get_adapter
 from omni_crm.ingest import gateway
 from omni_crm.intake_files import mapper
-from omni_crm.pipeline.retry import redact
+from omni_crm.pipeline.retry import is_transient, redact
 
 KIND_DIRS = {"email": "gmail", "call": "voice", "web_form": "web_form", "messenger": "messenger"}
 DEFAULT_KINDS = ("email",)
@@ -40,7 +45,14 @@ DEFAULT_DAYS = 3
 DONE_TTL = 14 * 86400
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_PER_RUN = 200
-RESULTS = ("moi", "trung", "bo_qua", "chua_ho_tro", "thieu_kenh", "loi")
+RESULTS = ("moi", "trung", "bo_qua", "chua_ho_tro", "thieu_kenh", "loi", "thu_lai")
+RUN_METHOD = "omni_crm.intake_files.runner.run"
+KICK_QUEUE = "short"
+KICK_JOB_ID = "omni-intake-runner-kick"
+LOCK_KEY = "omni:intake:runner:lock"
+RERUN_KEY = "omni:intake:runner:rerun"
+LOCK_TIMEOUT = 600  # giây; tiến trình chết giữa chừng thì khóa tự hết hạn
+MAX_ROUNDS = 5  # số vòng quét tối đa trong một lượt khi liên tục có file mới
 
 
 def spool_root() -> Path | None:
@@ -171,7 +183,40 @@ def ingest_envelope(env: Any) -> str:
 
 
 def run(limit: int = MAX_PER_RUN) -> dict[str, int]:
-	"""Quét `inbox/` và nạp tối đa `limit` file theo thứ tự đường dẫn (cũ trước). Gọi từ scheduler, lỗi từng file không dừng cả lô."""
+	"""Một lượt nạp có khóa: mỗi lúc chỉ một lượt quét; lượt đến sau chỉ để lại dấu "chạy lại" cho lượt đang chạy.
+
+	Dấu được đặt TRƯỚC khi thử lấy khóa và lượt giữ khóa xem dấu SAU khi nhả khóa, nên không có khe hở để một file
+	phải chờ tới lượt cron sau. Tối đa MAX_ROUNDS vòng mỗi lượt khi file mới đến liên tục.
+	"""
+	cache = frappe.cache()
+	lock_key, rerun_key = cache.make_key(LOCK_KEY), cache.make_key(RERUN_KEY)
+	total = dict.fromkeys(RESULTS, 0)
+	for _ in range(MAX_ROUNDS):
+		cache.set(rerun_key, 1, ex=LOCK_TIMEOUT)
+		lock = cache.lock(lock_key, timeout=LOCK_TIMEOUT)
+		if not lock.acquire(blocking=False):
+			break  # lượt đang giữ khóa sẽ thấy dấu và quét thêm
+		try:
+			cache.delete(rerun_key)
+			for k, v in _scan(limit).items():
+				total[k] += v
+		finally:
+			with contextlib.suppress(Exception):  # khóa đã hết hạn: không còn gì để trả
+				lock.release()
+		if not cache.get(rerun_key):
+			break
+	return total
+
+
+def kick() -> None:
+	"""Đẩy ngay một lượt nạp (watcher gọi khi thấy file mới); đã có lượt chờ/đang chạy thì lượt đó quét thêm nhờ dấu."""
+	cache = frappe.cache()
+	cache.set(cache.make_key(RERUN_KEY), 1, ex=LOCK_TIMEOUT)
+	frappe.enqueue(RUN_METHOD, queue=KICK_QUEUE, job_id=KICK_JOB_ID, deduplicate=True)
+
+
+def _scan(limit: int) -> dict[str, int]:
+	"""Quét `inbox/` và nạp tối đa `limit` file theo thứ tự đường dẫn (cũ trước). Lỗi từng file không dừng cả lô."""
 	stats = dict.fromkeys(RESULTS, 0)
 	root = spool_root()
 	if root is None:
@@ -192,6 +237,18 @@ def run(limit: int = MAX_PER_RUN) -> dict[str, int]:
 			frappe.db.commit()
 		except Exception as e:
 			frappe.db.rollback()
+			if is_transient(e):
+				# Deadlock, mất kết nối...: giữ file trong inbox (không ghi dấu đã xử lý) và quét lại vòng sau; nếu vẫn lỗi
+				# thì cron thử tiếp. Trước đây file bị coi là hỏng và (ở spool chỉ đọc) không bao giờ được nạp lại.
+				stats["thu_lai"] += 1
+				cache = frappe.cache()
+				cache.set(cache.make_key(RERUN_KEY), 1, ex=LOCK_TIMEOUT)
+				frappe.log_error(
+					title="Omni: lỗi tạm thời khi nạp file intake, sẽ thử lại",
+					message=redact(f"{path.name}\n{type(e).__name__}: {e}")[:1000],
+				)
+				frappe.db.commit()
+				continue
 			stats["loi"] += 1
 			_finish(root, path, "dead_crm", redact(f"{type(e).__name__}: {e}")[:500])
 			frappe.log_error(

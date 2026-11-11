@@ -19,6 +19,7 @@ from omni_crm.identity import resolver
 from omni_crm.ingest.gateway import enqueue_identity
 from omni_crm.pipeline.locks import LockBusy, identity_lock
 from omni_crm.pipeline.retry import is_transient, mark_retry, redact
+from omni_crm.queue import channel_type_of
 
 INBOUND = "Omni Inbound Message"
 # Sự kiện không phải khách chủ động liên hệ: không tính vào last_inbound_at (khung gửi tin của Zalo).
@@ -27,6 +28,8 @@ MAX_ROUNDS = 5
 BATCH_LIMIT = 200
 LOCK_TIMEOUT = 120
 LOCK_WAIT = 30
+# Thư không gõ dồn từng dòng như chat: chờ gộp chỉ làm chậm, nên không áp `debounce_seconds` của Omni Settings.
+NO_DEBOUNCE_CHANNELS = {"Email"}
 FIELDS = [
 	"name",
 	"channel",
@@ -49,7 +52,11 @@ def process_identity(
 ) -> str:
 	"""Xử lý mọi tin New/Retry đến hạn của một khách; trả "done", "busy" hoặc "idle"."""
 	if debounce_seconds is None:
-		debounce_seconds = frappe.db.get_single_value("Omni Settings", "debounce_seconds") or 0
+		debounce_seconds = (
+			0
+			if channel_type_of(identity_key) in NO_DEBOUNCE_CHANNELS
+			else frappe.db.get_single_value("Omni Settings", "debounce_seconds") or 0
+		)
 	if debounce_seconds:
 		time.sleep(debounce_seconds)  # gom tin khách gõ liên tiếp
 	try:

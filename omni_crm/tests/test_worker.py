@@ -308,6 +308,22 @@ class TestWorker(PipelineTestCase):
 			process_identity(KEY)
 		sl.assert_called_once_with(7)
 
+	def test_email_khong_cho_gop_tin(self):
+		real = frappe.db.get_single_value
+		asked = []
+
+		def fake(doctype, field, *a, **kw):
+			asked.append((doctype, field))
+			return real(doctype, field, *a, **kw)
+
+		with (
+			mock.patch("omni_crm.pipeline.worker.time.sleep") as sl,
+			mock.patch.object(frappe.db, "get_single_value", side_effect=fake),
+		):
+			process_identity(f"Email:{PREFIX.lower()}-khong-co@example.org")
+		sl.assert_not_called()
+		self.assertNotIn(("Omni Settings", "debounce_seconds"), asked)
+
 	def test_post_batch_hook_error_does_not_break_done(self):
 		name = self.add_msg("h1")
 		with (

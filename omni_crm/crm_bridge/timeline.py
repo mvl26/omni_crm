@@ -30,6 +30,9 @@ ZALO = "Zalo OA"
 TIMELINE_EVENTS = {"message", "oa_echo", "form_lead"}
 SUBJECT_LEN = 80
 REALTIME_EVENT = "omni_inbox_update"
+# Bộ nghe có sẵn của giao diện CRM (crm/frontend/src/socket.js): nhận khóa đệm rồi tự tải lại tài nguyên đó.
+# Khối hoạt động/email của trang Lead/Deal có khóa ["activity", tên] (components/Activities/Activities.vue).
+REFETCH_EVENT = "refetch_resource"
 
 
 def resolve_target(target: str | None) -> tuple[str, str] | None:
@@ -316,6 +319,23 @@ def notify(lead: str | None, channel_types: list[str] | None = None) -> None:
 		pass
 	for user in filter(None, users):
 		frappe.publish_realtime(REALTIME_EVENT, payload, user=user, after_commit=True)
+	refresh_activity(lead)
+
+
+def refresh_activity(lead: str) -> None:
+	"""Trang Lead (và Deal của nó) đang mở tự tải lại khối hoạt động/email, không phải F5.
+
+	Gửi vào phòng riêng của tài liệu: chỉ trình duyệt đang mở đúng tài liệu đó (Frappe kiểm quyền đọc khi đăng ký
+	phòng) mới nhận. Tin chỉ có khóa đệm; trình duyệt tự gọi API có kiểm quyền để tải lại.
+	"""
+	targets = [(LEAD, lead)]
+	deal = lead_bridge.get_deal_for_lead(lead)
+	if deal:
+		targets.append((DEAL, deal))
+	for doctype, name in targets:
+		frappe.publish_realtime(
+			REFETCH_EVENT, {"cache_key": ["activity", name]}, doctype=doctype, docname=name, after_commit=True
+		)
 
 
 def conversation_turns(lead: str, until: Any = None) -> list[dict]:
