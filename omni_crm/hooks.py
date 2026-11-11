@@ -172,6 +172,7 @@ scheduler_events = {
 		"* * * * *": [
 			"omni_crm.ingest.spool.drain",  # V21-04: chèn lại tin trong hàng dự phòng webhook (kiểm chữ ký, chống trùng)
 			"omni_crm.intake_files.runner.run",  # nạp file JSON của miyano-intake (tắt khi chưa đặt site_config omni_intake_dir)
+			"omni_crm.crm_bridge.list_refresh.flush_pending",  # danh sách Lead CRM tự tải lại: phát bù Lead bị gộp
 		],
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",
@@ -232,6 +233,7 @@ doc_events = {
 			"omni_crm.bot.scoring.protect_score_fields",  # D2-06: điểm chỉ đọc với người dùng
 		],
 		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06
+		"after_insert": "omni_crm.crm_bridge.list_refresh.on_lead_insert",  # danh sách /crm/leads tự tải lại
 		"on_trash": "omni_crm.crm_bridge.care_log.delete_for_lead",  # V2-04: nhật ký chăm sóc đi theo Lead
 	},
 }
