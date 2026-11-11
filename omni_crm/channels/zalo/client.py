@@ -222,7 +222,7 @@ class ZaloClient:
 		uploaded = self._request(
 			"POST",
 			config.get("upload_paths")[kind],
-			files={"file": (filename, content)},
+			files={"file": (filename, content, media_out.mime_of(filename))},
 			timeout=config.get("upload_timeout"),
 		)
 		ref = str(uploaded.get("attachment_id") or uploaded.get("token") or "")

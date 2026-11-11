@@ -13,6 +13,7 @@ from frappe.utils import cint, get_datetime
 from omni_crm import flags
 from omni_crm.bot import scoring
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
+from omni_crm.channels.zalo import media_out
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
 from omni_crm.crm_bridge.timeline import TIMELINE_EVENTS, parse_attachments
@@ -71,7 +72,8 @@ def _last_events(leads: list[str]) -> dict[str, dict]:
 	st_marks, st_params = _in_clause(list(OUT_STATUSES))
 	outbound = frappe.db.sql(
 		f"""
-		select m.lead, c.channel_type, m.text, coalesce(m.sent_at, m.creation) as at
+		select m.lead, c.channel_type, m.text, m.attachment_kind, m.attachment_name,
+			coalesce(m.sent_at, m.creation) as at
 		from `tab{OUTBOUND}` m
 		left join `tabOmni Channel` c on c.name = m.channel
 		join (
@@ -95,7 +97,13 @@ def _last_events(leads: list[str]) -> dict[str, dict]:
 		}
 		for r in inbound
 	] + [
-		{"lead": r.lead, "direction": "out", "channel_type": r.channel_type, "text": r.text, "at": r.at}
+		{
+			"lead": r.lead,
+			"direction": "out",
+			"channel_type": r.channel_type,
+			"text": media_out.display_text(r.text, r.attachment_kind, r.attachment_name),
+			"at": r.at,
+		}
 		for r in outbound
 	]
 	for c in candidates:
@@ -600,7 +608,7 @@ def compose_state(lead: str) -> dict:
 	except AdapterNotFoundError:
 		ok, reason = False, _("Chưa có adapter Zalo")
 	has_phone = _has_phone(lead)
-	from omni_crm.channels.zalo import media_out, phone_request
+	from omni_crm.channels.zalo import phone_request
 
 	phone_why = phone_request.ineligible_reason(identity_doc, channel_doc, manual=True)
 	paid = bool(ok and reason)

@@ -208,7 +208,7 @@ class TestClient(MediaCase):
 		self.assertEqual(mid, "zl-media-1")
 		up, send = http.call_args_list
 		self.assertTrue(up.args[1].endswith("/v2.0/oa/upload/image"))
-		self.assertIn("file", up.kwargs["files"])
+		self.assertEqual(up.kwargs["files"]["file"][2], "image/png")
 		self.assertNotIn("Content-Type", up.kwargs["headers"])  # requests tự đặt multipart
 		body = json.loads(send.kwargs["data"])
 		self.assertEqual(body["message"]["text"], "Mẫu A")
@@ -231,6 +231,7 @@ class TestClient(MediaCase):
 		with switch(True), mock.patch(REQ, side_effect=[response(UPLOAD_FILE), response(SENT)]) as http:
 			self.client().send_media("khach-1", "file", pdf_bytes(), "bao-gia.pdf", caption="bỏ qua")
 		self.assertTrue(http.call_args_list[0].args[1].endswith("/v2.0/oa/upload/file"))
+		self.assertEqual(http.call_args_list[0].kwargs["files"]["file"][2], "application/pdf")
 		message = json.loads(http.call_args_list[1].kwargs["data"])["message"]
 		self.assertEqual(message, {"attachment": {"type": "file", "payload": {"token": "tok-file-1"}}})
 
@@ -273,10 +274,11 @@ class TestEndToEnd(MediaCase):
 			res = self.send_tab(url)
 			status, http = self.deliver(res["outbound"], [UPLOAD_IMG, SENT])
 		self.assertEqual(status, "Sent")
-		name, content = http.call_args_list[0].kwargs["files"]["file"]
+		name, content, mime = http.call_args_list[0].kwargs["files"]["file"]
 		self.assertTrue(
 			name.startswith("lon") and name.endswith(".jpg"), name
 		)  # Frappe có thể thêm hậu tố chống trùng
+		self.assertEqual(mime, "image/jpeg")
 		self.assertLessEqual(len(content), media_out.MB)
 
 	def test_file_with_text_queues_text_first_then_file(self):
@@ -339,3 +341,14 @@ class TestEndToEnd(MediaCase):
 		with switch(True), self.assertRaises(media_out.MediaError):
 			self.send_tab(other)
 		frappe.set_user("Administrator")
+
+	def test_file_only_row_has_label_on_crm_timeline(self):
+		url = self.attach("bao-gia.pdf", pdf_bytes())
+		with switch(True):
+			res = self.send_tab(url)
+			status, _http = self.deliver(res["outbound"], [UPLOAD_FILE, SENT])
+		self.assertEqual(status, "Sent")
+		content = frappe.db.get_value("Communication", {"omni_outbound_message": res["outbound"]}, "content")
+		self.assertIn("[Tệp] bao-gia.pdf", content)
+		self.assertEqual(media_out.display_text("Dạ", "image", "a.png"), "Dạ\n[Ảnh] a.png")
+		self.assertEqual(media_out.display_text("Dạ", None, None), "Dạ")

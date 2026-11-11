@@ -263,11 +263,26 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 	row = frappe.db.get_value(
 		OUTBOUND,
 		name,
-		["name", "channel", "text", "source", "sent_by", "sent_at", "creation", "is_sandbox"],
+		[
+			"name",
+			"channel",
+			"text",
+			"source",
+			"sent_by",
+			"sent_at",
+			"creation",
+			"is_sandbox",
+			"attachment_kind",
+			"attachment_name",
+		],
 		as_dict=True,
 	)
 	if not row:
 		return None
+	if row.attachment_kind:  # V3-09: tin ảnh/tệp hiện nhãn "[Ảnh] tên tệp" thay vì trống
+		from omni_crm.channels.zalo.media_out import display_text
+
+		row.text = display_text(row.text, row.attachment_kind, row.attachment_name)
 	channel_type = frappe.db.get_value("Omni Channel", row.channel, "channel_type") or ""
 	if channel_type == EMAIL:
 		return None

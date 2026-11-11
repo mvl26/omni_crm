@@ -39,6 +39,17 @@ EXTENSIONS = {
 	".docx": FILE,
 	".csv": FILE,
 }
+MIME_TYPES = {
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png": "image/png",
+	".gif": "image/gif",
+	".pdf": "application/pdf",
+	".doc": "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".csv": "text/csv",
+}
+LABELS = {IMAGE: "Ảnh", GIF: "GIF", FILE: "Tệp"}
 MAX_SOURCE_IMAGE = 15 * MB  # ảnh gốc lớn hơn thế này thì không nén, báo chọn ảnh khác
 CAPTION_MAX = 2000
 UPLOAD_MONTHLY_QUOTA = 5000
@@ -73,6 +84,20 @@ def recipient_allowed(user_id: str | None) -> bool:
 def kind_of(filename: str) -> str | None:
 	"""Loại Zalo theo đuôi tệp (image/gif/file); None nếu Zalo không nhận."""
 	return EXTENSIONS.get(os.path.splitext(str(filename or ""))[1].lower())
+
+
+def mime_of(filename: str) -> str:
+	"""Kiểu MIME cho phần `file` khi tải lên Zalo (theo đuôi tệp; lạ thì application/octet-stream)."""
+	return MIME_TYPES.get(os.path.splitext(str(filename or ""))[1].lower(), "application/octet-stream")
+
+
+def display_text(text: str | None, kind: str | None, name: str | None) -> str:
+	"""Chữ hiển thị của tin ra trên dòng thời gian / đoạn trích: lời nhắn, và nhãn "[Ảnh] tên tệp" nếu có đính kèm."""
+	text = (text or "").strip()
+	if not kind:
+		return text
+	label = f"[{_(LABELS.get(kind, 'Tệp'))}] {name or ''}".strip()
+	return f"{text}\n{label}" if text else label
 
 
 def allowed_types_text() -> str:
