@@ -41,6 +41,9 @@ class OutboundRequest:
 	meta: dict = field(
 		default_factory=dict
 	)  # adapter ghi kết quả phụ của lần gửi (vd quota_type Zalo trả về)
+	attachment: dict | None = (
+		None  # V3-09: {"file_url", "kind" (image|gif|file), "name"}; tệp của Lead trong CRM
+	)
 
 
 def stable_message_id(*parts: object) -> str:

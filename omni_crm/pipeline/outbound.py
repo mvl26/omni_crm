@@ -140,7 +140,7 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 	miễn phí. send_outbound chỉ cho tin Sale đi khi khung có phí nếu cờ là "paid" (free chuyển sang paid giữa chừng bị chặn).
 	"""
 	text = (req.text or "").strip()
-	if not text:
+	if not text and not req.attachment:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(MAX_TEXT_CHARS))
@@ -161,6 +161,7 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 			"attempts": 0,
 			"is_sandbox": 1 if flags.sandbox() else 0,
 			**(route.fields() if route else {}),
+			**_attachment_fields(req.attachment),
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -169,6 +170,23 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 		frappe.cache().set_value(paid_ok_key(doc.name), confirmation, expires_in_sec=PAID_OK_TTL)
 	enqueue_outbound(doc.name)
 	return doc.name
+
+
+def _attachment_fields(attachment: dict | None) -> dict:
+	"""Trường đính kèm ghi vào Omni Outbound Message (V3-09)."""
+	if not attachment:
+		return {}
+	return {
+		"attachment": attachment["file_url"],
+		"attachment_kind": attachment["kind"],
+		"attachment_name": attachment.get("name") or "",
+	}
+
+
+def _attachment_of(row: Any) -> dict | None:
+	if not row.get("attachment"):
+		return None
+	return {"file_url": row.attachment, "kind": row.attachment_kind, "name": row.attachment_name}
 
 
 def _route_for(req: OutboundRequest, user: str | None, confirmed_paid: bool) -> Any:
@@ -233,6 +251,9 @@ def _row(name: str, lock: bool = False) -> Any:
 			"purpose",
 			"quota_consumed",
 			"approved_by",
+			"attachment",
+			"attachment_kind",
+			"attachment_name",
 		],
 		as_dict=True,
 		for_update=lock,
@@ -459,6 +480,7 @@ def send_outbound(outbound_name: str) -> str:
 		reply_to_external_id=_reply_target(claimed),
 		source=claimed.source,
 		purpose=claimed.purpose or "reply",
+		attachment=_attachment_of(claimed),
 	)
 	try:
 		external_id = adapter.send(req, channel_doc)  # ngoài khóa DB; sandbox đã chặn ở trên

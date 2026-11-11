@@ -64,9 +64,16 @@ class ZaloClient:
 		return tok
 
 	def _request(
-		self, method: str, path: str, *, params: dict | None = None, body: dict | None = None
+		self,
+		method: str,
+		path: str,
+		*,
+		params: dict | None = None,
+		body: dict | None = None,
+		files: dict | None = None,
+		timeout: int | None = None,
 	) -> dict:
-		"""Gọi API, trả phần `data` của phản hồi; token lỗi thì làm mới một lần rồi thử lại."""
+		"""Gọi API, trả phần `data` của phản hồi; token lỗi thì làm mới một lần rồi thử lại. `files`: multipart."""
 		if flags.sandbox():  # chốt chặn cuối: sandbox không có HTTP ra Zalo
 			raise ZaloError(None, "permanent", _("Chế độ thử (sandbox) đang bật: không gọi API Zalo"))
 		refreshed = False
@@ -75,13 +82,17 @@ class ZaloClient:
 		while True:
 			tok = self._access_token()
 			try:
+				headers = {"access_token": tok}
+				if files is None:
+					headers["Content-Type"] = "application/json"
 				resp = requests.request(
 					method,
 					config.get("api_base") + path,
-					headers={"access_token": tok, "Content-Type": "application/json"},
+					headers=headers,
 					params=params,
 					data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None,
-					timeout=config.get("timeout"),
+					files=files,
+					timeout=timeout or config.get("timeout"),
 				)
 				result = self._parse(resp)
 			except requests.RequestException as e:
@@ -175,6 +186,64 @@ class ZaloClient:
 					}
 				},
 			},
+		)
+		self.last_quota_type = _quota_type(data)
+		return str(data.get("message_id") or "")
+
+	def send_media(
+		self,
+		user_id: str,
+		kind: str,
+		content: bytes,
+		filename: str,
+		*,
+		caption: str = "",
+		size: tuple[int, int] | None = None,
+	) -> str:
+		"""Tải ảnh/GIF/tệp lên Zalo rồi gửi tin tư vấn đính kèm (V3-09); trả mã tin. Sandbox: không gọi HTTP.
+
+		Danh sách trắng: công tắc `zalo_media_send_enabled` tắt thì chỉ tài khoản Zalo thử nghiệm nhận được, chặn NGAY Ở
+		ĐÂY, trước cả nhánh sandbox. Tải lên KHÔNG thử lại; lỗi sau khi tải mà chưa gửi thì lần thử sau tải lại.
+		"""
+		from omni_crm.channels.zalo import media_out
+
+		if not media_out.recipient_allowed(user_id):
+			raise ZaloError(
+				None,
+				"permanent",
+				_("Gửi ảnh/tệp qua Zalo đang tắt: chỉ tài khoản Zalo thử nghiệm nhận được."),
+			)
+		if kind not in media_out.KINDS:
+			raise ZaloError(None, "permanent", _("Loại đính kèm không hợp lệ"))
+		if flags.sandbox():
+			frappe.logger("omni").info("omni sandbox: bỏ qua gửi %s Zalo (kênh %s)", kind, self.channel)
+			return f"sandbox:{uuid.uuid4().hex[:16]}"
+		media_out.reserve_upload(kind)
+		uploaded = self._request(
+			"POST",
+			config.get("upload_paths")[kind],
+			files={"file": (filename, content)},
+			timeout=config.get("upload_timeout"),
+		)
+		ref = str(uploaded.get("attachment_id") or uploaded.get("token") or "")
+		if not ref:
+			raise ZaloError(None, "permanent", _("Zalo không trả mã tệp sau khi tải lên"))
+		if kind == media_out.FILE:
+			message: dict = {"attachment": {"type": "file", "payload": {"token": ref}}}
+		else:
+			element: dict = {"media_type": kind, "attachment_id": ref}
+			if kind == media_out.GIF and size:
+				element["width"], element["height"] = int(size[0]), int(size[1])
+			message = {
+				"attachment": {
+					"type": "template",
+					"payload": {"template_type": "media", "elements": [element]},
+				}
+			}
+			if caption:
+				message["text"] = caption[: media_out.CAPTION_MAX]
+		data = self._request(
+			"POST", config.get("send_path"), body={"recipient": {"user_id": user_id}, "message": message}
 		)
 		self.last_quota_type = _quota_type(data)
 		return str(data.get("message_id") or "")

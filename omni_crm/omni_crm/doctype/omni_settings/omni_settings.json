@@ -105,6 +105,7 @@
   "col_zalo_growth",
   "zalo_quota_total",
   "zalo_quota_cycle_end",
+  "zalo_media_send_enabled",
   "sec_release_gate",
   "q1_allowed",
   "q11_allowed",
@@ -713,6 +714,13 @@
    "label": "Ngày hết hạn gói OA (cuối chu kỳ quỹ)",
    "default": "2027-11-09",
    "description": "Chu kỳ quỹ là 1 năm kết thúc ở ngày này (không phải năm dương lịch). Trống = 09/11/2027."
+  },
+  {
+   "fieldname": "zalo_media_send_enabled",
+   "fieldtype": "Check",
+   "label": "Bật gửi ảnh / tệp qua Zalo cho mọi khách",
+   "default": "0",
+   "description": "Tắt (mặc định): nút đính kèm trên tab Zalo chỉ gửi được tới tài khoản Zalo thử nghiệm ghi cứng trong code, mọi khách khác bị chặn ở tầng gửi. Bật: sale gửi ảnh (JPG/PNG/GIF) và tệp (PDF/DOC/DOCX/CSV) cho mọi khách."
   },
   {
    "fieldname": "sec_release_gate",

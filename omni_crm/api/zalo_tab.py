@@ -17,6 +17,7 @@ from omni_crm.api import inbox
 from omni_crm.channels.zalo import worker_hooks
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.pipeline import outbound as outbound_pipeline
+from omni_crm.utils import media
 
 LEAD = "CRM Lead"
 DEAL = "CRM Deal"
@@ -48,7 +49,8 @@ def resolve_lead(doctype: str, name: str, ptype: str = "read") -> str | None:
 
 
 def _http_only(attachments: list[dict]) -> list[dict]:
-	return [a for a in attachments if str(a.get("url") or "").startswith(("http://", "https://"))]
+	"""Đính kèm có URL hiện được: http(s), hoặc /files, /private/files của CRM (V3-09: ảnh/tệp sale gửi kèm)."""
+	return [a for a in attachments if media.is_safe_link(str(a.get("url") or ""))]
 
 
 def _message(item: dict) -> dict:
@@ -149,6 +151,8 @@ def _compose(data: dict, can_write: bool) -> dict:
 		"linked": zalo is not None,
 		"can_request_phone": False,
 		"phone_request_reason": "",
+		"can_send_media": False,
+		"media_accept": ".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.csv",
 	}
 	if zalo is None:
 		state["reason"] = _(
@@ -170,6 +174,7 @@ def _compose(data: dict, can_write: bool) -> dict:
 		state["quota"] = zalo.get("quota")  # V3-07: chỉ có khi khách đã ngoài 48 giờ
 		state["can_request_phone"] = bool(can_write and zalo.get("can_request_phone"))
 		state["phone_request_reason"] = zalo.get("phone_request_reason") or ""
+		state["can_send_media"] = bool(state["can_send"] and zalo.get("can_send_media"))
 	return state
 
 
@@ -229,6 +234,38 @@ def send(doctype: str, name: str, text: str, confirm_paid: int | str = 0) -> dic
 		frappe.throw(_("Không có Lead gốc để gắn hội thoại Zalo"))
 	lead = inbox.check_lead_write(lead)
 	return inbox.send_zalo(lead, text, confirm_paid)
+
+
+@frappe.whitelist(methods=["POST"])
+def send_attachment(
+	doctype: str, name: str, file_url: str, text: str = "", confirm_paid: int | str = 0
+) -> dict:
+	"""Sale gửi ảnh (JPG/PNG/GIF) hoặc tệp (PDF/DOC/DOCX/CSV) của Lead qua Zalo OA từ tab Zalo (V3-09).
+
+	Tệp phải đã đính kèm vào Lead (hoặc Deal của Lead) trong CRM. Ảnh: chữ đi cùng tin làm chú thích. Tệp: Zalo không cho
+	kèm chữ nên chữ được xếp hàng thành một tin riêng TRƯỚC tệp. Mọi guard của `inbox.send_zalo` giữ nguyên.
+	"""
+	from omni_crm.channels.zalo import media_out
+
+	if not flags.zalo_tab_enabled():
+		frappe.throw(_("Tab Zalo đang bị tắt"), frappe.PermissionError)
+	lead = resolve_lead(doctype, name, "write")
+	if not lead:
+		frappe.throw(_("Không có Lead gốc để gắn hội thoại Zalo"))
+	lead = inbox.check_lead_write(lead)
+	att = media_out.attachment_for_lead(file_url, lead)
+	attachment = {"file_url": att.file_url, "kind": att.kind, "name": att.name}
+	text = (text or "").strip()
+	if att.kind == media_out.FILE and text:
+		first = inbox.send_zalo(lead, text, confirm_paid)
+		if first.get("status") != "Queued":
+			return first
+		result = inbox.send_zalo(lead, "", confirm_paid, attachment=attachment)
+		result["text_outbound"] = first.get("outbound")
+		return result
+	if len(text) > media_out.CAPTION_MAX:
+		frappe.throw(_("Chú thích ảnh dài quá {0} ký tự").format(media_out.CAPTION_MAX))
+	return inbox.send_zalo(lead, text, confirm_paid, attachment=attachment)
 
 
 @frappe.whitelist(methods=["POST"])

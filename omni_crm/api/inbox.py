@@ -297,6 +297,16 @@ def _safe_attachments(raw: Any) -> list[dict]:
 	return out
 
 
+def _outbound_attachments(row: Any) -> list[dict]:
+	"""Ảnh/tệp sale gửi kèm (V3-09), qua cùng bộ lọc URL với đính kèm của khách."""
+	if not row.get("attachment"):
+		return []
+	kind = row.get("attachment_kind") or "file"
+	return _safe_attachments(
+		[{"url": row.attachment, "name": row.get("attachment_name") or "", "type": kind}]
+	)
+
+
 def check_lead_access(lead: str) -> None:
 	"""Ném PermissionError nếu người dùng không được đọc Lead (kiểm theo Lead, không theo DocType)."""
 	if not lead or not frappe.db.exists(LEAD, lead):
@@ -351,6 +361,9 @@ def thread_data(lead: str) -> dict:
 			"external_message_id",
 			"last_error",
 			"bot_draft",
+			"attachment",
+			"attachment_kind",
+			"attachment_name",
 		],
 		order_by="creation desc",
 		limit_page_length=THREAD_LIMIT,
@@ -430,7 +443,7 @@ def thread_data(lead: str) -> dict:
 				"channel_type": channel_types.get(o.channel),
 				"sender": sender,
 				"text": o.text or "",
-				"attachments": [],
+				"attachments": _outbound_attachments(o),
 				"at": o.sent_at or o.creation,
 				"status": o.status,
 				"is_sandbox": cint(o.is_sandbox),
@@ -587,7 +600,7 @@ def compose_state(lead: str) -> dict:
 	except AdapterNotFoundError:
 		ok, reason = False, _("Chưa có adapter Zalo")
 	has_phone = _has_phone(lead)
-	from omni_crm.channels.zalo import phone_request
+	from omni_crm.channels.zalo import media_out, phone_request
 
 	phone_why = phone_request.ineligible_reason(identity_doc, channel_doc, manual=True)
 	paid = bool(ok and reason)
@@ -599,6 +612,8 @@ def compose_state(lead: str) -> dict:
 		"phone_request_reason": phone_why or "",
 		"has_phone": has_phone,
 		"sandbox": bool(flags.sandbox()),
+		# V3-09: nút đính kèm ảnh/tệp; công tắc tắt thì chỉ tài khoản Zalo thử nghiệm
+		"can_send_media": bool(ok and media_out.recipient_allowed(identity_doc.get("external_id"))),
 		# V3-07: số tin còn lại của quỹ ngoài 48 giờ CHỈ hiện khi khách đã ngoài 48 giờ (trong khung thì không liên quan)
 		"quota": _quota_safe() if paid else None,
 	}
@@ -640,10 +655,13 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 	return send_zalo(lead, text, confirm_paid)
 
 
-def send_zalo(lead: str, text: str, confirm_paid: int | str = 0) -> dict:
-	"""Gửi tin Sale qua Zalo OA của Lead (kiểm nội dung, từ chối liên hệ, khung gửi); người gọi PHẢI đã kiểm quyền ghi."""
+def send_zalo(lead: str, text: str, confirm_paid: int | str = 0, attachment: dict | None = None) -> dict:
+	"""Gửi tin Sale qua Zalo OA của Lead (kiểm nội dung, từ chối liên hệ, khung gửi); người gọi PHẢI đã kiểm quyền ghi.
+
+	`attachment` (V3-09): {"file_url", "kind", "name"} đã kiểm thuộc Lead (media_out.attachment_for_lead); có tệp thì chữ được trống.
+	"""
 	text = (text or "").strip()
-	if not text:
+	if not text and not attachment:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > outbound_pipeline.MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(outbound_pipeline.MAX_TEXT_CHARS))
@@ -657,7 +675,7 @@ def send_zalo(lead: str, text: str, confirm_paid: int | str = 0) -> dict:
 			_("Người này đã từ chối nhận liên hệ (hoặc đã bị xóa dữ liệu): không gửi tin nhắn từ hệ thống.")
 		)
 	identity_doc, channel_doc = target
-	return queue_zalo_reply(lead, identity_doc, channel_doc, text, confirm_paid)
+	return queue_zalo_reply(lead, identity_doc, channel_doc, text, confirm_paid, attachment=attachment)
 
 
 def queue_zalo_reply(
@@ -667,6 +685,7 @@ def queue_zalo_reply(
 	text: str,
 	confirm_paid: int | str = 0,
 	bot_draft: str | None = None,
+	attachment: dict | None = None,
 ) -> dict:
 	"""Kiểm khung gửi Zalo rồi xếp hàng tin của Sale (dùng chung cho trả lời tay và gửi nháp của bot).
 
@@ -677,7 +696,7 @@ def queue_zalo_reply(
 	adapter = get_adapter("Zalo OA")
 	ok, reason = adapter.can_send_now(identity_doc, channel_doc, source="Sale")
 	if not ok:
-		name = _record_blocked(channel_doc, identity_doc, lead, text, reason)
+		name = _record_blocked(channel_doc, identity_doc, lead, text, reason, attachment)
 		return {"status": "Blocked", "outbound": name, "reason": reason}
 	try:  # V3-07: ngoài 48 giờ thì NGƯỜI quyết định tiêu quỹ, máy không tự hạ loại tin
 		route = routing.pick_message_kind(
@@ -690,7 +709,7 @@ def queue_zalo_reply(
 	except routing.NeedsApproval as e:
 		return {"status": "confirm_required", "warning": e.message_vi, "quota": _quota_safe()}
 	except routing.RoutingError as e:
-		name = _record_blocked(channel_doc, identity_doc, lead, text, e.message_vi)
+		name = _record_blocked(channel_doc, identity_doc, lead, text, e.message_vi, attachment)
 		return {"status": "Blocked", "outbound": name, "reason": e.message_vi}
 	name = outbound_pipeline.queue_outbound(
 		OutboundRequest(
@@ -701,6 +720,7 @@ def queue_zalo_reply(
 			source="Sale",
 			bot_draft=bot_draft,
 			route=route,
+			attachment=attachment,
 		),
 		user=frappe.session.user,
 		confirmed_paid=bool(cint(confirm_paid)),
@@ -709,9 +729,12 @@ def queue_zalo_reply(
 	return {"status": "Queued", "outbound": name, "warning": reason or ""}
 
 
-def _record_blocked(channel_doc: Any, identity_doc: Any, lead: str, text: str, reason: str) -> str:
+def _record_blocked(
+	channel_doc: Any, identity_doc: Any, lead: str, text: str, reason: str, attachment: dict | None = None
+) -> str:
 	doc = frappe.get_doc(
 		{
+			**outbound_pipeline._attachment_fields(attachment),
 			"doctype": OUTBOUND,
 			"channel": channel_doc.name,
 			"identity": identity_doc.name,

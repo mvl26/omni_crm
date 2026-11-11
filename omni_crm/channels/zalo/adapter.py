@@ -13,9 +13,11 @@ import frappe
 from frappe import _
 from frappe.utils import cint, convert_utc_to_system_timezone, now_datetime
 
+from omni_crm import flags
 from omni_crm.channels.registry import register_adapter
 from omni_crm.channels.zalo import signature, sigprobe, worker_hooks
 from omni_crm.channels.zalo.client import ZaloClient
+from omni_crm.channels.zalo.errors import ZaloError
 from omni_crm.ingest.events import InboundEvent, OutboundRequest, stable_message_id
 
 CHANNEL_TYPE = "Zalo OA"
@@ -355,9 +357,46 @@ class ZaloAdapter:
 		if not user_id:
 			raise ValueError(_("Định danh chưa có mã người dùng Zalo"))
 		client = ZaloClient(channel_doc.name)
+		if req.attachment:
+			message_id = self._send_attachment(client, user_id, req)
+			req.meta["quota_type"] = client.last_quota_type
+			return message_id
 		ids = client.send_text(user_id, req.text)
 		req.meta["quota_type"] = client.last_quota_type
 		return ids[0]
+
+	@staticmethod
+	def _send_attachment(client: ZaloClient, user_id: str, req: OutboundRequest) -> str:
+		"""Ảnh/GIF/tệp của Lead (V3-09): đọc tệp, nén ảnh quá 1 MB, lấy kích thước GIF, rồi tải lên và gửi."""
+		from omni_crm.channels.zalo import media_out
+
+		att = req.attachment or {}
+		kind = att.get("kind")
+		name = att.get("name") or "tep"
+		if not media_out.recipient_allowed(user_id):  # chặn trước cả khi đọc tệp (client cũng chặn lần nữa)
+			raise ZaloError(
+				None,
+				"permanent",
+				_("Gửi ảnh/tệp qua Zalo đang tắt: chỉ tài khoản Zalo thử nghiệm nhận được."),
+			)
+		if flags.sandbox():
+			return client.send_media(user_id, kind, b"", name, caption=req.text or "")
+		try:
+			content = media_out.read_content(att["file_url"])
+			size = None
+			if kind == media_out.IMAGE:
+				content, ext = media_out.shrink_image(content)
+				base = name.rsplit(".", 1)[0] if "." in name else name
+				name = f"{base}{ext}"
+			elif kind == media_out.GIF:
+				size = media_out.gif_size(content)
+		except media_out.MediaError as e:
+			raise ZaloError(None, "permanent", str(e)) from e
+		except Exception as e:  # tệp đã bị xóa khỏi CRM, ảnh hỏng...: không thử lại vô ích
+			raise ZaloError(None, "permanent", _("Không đọc được tệp đính kèm trong CRM")) from e
+		if len(content) > media_out.LIMITS[kind]:
+			raise ZaloError(None, "permanent", media_out.too_big_text(kind, len(content)))
+		return client.send_media(user_id, kind, content, name, caption=req.text or "", size=size)
 
 	def request_user_info(self, identity_doc, channel_doc, meta: dict | None = None) -> tuple[str, str]:
 		"""Gửi thẻ xin SĐT (request_user_info); trả (mã tin, nội dung hiển thị). Sandbox: không gọi HTTP.

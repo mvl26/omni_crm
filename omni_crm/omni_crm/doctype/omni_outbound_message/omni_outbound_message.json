@@ -11,6 +11,9 @@
   "identity",
   "lead",
   "text",
+  "attachment",
+  "attachment_kind",
+  "attachment_name",
   "col_out",
   "source",
   "sent_by",
@@ -57,6 +60,27 @@
    "fieldname": "text",
    "fieldtype": "Long Text",
    "label": "Nội dung"
+  },
+  {
+   "fieldname": "attachment",
+   "fieldtype": "Attach",
+   "label": "Tệp đính kèm",
+   "read_only": 1,
+   "description": "V3-09: ảnh/tệp sale gửi kèm qua Zalo (tệp của Lead trong CRM)."
+  },
+  {
+   "fieldname": "attachment_kind",
+   "fieldtype": "Select",
+   "label": "Loại đính kèm",
+   "options": "\nimage\ngif\nfile",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attachment_name",
+   "fieldtype": "Data",
+   "label": "Tên tệp đính kèm",
+   "length": 140,
+   "read_only": 1
   },
   {
    "fieldname": "col_out",

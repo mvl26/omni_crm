@@ -14,6 +14,12 @@ DEFAULTS: dict = {
 	"send_path": "/v3.0/oa/message/cs",
 	"profile_path": "/v3.0/oa/user/detail",
 	"quota_path": "/v3.0/oa/quota/message",  # V3-07: tài liệu "Kiểm tra hạn mức tin nhắn OA" (POST)
+	"upload_paths": {  # V3-09: tài liệu "Upload hình ảnh / Upload ảnh GIF / Upload file" (multipart, trường `file`)
+		"image": "/v2.0/oa/upload/image",
+		"gif": "/v2.0/oa/upload/gif",
+		"file": "/v2.0/oa/upload/file",
+	},
+	"upload_timeout": 30,  # giây: tải tệp tới 5 MB lâu hơn gửi tin chữ
 	"oauth_permission_path": "/v4/oa/permission",
 	"oauth_token_path": "/v4/oa/access_token",
 	"max_text_length": 2000,  # độ dài tối đa một tin văn bản tư vấn (chưa xác nhận)
