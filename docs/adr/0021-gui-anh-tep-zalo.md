@@ -26,3 +26,8 @@ Người phụ trách yêu cầu sale gửi được ảnh và tệp PDF/Word t�
 - Bản giao diện patch (ADR 0016) thêm nút 📎, thẻ tệp đã chọn, ô chú thích; hàm thuần `checkMediaFile`, `canSubmitWithFile` trong `zaloThread.js` (vitest).
 - Hộp thư (`/omni-inbox`) chưa có nút đính kèm (ngoài phạm vi), nhưng hiện được ảnh/tệp đã gửi.
 - Chưa xác minh với API thật: tên trường `token` hay `attachment_id` trong phản hồi tải GIF (tài liệu ví dụ trả `attachment_id`, bảng mô tả ghi `token`; code đọc cả hai); tải lên có tính vào giới hạn 100 lượt/phút của OA không.
+
+## Thử thật trên OA Miyano (2026-11-11, tài khoản Zalo thử nghiệm)
+
+- Tới khách, Zalo dội echo đúng mã tin: ảnh JPG nhỏ kèm chú thích; PNG 4,9 MB (nén xuống dưới 1 MB); PDF; DOCX tên tiếng Việt "Báo giá Miyano thử.docx" (tên hiện đúng ở echo); lời nhắn rồi PDF (đúng thứ tự). Tất cả `quota_type` = trong 48 giờ, không tiêu quỹ.
+- **GIF không gửi được**: tải lên `/v2.0/oa/upload/gif` thành công (trả `attachment_id`, không phải `token`), nhưng `message/cs` luôn trả **-200 "Send message failed"**: đã thử 160x120 và 480x270, có/không width-height, `media_type` gif lẫn image, và `url` GIF công khai. Nên `.gif` bị loại khỏi danh sách gửi (máy chủ và giao diện báo "hãy gửi JPG hoặc PNG"); code gửi GIF trong `ZaloClient` giữ lại để bật khi Zalo nhận. GIF khách gửi đến vẫn hiện như cũ.

@@ -131,7 +131,7 @@ class TestRules(MediaCase):
 	def test_kind_by_extension(self):
 		self.assertEqual(media_out.kind_of("Bao gia.PDF"), "file")
 		self.assertEqual(media_out.kind_of("a.jpeg"), "image")
-		self.assertEqual(media_out.kind_of("b.gif"), "gif")
+		self.assertIsNone(media_out.kind_of("b.gif"))  # Zalo trả -200 khi gửi GIF (thử thật 2026-11-11)
 		self.assertEqual(media_out.kind_of("c.docx"), "file")
 		self.assertIsNone(media_out.kind_of("d.xlsx"))  # Zalo không nhận xlsx
 		self.assertIsNone(media_out.kind_of("e.exe"))
@@ -171,6 +171,12 @@ class TestAttachmentBelongsToLead(MediaCase):
 		xlsx = self.attach("bang.xlsx", b"PK td")
 		with self.assertRaises(media_out.MediaError):
 			media_out.attachment_for_lead(xlsx, self.lead1)
+
+	def test_gif_refused_with_clear_message(self):
+		url = self.attach("dong.gif", gif_bytes())
+		with self.assertRaises(media_out.MediaError) as ctx:
+			media_out.attachment_for_lead(url, self.lead1)
+		self.assertIn("JPG hoặc PNG", str(ctx.exception))
 
 	def test_gif_or_file_over_5mb_refused(self):
 		url = self.attach("lon.csv", b"0" * (5 * media_out.MB + 1))

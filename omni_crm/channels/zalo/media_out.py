@@ -33,7 +33,8 @@ EXTENSIONS = {
 	".jpg": IMAGE,
 	".jpeg": IMAGE,
 	".png": IMAGE,
-	".gif": GIF,
+	# ".gif": GIF, -- thử thật 2026-11-11 trên OA Miyano: tải lên được nhưng gửi luôn lỗi -200 (cả attachment_id lẫn url,
+	# có/không width-height): chưa nhận GIF. Giữ code gửi GIF trong ZaloClient để bật lại khi Zalo nhận.
 	".pdf": FILE,
 	".doc": FILE,
 	".docx": FILE,
@@ -101,7 +102,7 @@ def display_text(text: str | None, kind: str | None, name: str | None) -> str:
 
 
 def allowed_types_text() -> str:
-	return _("ảnh JPG/PNG/GIF hoặc tệp PDF/DOC/DOCX/CSV")
+	return _("ảnh JPG/PNG hoặc tệp PDF/DOC/DOCX/CSV")
 
 
 def attachment_for_lead(file_url: str, lead: str) -> Attachment:
@@ -133,6 +134,8 @@ def attachment_for_lead(file_url: str, lead: str) -> Attachment:
 	name = (row.file_name or os.path.basename(file_url))[:140]
 	kind = kind_of(name) or kind_of(file_url)
 	if not kind:
+		if (name or file_url).lower().endswith(".gif"):
+			raise MediaError(_("Zalo hiện chưa nhận ảnh GIF gửi qua hệ thống; hãy gửi ảnh JPG hoặc PNG"))
 		raise MediaError(_("Zalo chỉ nhận {0}").format(allowed_types_text()))
 	size = cint(row.file_size)
 	limit = MAX_SOURCE_IMAGE if kind == IMAGE else LIMITS[kind]

@@ -160,7 +160,7 @@ def _compose(data: dict, can_write: bool) -> dict:
 		"can_request_phone": False,
 		"phone_request_reason": "",
 		"can_send_media": False,
-		"media_accept": ".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.csv",
+		"media_accept": ".jpg,.jpeg,.png,.pdf,.doc,.docx,.csv",
 	}
 	if zalo is None:
 		state["reason"] = _(
@@ -248,7 +248,7 @@ def send(doctype: str, name: str, text: str, confirm_paid: int | str = 0) -> dic
 def send_attachment(
 	doctype: str, name: str, file_url: str, text: str = "", confirm_paid: int | str = 0
 ) -> dict:
-	"""Sale gửi ảnh (JPG/PNG/GIF) hoặc tệp (PDF/DOC/DOCX/CSV) của Lead qua Zalo OA từ tab Zalo (V3-09).
+	"""Sale gửi ảnh (JPG/PNG; GIF Zalo chưa nhận) hoặc tệp (PDF/DOC/DOCX/CSV) của Lead qua Zalo OA từ tab Zalo (V3-09).
 
 	Tệp phải đã đính kèm vào Lead (hoặc Deal của Lead) trong CRM. Ảnh: chữ đi cùng tin làm chú thích. Tệp: Zalo không cho
 	kèm chữ nên chữ được xếp hàng thành một tin riêng TRƯỚC tệp. Mọi guard của `inbox.send_zalo` giữ nguyên.

@@ -421,7 +421,7 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
-index 0000000..2e438b0
+index 0000000..f6ebfd9
 --- /dev/null
 +++ b/frontend/src/components/Activities/ZaloTab.vue
 @@ -0,0 +1,627 @@
@@ -674,7 +674,7 @@ index 0000000..2e438b0
 +        />
 +        <Button
 +          v-if="compose.can_send_media"
-+          :title="__('Gửi ảnh hoặc tệp (JPG, PNG, GIF, PDF, DOC, DOCX, CSV)')"
++          :title="__('Gửi ảnh hoặc tệp (JPG, PNG, PDF, DOC, DOCX, CSV)')"
 +          :disabled="sending"
 +          @click="fileInput?.click()"
 +        >
@@ -1406,10 +1406,10 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
-index 0000000..a807b04
+index 0000000..d3cdb6d
 --- /dev/null
 +++ b/frontend/src/utils/zaloThread.js
-@@ -0,0 +1,389 @@
+@@ -0,0 +1,394 @@
 +// Hàm thuần cho tab "Zalo" (omni_crm, V3-01): nhóm bong bóng, nhãn, lọc URL an toàn. Không phụ thuộc Vue/DOM.
 +
 +export const ZALO_EVENT = 'omni_inbox_update'
@@ -1748,7 +1748,6 @@ index 0000000..a807b04
 +  '.jpg': { kind: 'image', max: 15 * MB },
 +  '.jpeg': { kind: 'image', max: 15 * MB },
 +  '.png': { kind: 'image', max: 15 * MB },
-+  '.gif': { kind: 'gif', max: 5 * MB },
 +  '.pdf': { kind: 'file', max: 5 * MB },
 +  '.doc': { kind: 'file', max: 5 * MB },
 +  '.docx': { kind: 'file', max: 5 * MB },
@@ -1765,9 +1764,15 @@ index 0000000..a807b04
 +/** Kiểm tệp sale chọn: trả { kind } nếu gửi được, hoặc { error } (chuỗi tiếng Việt chưa dịch). */
 +export function checkMediaFile(file) {
 +  if (!file) return { error: 'Chưa chọn tệp' }
-+  const rule = MEDIA_RULES[fileExtension(file.name)]
++  const ext = fileExtension(file.name)
++  if (ext === '.gif')
++    return {
++      error:
++        'Zalo hiện chưa nhận ảnh GIF gửi qua hệ thống; hãy gửi ảnh JPG hoặc PNG',
++    }
++  const rule = MEDIA_RULES[ext]
 +  if (!rule)
-+    return { error: 'Zalo chỉ nhận ảnh JPG/PNG/GIF hoặc tệp PDF/DOC/DOCX/CSV' }
++    return { error: 'Zalo chỉ nhận ảnh JPG/PNG hoặc tệp PDF/DOC/DOCX/CSV' }
 +  if (!file.size) return { error: 'Tệp rỗng' }
 +  if (file.size > rule.max) {
 +    const limit = Math.round(rule.max / MB)
@@ -1908,10 +1913,10 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js
 new file mode 100644
-index 0000000..a453361
+index 0000000..ea58a6d
 --- /dev/null
 +++ b/frontend/tests/unit/zaloThread.test.js
-@@ -0,0 +1,503 @@
+@@ -0,0 +1,502 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  OA_CHAT_URL,
@@ -2375,7 +2380,7 @@ index 0000000..a453361
 +  it('nhận đúng loại Zalo cho phép, từ chối loại khác', () => {
 +    expect(checkMediaFile(f('Bao gia.PDF', 1000))).toEqual({ kind: 'file' })
 +    expect(checkMediaFile(f('a.jpeg', 1000))).toEqual({ kind: 'image' })
-+    expect(checkMediaFile(f('b.gif', 1000))).toEqual({ kind: 'gif' })
++    expect(checkMediaFile(f('b.gif', 1000)).error).toMatch(/JPG hoặc PNG/) // Zalo trả -200 khi gửi GIF
 +    expect(checkMediaFile(f('c.docx', 1000))).toEqual({ kind: 'file' })
 +    expect(checkMediaFile(f('d.xlsx', 1000)).error).toMatch(/PDF\/DOC/)
 +    expect(checkMediaFile(f('khongduoi', 1000)).error).toBeTruthy()
@@ -2388,7 +2393,6 @@ index 0000000..a453361
 +    const MB = 1024 * 1024
 +    expect(checkMediaFile(f('a.pdf', 5 * MB)).kind).toBe('file')
 +    expect(checkMediaFile(f('a.pdf', 5 * MB + 1)).error).toMatch(/5 MB/)
-+    expect(checkMediaFile(f('a.gif', 5 * MB + 1)).error).toMatch(/5 MB/)
 +    expect(checkMediaFile(f('a.png', 3 * MB)).kind).toBe('image')
 +    expect(checkMediaFile(f('a.png', 15 * MB + 1)).error).toMatch(/15 MB/)
 +  })
