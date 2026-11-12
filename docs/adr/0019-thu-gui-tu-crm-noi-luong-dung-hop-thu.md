@@ -16,7 +16,7 @@ Thư sale gửi từ CRM tới khách rơi vào thư rác. Đọc mã (crm 3942b
 3. Chỉ dựa vào cấu hình "Always use this email address as sender address": sửa được From nhưng không nối luồng, và không cứu trường hợp Frappe báo thiếu Email Account.
 
 ## Quyết định
-Chọn 2, cộng cấu hình Email Account: tắt Track Email Status, bật Always use this email address as sender address. Lỗi trong hook chỉ ghi log, không chặn gửi.
+Chọn 2, cộng cấu hình Email Account: tắt Track Email Status; tên Email Account là tên thương hiệu, bật cả Always use this email address as sender address và Always use this name as sender name (docs/05 mục 5: bật riêng ô thứ nhất làm mất dấu tiếng Việt trong tên người gửi do `parse_addr` của Frappe). Lỗi trong hook chỉ ghi log, không chặn gửi.
 
 ## Hệ quả
 - Người nhận thấy thư đến từ đúng hộp thư mà họ đã viết tới, nằm trong cùng cuộc hội thoại.
