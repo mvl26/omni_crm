@@ -165,6 +165,31 @@ class TestClient(unittest.TestCase):
 				mc.MessengerClient(channel()).send_text(PSID, "a" * 2500)
 		self.assertEqual(cm.exception.sent_ids, ["m1"])
 
+	def test_lay_ten_qua_hoi_thoai(self):
+		conv = {
+			"data": [
+				{"participants": {"data": [{"id": PAGE, "name": "Miyano"}, {"id": PSID, "name": "Lê Khách"}]}}
+			]
+		}
+		with mock.patch.object(mc.requests, "request", return_value=Resp(200, conv)) as req:
+			self.assertEqual(mc.MessengerClient(channel()).get_name(PSID), "Lê Khách")
+		self.assertEqual(req.call_args.args[1], f"https://graph.facebook.com/v23.0/{PAGE}/conversations")
+		self.assertEqual(req.call_args.kwargs["params"]["user_id"], PSID)
+
+	def test_lay_ten_du_phong_ho_so_va_bao_loi_ro(self):
+		no_perm = Resp(400, {"error": {"code": 100, "error_subcode": 33}})
+		with mock.patch.object(
+			mc.requests,
+			"request",
+			side_effect=[Resp(200, {"data": []}), Resp(200, {"first_name": "A", "last_name": "B"})],
+		):
+			self.assertEqual(mc.MessengerClient(channel()).get_name(PSID), "A B")
+		with mock.patch.object(mc.requests, "request", side_effect=[Resp(200, {"data": []}), no_perm]):
+			with self.assertRaises(mc.MessengerError) as cm:
+				mc.MessengerClient(channel()).get_name(PSID)
+		self.assertIn("không trả tên", cm.exception.message_vi)
+		self.assertIn("100/33", cm.exception.message_vi)
+
 	def test_sandbox_khong_goi_http(self):
 		with (
 			mock.patch.object(mc.flags, "sandbox", return_value=True),

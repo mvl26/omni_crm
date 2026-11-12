@@ -159,6 +159,38 @@ class MessengerClient:
 		return sent[0]
 
 	def get_name(self, psid: str) -> str:
-		"""Tên hiển thị của người gửi (first_name last_name); rỗng nếu Meta không trả."""
-		data = self._request("GET", f"/{psid}", params={"fields": "first_name,last_name"})
+		"""Tên hiển thị của người gửi; rỗng nếu Meta không trả.
+
+		Đi qua hội thoại của Page trước (`/{page}/conversations?user_id=…&fields=participants`): chỉ cần token Page có
+		`pages_messaging`, đã kiểm chạy được trên Page Miyano 12/11/2026. Đọc thẳng hồ sơ `/{PSID}` cần tính năng
+		"Business Asset User Profile Access" mà ứng dụng chưa có (Meta trả 100/33), nên chỉ để dự phòng.
+		"""
+		name = ""
+		first_error: MessengerError | None = None
+		if self.page_id:
+			try:
+				data = self._request(
+					"GET",
+					f"/{self.page_id}/conversations",
+					params={"platform": "messenger", "user_id": psid, "fields": "participants"},
+				)
+				for conv in data.get("data") or []:
+					for person in (conv.get("participants") or {}).get("data") or []:
+						if str(person.get("id")) == str(psid) and person.get("name"):
+							name = str(person["name"]).strip()
+			except MessengerError as e:
+				first_error = e
+		if name:
+			return name
+		try:
+			data = self._request("GET", f"/{psid}", params={"fields": "first_name,last_name"})
+		except MessengerError as e:
+			err = first_error or e
+			raise MessengerError(
+				err.code,
+				err.kind,
+				_("Meta không trả tên người gửi (mã {0}/{1})").format(err.code, err.subcode),
+				err.http_status,
+				err.subcode,
+			) from e
 		return " ".join(str(data.get(k) or "").strip() for k in ("first_name", "last_name")).strip()
