@@ -16,6 +16,7 @@ from omni_crm import flags
 from omni_crm.api import inbox
 from omni_crm.api.zalo_tab import resolve_lead
 from omni_crm.channels.meta_messenger import media_out
+from omni_crm.crm_bridge import chat_templates
 from omni_crm.pipeline import outbound as outbound_pipeline
 from omni_crm.utils import media
 
@@ -169,6 +170,22 @@ def get_conversation(doctype: str, name: str) -> dict:
 		"truncated": bool(data.get("truncated")),
 		"compose": _compose(data, can_write),
 	}
+
+
+@frappe.whitelist()
+def get_templates(doctype: str, name: str) -> dict:
+	"""Mẫu tin nhắn (ADR 0026) đã điền cho Lead gốc của trang đang xem và người đang soạn; chỉ để ĐIỀN ô soạn, không gửi.
+
+	Quyền: đọc trang đang mở VÀ Lead gốc (như `get_conversation`). Tab tắt hoặc không có Lead gốc: danh sách rỗng.
+	"""
+	if not flags.messenger_tab_enabled():
+		return {"templates": []}
+	lead = resolve_lead(doctype, name, "read")
+	if not lead:
+		return {"templates": []}
+	if not frappe.has_permission(LEAD, "read", doc=lead):
+		frappe.throw(_("Bạn không có quyền xem Lead này"), frappe.PermissionError)
+	return {"templates": chat_templates.for_lead(lead, CHANNEL)}
 
 
 def _write_lead(doctype: str, name: str) -> str:

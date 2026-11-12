@@ -429,10 +429,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/MessengerTab.vue b/frontend/src/components/Activities/MessengerTab.vue
 new file mode 100644
-index 0000000..49795c5
+index 0000000..99e2ca9
 --- /dev/null
 +++ b/frontend/src/components/Activities/MessengerTab.vue
-@@ -0,0 +1,546 @@
+@@ -0,0 +1,717 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot (cùng khối `bot` như tab Zalo): chữ xuống dòng theo nội dung; quá dài thì cuộn trong thẻ -->
@@ -671,7 +671,107 @@ index 0000000..49795c5
 +        >
 +          📎
 +        </Button>
++        <!-- Mẫu tin nhắn (ADR 0026): chọn mẫu chỉ điền vào ô soạn, KHÔNG tự gửi -->
++        <Popover v-if="compose.can_send" class="shrink-0" placement="top-start">
++          <template #target="{ togglePopover, isOpen }">
++            <Button
++              :label="__('Mẫu tin')"
++              :title="__('Chọn mẫu tin nhắn để điền vào ô soạn')"
++              :disabled="sending"
++              @click="toggleTemplates(togglePopover, isOpen)"
++            />
++          </template>
++          <template #body="{ close }">
++            <div
++              class="mb-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border bg-surface-modal p-1.5 text-base shadow-xl"
++            >
++              <div
++                v-if="
++                  templates.loading || (!templates.fetched && !templates.error)
++                "
++                class="flex items-center gap-2 px-2 py-3 text-sm text-ink-gray-5"
++              >
++                <LoadingIndicator class="h-4 w-4" />
++                <span>{{ __('Đang tải mẫu tin...') }}</span>
++              </div>
++              <div v-else-if="templates.error" class="px-2 py-2 text-sm">
++                <div class="text-ink-red-3">
++                  {{ __('Không tải được mẫu tin nhắn.') }}
++                </div>
++                <Button
++                  class="mt-2"
++                  size="sm"
++                  :label="__('Thử lại')"
++                  @click="loadTemplates()"
++                />
++              </div>
++              <div v-else-if="!templateItems.length" class="px-2 py-2 text-sm">
++                <div class="text-ink-gray-8">
++                  {{ __('Chưa có mẫu tin nhắn') }}
++                </div>
++                <div class="mt-1 text-xs text-ink-gray-5">
++                  {{ __('Quản lý thêm mẫu trong Desk:') }}
++                  <a
++                    href="/app/omni-chat-template"
++                    target="_blank"
++                    rel="noopener noreferrer"
++                    class="text-ink-blue-3 underline"
++                    >/app/omni-chat-template</a
++                  >
++                </div>
++              </div>
++              <template v-else>
++                <TextInput
++                  v-if="showTemplateSearch"
++                  v-model="templateQuery"
++                  class="mb-1"
++                  type="text"
++                  :placeholder="__('Tìm theo tên, ghi chú, nội dung')"
++                />
++                <div class="max-h-72 overflow-y-auto">
++                  <button
++                    v-for="item in shownTemplates"
++                    :key="item.key"
++                    type="button"
++                    class="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent"
++                    :disabled="Boolean(item.error)"
++                    :title="item.text"
++                    @click="chooseTemplate(item, close)"
++                  >
++                    <div
++                      class="break-words"
++                      :class="
++                        item.error ? 'text-ink-gray-5' : 'text-ink-gray-9'
++                      "
++                    >
++                      {{ item.title }}
++                    </div>
++                    <div
++                      v-if="item.note"
++                      class="break-words text-xs text-ink-gray-5"
++                    >
++                      {{ item.note }}
++                    </div>
++                    <div
++                      v-if="item.error"
++                      class="break-words text-xs text-ink-red-3"
++                    >
++                      {{ __('Mẫu lỗi: {0}', [item.error]) }}
++                    </div>
++                  </button>
++                  <div
++                    v-if="!shownTemplates.length"
++                    class="px-2 py-2 text-sm text-ink-gray-5"
++                  >
++                    {{ __('Không có mẫu nào khớp') }}
++                  </div>
++                </div>
++              </template>
++            </div>
++          </template>
++        </Popover>
 +        <Textarea
++          ref="composer"
 +          v-model="text"
 +          type="textarea"
 +          class="min-h-8 w-full"
@@ -700,6 +800,18 @@ index 0000000..49795c5
 +          @click="submit()"
 +        />
 +      </div>
++      <!-- Chữ quá dài (vd. mẫu dài) vẫn được điền; nút Gửi khóa, dòng này nói lý do -->
++      <div
++        v-if="compose.can_send && textTooLong"
++        class="mt-1 text-xs text-ink-red-3"
++      >
++        {{
++          __('Tin dài {0} ký tự, Messenger chỉ nhận tối đa {1}. Hãy rút gọn.', [
++            textTooLong.length,
++            textTooLong.max,
++          ])
++        }}
++      </div>
 +    </div>
 +  </div>
 +</template>
@@ -717,12 +829,15 @@ index 0000000..49795c5
 +import {
 +  Button,
 +  LoadingIndicator,
++  Popover,
++  TextInput,
 +  Textarea,
 +  call,
 +  createResource,
 +  toast,
 +} from 'frappe-ui'
 +import { globalStore } from '@/stores/global'
++import { useMessengerTemplates } from '@/composables/messenger'
 +import {
 +  POLL_MS,
 +  ZALO_EVENT,
@@ -735,6 +850,7 @@ index 0000000..49795c5
 +} from '@/utils/zaloThread'
 +import {
 +  acceptList,
++  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
 +  formatSize,
@@ -743,6 +859,7 @@ index 0000000..49795c5
 +  messengerAttachmentViews,
 +  metaInboxUrl,
 +  openMetaInbox,
++  overLimit,
 +  parseUploadResponse,
 +  sendOutcome,
 +} from '@/utils/messengerThread'
@@ -792,6 +909,57 @@ index 0000000..49795c5
 +const maxMb = computed(() =>
 +  Math.round(mediaMaxBytes(compose.value.media_max_mb) / (1024 * 1024)),
 +)
++const textTooLong = computed(() =>
++  overLimit(text.value, compose.value.max_chars),
++)
++
++// Mẫu tin nhắn (ADR 0026): omni_crm.api.messenger_tab.get_templates, tải khi bảng chọn mở lần đầu, không thăm dò.
++const composer = ref(null)
++const {
++  resource: templates,
++  query: templateQuery,
++  items: templateItems,
++  shown: shownTemplates,
++  showSearch: showTemplateSearch,
++  load: loadTemplates,
++  reset: resetTemplates,
++} = useMessengerTemplates(() => ({
++  doctype: props.doctype,
++  name: props.docname,
++}))
++
++function toggleTemplates(togglePopover, isOpen) {
++  if (!isOpen) {
++    templateQuery.value = ''
++    loadTemplates()
++  }
++  togglePopover()
++}
++
++// Chỉ điền vào ô soạn: ô đang có chữ khác thì hỏi trước khi thay (cùng kiểu window.confirm của tab Zalo). Không tự gửi.
++function chooseTemplate(item, close) {
++  if (item.error) return
++  const result = applyTemplate(text.value, item.text)
++  close()
++  if (
++    result.needsConfirm &&
++    !window.confirm(
++      __('Ô soạn đang có chữ. Thay bằng mẫu "{0}"?', [item.title]),
++    )
++  )
++    return
++  text.value = result.text
++  nextTick(focusComposerEnd)
++}
++
++function focusComposerEnd() {
++  const el = composer.value?.$el?.querySelector?.('textarea')
++  if (!el) return
++  el.focus()
++  const end = el.value.length
++  el.setSelectionRange(end, end)
++  el.scrollTop = el.scrollHeight
++}
 +
 +// Tóm tắt, ý định, mức gấp, điểm do bot phân tích ghi vào Lead (cùng hàm `_bot` của tab Zalo ở máy chủ).
 +const bot = computed(() => botCard(conversation.data?.bot))
@@ -976,7 +1144,10 @@ index 0000000..49795c5
 +
 +watch(
 +  () => [props.doctype, props.docname],
-+  () => conversation.reload(),
++  () => {
++    conversation.reload()
++    resetTemplates() // mẫu đã điền theo Lead cũ: tải lại khi mở bảng chọn
++  },
 +)
 +</script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
@@ -1772,12 +1943,17 @@ index 0000000..7b6f7fc
 +}
 diff --git a/frontend/src/composables/messenger.js b/frontend/src/composables/messenger.js
 new file mode 100644
-index 0000000..a6d085c
+index 0000000..e168c8d
 --- /dev/null
 +++ b/frontend/src/composables/messenger.js
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,52 @@
 +import { createResource } from 'frappe-ui'
-+import { ref } from 'vue'
++import { computed, ref } from 'vue'
++import {
++  filterTemplates,
++  needsTemplateSearch,
++  templateList,
++} from '@/utils/messengerThread'
 +
 +// Tab Messenger (ADR 0023) chỉ hiện khi app omni_crm đã cài và công tắc không bị tắt (Omni Settings.messenger_tab_disabled).
 +// Nếu omni_crm không có trên site (hoặc bản omni_crm cũ chưa có API này), lời gọi lỗi và tab đơn giản không hiện (CRM chạy như cũ).
@@ -1794,6 +1970,35 @@ index 0000000..a6d085c
 +    messengerEnabled.value = false
 +  },
 +})
++
++/**
++ * Mẫu tin nhắn của tab Messenger (ADR 0026): một resource cho mỗi tab (tab được tạo lại theo Lead/Deal), chỉ tải khi
++ * bảng chọn mở lần đầu, không thăm dò. Máy chủ đã lọc, sắp xếp và điền sẵn theo Lead và người dùng. Lỗi tải hiện ngay
++ * trong bảng chọn (có nút thử lại), không bật thông báo chung.
++ */
++export function useMessengerTemplates(getParams) {
++  const resource = createResource({
++    url: 'omni_crm.api.messenger_tab.get_templates',
++    makeParams: () => getParams(),
++    onError: () => {},
++  })
++  const query = ref('')
++  const items = computed(() => templateList(resource.data))
++  const shown = computed(() => filterTemplates(items.value, query.value))
++  const showSearch = computed(() => needsTemplateSearch(items.value))
++
++  function load() {
++    if (resource.loading || resource.fetched) return
++    resource.fetch().catch(() => {}) // lỗi đã nằm ở resource.error
++  }
++
++  function reset() {
++    resource.reset()
++    query.value = ''
++  }
++
++  return { resource, query, items, shown, showSearch, load, reset }
++}
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
 index 0000000..5e7db68
@@ -2035,13 +2240,13 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/messengerThread.js b/frontend/src/utils/messengerThread.js
 new file mode 100644
-index 0000000..b585733
+index 0000000..7ce28f5
 --- /dev/null
 +++ b/frontend/src/utils/messengerThread.js
-@@ -0,0 +1,293 @@
+@@ -0,0 +1,377 @@
 +// Hàm thuần cho tab "Messenger" (omni_crm, ADR 0023): đính kèm (ảnh / video / âm thanh / tệp đã lưu trong CRM), kiểm tệp
-+// sale chọn để gửi, liên kết hộp thư Meta Business Suite. Gom bong bóng, nhãn, giờ và luật URL dùng lại `zaloThread.js`
-+// (không sửa tệp đó). Không phụ thuộc Vue/DOM.
++// sale chọn để gửi, liên kết hộp thư Meta Business Suite, mẫu tin nhắn (ADR 0026). Gom bong bóng, nhãn, giờ và luật URL
++// dùng lại `zaloThread.js` (không sửa tệp đó). Không phụ thuộc Vue/DOM.
 +import {
 +  INLINE_IMAGE_TYPES,
 +  attachmentLabel,
@@ -2331,6 +2536,90 @@ index 0000000..b585733
 +      error: res.reason || 'Tin bị chặn, chưa gửi',
 +    }
 +  return { ok: true, clearText: true, clearFile: true, error: '' }
++}
++
++// --- Mẫu tin nhắn (ADR 0026): máy chủ `get_templates` đã lọc, sắp xếp và điền sẵn theo Lead và người dùng ---
++
++/** Có nhiều hơn chừng này mẫu thì bảng chọn hiện ô tìm. */
++export const TEMPLATE_SEARCH_AFTER = 5
++
++/** Chữ dùng để so khớp khi tìm: bỏ dấu tiếng Việt (cả đ/Đ), chữ thường, gộp khoảng trắng. */
++export function foldText(value) {
++  return String(value ?? '')
++    .normalize('NFD')
++    .replace(/[̀-ͯ]/g, '')
++    .toLowerCase()
++    .replace(/đ/g, 'd')
++    .replace(/\s+/g, ' ')
++    .trim()
++}
++
++/**
++ * Danh sách mẫu từ kết quả `get_templates` ({ templates: [...] }): [{ key, name, title, note, text, error }], giữ thứ tự
++ * máy chủ. Mẫu lỗi (`error` khác rỗng) hoặc nội dung trống thì `text` = '' và có `error`: hiện mờ, không chọn được.
++ * Bỏ mục rác (không phải object, không có tên lẫn tiêu đề). Chữ thuần, hiển thị bằng nội suy.
++ */
++export function templateList(data) {
++  const list = Array.isArray(data?.templates) ? data.templates : []
++  const out = []
++  for (const t of list) {
++    if (!t || typeof t !== 'object') continue
++    const name = String(t.name ?? '').trim()
++    const title = String(t.title ?? '').trim() || name
++    if (!title) continue
++    const body = t.text == null ? '' : String(t.text).replace(/\r\n?/g, '\n')
++    const error = t.error
++      ? String(t.error).trim() || 'Mẫu lỗi'
++      : body.trim()
++        ? ''
++        : 'Nội dung mẫu trống'
++    out.push({
++      key: out.length,
++      name: name || title,
++      title,
++      note: String(t.note ?? '').trim(),
++      text: error ? '' : body,
++      error,
++    })
++  }
++  return out
++}
++
++/** Bảng chọn có cần ô tìm không (nhiều hơn `TEMPLATE_SEARCH_AFTER` mẫu). */
++export function needsTemplateSearch(list) {
++  return Array.isArray(list) && list.length > TEMPLATE_SEARCH_AFTER
++}
++
++/**
++ * Lọc mẫu theo tiêu đề, ghi chú và nội dung; không phân biệt hoa thường và dấu tiếng Việt; mọi từ trong ô tìm phải có
++ * mặt. Ô tìm rỗng (sau khi bỏ khoảng trắng) trả cả danh sách. Mẫu lỗi chỉ so theo tiêu đề và ghi chú (nội dung không dùng).
++ */
++export function filterTemplates(list, query) {
++  const items = Array.isArray(list) ? list : []
++  const q = foldText(query)
++  if (!q) return items
++  const words = q.split(' ')
++  return items.filter((t) => {
++    if (!t || typeof t !== 'object') return false
++    const hay = foldText([t.title, t.note, t.error ? '' : t.text].join(' '))
++    return words.every((w) => hay.includes(w))
++  })
++}
++
++/**
++ * Điền mẫu vào ô soạn: { text, needsConfirm }. Ô trống (chỉ khoảng trắng) thì điền thẳng; đang có chữ khác thì phải hỏi
++ * sale trước khi thay. Không bao giờ tự gửi; chữ dài hơn giới hạn vẫn điền (nút Gửi tự khóa, có dòng báo độ dài).
++ */
++export function applyTemplate(current, text) {
++  const value = text == null ? '' : String(text)
++  const now = current == null ? '' : String(current)
++  return { text: value, needsConfirm: Boolean(now.trim()) && now !== value }
++}
++
++/** Chữ (đã bỏ khoảng trắng hai đầu, như `canSubmit`) dài quá `maxChars`: { length, max }; trong giới hạn thì null. */
++export function overLimit(text, maxChars = 6000) {
++  const length = String(text || '').trim().length
++  return length > maxChars ? { length, max: maxChars } : null
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
@@ -2841,18 +3130,22 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/messengerThread.test.js b/frontend/tests/unit/messengerThread.test.js
 new file mode 100644
-index 0000000..1ddb1e6
+index 0000000..304a090
 --- /dev/null
 +++ b/frontend/tests/unit/messengerThread.test.js
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,638 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  DEFAULT_MEDIA_ACCEPT,
 +  META_INBOX_URL,
 +  MESSENGER_CHANNEL,
++  TEMPLATE_SEARCH_AFTER,
 +  acceptList,
++  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
++  filterTemplates,
++  foldText,
 +  formatSize,
 +  isMessengerUpdate,
 +  localFileName,
@@ -2861,9 +3154,12 @@ index 0000000..1ddb1e6
 +  mediaMaxBytes,
 +  messengerAttachmentViews,
 +  metaInboxUrl,
++  needsTemplateSearch,
 +  openMetaInbox,
++  overLimit,
 +  parseUploadResponse,
 +  sendOutcome,
++  templateList,
 +} from '@/utils/messengerThread'
 +
 +const MB = 1024 * 1024
@@ -3281,6 +3577,199 @@ index 0000000..1ddb1e6
 +        text_outbound: 'OUT-1',
 +      }),
 +    ).toEqual({ ok: false, clearText: true, clearFile: false, error: 'x' })
++  })
++})
++
++// --- Mẫu tin nhắn (ADR 0026) ---
++
++const TEMPLATES = templateList({
++  templates: [
++    {
++      name: 'Chào hỏi',
++      title: 'Chào hỏi',
++      note: 'Tin đầu tiên khi khách mới nhắn',
++      text: 'Dạ Miyano Việt Nam xin chào anh/chị Minh.\nEm có thể hỗ trợ gì ạ?',
++      error: null,
++    },
++    {
++      name: 'Báo giá',
++      title: 'Gửi báo giá',
++      note: 'Sau khi khách hỏi giá',
++      text: 'Em gửi anh/chị bảng giá ĐIỀU TRỊ đau vai gáy ạ.',
++      error: null,
++    },
++    {
++      name: 'Hỏng',
++      title: 'Hẹn lịch',
++      note: 'Mẫu có biến sai',
++      text: '',
++      error: "Biến 'lead.ngay_hen' không tồn tại",
++    },
++  ],
++})
++
++describe('templateList', () => {
++  it('làm sạch kết quả get_templates, giữ thứ tự máy chủ', () => {
++    expect(TEMPLATES.map((t) => [t.key, t.name, t.title, t.error])).toEqual([
++      [0, 'Chào hỏi', 'Chào hỏi', ''],
++      [1, 'Báo giá', 'Gửi báo giá', ''],
++      [2, 'Hỏng', 'Hẹn lịch', "Biến 'lead.ngay_hen' không tồn tại"],
++    ])
++    expect(TEMPLATES[0].text).toBe(
++      'Dạ Miyano Việt Nam xin chào anh/chị Minh.\nEm có thể hỗ trợ gì ạ?',
++    )
++    expect(TEMPLATES[2].text).toBe('')
++  })
++  it('mẫu lỗi không bao giờ mang nội dung; nội dung trống coi như lỗi', () => {
++    const [broken, empty, blank] = templateList({
++      templates: [
++        { name: 'a', title: 'A', text: 'còn sót', error: 'Lỗi Jinja' },
++        { name: 'b', title: 'B', text: '   \n', error: null },
++        { name: 'c', title: 'C', error: '   ' },
++      ],
++    })
++    expect(broken).toMatchObject({ text: '', error: 'Lỗi Jinja' })
++    expect(empty).toMatchObject({ text: '', error: 'Nội dung mẫu trống' })
++    expect(blank).toMatchObject({ text: '', error: 'Mẫu lỗi' })
++  })
++  it('thiếu tiêu đề thì dùng tên; bỏ mục rác; CRLF thành LF', () => {
++    const list = templateList({
++      templates: [
++        null,
++        'chuoi',
++        { title: '', name: '' },
++        { name: 'chi-ten', text: 'x\r\ny\rz' },
++        { title: 'Chỉ tiêu đề', text: 'ok', note: null },
++      ],
++    })
++    expect(list).toEqual([
++      {
++        key: 0,
++        name: 'chi-ten',
++        title: 'chi-ten',
++        note: '',
++        text: 'x\ny\nz',
++        error: '',
++      },
++      {
++        key: 1,
++        name: 'Chỉ tiêu đề',
++        title: 'Chỉ tiêu đề',
++        note: '',
++        text: 'ok',
++        error: '',
++      },
++    ])
++  })
++  it('kết quả rỗng hoặc lạ: danh sách rỗng', () => {
++    expect(templateList({ templates: [] })).toEqual([])
++    expect(templateList(null)).toEqual([])
++    expect(templateList({ templates: 'x' })).toEqual([])
++    expect(templateList([])).toEqual([])
++  })
++})
++
++describe('filterTemplates', () => {
++  it('ô tìm rỗng hoặc chỉ khoảng trắng: trả cả danh sách', () => {
++    expect(filterTemplates(TEMPLATES, '')).toBe(TEMPLATES)
++    expect(filterTemplates(TEMPLATES, '   ')).toBe(TEMPLATES)
++    expect(filterTemplates(TEMPLATES, null)).toBe(TEMPLATES)
++    expect(filterTemplates(TEMPLATES, undefined)).toBe(TEMPLATES)
++  })
++  it('không phân biệt hoa thường và dấu tiếng Việt, bỏ khoảng trắng hai đầu', () => {
++    const names = (q) => filterTemplates(TEMPLATES, q).map((t) => t.name)
++    expect(names('  chao hoi ')).toEqual(['Chào hỏi'])
++    expect(names('CHÀO')).toEqual(['Chào hỏi'])
++    expect(names('dieu tri')).toEqual(['Báo giá']) // đ/Đ thành d, khớp nội dung
++    expect(names('Điều Trị')).toEqual(['Báo giá'])
++    expect(names('bao gia')).toEqual(['Báo giá']) // khớp tên hiển thị "Gửi báo giá" và ghi chú
++  })
++  it('theo tiêu đề, ghi chú và nội dung; mọi từ phải có mặt', () => {
++    const names = (q) => filterTemplates(TEMPLATES, q).map((t) => t.name)
++    expect(names('khach')).toEqual(['Chào hỏi', 'Báo giá']) // ghi chú
++    expect(names('ho tro')).toEqual(['Chào hỏi']) // nội dung, dòng thứ hai
++    expect(names('anh chi minh')).toEqual(['Chào hỏi'])
++    expect(names('gia minh')).toEqual([])
++    expect(names('khong co dau')).toEqual([])
++  })
++  it('mẫu lỗi: tìm được theo tiêu đề/ghi chú, không theo nội dung, không lỗi khi thiếu text', () => {
++    const names = (q) => filterTemplates(TEMPLATES, q).map((t) => t.name)
++    expect(names('hen lich')).toEqual(['Hỏng'])
++    expect(names('bien sai')).toEqual(['Hỏng'])
++    const raw = [
++      { name: 'x', title: 'Hỏng', error: 'Lỗi', text: undefined, note: null },
++      { name: 'y', title: 'Lỗi còn chữ', error: 'Lỗi', text: 'bi mat' },
++      { name: 'z', title: null, note: undefined, text: null },
++      null,
++    ]
++    expect(filterTemplates(raw, 'bi mat')).toEqual([])
++    expect(filterTemplates(raw, 'hong').map((t) => t.name)).toEqual(['x'])
++    expect(filterTemplates(null, 'a')).toEqual([])
++  })
++})
++
++describe('needsTemplateSearch', () => {
++  it(`hiện ô tìm khi có hơn ${TEMPLATE_SEARCH_AFTER} mẫu`, () => {
++    const many = (n) => Array.from({ length: n }, (_, i) => ({ key: i }))
++    expect(TEMPLATE_SEARCH_AFTER).toBe(5)
++    expect(needsTemplateSearch(many(5))).toBe(false)
++    expect(needsTemplateSearch(many(6))).toBe(true)
++    expect(needsTemplateSearch([])).toBe(false)
++    expect(needsTemplateSearch(null)).toBe(false)
++  })
++})
++
++describe('foldText', () => {
++  it('bỏ dấu, chữ thường, gộp khoảng trắng', () => {
++    expect(foldText('  Đặng   Thị\nHƯƠNG ')).toBe('dang thi huong')
++    expect(foldText('Ễ ỡ ự Ợ')).toBe('e o u o')
++    expect(foldText(null)).toBe('')
++    expect(foldText(0)).toBe('0')
++  })
++})
++
++describe('applyTemplate', () => {
++  it('ô trống (kể cả chỉ khoảng trắng): điền thẳng', () => {
++    expect(applyTemplate('', 'Xin chào')).toEqual({
++      text: 'Xin chào',
++      needsConfirm: false,
++    })
++    expect(applyTemplate('  \n ', 'Xin chào')).toEqual({
++      text: 'Xin chào',
++      needsConfirm: false,
++    })
++    expect(applyTemplate(null, 'Xin chào').needsConfirm).toBe(false)
++    expect(applyTemplate(undefined, 'Xin chào').needsConfirm).toBe(false)
++  })
++  it('đang có chữ khác: phải hỏi trước khi thay', () => {
++    expect(applyTemplate('Dạ em chào', 'Xin chào')).toEqual({
++      text: 'Xin chào',
++      needsConfirm: true,
++    })
++  })
++  it('chữ đang có trùng hẳn mẫu: không cần hỏi', () => {
++    expect(applyTemplate('Xin chào', 'Xin chào').needsConfirm).toBe(false)
++  })
++  it('giữ nguyên nội dung mẫu (xuống dòng), kể cả dài hơn giới hạn', () => {
++    const long = 'a'.repeat(7000)
++    expect(applyTemplate('', long).text).toBe(long)
++    expect(applyTemplate('', 'Dòng 1\nDòng 2').text).toBe('Dòng 1\nDòng 2')
++    expect(applyTemplate('', null).text).toBe('')
++  })
++})
++
++describe('overLimit', () => {
++  it('như canSubmit: độ dài sau khi bỏ khoảng trắng hai đầu, mặc định 6000', () => {
++    expect(overLimit('abc', 3)).toBe(null)
++    expect(overLimit('  abc  ', 3)).toBe(null)
++    expect(overLimit('abcd', 3)).toEqual({ length: 4, max: 3 })
++    expect(overLimit('x'.repeat(6000))).toBe(null)
++    expect(overLimit('x'.repeat(6001), undefined)).toEqual({
++      length: 6001,
++      max: 6000,
++    })
++    expect(overLimit('', 0)).toBe(null)
++    expect(overLimit(null, 10)).toBe(null)
 +  })
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js

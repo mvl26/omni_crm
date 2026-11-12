@@ -87,6 +87,7 @@ EXPECTED_WHITELISTED = {
 		"get_conversation",
 		"send",
 		"send_attachment",  # ADR 0023: 1 ảnh/tệp của chính Lead tới 1 khách/lần, qua mọi guard của send_messenger
+		"get_templates",  # ADR 0026: chỉ đọc, điền mẫu tin nhắn cho 1 Lead, không gửi
 	},  # ADR 0023: tab Messenger, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {

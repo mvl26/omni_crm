@@ -29,6 +29,7 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | Omni Bot Draft | Thường | 2 | Câu trả lời bot soạn (ngầm, nháp, tự động) |
 | Omni Assistant Session | Thường | V3-05 | Phiên hội thoại với trợ lý AI nội bộ (ADR 0018) |
 | Omni Assistant Action | Thường | V3-05 | Mỗi lần trợ lý gọi tool: kiểm toán + hàng đợi duyệt (ADR 0018) |
+| Omni Chat Template | Thường | ADR 0026 | Mẫu tin nhắn chat cho sale (tên, đang dùng, kênh, thứ tự, dùng khi, nội dung Jinja chữ thuần); chọn ở tab Messenger |
 | Omni Eval Case | Thường | 2 | Một ca trong bộ đề |
 | Omni Eval Run | Thường | 2 | Một lần chạy bộ đề và kết quả |
 
@@ -386,6 +387,7 @@ Trường ẩn `omni_import_snapshot` (Long Text) trên CRM Organization và Con
 | Omni Campaign | Đọc/Ghi | Đọc | — |
 | Omni Lead Form | Đọc/Ghi (khóa bí mật chỉ Omni Admin) | — | — |
 | Omni Care Log | Đọc/Ghi | Đọc/ghi kết quả qua API theo quyền Lead | — |
+| Omni Chat Template | Đọc/Ghi (Sales Manager cũng Đọc/Ghi) | Đọc; mẫu đã điền chỉ qua API `messenger_tab.get_templates` (quyền đọc Lead) | — |
 
 "Theo Lead xem được": kiểm tra quyền bằng `frappe.has_permission("CRM Lead", doc=lead)` trong API, không chỉ dựa vào quyền DocType.
 

@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "creation": "2026-11-12 18:00:00.000000",
+ "modified": "2026-11-12 18:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Chat Template",
+ "description": "Mẫu tin nhắn chat cho sale (ADR 0026): chọn ở nút \"Mẫu tin\" của tab Messenger, nội dung được điền vào ô soạn để sale sửa rồi tự gửi.",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:template_name",
+ "naming_rule": "By fieldname",
+ "title_field": "template_name",
+ "track_changes": 1,
+ "search_fields": "usage_note,channel_type",
+ "field_order": [
+  "template_name",
+  "enabled",
+  "channel_type",
+  "col_order",
+  "sort_order",
+  "usage_note",
+  "sec_content",
+  "content"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "label": "Tên mẫu",
+   "reqd": 1,
+   "unique": 1,
+   "length": 140,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Đang dùng",
+   "default": "1",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "channel_type",
+   "fieldtype": "Select",
+   "label": "Kênh",
+   "options": "\nMeta Messenger\nZalo OA",
+   "description": "Để trống: dùng cho mọi kênh chat. Hiện chỉ tab Messenger có nút chọn mẫu (ADR 0026).",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "col_order",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Thứ tự",
+   "default": "0",
+   "description": "Số nhỏ hiện trước; bằng nhau thì theo tên mẫu."
+  },
+  {
+   "fieldname": "usage_note",
+   "fieldtype": "Data",
+   "label": "Dùng khi",
+   "length": 140,
+   "description": "Một dòng gợi ý cho sale, hiện dưới tên mẫu."
+  },
+  {
+   "fieldname": "sec_content",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Text",
+   "label": "Nội dung",
+   "reqd": 1,
+   "ignore_xss_filter": 1,
+   "description": "Chữ thuần (không HTML). Biến điền sẵn: {{ ten_goi }} (tên gọi của khách, ví dụ Minh), {{ ten_khach }} (họ tên khách), {{ cong_ty }} (tổ chức), {{ ten_sale }}, {{ sdt_sale }} (của người đang soạn); biến trống khi chưa biết, ví dụ {{ ' ' ~ ten_goi if ten_goi else '' }}. Điều kiện: {% if sdt_sale %}...{% endif %}. Không nêu giá, chiết khấu, điều khoản hay cam kết."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}
