@@ -1,7 +1,7 @@
 # 0022 · Kênh Meta Messenger: nhận qua file của miyano-intake, đính kèm vào File, trả lời từ Hộp thư
 
 - Ngày: 2026-11-12
-- Trạng thái: Đã chấp nhận (người phụ trách duyệt 12/11/2026: C1, D1, có ghi tin echo)
+- Trạng thái: Đã chấp nhận (người phụ trách duyệt 12/11/2026: C1, D1, có ghi tin echo). **Thay một phần bởi ADR 0023** (12/11/2026): mục C1 (tin hiện ở tab Hoạt động) đổi thành tab Messenger riêng, tin ẩn khỏi Hoạt động; mục D2 (gửi tệp, để đợt sau) đã làm ở tab Messenger, sau công tắc `messenger_media_send_enabled`.
 - Prompt: không có prompt kit; yêu cầu trực tiếp của người phụ trách ngày 12/11/2026 ("Messenger: quyết định đưa vào CRM. Thêm một loại kênh mới và viết ADR theo quy ước của repo"; "file đính kèm … cần chép vào File của Frappe … messenger có gì phải làm y cái đó")
 - Liên quan: `docs/16-nap-file-intake.md` (mục "Việc cần quyết" 1 và 3), `docs/12` mục Phát hiện (dòng Messenger), ADR 0014 (hàng dự phòng webhook), ADR 0017 (ẩn tin Zalo khỏi Hoạt động)
 
@@ -64,4 +64,4 @@ A1, B1, C1, D1 (D2 đợt sau, D3 chỉ khi có quyền), và ghi tin echo (mụ
 - Test: mapper/adapter/đính kèm (đơn vị, không gọi mạng), runner tích hợp trên site test; không chạy song song với bộ test lớn của phiên khác; không `migrate` site test dùng chung khi chưa báo.
 - Tài liệu: `docs/16` (bảng ánh xạ, số phận file, nạp bù), `docs/02` (option mới của `channel_type`), `docs/09` (công tắc), `docs/12` (đổi dòng Phát hiện Messenger thành Đã xác nhận + trỏ ADR này).
 - miyano-intake (repo khác) phải sửa cho mục 9: ghi tin echo, thêm `message_echoes` vào lệnh `meta-subscribe` và hướng dẫn webhook.
-- Chưa làm: gửi tệp ra (D2), tag ngoài 24 giờ (D3), tab riêng (C2), Instagram.
+- Chưa làm: gửi tệp ra (D2), tag ngoài 24 giờ (D3), tab riêng (C2), Instagram. (Cập nhật 12/11/2026: D2 và tab riêng đã làm theo ADR 0023.)

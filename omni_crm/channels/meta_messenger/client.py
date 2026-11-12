@@ -6,6 +6,7 @@ Sandbox (`Omni Settings.sandbox_mode`) là chốt chặn cuối: không có HTTP
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -157,6 +158,28 @@ class MessengerClient:
 				raise
 			sent.append(str(data.get("message_id") or ""))
 		return sent[0]
+
+	def send_attachment(self, psid: str, kind: str, name: str, content: bytes, mime: str) -> str:
+		"""Gửi một ảnh/video/âm thanh/tệp (ADR 0023): tải lên multipart cùng lời gọi Send API; trả mã tin. Sandbox: không HTTP."""
+		if flags.sandbox():
+			frappe.logger("omni").info(
+				"omni sandbox: bỏ qua gửi tệp Messenger (kênh %s, loại %s)", self.channel_doc.name, kind
+			)
+			return f"sandbox:{uuid.uuid4().hex[:16]}"
+		if not self.page_id:
+			raise MessengerError(None, PERMANENT, _("Kênh Messenger chưa có Page ID"))
+		message = {"attachment": {"type": kind, "payload": {"is_reusable": False}}}
+		data = self._request(
+			"POST",
+			f"/{self.page_id}/messages",
+			data={
+				"recipient": json.dumps({"id": psid}),
+				"messaging_type": "RESPONSE",
+				"message": json.dumps(message),
+			},
+			files={"filedata": (name, content, mime)},
+		)
+		return str(data.get("message_id") or "")
 
 	def get_name(self, psid: str) -> str:
 		"""Tên hiển thị của người gửi; rỗng nếu Meta không trả.

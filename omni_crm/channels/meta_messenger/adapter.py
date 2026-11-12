@@ -5,7 +5,8 @@ Nhận: CHỈ qua file của miyano-intake (`intake_files`), không có webhook 
 không dùng; ánh xạ file -> InboundEvent nằm ở `intake_files/mapper.py`.
 
 Gửi: tin chữ trả lời khách qua Send API, chỉ trong 24 giờ kể từ tin cuối của khách (`messaging_type = RESPONSE`).
-Gửi tệp và gửi ngoài 24 giờ (tag HUMAN_AGENT) chưa làm (ADR 0022, D2/D3).
+Gửi ảnh/tệp (ADR 0023) qua `req.attachment` khi bật `messenger_media_send_enabled`. Gửi ngoài 24 giờ (tag
+HUMAN_AGENT) chưa làm (ADR 0022, D3).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
 from omni_crm.channels.meta_messenger import worker_hooks
-from omni_crm.channels.meta_messenger.client import MessengerClient
+from omni_crm.channels.meta_messenger.client import PERMANENT, MessengerClient, MessengerError
 from omni_crm.channels.registry import register_adapter
 from omni_crm.ingest.events import InboundEvent, OutboundRequest
 
@@ -59,7 +60,28 @@ class MetaMessengerAdapter:
 		psid = frappe.db.get_value("Omni Identity", req.identity, "external_id")
 		if not psid:
 			raise ValueError(_("Định danh chưa có mã người dùng Messenger (PSID)"))
+		attachment = getattr(req, "attachment", None)
+		if attachment:
+			return self._send_attachment(channel_doc, psid, attachment)
 		return MessengerClient(channel_doc).send_text(psid, req.text)
+
+	@staticmethod
+	def _send_attachment(channel_doc, psid: str, attachment: dict) -> str:
+		"""Tin ảnh/tệp (ADR 0023): chặn khi công tắc tắt, đọc tệp trong CRM lúc gửi; lỗi tệp là lỗi vĩnh viễn."""
+		from omni_crm import flags
+		from omni_crm.channels.meta_messenger import media_out
+
+		if not flags.messenger_media_send_enabled():
+			raise MessengerError(None, PERMANENT, _("Chưa bật gửi ảnh/tệp qua Messenger"))
+		name = attachment.get("name") or "tep"
+		try:
+			content = media_out.read_content(attachment["file_url"])
+		except media_out.MediaError as e:
+			raise MessengerError(None, PERMANENT, str(e)) from e
+		kind = attachment.get("kind") or media_out.kind_of(name) or media_out.FILE
+		return MessengerClient(channel_doc).send_attachment(
+			psid, kind, name, content, media_out.mime_of(name)
+		)
 
 	# Điểm nối với worker (không thuộc Protocol bắt buộc)
 	def prepare_batch(self, msgs: list[Any], channel_doc) -> list[Any]:

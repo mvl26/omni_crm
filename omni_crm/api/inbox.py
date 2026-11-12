@@ -695,10 +695,14 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 	return send_zalo(lead, text, confirm_paid)
 
 
-def send_messenger(lead: str, text: str) -> dict:
-	"""Gửi tin chữ của Sale qua Messenger (ADR 0022, D1); cùng các chặn như Zalo. Người gọi PHẢI đã kiểm quyền ghi."""
+def send_messenger(lead: str, text: str, attachment: dict | None = None) -> dict:
+	"""Gửi tin của Sale qua Messenger (ADR 0022; ảnh/tệp ADR 0023); cùng các chặn như Zalo. Người gọi PHẢI đã kiểm quyền ghi.
+
+	`attachment`: {"file_url", "kind", "name"} đã kiểm thuộc Lead (`meta_messenger.media_out.attachment_for_lead`); có tệp thì
+	chữ được trống (chữ kèm tệp do người gọi xếp thành tin riêng trước).
+	"""
 	text = (text or "").strip()
-	if not text:
+	if not text and not attachment:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > outbound_pipeline.MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(outbound_pipeline.MAX_TEXT_CHARS))
@@ -714,7 +718,7 @@ def send_messenger(lead: str, text: str) -> dict:
 	identity_doc, channel_doc = target
 	ok, reason = get_adapter(MESSENGER).can_send_now(identity_doc, channel_doc, source="Sale")
 	if not ok:
-		name = _record_blocked(channel_doc, identity_doc, lead, text, reason)
+		name = _record_blocked(channel_doc, identity_doc, lead, text, reason, attachment)
 		return {"status": "Blocked", "outbound": name, "reason": reason}
 	name = outbound_pipeline.queue_outbound(
 		OutboundRequest(
@@ -723,6 +727,7 @@ def send_messenger(lead: str, text: str) -> dict:
 			text=text,
 			reply_to_external_id=None,
 			source="Sale",
+			attachment=attachment,
 		),
 		user=frappe.session.user,
 	)

@@ -206,6 +206,39 @@ def lead_contact_button_enabled() -> bool:
 	return not (row and cint(row[0][0]))
 
 
+def _single_flag(field: str) -> int | None:
+	"""Giá trị Check của Omni Settings đọc thẳng `tabSingles` (Single không áp default JSON); None nếu chưa lưu, lỗi đọc ném ra."""
+	row = frappe.db.sql(
+		"select value from `tabSingles` where doctype = 'Omni Settings' and field = %s", (field,)
+	)
+	return cint(row[0][0]) if row else None
+
+
+def messenger_tab_enabled() -> bool:
+	"""Có hiện tab "Messenger" trong trang Lead/Deal không (ADR 0023). Cực tính NGƯỢC (`messenger_tab_disabled`):
+	chưa lưu hoặc 0 = hiện, 1 = ẩn. Lỗi đọc = ẩn."""
+	try:
+		return not _single_flag("messenger_tab_disabled")
+	except Exception:
+		return False
+
+
+def messenger_in_activity_enabled() -> bool:
+	"""Có ghi tin Messenger mới vào tab Hoạt động/Email không (ADR 0023). Mặc định TẮT: chỉ giá trị 1 mới bật. Lỗi đọc = tắt."""
+	try:
+		return bool(_single_flag("messenger_in_activity_enabled"))
+	except Exception:
+		return False
+
+
+def messenger_media_send_enabled() -> bool:
+	"""Có cho sale gửi ảnh/tệp qua Messenger không (ADR 0023). Mặc định TẮT. Lỗi đọc = tắt."""
+	try:
+		return bool(_single_flag("messenger_media_send_enabled"))
+	except Exception:
+		return False
+
+
 def zalo_in_activity_enabled() -> bool:
 	"""Có ghi tin Zalo OA mới vào tab Hoạt động/Email của Lead/Deal không (V3-02, ADR 0017). Mặc định TẮT (tin Zalo
 	chỉ ở tab Zalo và Hộp thư): Single không áp default JSON nên "chưa từng lưu" = không có hàng = tắt, và lưu 0 cũng

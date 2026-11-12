@@ -26,6 +26,7 @@ OUTBOUND = "Omni Outbound Message"
 COMMUNICATION = "Communication"
 EMAIL = "Email"
 ZALO = "Zalo OA"
+MESSENGER = "Meta Messenger"
 # Sự kiện có nội dung hội thoại để hiện trên dòng thời gian (follow/unfollow/user_info... không hiện).
 TIMELINE_EVENTS = {"message", "oa_echo", "form_lead"}
 SUBJECT_LEN = 80
@@ -139,6 +140,8 @@ def communication_type_for(channel_type: str | None) -> str:
 	`Omni Settings.zalo_in_activity_enabled`; kênh khác (form quảng cáo, web form) giữ "Communication"."""
 	if channel_type == ZALO and not flags.zalo_in_activity_enabled():
 		return "Chat"
+	if channel_type == MESSENGER and not flags.messenger_in_activity_enabled():
+		return "Chat"  # ADR 0023: tin Messenger ở tab Messenger và Hộp thư
 	return "Communication"
 
 

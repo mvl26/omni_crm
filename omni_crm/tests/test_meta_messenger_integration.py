@@ -159,7 +159,7 @@ class TestMessengerIntegration(FrappeTestCase):
 			fields=["content", "communication_type"],
 		)
 		self.assertTrue(any("<img" in (c.content or "") for c in comm), comm)
-		self.assertTrue(all(c.communication_type == "Communication" for c in comm))  # C1: hiện ở Hoạt động
+		self.assertTrue(all(c.communication_type == "Chat" for c in comm))  # ADR 0023: ẩn khỏi Hoạt động
 		# Chạy lại: trùng, không sinh File thừa
 		before = frappe.db.count("File", {"attached_to_name": row.name})
 		self.assertEqual(runner.ingest_envelope(menv("messenger:m_td22_1", content=content)), "trung")

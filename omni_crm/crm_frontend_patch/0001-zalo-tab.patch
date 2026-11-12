@@ -1,8 +1,8 @@
 diff --git a/frontend/src/components/Activities/Activities.vue b/frontend/src/components/Activities/Activities.vue
-index e262752..dbee5c7 100644
+index e262752..d05e798 100644
 --- a/frontend/src/components/Activities/Activities.vue
 +++ b/frontend/src/components/Activities/Activities.vue
-@@ -10,7 +10,21 @@
+@@ -10,7 +10,27 @@
      :whatsappBox="whatsappBox"
      :modalRef="modalRef"
    />
@@ -10,6 +10,12 @@ index e262752..dbee5c7 100644
 +  <ZaloTab
 +    v-if="title == 'Zalo'"
 +    :key="doctype + docname"
++    :doctype="doctype"
++    :docname="docname"
++  />
++  <MessengerTab
++    v-else-if="title == 'Messenger'"
++    :key="'messenger' + doctype + docname"
 +    :doctype="doctype"
 +    :docname="docname"
 +  />
@@ -25,24 +31,26 @@ index e262752..dbee5c7 100644
      <div
        v-if="all_activities?.loading"
        class="flex flex-1 flex-col items-center justify-center gap-3 text-xl font-medium text-ink-gray-4"
-@@ -466,6 +480,8 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+@@ -466,6 +486,9 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
  import WhatsAppArea from '@/components/Activities/WhatsAppArea.vue'
  import WhatsAppBox from '@/components/Activities/WhatsAppBox.vue'
 +import ZaloTab from '@/components/Activities/ZaloTab.vue'
++import MessengerTab from '@/components/Activities/MessengerTab.vue'
 +import AssistantTab from '@/components/Activities/AssistantTab.vue'
  import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
  import EmptyState from '@/components/ListViews/EmptyState.vue'
  import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 diff --git a/frontend/src/components/Activities/ActivityHeader.vue b/frontend/src/components/Activities/ActivityHeader.vue
-index bc2f6dc..ec52ba8 100644
+index bc2f6dc..2c99202 100644
 --- a/frontend/src/components/Activities/ActivityHeader.vue
 +++ b/frontend/src/components/Activities/ActivityHeader.vue
-@@ -58,6 +58,8 @@
+@@ -58,6 +58,9 @@
          @click="whatsappBox.show()"
        />
      </div>
 +    <div v-else-if="title == 'Zalo'" />
++    <div v-else-if="title == 'Messenger'" />
 +    <div v-else-if="title == 'Assistant'" />
      <Dropdown v-else :options="defaultActions" @click.stop>
        <template #default="{ open }">
@@ -419,6 +427,558 @@ index 0fa6fcb..bb95934 100644
  const showCallLogDetailModal = ref(false)
 +const notes = computed(() => callNotes(callLog.data?._notes))
  </script>
+diff --git a/frontend/src/components/Activities/MessengerTab.vue b/frontend/src/components/Activities/MessengerTab.vue
+new file mode 100644
+index 0000000..49795c5
+--- /dev/null
++++ b/frontend/src/components/Activities/MessengerTab.vue
+@@ -0,0 +1,546 @@
++<template>
++  <div class="flex h-full min-h-0 flex-col overflow-hidden">
++    <!-- Thẻ tóm tắt của bot (cùng khối `bot` như tab Zalo): chữ xuống dòng theo nội dung; quá dài thì cuộn trong thẻ -->
++    <div
++      v-if="bot"
++      class="mx-3 mt-3 shrink-0 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2.5 sm:mx-10"
++    >
++      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
++        <span class="text-sm font-semibold text-ink-gray-9">{{
++          __('Tóm tắt của bot AI')
++        }}</span>
++        <span
++          v-for="chip in bot.chips"
++          :key="chip.key"
++          class="rounded bg-surface-gray-3 px-1.5 py-0.5 text-xs text-ink-gray-8"
++          >{{ chipLabel(chip) }}</span
++        >
++        <span v-if="bot.analyzedAt" class="ml-auto text-xs text-ink-gray-5">{{
++          __('Phân tích lúc {0}', [bot.analyzedAt])
++        }}</span>
++      </div>
++      <div
++        v-if="bot.summary"
++        class="mt-1.5 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words text-base leading-relaxed text-ink-gray-8"
++      >
++        {{ bot.summary }}
++      </div>
++    </div>
++    <div
++      ref="scroller"
++      class="min-h-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-10"
++    >
++      <div
++        v-if="conversation.loading && !conversation.data"
++        class="flex items-center justify-center gap-3 py-10 text-ink-gray-4"
++      >
++        <LoadingIndicator class="h-5 w-5" />
++        <span>{{ __('Loading...') }}</span>
++      </div>
++      <div
++        v-else-if="loadFailed"
++        class="py-10 text-center text-base text-ink-red-3"
++      >
++        {{ __('Không tải được hội thoại Messenger. Thử tải lại trang.') }}
++      </div>
++      <div
++        v-else-if="!messages.length"
++        class="py-10 text-center text-base text-ink-gray-5"
++      >
++        {{ __('Chưa có tin nhắn Messenger nào với khách này.') }}
++      </div>
++      <template v-else>
++        <div
++          v-if="conversation.data?.truncated"
++          class="pb-2 text-center text-sm text-ink-gray-5"
++        >
++          {{ __('Chỉ hiện các tin gần nhất. Xem đầy đủ trong Hộp thư Omni.') }}
++        </div>
++        <div v-for="group in groups" :key="group.day">
++          <div class="py-2 text-center text-xs text-ink-gray-5">
++            {{ dayLabel(group.day) }}
++          </div>
++          <div
++            v-for="msg in group.items"
++            :key="msg.name"
++            class="activity mb-2 flex"
++            :class="
++              bubbleSide(msg) === 'right' ? 'justify-end' : 'justify-start'
++            "
++          >
++            <div
++              :class="[
++                'max-w-[85%] rounded-lg px-3 py-1.5 text-base text-ink-gray-9 shadow-sm',
++                bubbleSide(msg) === 'right'
++                  ? 'bg-blue-100'
++                  : 'bg-surface-gray-2',
++                msg.status === 'Failed' || msg.status === 'Blocked'
++                  ? 'border border-red-400'
++                  : '',
++              ]"
++            >
++              <div class="mb-0.5 text-xs text-ink-gray-5">
++                {{ senderLabel(msg) }}
++              </div>
++              <div v-if="msg.text" class="whitespace-pre-wrap break-words">
++                {{ msg.text }}
++              </div>
++              <!-- Đính kèm: chỉ tệp đã lưu trong CRM (/files, /private/files) mới được vẽ thành ảnh / trình phát; còn lại là liên kết -->
++              <div
++                v-for="att in messengerAttachmentViews(msg.attachments)"
++                :key="att.index"
++                class="mt-1 text-sm"
++              >
++                <a
++                  v-if="
++                    att.kind === 'image' && !broken[`${msg.name}:${att.index}`]
++                  "
++                  :href="att.url"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  class="block"
++                  :title="__('Mở ảnh gốc')"
++                >
++                  <img
++                    :src="att.src"
++                    :alt="att.text"
++                    loading="lazy"
++                    referrerpolicy="no-referrer"
++                    class="max-h-60 max-w-[240px] rounded object-contain"
++                    @error="broken[`${msg.name}:${att.index}`] = true"
++                  />
++                </a>
++                <video
++                  v-else-if="
++                    att.kind === 'video' && !broken[`${msg.name}:${att.index}`]
++                  "
++                  :src="att.src"
++                  controls
++                  preload="metadata"
++                  class="max-h-60 max-w-[240px] rounded"
++                  @error="broken[`${msg.name}:${att.index}`] = true"
++                />
++                <audio
++                  v-else-if="
++                    att.kind === 'audio' && !broken[`${msg.name}:${att.index}`]
++                  "
++                  :src="att.src"
++                  controls
++                  preload="none"
++                  class="max-w-[240px]"
++                  @error="broken[`${msg.name}:${att.index}`] = true"
++                />
++                <span v-else-if="att.kind === 'note'" class="text-ink-gray-6"
++                  >📎 {{ att.text }}</span
++                >
++                <a
++                  v-else
++                  :href="att.url"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  class="text-ink-blue-3 underline"
++                  >📎 {{ att.text }}</a
++                >
++              </div>
++              <div
++                v-if="msg.sandbox"
++                class="mt-1 text-xs italic text-ink-gray-6"
++              >
++                {{ __('Thử nghiệm (sandbox), chưa gửi tới khách') }}
++              </div>
++              <div v-if="statusText(msg)" class="mt-1 text-xs text-ink-red-3">
++                {{ statusText(msg) }}
++              </div>
++              <div class="mt-0.5 text-right text-xs text-ink-gray-5">
++                {{ timeLabel(msg.at) }}
++              </div>
++            </div>
++          </div>
++        </div>
++      </template>
++    </div>
++
++    <!-- Nhắn từ hộp thư Meta Business Suite (thay nút "Mở chat Zalo OA" của tab Zalo) -->
++    <div
++      v-if="contact"
++      class="border-t px-3 py-2 text-sm text-ink-gray-7 sm:px-10"
++    >
++      <div class="flex flex-wrap items-center gap-2">
++        <Button :label="__('Mở hộp thư Meta')" @click="openInbox" />
++        <span v-if="contactNames">{{
++          __('Trong hộp thư, tìm khách theo tên: {0}', [contactNames])
++        }}</span>
++      </div>
++      <div v-if="!directInbox" class="mt-1 text-xs text-ink-gray-5">
++        {{
++          __(
++            'Chưa có mã Page của kênh: nút mở hộp thư chung, hãy chọn đúng Page rồi tìm khách.',
++          )
++        }}
++      </div>
++      <div v-if="contact.name_note" class="mt-1 text-xs text-ink-gray-5">
++        {{ contact.name_note }}
++      </div>
++    </div>
++
++    <div class="border-t px-3 py-2.5 sm:px-10">
++      <div
++        v-if="!compose.can_send"
++        class="mb-2 rounded bg-surface-gray-2 px-3 py-2 text-sm text-ink-gray-7"
++      >
++        {{ compose.reason }}
++      </div>
++      <div
++        v-if="compose.sandbox && compose.linked"
++        class="mb-1 text-xs text-ink-gray-5"
++      >
++        {{
++          __('Chế độ thử: tin gửi chỉ được ghi lại, không gửi thật tới khách.')
++        }}
++      </div>
++      <!-- Ảnh / tệp đã chọn, chờ gửi -->
++      <div
++        v-if="pickedFile"
++        class="mb-2 flex items-center gap-2 rounded bg-surface-gray-2 px-2 py-1 text-sm text-ink-gray-8"
++      >
++        <span class="truncate">📎 {{ pickedFile.name }}</span>
++        <span class="shrink-0 text-xs text-ink-gray-5">{{
++          formatSize(pickedFile.size)
++        }}</span>
++        <span v-if="text.trim()" class="shrink-0 text-xs text-ink-gray-5">{{
++          __('Lời nhắn gửi thành tin riêng trước tệp')
++        }}</span>
++        <Button
++          size="sm"
++          variant="ghost"
++          :label="__('Bỏ')"
++          :disabled="sending"
++          @click="clearFile"
++        />
++      </div>
++      <div class="flex items-end gap-2">
++        <input
++          ref="fileInput"
++          type="file"
++          class="hidden"
++          :accept="acceptList(compose.media_accept).join(',')"
++          @change="onPickFile"
++        />
++        <Button
++          v-if="compose.can_send_media"
++          :title="
++            __('Gửi ảnh, video, âm thanh hoặc tệp (tối đa {0} MB)', [maxMb])
++          "
++          :disabled="sending"
++          @click="fileInput?.click()"
++        >
++          📎
++        </Button>
++        <Textarea
++          v-model="text"
++          type="textarea"
++          class="min-h-8 w-full"
++          :rows="3"
++          :disabled="!compose.can_send"
++          :placeholder="
++            pickedFile
++              ? __('Lời nhắn kèm (không bắt buộc)')
++              : __('Nhập tin trả lời Messenger')
++          "
++          @keydown.enter.exact="onEnter"
++        />
++        <Button
++          variant="solid"
++          :label="__('Gửi qua Messenger')"
++          :loading="sending"
++          :disabled="
++            !canSubmitMessenger(
++              compose,
++              text,
++              pickedFile,
++              sending,
++              compose.max_chars,
++            )
++          "
++          @click="submit()"
++        />
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import {
++  computed,
++  nextTick,
++  onBeforeUnmount,
++  onMounted,
++  reactive,
++  ref,
++  watch,
++} from 'vue'
++import {
++  Button,
++  LoadingIndicator,
++  Textarea,
++  call,
++  createResource,
++  toast,
++} from 'frappe-ui'
++import { globalStore } from '@/stores/global'
++import {
++  POLL_MS,
++  ZALO_EVENT,
++  botCard,
++  bubbleSide,
++  dayLabel,
++  groupByDay,
++  sourceOf,
++  timeLabel,
++} from '@/utils/zaloThread'
++import {
++  acceptList,
++  canSubmitMessenger,
++  checkMessengerFile,
++  formatSize,
++  isMessengerUpdate,
++  mediaMaxBytes,
++  messengerAttachmentViews,
++  metaInboxUrl,
++  openMetaInbox,
++  parseUploadResponse,
++  sendOutcome,
++} from '@/utils/messengerThread'
++
++const props = defineProps({
++  doctype: { type: String, required: true },
++  docname: { type: String, required: true },
++})
++
++const { $socket } = globalStore()
++
++const text = ref('')
++const sending = ref(false)
++const fileInput = ref(null)
++const pickedFile = ref(null) // ảnh/tệp sale chọn, chưa gửi
++let uploaded = null // { file, url }: tệp đã tải lên CRM, dùng lại nếu sale bấm gửi lần nữa (không tải trùng)
++const scroller = ref(null)
++const loadFailed = ref(false)
++const broken = reactive({}) // ảnh / video / âm thanh tải lỗi: rơi về liên kết có nhãn
++
++// Dữ liệu và mọi guard (luật 24 giờ, từ chối liên hệ, sandbox, độ dài, loại/cỡ tệp) nằm ở máy chủ: omni_crm.api.messenger_tab.
++const conversation = createResource({
++  url: 'omni_crm.api.messenger_tab.get_conversation',
++  makeParams: () => ({ doctype: props.doctype, name: props.docname }),
++  auto: true,
++  onSuccess: () => {
++    loadFailed.value = false
++    nextTick(scrollToBottom)
++  },
++  onError: () => {
++    loadFailed.value = true
++  },
++})
++
++const messages = computed(() => conversation.data?.messages || [])
++const groups = computed(() => groupByDay(messages.value))
++const compose = computed(
++  () =>
++    conversation.data?.compose || {
++      can_send: false,
++      reason: '',
++      sandbox: false,
++      linked: false,
++      can_send_media: false,
++    },
++)
++const maxMb = computed(() =>
++  Math.round(mediaMaxBytes(compose.value.media_max_mb) / (1024 * 1024)),
++)
++
++// Tóm tắt, ý định, mức gấp, điểm do bot phân tích ghi vào Lead (cùng hàm `_bot` của tab Zalo ở máy chủ).
++const bot = computed(() => botCard(conversation.data?.bot))
++function chipLabel(chip) {
++  if (chip.key === 'intent') return __('Ý định: {0}', [chip.value])
++  if (chip.key === 'urgency') return __('Mức gấp: {0}', [chip.value])
++  return __('Điểm: {0}', [chip.value])
++}
++
++// Hộp thư Meta Business Suite: liên kết do máy chủ dựng (mở đúng Page); chỉ nhận https://business.facebook.com/.
++const contact = computed(() => conversation.data?.contact || null)
++const directInbox = computed(() => Boolean(metaInboxUrl(contact.value)))
++const contactNames = computed(() => {
++  const c = contact.value
++  if (!c) return ''
++  return [...new Set([c.lead_name, c.display_name].filter(Boolean))].join(' / ')
++})
++
++function openInbox() {
++  if (!openMetaInbox(contact.value))
++    toast.error(__('Trình duyệt chặn cửa sổ mới'))
++}
++
++function senderLabel(msg) {
++  const source = sourceOf(msg)
++  if (source === 'customer') return msg.sender
++  if (source === 'bot') return `${__('Bot')} · ${msg.sender}`
++  if (source === 'echo') return __('Nhân viên (ngoài hệ thống)')
++  return `${__('Sale')} · ${msg.sender}`
++}
++
++function statusText(msg) {
++  if (msg.status === 'Queued' || msg.queued) return __('Đang gửi...')
++  if (msg.status === 'Blocked') return msg.error || __('Bị chặn, chưa gửi')
++  if (msg.status === 'Failed') return msg.error || __('Gửi lỗi')
++  return ''
++}
++
++function scrollToBottom() {
++  const el = scroller.value
++  if (el) el.scrollTop = el.scrollHeight
++}
++
++function reload() {
++  if (sending.value) return
++  conversation.reload()
++}
++
++function onPickFile(event) {
++  const file = event.target.files?.[0]
++  event.target.value = '' // chọn lại cùng tệp vẫn kích hoạt change
++  if (!file) return
++  const check = checkMessengerFile(file, compose.value)
++  if (check.error) {
++    toast.error(__(check.error))
++    return
++  }
++  pickedFile.value = file
++}
++
++function clearFile() {
++  pickedFile.value = null
++}
++
++// Enter gửi; Shift+Enter xuống dòng. Bỏ qua Enter khi bộ gõ tiếng Việt đang ghép chữ (không gửi nửa chừng).
++function onEnter(event) {
++  if (event.isComposing || event.keyCode === 229) return
++  event.preventDefault()
++  submit()
++}
++
++// Tải tệp lên CRM (gắn vào Lead/Deal đang mở, riêng tư) như tab Zalo, trả file_url. Máy chủ kiểm lại tệp thuộc Lead.
++async function uploadToCrm(file) {
++  if (uploaded?.file === file) return uploaded.url
++  const form = new FormData()
++  form.append('file', file, file.name)
++  form.append('doctype', props.doctype)
++  form.append('docname', props.docname)
++  form.append('is_private', '1')
++  const resp = await fetch('/api/method/upload_file', {
++    method: 'POST',
++    headers: {
++      Accept: 'application/json',
++      'X-Frappe-CSRF-Token': window.csrf_token,
++    },
++    body: form,
++  })
++  const data = await resp.json().catch(() => ({}))
++  const result = parseUploadResponse(resp.ok, data)
++  if (!result.url)
++    throw new Error(result.error || __('Không tải được tệp lên CRM'))
++  uploaded = { file, url: result.url }
++  return result.url
++}
++
++function applyOutcome(res) {
++  const outcome = sendOutcome(res)
++  if (outcome.clearText) text.value = ''
++  if (outcome.clearFile) {
++    pickedFile.value = null
++    uploaded = null
++  }
++  if (!outcome.ok) toast.error(__(outcome.error))
++}
++
++async function submit() {
++  if (
++    !canSubmitMessenger(
++      compose.value,
++      text.value,
++      pickedFile.value,
++      sending.value,
++      compose.value.max_chars,
++    )
++  )
++    return
++  const file = pickedFile.value
++  const body = text.value
++  sending.value = true // giữ cờ đến khi xong cả tải tệp lẫn gửi: không gửi đôi
++  try {
++    if (file) {
++      const fileUrl = await uploadToCrm(file)
++      applyOutcome(
++        await call('omni_crm.api.messenger_tab.send_attachment', {
++          doctype: props.doctype,
++          name: props.docname,
++          file_url: fileUrl,
++          text: body,
++        }),
++      )
++    } else {
++      applyOutcome(
++        await call('omni_crm.api.messenger_tab.send', {
++          doctype: props.doctype,
++          name: props.docname,
++          text: body,
++        }),
++      )
++    }
++  } catch (error) {
++    toast.error(
++      error?.messages?.[0] ||
++        error?.message ||
++        (file
++          ? __('Không gửi được ảnh/tệp qua Messenger')
++          : __('Không gửi được tin Messenger')),
++    )
++  } finally {
++    sending.value = false
++    conversation.reload()
++  }
++}
++
++// Realtime: payload chỉ có {lead, channels}, không có nội dung tin; nhận tín hiệu rồi tải lại qua API có kiểm quyền.
++let timer = null
++let poll = null
++function onUpdate(payload) {
++  if (!isMessengerUpdate(payload, conversation.data?.lead)) return
++  clearTimeout(timer)
++  timer = setTimeout(reload, 500)
++}
++
++function onVisible() {
++  if (!document.hidden) reload()
++}
++
++onMounted(() => {
++  $socket?.on(ZALO_EVENT, onUpdate) // cùng sự kiện `omni_inbox_update` của Hộp thư, lọc theo kênh Meta Messenger
++  // Dự phòng khi mất kết nối realtime; tab trình duyệt ẩn thì không thăm dò, hiện lại thì tải ngay.
++  poll = setInterval(() => {
++    if (!document.hidden) reload()
++  }, POLL_MS)
++  document.addEventListener('visibilitychange', onVisible)
++})
++
++onBeforeUnmount(() => {
++  $socket?.off(ZALO_EVENT, onUpdate)
++  clearInterval(poll)
++  document.removeEventListener('visibilitychange', onVisible)
++  clearTimeout(timer)
++})
++
++watch(
++  () => [props.doctype, props.docname],
++  () => conversation.reload(),
++)
++</script>
 diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
 new file mode 100644
 index 0000000..f6ebfd9
@@ -1052,6 +1612,35 @@ index 0000000..f6ebfd9
 +  () => conversation.reload(),
 +)
 +</script>
+diff --git a/frontend/src/components/Icons/MessengerIcon.vue b/frontend/src/components/Icons/MessengerIcon.vue
+new file mode 100644
+index 0000000..98aabd0
+--- /dev/null
++++ b/frontend/src/components/Icons/MessengerIcon.vue
+@@ -0,0 +1,23 @@
++<template>
++  <svg
++    width="16"
++    height="16"
++    viewBox="0 0 16 16"
++    fill="none"
++    xmlns="http://www.w3.org/2000/svg"
++  >
++    <!-- Biểu tượng tab Messenger (ADR 0023): bong bóng chat có tia chớp, vẽ nội tuyến, không tải từ ngoài -->
++    <path
++      d="M8 2C4.69 2 2 4.46 2 7.5c0 1.66.8 3.15 2.07 4.16V14l2.02-1.12c.6.17 1.24.26 1.91.26 3.31 0 6-2.46 6-5.64C14 4.46 11.31 2 8 2Z"
++      stroke="currentColor"
++      stroke-width="1.2"
++      stroke-linejoin="round"
++    />
++    <path
++      d="m4.9 9.2 2.1-2.3 1.6 1.3 2.5-1.4-2.1 2.3-1.6-1.3-2.5 1.4Z"
++      stroke="currentColor"
++      stroke-width="1"
++      stroke-linejoin="round"
++    />
++  </svg>
++</template>
 diff --git a/frontend/src/components/Icons/ZaloIcon.vue b/frontend/src/components/Icons/ZaloIcon.vue
 new file mode 100644
 index 0000000..0db54de
@@ -1181,6 +1770,30 @@ index 0000000..7b6f7fc
 +    leadContactBusy.value = false
 +  }
 +}
+diff --git a/frontend/src/composables/messenger.js b/frontend/src/composables/messenger.js
+new file mode 100644
+index 0000000..a6d085c
+--- /dev/null
++++ b/frontend/src/composables/messenger.js
+@@ -0,0 +1,18 @@
++import { createResource } from 'frappe-ui'
++import { ref } from 'vue'
++
++// Tab Messenger (ADR 0023) chỉ hiện khi app omni_crm đã cài và công tắc không bị tắt (Omni Settings.messenger_tab_disabled).
++// Nếu omni_crm không có trên site (hoặc bản omni_crm cũ chưa có API này), lời gọi lỗi và tab đơn giản không hiện (CRM chạy như cũ).
++export const messengerEnabled = ref(false)
++
++createResource({
++  url: 'omni_crm.api.messenger_tab.tab_state',
++  cache: 'Omni Messenger Tab Enabled',
++  auto: true,
++  onSuccess: (data) => {
++    messengerEnabled.value = Boolean(data?.enabled)
++  },
++  onError: () => {
++    messengerEnabled.value = false
++  },
++})
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
 index 0000000..5e7db68
@@ -1206,26 +1819,28 @@ index 0000000..5e7db68
 +  },
 +})
 diff --git a/frontend/src/pages/Deal.vue b/frontend/src/pages/Deal.vue
-index 77cd4b7..6c14517 100644
+index 77cd4b7..83d0736 100644
 --- a/frontend/src/pages/Deal.vue
 +++ b/frontend/src/pages/Deal.vue
-@@ -349,6 +349,7 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+@@ -349,6 +349,8 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
  import TaskIcon from '@/components/Icons/TaskIcon.vue'
  import NoteIcon from '@/components/Icons/NoteIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 +import ZaloIcon from '@/components/Icons/ZaloIcon.vue'
++import MessengerIcon from '@/components/Icons/MessengerIcon.vue'
  import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
  import LinkIcon from '@/components/Icons/LinkIcon.vue'
  import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
-@@ -379,6 +380,7 @@ import { statusesStore } from '@/stores/statuses'
+@@ -379,6 +381,8 @@ import { statusesStore } from '@/stores/statuses'
  import { getMeta } from '@/stores/meta'
  import { useDocument } from '@/data/document'
  import { whatsappEnabled } from '@/composables/whatsapp'
 +import { zaloEnabled } from '@/composables/zalo'
++import { messengerEnabled } from '@/composables/messenger'
  import { callEnabled } from '@/composables/telephony'
  import { useBroadcast } from '@/composables/useBroadcast'
  import {
-@@ -601,6 +603,12 @@ const tabs = computed(() => {
+@@ -601,6 +605,18 @@ const tabs = computed(() => {
        icon: WhatsAppIcon,
        condition: () => whatsappEnabled.value,
      },
@@ -1235,11 +1850,17 @@ index 77cd4b7..6c14517 100644
 +      icon: ZaloIcon,
 +      condition: () => zaloEnabled.value,
 +    },
++    {
++      name: 'Messenger',
++      label: __('Messenger'),
++      icon: MessengerIcon,
++      condition: () => messengerEnabled.value,
++    },
    ]
    return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
  })
 diff --git a/frontend/src/pages/Lead.vue b/frontend/src/pages/Lead.vue
-index d363cbf..58148bd 100644
+index d363cbf..b7b7cdf 100644
 --- a/frontend/src/pages/Lead.vue
 +++ b/frontend/src/pages/Lead.vue
 @@ -34,6 +34,12 @@
@@ -1255,20 +1876,22 @@ index d363cbf..58148bd 100644
        <Button
          :label="__('Convert to Deal')"
          variant="solid"
-@@ -246,6 +252,8 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+@@ -246,6 +252,9 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
  import TaskIcon from '@/components/Icons/TaskIcon.vue'
  import NoteIcon from '@/components/Icons/NoteIcon.vue'
  import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 +import ZaloIcon from '@/components/Icons/ZaloIcon.vue'
++import MessengerIcon from '@/components/Icons/MessengerIcon.vue'
 +import AssistantIcon from '~icons/lucide/bot'
  import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
  import CameraIcon from '@/components/Icons/CameraIcon.vue'
  import LinkIcon from '@/components/Icons/LinkIcon.vue'
-@@ -273,6 +281,13 @@ import { statusesStore } from '@/stores/statuses'
+@@ -273,6 +282,14 @@ import { statusesStore } from '@/stores/statuses'
  import { getMeta } from '@/stores/meta'
  import { useDocument } from '@/data/document'
  import { whatsappEnabled } from '@/composables/whatsapp'
 +import { zaloEnabled } from '@/composables/zalo'
++import { messengerEnabled } from '@/composables/messenger'
 +import { assistantEnabled } from '@/composables/assistant'
 +import {
 +  leadContactBusy,
@@ -1278,7 +1901,7 @@ index d363cbf..58148bd 100644
  import { callEnabled } from '@/composables/telephony'
  import {
    createResource,
-@@ -453,6 +468,18 @@ const tabs = computed(() => {
+@@ -453,6 +470,24 @@ const tabs = computed(() => {
        icon: WhatsAppIcon,
        condition: () => whatsappEnabled.value,
      },
@@ -1287,6 +1910,12 @@ index d363cbf..58148bd 100644
 +      label: __('Zalo'),
 +      icon: ZaloIcon,
 +      condition: () => zaloEnabled.value,
++    },
++    {
++      name: 'Messenger',
++      label: __('Messenger'),
++      icon: MessengerIcon,
++      condition: () => messengerEnabled.value,
 +    },
 +    {
 +      name: 'Assistant',
@@ -1403,6 +2032,305 @@ index 0000000..6383c9d
 +      text: htmlToText(n?.content),
 +    }))
 +    .filter((n) => n.text || n.title)
++}
+diff --git a/frontend/src/utils/messengerThread.js b/frontend/src/utils/messengerThread.js
+new file mode 100644
+index 0000000..b585733
+--- /dev/null
++++ b/frontend/src/utils/messengerThread.js
+@@ -0,0 +1,293 @@
++// Hàm thuần cho tab "Messenger" (omni_crm, ADR 0023): đính kèm (ảnh / video / âm thanh / tệp đã lưu trong CRM), kiểm tệp
++// sale chọn để gửi, liên kết hộp thư Meta Business Suite. Gom bong bóng, nhãn, giờ và luật URL dùng lại `zaloThread.js`
++// (không sửa tệp đó). Không phụ thuộc Vue/DOM.
++import {
++  INLINE_IMAGE_TYPES,
++  attachmentLabel,
++  canSubmit,
++  fileExtension,
++  fileNameFromUrl,
++  isInlineImageUrl,
++  isSafeUrl,
++} from '@/utils/zaloThread'
++
++/** Loại kênh trong tín hiệu realtime `omni_inbox_update` và trong `Omni Channel.channel_type`. */
++export const MESSENGER_CHANNEL = 'Meta Messenger'
++
++const MB = 1024 * 1024
++const LOCAL_FILE = /^\/(?:private\/)?files\//
++
++// --- Đính kèm: tệp khách gửi đã được chép vào File của CRM; tệp sale gửi cũng là File của Lead ---
++
++/**
++ * Đường dẫn tệp trong CRM (/files, /private/files) dùng được, hoặc '' nếu bị từ chối. Cùng luật nghiêm ngặt với ảnh nội tuyến
++ * (`isInlineImageUrl`): không `..` (kể cả %2e), không `//`, không `\`, ký tự điều khiển hay khoảng trắng.
++ * `allowSpace`: nhận dấu cách thường (tên tệp Frappe có thể chứa) và trả đường đã mã hóa dấu cách thành %20 (như máy chủ
++ * `media.is_safe_link`); chỉ dùng cho liên kết tải, KHÔNG dùng cho src của ảnh/video/âm thanh.
++ */
++export function localFileUrl(url, { allowSpace = false } = {}) {
++  const value = String(url || '')
++  if (!LOCAL_FILE.test(value)) return ''
++  const candidate = allowSpace ? value.replace(/ /g, '%20') : value
++  return isInlineImageUrl(candidate) ? candidate : ''
++}
++
++/** Tên tệp cuối đường dẫn nội bộ (bỏ query, giải mã %xx); '' nếu không có. */
++export function localFileName(url) {
++  const path = String(url || '')
++    .split(/[?#]/)[0]
++    .replace(/\/+$/, '')
++  const seg = path.slice(path.lastIndexOf('/') + 1)
++  try {
++    return decodeURIComponent(seg).slice(0, 80)
++  } catch {
++    return seg.slice(0, 80)
++  }
++}
++
++/** Cách vẽ theo loại (type của Messenger, rồi mime khi type thiếu hoặc là 'file'): 'image' | 'video' | 'audio' | ''. */
++export function mediaKind(type, mime) {
++  const t = String(type || '').toLowerCase()
++  if (INLINE_IMAGE_TYPES.includes(t)) return 'image'
++  if (t === 'video' || t === 'audio') return t
++  if (t && t !== 'file') return ''
++  const m = String(mime || '').toLowerCase()
++  if (m.startsWith('image/')) return 'image'
++  if (m.startsWith('video/')) return 'video'
++  if (m.startsWith('audio/')) return 'audio'
++  return ''
++}
++
++function nameOf(att, url, local) {
++  const name = String(att?.name || '').trim()
++  if (name && !/^(?:https?:\/\/|\/)/i.test(name)) return name.slice(0, 80) // không in URL dài
++  return (
++    (local ? localFileName(url) : fileNameFromUrl(url)) ||
++    attachmentLabel(att?.type)
++  )
++}
++
++/**
++ * Mô hình hiển thị đính kèm của tab Messenger: [{ index, kind, url, src, text }].
++ * - kind 'image' | 'video' | 'audio': vẽ thẳng (<img>, <video controls>, <audio controls>), CHỈ khi url là /files hoặc
++ *   /private/files sạch (cùng gốc với CRM, người xem đã đăng nhập); `src` = `url`.
++ * - kind 'link': liên kết mở/tải tệp (đường /files có thể có dấu cách, hoặc http(s) sạch); `src` rỗng.
++ * - kind 'note': tệp không lưu được vào CRM (url rỗng, máy chủ ghi `note`): chỉ chữ "tên (ghi chú)", không liên kết.
++ * Mục có URL lạ (javascript:, data:, //host, `..`...) bị bỏ. `text` là chữ thuần, hiển thị bằng nội suy (không chèn HTML thô).
++ */
++export function messengerAttachmentViews(list) {
++  if (!Array.isArray(list)) return []
++  const out = []
++  for (const att of list) {
++    if (!att || typeof att !== 'object') continue
++    const url = String(att.url || '')
++    if (!url) {
++      const note = String(att.note || '')
++        .trim()
++        .slice(0, 200)
++      if (!note) continue
++      const name =
++        String(att.name || '')
++          .trim()
++          .slice(0, 80) || attachmentLabel(att.type)
++      out.push({
++        index: out.length,
++        kind: 'note',
++        url: '',
++        src: '',
++        text: `${name} (${note})`,
++      })
++      continue
++    }
++    const kind = mediaKind(att.type, att.mime)
++    const src = kind ? localFileUrl(url) : ''
++    if (src) {
++      out.push({
++        index: out.length,
++        kind,
++        url: src,
++        src,
++        text: nameOf(att, src, true),
++      })
++      continue
++    }
++    const local = localFileUrl(url, { allowSpace: true })
++    const href = local || (isSafeUrl(url) ? url : '')
++    if (!href) continue
++    out.push({
++      index: out.length,
++      kind: 'link',
++      url: href,
++      src: '',
++      text: nameOf(att, href, Boolean(local)),
++    })
++  }
++  return out
++}
++
++// --- Realtime ---
++
++/** Tín hiệu realtime `omni_inbox_update` có thuộc hội thoại Messenger đang xem không (payload chỉ có {lead, channels}). */
++export function isMessengerUpdate(payload, lead) {
++  if (!payload || !lead || payload.lead !== lead) return false
++  const channels = payload.channels
++  return (
++    !Array.isArray(channels) ||
++    !channels.length ||
++    channels.includes(MESSENGER_CHANNEL)
++  )
++}
++
++// --- Hộp thư Meta Business Suite (thay nút "Mở chat Zalo OA") ---
++
++/** Hộp thư chung của Meta Business Suite: dùng khi máy chủ chưa có mã Page để mở đúng hộp thư của Page. */
++export const META_INBOX_URL = 'https://business.facebook.com/latest/inbox/all/'
++const META_INBOX_PREFIX = 'https://business.facebook.com/'
++
++/**
++ * Liên kết hộp thư Meta của khách (`contact.inbox_url` do máy chủ dựng), hoặc '' nếu không hợp lệ. Chỉ nhận đúng
++ * https://business.facebook.com/...: không userinfo, không cổng, không `\`/ký tự điều khiển/khoảng trắng.
++ */
++export function metaInboxUrl(contact) {
++  const value = String(contact?.inbox_url ?? '')
++  if (!value.startsWith(META_INBOX_PREFIX) || !isSafeUrl(value)) return ''
++  let u
++  try {
++    u = new URL(value)
++  } catch {
++    return ''
++  }
++  if (
++    u.protocol !== 'https:' ||
++    u.hostname !== 'business.facebook.com' ||
++    u.username ||
++    u.password ||
++    u.port
++  )
++    return ''
++  return u.href
++}
++
++/** Mở hộp thư Meta (đúng Page nếu có liên kết hợp lệ, nếu không thì hộp thư chung) ở tab mới; true nếu gọi được window.open. */
++export function openMetaInbox(contact = null, win = globalThis.window) {
++  if (!win || typeof win.open !== 'function') return false
++  win.open(
++    metaInboxUrl(contact) || META_INBOX_URL,
++    '_blank',
++    'noopener,noreferrer',
++  )
++  return true
++}
++
++// --- Sale gửi ảnh / tệp qua Messenger (ADR 0023 mục 4) ---
++
++/** Danh sách đuôi mặc định, trùng `omni_crm.channels.meta_messenger.media_out.ACCEPT` (máy chủ gửi kèm trong `compose`). */
++export const DEFAULT_MEDIA_ACCEPT =
++  '.jpg,.jpeg,.png,.gif,.mp4,.mp3,.m4a,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip'
++export const DEFAULT_MEDIA_MAX_MB = 25
++
++const KIND_BY_EXT = {
++  '.jpg': 'image',
++  '.jpeg': 'image',
++  '.png': 'image',
++  '.gif': 'image',
++  '.mp4': 'video',
++  '.mp3': 'audio',
++  '.m4a': 'audio',
++}
++
++/** Đuôi tệp được nhận (chữ thường, có dấu chấm) từ chuỗi `accept` của máy chủ; rỗng hoặc lạ thì dùng danh sách mặc định. */
++export function acceptList(accept) {
++  const list = String(accept || '')
++    .split(',')
++    .map((s) => s.trim().toLowerCase())
++    .filter((s) => /^\.[a-z0-9]{1,10}$/.test(s))
++  if (list.length) return [...new Set(list)]
++  return DEFAULT_MEDIA_ACCEPT.split(',')
++}
++
++/** Cỡ tối đa (byte) theo `media_max_mb` của máy chủ; thiếu hoặc không hợp lệ thì 25 MB. */
++export function mediaMaxBytes(maxMb) {
++  const n = Number(maxMb)
++  return (Number.isFinite(n) && n > 0 ? n : DEFAULT_MEDIA_MAX_MB) * MB
++}
++
++/** Cỡ tệp dễ đọc: "850 KB", "1,5 MB". */
++export function formatSize(bytes) {
++  const n = Number(bytes) || 0
++  if (n < MB) return `${Math.max(1, Math.round(n / 1024))} KB`
++  return `${(Math.round((n / MB) * 10) / 10).toString().replace('.', ',')} MB`
++}
++
++/**
++ * Kiểm tệp sale chọn theo `compose.media_accept` và `compose.media_max_mb` của máy chủ: trả { kind } (image | video | audio
++ * | file) nếu gửi được, hoặc { error } (chuỗi tiếng Việt chưa dịch). Máy chủ kiểm lại (loại, cỡ, tệp thuộc Lead).
++ */
++export function checkMessengerFile(file, compose = null) {
++  if (!file) return { error: 'Chưa chọn tệp' }
++  const allowed = acceptList(compose?.media_accept)
++  const ext = fileExtension(file.name)
++  if (!ext || !allowed.includes(ext))
++    return {
++      error: `Messenger chỉ nhận tệp ${allowed.map((e) => e.slice(1).toUpperCase()).join(', ')}`,
++    }
++  if (!file.size) return { error: 'Tệp rỗng' }
++  const max = mediaMaxBytes(compose?.media_max_mb)
++  if (file.size > max)
++    return {
++      error: `Tệp quá lớn: Messenger nhận tối đa ${String(max / MB).replace('.', ',')} MB`,
++    }
++  return { kind: KIND_BY_EXT[ext] || 'file' }
++}
++
++/**
++ * Nút Gửi bật khi: không có tệp thì như `canSubmit` (có chữ, trong giới hạn); có tệp thì khung soạn cho gửi ảnh/tệp, tệp
++ * hợp lệ, chữ (không bắt buộc) trong giới hạn: chữ đi thành tin riêng TRƯỚC tệp nên giới hạn là `max_chars`, không phải 2.000.
++ */
++export function canSubmitMessenger(
++  compose,
++  text,
++  file,
++  sending,
++  maxChars = 6000,
++) {
++  if (!file) return canSubmit(compose, text, sending, maxChars)
++  const value = String(text || '').trim()
++  return Boolean(
++    compose?.can_send &&
++    compose?.can_send_media &&
++    !sending &&
++    !checkMessengerFile(file, compose).error &&
++    value.length <= maxChars,
++  )
++}
++
++/**
++ * Kết quả trả về của `upload_file` (Frappe): { url } khi có `message.file_url` (chỉ nhận /files, /private/files), hoặc
++ * { error } với thông điệp của máy chủ nếu đọc được (`_server_messages`), rỗng nếu không (người gọi dùng câu mặc định).
++ */
++export function parseUploadResponse(ok, data) {
++  const url = String(data?.message?.file_url || '')
++  if (ok && LOCAL_FILE.test(url)) return { url }
++  try {
++    const first = JSON.parse(data?._server_messages || '[]')[0]
++    return { error: String(JSON.parse(first || '{}').message || '') }
++  } catch {
++    return { error: '' }
++  }
++}
++
++/**
++ * Sau khi gọi `send` / `send_attachment`: { ok, clearText, clearFile, error }. Bị chặn thì giữ khung soạn để sửa, trừ phần chữ
++ * đã xếp hàng (có `text_outbound`: chữ đi rồi, chỉ tệp bị chặn) để bấm lại không gửi chữ hai lần.
++ */
++export function sendOutcome(res) {
++  if (res?.status === 'Blocked')
++    return {
++      ok: false,
++      clearText: Boolean(res.text_outbound),
++      clearFile: false,
++      error: res.reason || 'Tin bị chặn, chưa gửi',
++    }
++  return { ok: true, clearText: true, clearFile: true, error: '' }
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
@@ -1909,6 +2837,450 @@ index 0000000..3e67f48
 +      ]),
 +    ).toEqual([{ name: 'N1', title: 'Cuộc gọi 06/11', text: 'đặt hàng' }])
 +    expect(callNotes(undefined)).toEqual([])
++  })
++})
+diff --git a/frontend/tests/unit/messengerThread.test.js b/frontend/tests/unit/messengerThread.test.js
+new file mode 100644
+index 0000000..1ddb1e6
+--- /dev/null
++++ b/frontend/tests/unit/messengerThread.test.js
+@@ -0,0 +1,438 @@
++import { describe, expect, it } from 'vitest'
++import {
++  DEFAULT_MEDIA_ACCEPT,
++  META_INBOX_URL,
++  MESSENGER_CHANNEL,
++  acceptList,
++  canSubmitMessenger,
++  checkMessengerFile,
++  formatSize,
++  isMessengerUpdate,
++  localFileName,
++  localFileUrl,
++  mediaKind,
++  mediaMaxBytes,
++  messengerAttachmentViews,
++  metaInboxUrl,
++  openMetaInbox,
++  parseUploadResponse,
++  sendOutcome,
++} from '@/utils/messengerThread'
++
++const MB = 1024 * 1024
++const f = (name, size) => ({ name, size })
++const COMPOSE = {
++  can_send: true,
++  can_send_media: true,
++  media_accept: DEFAULT_MEDIA_ACCEPT,
++  media_max_mb: 25,
++  max_chars: 6000,
++}
++
++describe('localFileUrl / localFileName (tệp trong CRM)', () => {
++  it('nhận /files, /private/files sạch', () => {
++    expect(localFileUrl('/files/a.png')).toBe('/files/a.png')
++    expect(localFileUrl('/private/files/a%20b.jpg')).toBe(
++      '/private/files/a%20b.jpg',
++    )
++  })
++  it('từ chối đường lạ, .., //, ký tự điều khiển, URL ngoài', () => {
++    for (const bad of [
++      '',
++      null,
++      undefined,
++      'https://cdn.example/a.png',
++      '//evil.example/files/a.png',
++      '/files/../private/files/x.png',
++      '/private/files/%2e%2e/x.png',
++      '/files//x.png',
++      '/files/a\\b.png',
++      '/files/a\nb.png',
++      '/files/a\tb.png',
++      'javascript:alert(1)',
++      '/filesx/a.png',
++      'files/a.png',
++    ]) {
++      expect(localFileUrl(bad)).toBe('')
++      expect(localFileUrl(bad, { allowSpace: true })).toBe('')
++    }
++  })
++  it('dấu cách: từ chối cho src, nhận và mã hóa cho liên kết', () => {
++    expect(localFileUrl('/private/files/Báo giá.pdf')).toBe('')
++    expect(
++      localFileUrl('/private/files/Bao gia thu.pdf', { allowSpace: true }),
++    ).toBe('/private/files/Bao%20gia%20thu.pdf')
++  })
++  it('tên tệp cuối đường dẫn', () => {
++    expect(localFileName('/private/files/B%C3%A1o%20gi%C3%A1.pdf?x=1')).toBe(
++      'Báo giá.pdf',
++    )
++    expect(localFileName('/files/a%zz.pdf')).toBe('a%zz.pdf') // mã hỏng: giữ nguyên
++    expect(localFileName('')).toBe('')
++  })
++})
++
++describe('mediaKind', () => {
++  it('theo type, rồi mime khi type thiếu hoặc là file', () => {
++    expect(mediaKind('image')).toBe('image')
++    expect(mediaKind('GIF')).toBe('image')
++    expect(mediaKind('sticker')).toBe('image')
++    expect(mediaKind('video', 'video/mp4')).toBe('video')
++    expect(mediaKind('audio')).toBe('audio')
++    expect(mediaKind('', 'audio/mpeg')).toBe('audio')
++    expect(mediaKind('file', 'image/png')).toBe('image')
++    expect(mediaKind('file', 'application/pdf')).toBe('')
++    expect(mediaKind('fallback', 'image/png')).toBe('') // loại khác của Meta: chỉ liên kết
++    expect(mediaKind()).toBe('')
++  })
++})
++
++describe('messengerAttachmentViews', () => {
++  it('ảnh, video, âm thanh từ CRM được vẽ; tệp là liên kết', () => {
++    const views = messengerAttachmentViews([
++      {
++        url: '/private/files/m_1.jpg',
++        name: '',
++        type: 'image',
++        inline: true,
++      },
++      {
++        url: '/private/files/clip.mp4',
++        name: 'clip.mp4',
++        type: 'video',
++        mime: 'video/mp4',
++      },
++      { url: '/private/files/voice.m4a', type: 'audio', mime: 'audio/mp4' },
++      { url: '/private/files/Bao gia.pdf', name: 'Báo giá.pdf', type: 'file' },
++    ])
++    expect(views).toEqual([
++      {
++        index: 0,
++        kind: 'image',
++        url: '/private/files/m_1.jpg',
++        src: '/private/files/m_1.jpg',
++        text: 'm_1.jpg',
++      },
++      {
++        index: 1,
++        kind: 'video',
++        url: '/private/files/clip.mp4',
++        src: '/private/files/clip.mp4',
++        text: 'clip.mp4',
++      },
++      {
++        index: 2,
++        kind: 'audio',
++        url: '/private/files/voice.m4a',
++        src: '/private/files/voice.m4a',
++        text: 'voice.m4a',
++      },
++      {
++        index: 3,
++        kind: 'link',
++        url: '/private/files/Bao%20gia.pdf',
++        src: '',
++        text: 'Báo giá.pdf',
++      },
++    ])
++  })
++  it('ảnh/video từ URL ngoài không bao giờ được vẽ, chỉ là liên kết', () => {
++    const views = messengerAttachmentViews([
++      { url: 'https://scontent.xx.fbcdn.net/a.jpg', type: 'image' },
++      { url: 'https://video.example/v.mp4', type: 'video' },
++    ])
++    expect(views.map((v) => [v.kind, v.src, v.text])).toEqual([
++      ['link', '', 'a.jpg'],
++      ['link', '', 'v.mp4'],
++    ])
++  })
++  it('ảnh có dấu cách trong tên: không vẽ, rơi về liên kết đã mã hóa', () => {
++    const [v] = messengerAttachmentViews([
++      { url: '/files/anh chup.png', type: 'image' },
++    ])
++    expect(v).toMatchObject({
++      kind: 'link',
++      url: '/files/anh%20chup.png',
++      src: '',
++      text: 'anh chup.png',
++    })
++  })
++  it('tệp không lưu được: chỉ tên + ghi chú, không liên kết', () => {
++    expect(
++      messengerAttachmentViews([
++        {
++          url: '',
++          name: 'video.mp4',
++          type: 'video',
++          note: 'Tệp lớn hơn giới hạn 25 MB của hệ thống',
++        },
++        { url: '', type: 'file', note: 'Meta không cho tải tệp này về' },
++        { url: '', name: 'khong-ghi-chu.pdf' },
++      ]),
++    ).toEqual([
++      {
++        index: 0,
++        kind: 'note',
++        url: '',
++        src: '',
++        text: 'video.mp4 (Tệp lớn hơn giới hạn 25 MB của hệ thống)',
++      },
++      {
++        index: 1,
++        kind: 'note',
++        url: '',
++        src: '',
++        text: 'Tệp (Meta không cho tải tệp này về)',
++      },
++    ])
++  })
++  it('bỏ URL nguy hiểm và mục rác; chỉ số liền nhau', () => {
++    const views = messengerAttachmentViews([
++      { url: 'javascript:alert(1)', type: 'image' },
++      { url: 'data:image/png;base64,AAAA', type: 'image' },
++      { url: '//evil.example/a.png', type: 'image' },
++      { url: '/files/../x.png', type: 'image' },
++      { url: 'https://evil.example\\@x.example/a.png' },
++      null,
++      'chuoi',
++      { url: '/files/ok.png', type: 'image' },
++    ])
++    expect(views).toHaveLength(1)
++    expect(views[0]).toMatchObject({ index: 0, kind: 'image' })
++    expect(messengerAttachmentViews(undefined)).toEqual([])
++  })
++  it('tên là URL thì dùng tên tệp; tên thường giữ nguyên', () => {
++    const [a, b] = messengerAttachmentViews([
++      {
++        url: '/private/files/x.pdf',
++        name: 'https://cdn.example/rat-dai',
++        type: 'file',
++      },
++      { url: 'https://x.example/', name: '', type: 'file' },
++    ])
++    expect(a.text).toBe('x.pdf')
++    expect(b.text).toBe('Tệp')
++  })
++})
++
++describe('isMessengerUpdate', () => {
++  it('chỉ tín hiệu của đúng Lead và kênh Messenger (hoặc không ghi kênh)', () => {
++    expect(isMessengerUpdate({ lead: 'L1' }, 'L1')).toBe(true)
++    expect(isMessengerUpdate({ lead: 'L1', channels: [] }, 'L1')).toBe(true)
++    expect(
++      isMessengerUpdate({ lead: 'L1', channels: [MESSENGER_CHANNEL] }, 'L1'),
++    ).toBe(true)
++    expect(isMessengerUpdate({ lead: 'L1', channels: ['Zalo OA'] }, 'L1')).toBe(
++      false,
++    )
++    expect(isMessengerUpdate({ lead: 'L2' }, 'L1')).toBe(false)
++    expect(isMessengerUpdate({ lead: 'L1' }, null)).toBe(false)
++    expect(isMessengerUpdate(null, 'L1')).toBe(false)
++  })
++})
++
++describe('hộp thư Meta Business Suite', () => {
++  it('chỉ nhận https://business.facebook.com/', () => {
++    const ok =
++      'https://business.facebook.com/latest/inbox/all/?asset_id=1234567890'
++    expect(metaInboxUrl({ inbox_url: ok })).toBe(ok)
++    for (const bad of [
++      '',
++      null,
++      'http://business.facebook.com/latest/inbox/all/',
++      'https://business.facebook.com.evil.example/x',
++      'https://business.facebook.com@evil.example/x',
++      'https://business.facebook.com:8443/x',
++      'https://evil.example/https://business.facebook.com/',
++      'https://www.facebook.com/messages/t/1',
++      'javascript:alert(1)//https://business.facebook.com/',
++      'https://business.facebook.com/a b',
++      'https://business.facebook.com/a\\@evil.example',
++      ' https://business.facebook.com/latest/inbox/all/',
++    ]) {
++      expect(metaInboxUrl({ inbox_url: bad })).toBe('')
++    }
++    expect(metaInboxUrl(null)).toBe('')
++  })
++  it('mở tab mới với noopener,noreferrer; liên kết lỗi thì mở hộp thư chung', () => {
++    const calls = []
++    const win = { open: (...args) => calls.push(args) }
++    const ok = 'https://business.facebook.com/latest/inbox/all/?asset_id=42'
++    expect(openMetaInbox({ inbox_url: ok }, win)).toBe(true)
++    expect(openMetaInbox({ inbox_url: 'https://evil.example/' }, win)).toBe(
++      true,
++    )
++    expect(openMetaInbox(null, win)).toBe(true)
++    expect(calls).toEqual([
++      [ok, '_blank', 'noopener,noreferrer'],
++      [META_INBOX_URL, '_blank', 'noopener,noreferrer'],
++      [META_INBOX_URL, '_blank', 'noopener,noreferrer'],
++    ])
++    expect(openMetaInbox(null, {})).toBe(false)
++    expect(openMetaInbox(null, null)).toBe(false)
++  })
++})
++
++describe('kiểm tệp gửi qua Messenger', () => {
++  it('acceptList / mediaMaxBytes theo máy chủ, thiếu thì mặc định', () => {
++    expect(acceptList('.PDF, .jpg,,image/*,.pdf')).toEqual(['.pdf', '.jpg'])
++    expect(acceptList('')).toEqual(DEFAULT_MEDIA_ACCEPT.split(','))
++    expect(acceptList('image/*')).toEqual(DEFAULT_MEDIA_ACCEPT.split(','))
++    expect(mediaMaxBytes(10)).toBe(10 * MB)
++    expect(mediaMaxBytes(undefined)).toBe(25 * MB)
++    expect(mediaMaxBytes(0)).toBe(25 * MB)
++    expect(mediaMaxBytes('abc')).toBe(25 * MB)
++  })
++  it('loại theo đuôi', () => {
++    expect(checkMessengerFile(f('a.JPG', 1000), COMPOSE)).toEqual({
++      kind: 'image',
++    })
++    expect(checkMessengerFile(f('b.gif', 1000), COMPOSE)).toEqual({
++      kind: 'image',
++    })
++    expect(checkMessengerFile(f('c.mp4', 1000), COMPOSE)).toEqual({
++      kind: 'video',
++    })
++    expect(checkMessengerFile(f('d.m4a', 1000), COMPOSE)).toEqual({
++      kind: 'audio',
++    })
++    expect(checkMessengerFile(f('Báo giá.xlsx', 1000), COMPOSE)).toEqual({
++      kind: 'file',
++    })
++    expect(checkMessengerFile(f('e.zip', 1000), null)).toEqual({ kind: 'file' })
++  })
++  it('từ chối loại lạ, tệp rỗng, quá cỡ', () => {
++    expect(checkMessengerFile(f('a.exe', 1000), COMPOSE).error).toMatch(
++      /^Messenger chỉ nhận tệp JPG, JPEG, PNG/,
++    )
++    expect(checkMessengerFile(f('khongduoi', 1000), COMPOSE).error).toBeTruthy()
++    expect(checkMessengerFile(f('.png', 1000), COMPOSE).error).toBeTruthy()
++    expect(checkMessengerFile(null, COMPOSE).error).toBe('Chưa chọn tệp')
++    expect(checkMessengerFile(f('rong.pdf', 0), COMPOSE).error).toBe('Tệp rỗng')
++    expect(checkMessengerFile(f('to.mp4', 25 * MB), COMPOSE)).toEqual({
++      kind: 'video',
++    })
++    expect(checkMessengerFile(f('to.mp4', 25 * MB + 1), COMPOSE).error).toBe(
++      'Tệp quá lớn: Messenger nhận tối đa 25 MB',
++    )
++    // máy chủ thu hẹp danh sách: tệp ngoài danh sách bị từ chối ngay khi chọn
++    expect(
++      checkMessengerFile(f('a.mp4', 1000), { media_accept: '.jpg,.png' }).error,
++    ).toBe('Messenger chỉ nhận tệp JPG, PNG')
++  })
++  it('formatSize', () => {
++    expect(formatSize(100)).toBe('1 KB')
++    expect(formatSize(850 * 1024)).toBe('850 KB')
++    expect(formatSize(1.5 * MB)).toBe('1,5 MB')
++    expect(formatSize(25 * MB)).toBe('25 MB')
++    expect(formatSize(undefined)).toBe('1 KB')
++  })
++})
++
++describe('canSubmitMessenger', () => {
++  it('không có tệp: như canSubmit (cần chữ)', () => {
++    expect(canSubmitMessenger(COMPOSE, 'chào', null, false, 6000)).toBe(true)
++    expect(canSubmitMessenger(COMPOSE, '   ', null, false, 6000)).toBe(false)
++    expect(canSubmitMessenger(COMPOSE, 'chào', null, true, 6000)).toBe(false)
++    expect(
++      canSubmitMessenger({ can_send: false }, 'chào', null, false, 6000),
++    ).toBe(false)
++    expect(canSubmitMessenger(COMPOSE, 'x'.repeat(11), null, false, 10)).toBe(
++      false,
++    )
++  })
++  it('có tệp: cần can_send_media, tệp hợp lệ, không đang gửi; chữ không bắt buộc', () => {
++    const file = f('a.pdf', 1000)
++    expect(canSubmitMessenger(COMPOSE, '', file, false, 6000)).toBe(true)
++    expect(canSubmitMessenger(COMPOSE, 'kèm lời', file, false, 6000)).toBe(true)
++    expect(canSubmitMessenger(COMPOSE, '', file, true, 6000)).toBe(false) // chặn gửi đôi
++    expect(
++      canSubmitMessenger(
++        { ...COMPOSE, can_send_media: false },
++        '',
++        file,
++        false,
++        6000,
++      ),
++    ).toBe(false)
++    expect(
++      canSubmitMessenger(
++        { ...COMPOSE, can_send: false },
++        '',
++        file,
++        false,
++        6000,
++      ),
++    ).toBe(false)
++    expect(canSubmitMessenger(COMPOSE, '', f('a.exe', 1), false, 6000)).toBe(
++      false,
++    )
++    // chữ đi thành tin riêng nên giới hạn là max_chars (không phải 2.000 như chú thích ảnh Zalo)
++    expect(
++      canSubmitMessenger(COMPOSE, 'x'.repeat(3000), file, false, 6000),
++    ).toBe(true)
++    expect(canSubmitMessenger(COMPOSE, 'x'.repeat(11), file, false, 10)).toBe(
++      false,
++    )
++  })
++})
++
++describe('parseUploadResponse', () => {
++  it('lấy file_url khi thành công', () => {
++    expect(
++      parseUploadResponse(true, {
++        message: { file_url: '/private/files/a.pdf' },
++      }),
++    ).toEqual({ url: '/private/files/a.pdf' })
++  })
++  it('lỗi: đọc thông điệp máy chủ nếu có', () => {
++    const data = {
++      _server_messages: JSON.stringify([
++        JSON.stringify({ message: 'Tệp quá lớn' }),
++      ]),
++    }
++    expect(parseUploadResponse(false, data)).toEqual({ error: 'Tệp quá lớn' })
++    expect(parseUploadResponse(false, {})).toEqual({ error: '' })
++    expect(parseUploadResponse(false, { _server_messages: 'hong' })).toEqual({
++      error: '',
++    })
++    expect(parseUploadResponse(true, {})).toEqual({ error: '' })
++    // url không phải tệp CRM: không dùng
++    expect(
++      parseUploadResponse(true, {
++        message: { file_url: 'https://x.example/a' },
++      }),
++    ).toEqual({ error: '' })
++  })
++})
++
++describe('sendOutcome', () => {
++  it('xếp hàng xong: xóa chữ và tệp', () => {
++    expect(sendOutcome({ status: 'Queued', outbound: 'OUT-1' })).toEqual({
++      ok: true,
++      clearText: true,
++      clearFile: true,
++      error: '',
++    })
++  })
++  it('bị chặn: giữ khung soạn và báo lý do', () => {
++    expect(sendOutcome({ status: 'Blocked', reason: 'Ngoài 24 giờ' })).toEqual({
++      ok: false,
++      clearText: false,
++      clearFile: false,
++      error: 'Ngoài 24 giờ',
++    })
++    expect(sendOutcome({ status: 'Blocked' }).error).toBe(
++      'Tin bị chặn, chưa gửi',
++    )
++  })
++  it('chữ đã đi, tệp bị chặn: xóa chữ (bấm lại không gửi chữ hai lần), giữ tệp', () => {
++    expect(
++      sendOutcome({
++        status: 'Blocked',
++        reason: 'x',
++        text_outbound: 'OUT-1',
++      }),
++    ).toEqual({ ok: false, clearText: true, clearFile: false, error: 'x' })
 +  })
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js

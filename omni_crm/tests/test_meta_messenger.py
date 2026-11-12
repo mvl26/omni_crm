@@ -1,5 +1,6 @@
 """Kênh Meta Messenger (ADR 0022): client Graph, adapter, ánh xạ file, chép đính kèm, hiển thị. Không gọi mạng."""
 
+import json
 import tempfile
 import unittest
 from datetime import timedelta
@@ -11,6 +12,7 @@ from frappe import _dict
 from frappe.utils import now_datetime
 
 from omni_crm.channels.meta_messenger import client as mc
+from omni_crm.channels.meta_messenger import media_out as media_out_m
 from omni_crm.channels.meta_messenger.adapter import MetaMessengerAdapter
 from omni_crm.crm_bridge import timeline
 from omni_crm.intake_files import attachments, mapper
@@ -203,6 +205,66 @@ class TestClient(unittest.TestCase):
 		ch["_meta_page_access_token"] = None
 		with self.assertRaises(mc.MessengerError):
 			mc.MessengerClient(ch).send_text(PSID, "x")
+
+
+class TestSendAttachment(unittest.TestCase):
+	"""ADR 0023: gửi ảnh/tệp qua Messenger."""
+
+	def setUp(self):
+		for p in (
+			mock.patch.object(mc.frappe, "conf", _dict()),
+			mock.patch.object(mc.flags, "sandbox", return_value=False),
+		):
+			p.start()
+			self.addCleanup(p.stop)
+
+	def test_client_gui_multipart(self):
+		with mock.patch.object(mc.requests, "request", return_value=Resp(200, {"message_id": "m_F"})) as req:
+			mid = mc.MessengerClient(channel()).send_attachment(
+				PSID, "image", "anh.jpg", b"jpg", "image/jpeg"
+			)
+		self.assertEqual(mid, "m_F")
+		kw = req.call_args.kwargs
+		self.assertEqual(json.loads(kw["data"]["recipient"]), {"id": PSID})
+		self.assertEqual(json.loads(kw["data"]["message"])["attachment"]["type"], "image")
+		self.assertEqual(kw["files"]["filedata"], ("anh.jpg", b"jpg", "image/jpeg"))
+		self.assertEqual(kw["params"]["access_token"], "tok")
+
+	def test_loai_tep(self):
+		self.assertEqual(media_out_m.kind_of("a.JPG"), "image")
+		self.assertEqual(media_out_m.kind_of("v.mp4"), "video")
+		self.assertEqual(media_out_m.kind_of("g.m4a"), "audio")
+		self.assertEqual(media_out_m.kind_of("bao gia.xlsx"), "file")
+		self.assertIsNone(media_out_m.kind_of("x.exe"))
+
+	def test_adapter_chan_khi_cong_tac_tat(self):
+		req = _dict(
+			identity="I1",
+			text="",
+			attachment={"file_url": "/private/files/a.jpg", "kind": "image", "name": "a.jpg"},
+		)
+		with (
+			mock.patch("omni_crm.channels.meta_messenger.adapter.frappe.db.get_value", return_value=PSID),
+			mock.patch("omni_crm.flags.messenger_media_send_enabled", return_value=False),
+		):
+			with self.assertRaises(mc.MessengerError) as cm:
+				MetaMessengerAdapter().send(req, channel())
+		self.assertEqual(cm.exception.kind, mc.PERMANENT)
+
+	def test_adapter_gui_tep_khi_bat(self):
+		req = _dict(
+			identity="I1",
+			text="",
+			attachment={"file_url": "/private/files/a.pdf", "kind": "file", "name": "a.pdf"},
+		)
+		with (
+			mock.patch("omni_crm.channels.meta_messenger.adapter.frappe.db.get_value", return_value=PSID),
+			mock.patch("omni_crm.flags.messenger_media_send_enabled", return_value=True),
+			mock.patch.object(media_out_m, "read_content", return_value=b"%PDF"),
+			mock.patch.object(mc.MessengerClient, "send_attachment", return_value="m_P") as send,
+		):
+			self.assertEqual(MetaMessengerAdapter().send(req, channel()), "m_P")
+		self.assertEqual(send.call_args.args, (PSID, "file", "a.pdf", b"%PDF", "application/pdf"))
 
 
 class TestAdapter(unittest.TestCase):

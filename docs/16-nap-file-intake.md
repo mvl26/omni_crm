@@ -85,14 +85,14 @@ Hiện trạng site yhct (ảnh chụp 10/11/2026): có 3 Omni Channel là `zalo
 2. **Email qua Gmail API**: hộp thư chỉ đọc qua intake cần một Email Account "vỏ" (`enable_incoming` tắt, `email_id` = địa chỉ hộp thư) và một Omni Channel Email trỏ vào nó. Nếu CRM đã tự kéo hộp thư đó thì file Gmail bị bỏ qua, không cần làm gì.
 3. **Đính kèm**: Messenger chép vào File riêng tư của Frappe (ADR 0022). Email và cuộc gọi vẫn chỉ ghi tham chiếu đường dẫn.
 
-## Messenger (ADR 0022)
+## Messenger (ADR 0022, tab và gửi tệp: ADR 0023)
 
 - Một đường nhận duy nhất: file của miyano-intake. Không có webhook Messenger vào omni_crm (`MetaMessengerAdapter.verify_request` luôn từ chối).
 - Kênh: Omni Channel loại `Meta Messenger` (trên yhct: `messenger-mvl`), điền `meta_page_id` (bắt buộc khi bật), `meta_app_id`, `meta_page_access_token` (gửi tin, lấy tên); `outbound_enabled` để trả lời từ Hộp thư.
 - Bỏ: tin của Page khác `meta_page_id`; echo của chính tin CRM gửi (`raw.event.message.app_id` = `meta_app_id`, và trong worker: đã có Omni Outbound Message cùng mã tin).
 - Đính kèm: `content.attachments[].path` (trong `<spool>/attachments/`, chặn đường dẫn ra ngoài) được chép vào File riêng tư rồi gắn vào Omni Inbound Message (quyền mở tệp theo quyền đọc tin). Tệp thiếu, quá `max_file_size` hoặc không lưu được (ảnh hỏng) chỉ ghi tên và lý do; tin vẫn được nạp. Hộp thư và tab Hoạt động hiện ảnh/sticker, trình phát video/âm thanh, liên kết tải cho tệp khác.
-- Lead: tin đầu của PSID mới tạo Lead nguồn `Facebook Messenger`; tên lấy qua Graph (lỗi thì tên giữ chỗ "Khách Meta Messenger …"). Tin hiện ở tab Hoạt động (Communication thường) và Hộp thư.
-- Trả lời: Hộp thư, chỉ chữ, trong 24 giờ kể từ tin cuối của khách (`messaging_type = RESPONSE`); ngoài 24 giờ bị chặn kèm lý do.
+- Lead: tin đầu của PSID mới tạo Lead nguồn `Facebook Messenger`; tên lấy qua Graph (lỗi thì tên giữ chỗ "Khách Meta Messenger …"). Từ ADR 0023: tin hiện ở **tab Messenger** của trang Lead/Deal và Hộp thư, ẩn khỏi tab Hoạt động (`Communication` loại `Chat`; công tắc `messenger_in_activity_enabled`; tin cũ đổi bằng `omni_crm.ops.hide_messenger_activity.run`).
+- Trả lời: Hộp thư hoặc tab Messenger, trong 24 giờ kể từ tin cuối của khách (`messaging_type = RESPONSE`); ngoài 24 giờ bị chặn kèm lý do. Gửi ảnh/tệp chỉ ở tab Messenger, khi bật `messenger_media_send_enabled` (ADR 0023): tệp phải đã đính kèm vào Lead hoặc Deal của Lead, tải lên Meta kiểu multipart; có chữ thì chữ đi trước thành tin riêng.
 - **Nạp bù** tin nhận trước khi bật kênh (đã bị cất `chua_nap/` hoặc ghi dấu Redis ở spool chỉ đọc):
 
 ```bash

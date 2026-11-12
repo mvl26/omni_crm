@@ -673,6 +673,11 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 			"frontend/src/pages/Lead.vue",
 			"frontend/src/utils/zaloThread.js",
 			"frontend/tests/unit/zaloThread.test.js",
+			"frontend/src/components/Activities/MessengerTab.vue",  # ADR 0023: tab Messenger
+			"frontend/src/components/Icons/MessengerIcon.vue",  # ADR 0023
+			"frontend/src/composables/messenger.js",  # ADR 0023
+			"frontend/src/utils/messengerThread.js",  # ADR 0023
+			"frontend/tests/unit/messengerThread.test.js",  # ADR 0023
 		}
 	)
 

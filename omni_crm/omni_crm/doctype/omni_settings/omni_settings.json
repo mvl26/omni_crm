@@ -95,7 +95,9 @@
   "meta_requeue_disabled",
   "webhook_spool_disabled",
   "zalo_tab_disabled",
+  "messenger_tab_disabled",
   "zalo_in_activity_enabled",
+  "messenger_in_activity_enabled",
   "lead_contact_button_disabled",
   "sec_zalo_growth",
   "phone_request_enabled",
@@ -106,6 +108,7 @@
   "zalo_quota_total",
   "zalo_quota_cycle_end",
   "zalo_media_send_enabled",
+  "messenger_media_send_enabled",
   "sec_release_gate",
   "q1_allowed",
   "q11_allowed",
@@ -652,11 +655,25 @@
    "description": "Bật: ẩn tab Zalo (bong bóng chat + khung trả lời) trong giao diện CRM. Chưa từng lưu hoặc 0 = hiện (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt). Hộp thư và dòng thời gian không bị ảnh hưởng."
   },
   {
+   "fieldname": "messenger_tab_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt tab Messenger trong trang Lead/Deal",
+   "default": "0",
+   "description": "Bật: ẩn tab Messenger (bong bóng chat + khung trả lời) trong giao diện CRM (ADR 0023). Chưa từng lưu hoặc 0 = hiện. Hộp thư không bị ảnh hưởng; nên bật thêm 'Hiện tin Messenger mới trong tab Hoạt động/Email' nếu tắt tab."
+  },
+  {
    "fieldname": "zalo_in_activity_enabled",
    "fieldtype": "Check",
    "label": "Hiện tin Zalo mới trong tab Hoạt động/Email",
    "default": "0",
    "description": "Bật: tin Zalo OA GHI MỚI vẫn hiện thành thẻ trong tab Hoạt động/Email của Lead/Deal như trước V3-02. Chưa từng lưu hoặc 0 (mặc định) = ẩn: tin Zalo chỉ ở tab Zalo và Hộp thư. Công tắc này chỉ áp cho tin ghi sau đó; tin cũ đổi bằng lệnh omni_crm.ops.hide_zalo_activity.run (tham số reverse). Email không bị ảnh hưởng."
+  },
+  {
+   "fieldname": "messenger_in_activity_enabled",
+   "fieldtype": "Check",
+   "label": "Hiện tin Messenger mới trong tab Hoạt động/Email",
+   "default": "0",
+   "description": "Bật: tin Messenger GHI MỚI hiện thành thẻ trong tab Hoạt động/Email của Lead/Deal (như ADR 0022). Chưa từng lưu hoặc 0 (mặc định) = ẩn: tin Messenger chỉ ở tab Messenger và Hộp thư (ADR 0023). Tin cũ đổi bằng lệnh omni_crm.ops.hide_messenger_activity.run (tham số reverse)."
   },
   {
    "fieldname": "lead_contact_button_disabled",
@@ -721,6 +738,13 @@
    "label": "Bật gửi ảnh / tệp qua Zalo cho mọi khách",
    "default": "0",
    "description": "Tắt (mặc định): nút đính kèm trên tab Zalo chỉ gửi được tới tài khoản Zalo thử nghiệm ghi cứng trong code, mọi khách khác bị chặn ở tầng gửi. Bật: sale gửi ảnh (JPG/PNG/GIF) và tệp (PDF/DOC/DOCX/CSV) cho mọi khách."
+  },
+  {
+   "fieldname": "messenger_media_send_enabled",
+   "fieldtype": "Check",
+   "label": "Bật gửi ảnh / tệp qua Messenger",
+   "default": "0",
+   "description": "Tắt (mặc định): tab Messenger không có nút đính kèm, máy chủ từ chối gửi tệp. Bật: sale gửi ảnh (JPG/PNG/GIF), video (MP4), âm thanh (MP3/M4A) và tệp (PDF, Word, Excel, CSV, TXT, ZIP) tối đa 25 MB, trong 24 giờ kể từ tin cuối của khách (ADR 0023)."
   },
   {
    "fieldname": "sec_release_gate",
