@@ -27,6 +27,8 @@ ENQUEUE_SITES = {
 	"omni_crm/bot/reply.py": 1,  # bot.reply.reply_batch
 	"omni_crm/channels/telephony/callbacks.py": 1,  # channels.telephony.callbacks.process_missed_call
 	"omni_crm/prospect/importer.py": 1,  # prospect.importer.run_job (V2-03; test Guest: test_prospect_import::TestJobAndAccess)
+	"omni_crm/crm_bridge/fast_email.py": 1,  # crm_bridge.fast_email.send (test Guest: test_fast_email)
+	"omni_crm/intake_files/runner.py": 1,  # intake_files.runner.run qua kick (test Guest: test_intake_files_integration)
 }
 
 
