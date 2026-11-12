@@ -84,7 +84,12 @@ EXPECTED_WHITELISTED = {
 }
 BULK_NAME = re.compile(r"bulk|broadcast|mass|blast|newsletter|campaign_send|send_all|send_many", re.I)
 # Tệp được phép TẠO Omni Outbound Message (mỗi tin gắn với đúng một Lead/khách).
-OUTBOUND_CREATORS = {"api/inbox.py", "channels/zalo/worker_hooks.py", "pipeline/outbound.py"}
+OUTBOUND_CREATORS = {
+	"api/inbox.py",
+	"channels/zalo/worker_hooks.py",
+	"channels/meta_messenger/worker_hooks.py",  # ADR 0022: ghi echo (tin nhân viên đã gửi), một tin một Lead
+	"pipeline/outbound.py",
+}
 
 
 def whitelisted_functions() -> dict[str, dict[str, list[str]]]:

@@ -35,7 +35,7 @@
    "fieldname": "channel_type",
    "fieldtype": "Select",
    "label": "Loại kênh",
-   "options": "Email\nZalo OA\nTelephony\nMeta Lead Ads\nGoogle Lead Form\nWeb Form",
+   "options": "Email\nZalo OA\nTelephony\nMeta Lead Ads\nGoogle Lead Form\nWeb Form\nMeta Messenger",
    "in_list_view": 1,
    "in_standard_filter": 1
   },

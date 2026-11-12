@@ -83,15 +83,36 @@ def _identity_display_name(row: Any) -> str | None:
 	return None
 
 
+LOCAL_FILE_PREFIXES = ("/files/", "/private/files/")
+
+
+def _local_media(att: dict, url: str, label: str) -> str:
+	"""Tệp đã lưu trong File của hệ thống (Messenger, ADR 0022): ảnh/sticker hiện ảnh, video/âm thanh có trình phát."""
+	kind, mime, src = str(att.get("type") or ""), str(att.get("mime") or ""), escape_html(url)
+	link = f'<a href="{src}" target="_blank" rel="noopener">{label}</a>'
+	if kind in ("image", "sticker") or mime.startswith("image/"):
+		return f'<a href="{src}" target="_blank" rel="noopener"><img src="{src}" alt="{label}" style="max-width:240px;max-height:240px"></a>'
+	if kind == "video" or mime.startswith("video/"):
+		return f'<video controls preload="metadata" src="{src}" style="max-width:320px;max-height:240px"></video><br>{link}'
+	if kind == "audio" or mime.startswith("audio/"):
+		return f'<audio controls preload="none" src="{src}"></audio><br>{link}'
+	return f"📎 {link}"
+
+
 def render_text(text: str | None, attachments: list[dict] | None = None) -> str:
-	"""HTML an toàn cho nội dung tin: thoát ký tự, xuống dòng thành <br>, đính kèm là liên kết http(s)."""
+	"""HTML an toàn cho nội dung tin: thoát ký tự, xuống dòng thành <br>, đính kèm là liên kết http(s); tệp đã lưu trong
+	File của hệ thống hiện ảnh/trình phát; tệp không lưu được chỉ ghi tên và lý do."""
 	html = escape_html(text or "").replace("\r\n", "\n").replace("\n", "<br>")
 	links = []
 	for att in attachments or []:
 		url = str(att.get("url") or "")
+		label = escape_html(str(att.get("name") or url))
 		if url.startswith(("http://", "https://")):
-			label = escape_html(str(att.get("name") or url))
 			links.append(f'<a href="{escape_html(url)}" target="_blank" rel="noopener">{label}</a>')
+		elif url.startswith(LOCAL_FILE_PREFIXES):
+			links.append(_local_media(att, url, label))
+		elif att.get("note"):
+			links.append(f"📎 {label} ({escape_html(str(att.get('note')))})")
 	if links:
 		html += "<br>" + "<br>".join(links)
 	return f"<p>{html}</p>"

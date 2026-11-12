@@ -16,6 +16,8 @@ class OmniChannel(Document):
 				frappe.msgprint(issue, title=_("CRM sẽ tạo Lead trùng với Omni CRM"), indicator="orange")
 		if self.channel_type == "Telephony":
 			self.validate_telephony()
+		if self.channel_type == "Meta Messenger" and self.enabled and not (self.meta_page_id or "").strip():
+			frappe.throw(_("Kênh Messenger đang bật phải có Page ID"), title=_("Thiếu cấu hình"))
 		if (self.zalo_cs_free_hours or 0) < 0 or (self.zalo_cs_max_days or 0) < 0:
 			frappe.throw(_("Khung gửi tin Zalo không được âm"))
 		if (self.zalo_cs_paid_quota_month or 0) < 0:

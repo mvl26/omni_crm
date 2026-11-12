@@ -159,8 +159,12 @@ class TestRunner(unittest.TestCase):
 		self.assertEqual(len(list(self.d.glob("*.json"))), 2)
 
 	def test_ingest_envelope_phan_loai(self):
-		env = {"schema": "1", "kind": "message", "channel": "messenger"}
-		self.assertEqual(runner.ingest_envelope(env), "chua_ho_tro")
+		self.assertEqual(
+			runner.ingest_envelope({"schema": "1", "kind": "message", "channel": "instagram"}), "chua_ho_tro"
+		)
+		with mock.patch.object(runner, "resolve_channel", return_value=None):  # ADR 0022: Messenger cần kênh
+			env = {"schema": "1", "kind": "message", "channel": "messenger"}
+			self.assertEqual(runner.ingest_envelope(env), "thieu_kenh")
 		self.assertEqual(runner.ingest_envelope({"schema": "x"}), "bo_qua")
 		with mock.patch.object(runner, "resolve_channel", return_value=None):
 			self.assertEqual(
