@@ -486,6 +486,9 @@ class TestB04BudgetExhausted(BotE2E):
 	def test_b04_budget_exhausted_bot_stops_channel_keeps_running(self):
 		set_settings(daily_token_budget=1)
 		frappe.cache().delete_keys("omni:ai:")
+		# Đã dùng đúng bằng hạn mức. Không dựa vào Bot Run của test khác để lại trong ngày: bộ đếm trống thì khởi tạo
+		# từ tổng token Bot Run hôm nay, ngày chưa có dòng nào thì bằng 0 và lượt đầu vẫn được gọi AI.
+		frappe.cache().set(ai_client._counter_key(), 1, ex=ai_client.COUNTER_TTL_SECONDS)
 		self.fake.add_rule(order_signals(), kind="Analyze")
 		batches = []
 		for i in range(3):  # 3 khách nhắn liên tiếp
