@@ -44,6 +44,9 @@ class OutboundRequest:
 	attachment: dict | None = (
 		None  # V3-09: {"file_url", "kind" (image|gif|file), "name"}; tệp của Lead trong CRM
 	)
+	extras: dict | None = (
+		None  # ADR 0027 (Messenger): {"quote_mid": mã tin được trả lời, "sticker_id", "sticker_url"}
+	)
 
 
 def stable_message_id(*parts: object) -> str:

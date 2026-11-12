@@ -429,10 +429,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/MessengerTab.vue b/frontend/src/components/Activities/MessengerTab.vue
 new file mode 100644
-index 0000000..99e2ca9
+index 0000000..d21f995
 --- /dev/null
 +++ b/frontend/src/components/Activities/MessengerTab.vue
-@@ -0,0 +1,717 @@
+@@ -0,0 +1,1324 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot (cùng khối `bot` như tab Zalo): chữ xuống dòng theo nội dung; quá dài thì cuộn trong thẻ -->
@@ -495,101 +495,292 @@ index 0000000..99e2ca9
 +          <div class="py-2 text-center text-xs text-ink-gray-5">
 +            {{ dayLabel(group.day) }}
 +          </div>
++          <!-- Hàng tin: bong bóng (kèm chip cảm xúc) và nút ⋯ thao tác (ADR 0027), nút hiện khi rê chuột, luôn hiện trên màn cảm ứng -->
 +          <div
 +            v-for="msg in group.items"
 +            :key="msg.name"
-+            class="activity mb-2 flex"
-+            :class="
-+              bubbleSide(msg) === 'right' ? 'justify-end' : 'justify-start'
-+            "
++            :ref="(el) => setRowEl(msg.name, el)"
++            class="activity group/msg mb-2 flex items-center gap-1"
++            :class="bubbleSide(msg) === 'right' ? 'flex-row-reverse' : ''"
 +          >
 +            <div
-+              :class="[
-+                'max-w-[85%] rounded-lg px-3 py-1.5 text-base text-ink-gray-9 shadow-sm',
-+                bubbleSide(msg) === 'right'
-+                  ? 'bg-blue-100'
-+                  : 'bg-surface-gray-2',
-+                msg.status === 'Failed' || msg.status === 'Blocked'
-+                  ? 'border border-red-400'
-+                  : '',
-+              ]"
++              class="flex min-w-0 max-w-[85%] flex-col"
++              :class="bubbleSide(msg) === 'right' ? 'items-end' : 'items-start'"
 +            >
-+              <div class="mb-0.5 text-xs text-ink-gray-5">
-+                {{ senderLabel(msg) }}
-+              </div>
-+              <div v-if="msg.text" class="whitespace-pre-wrap break-words">
-+                {{ msg.text }}
-+              </div>
-+              <!-- Đính kèm: chỉ tệp đã lưu trong CRM (/files, /private/files) mới được vẽ thành ảnh / trình phát; còn lại là liên kết -->
 +              <div
-+                v-for="att in messengerAttachmentViews(msg.attachments)"
-+                :key="att.index"
-+                class="mt-1 text-sm"
++                :class="[
++                  'max-w-full rounded-lg px-3 py-1.5 text-base text-ink-gray-9 shadow-sm',
++                  bubbleSide(msg) === 'right'
++                    ? 'bg-blue-100'
++                    : 'bg-surface-gray-2',
++                  msg.status === 'Failed' || msg.status === 'Blocked'
++                    ? 'border border-red-400'
++                    : '',
++                  msg.hidden ? 'opacity-60' : '',
++                  flashed === msg.name ? 'ring-2 ring-amber-400' : '',
++                ]"
 +              >
-+                <a
-+                  v-if="
-+                    att.kind === 'image' && !broken[`${msg.name}:${att.index}`]
-+                  "
-+                  :href="att.url"
-+                  target="_blank"
-+                  rel="noopener noreferrer"
-+                  class="block"
-+                  :title="__('Mở ảnh gốc')"
++                <div class="mb-0.5 text-xs text-ink-gray-5">
++                  {{ senderLabel(msg) }}
++                </div>
++                <div
++                  v-if="msg.hidden"
++                  class="mb-0.5 text-xs italic text-ink-gray-6"
 +                >
++                  {{ __('Đã ẩn trong CRM') }}
++                </div>
++                <!-- Trích dẫn tin được trả lời: bấm để cuộn tới tin gốc -->
++                <button
++                  v-if="views[msg.name].quote"
++                  type="button"
++                  class="mb-1 block w-full truncate rounded border-l-2 px-2 py-0.5 text-left text-xs text-ink-gray-6 disabled:cursor-default"
++                  :class="
++                    bubbleSide(msg) === 'right'
++                      ? 'border-blue-400 bg-blue-200'
++                      : 'border-outline-gray-4 bg-surface-gray-3'
++                  "
++                  :disabled="views[msg.name].quote.missing"
++                  :title="
++                    views[msg.name].quote.missing
++                      ? ''
++                      : __('Bấm để xem tin gốc')
++                  "
++                  @click="jumpToMessage(views[msg.name].quote.name)"
++                >
++                  {{
++                    views[msg.name].quote.missing
++                      ? __('↪ Tin gốc không còn hiển thị')
++                      : __('↪ {0}: {1}', [
++                          views[msg.name].quote.sender ||
++                            (views[msg.name].quote.customer
++                              ? __('Khách')
++                              : __('Nhân viên')),
++                          views[msg.name].quote.text || '…',
++                        ])
++                  }}
++                </button>
++                <div v-if="msg.text" class="whitespace-pre-wrap break-words">
++                  {{ msg.text }}
++                </div>
++                <!-- Sticker sale gửi: ảnh chỉ khi URL thuộc CDN của Meta; không thì 👍 lớn (sticker thích) hoặc "[Sticker]" -->
++                <div v-if="views[msg.name].sticker" class="mt-0.5">
 +                  <img
++                    v-if="
++                      views[msg.name].sticker.src &&
++                      !broken[`${msg.name}:sticker`]
++                    "
++                    :src="views[msg.name].sticker.src"
++                    :alt="__('Sticker')"
++                    loading="lazy"
++                    referrerpolicy="no-referrer"
++                    class="h-[120px] w-[120px] object-contain"
++                    @error="broken[`${msg.name}:sticker`] = true"
++                  />
++                  <div
++                    v-else-if="views[msg.name].sticker.like"
++                    class="text-5xl leading-tight"
++                    :title="__('Sticker 👍')"
++                  >
++                    👍
++                  </div>
++                  <span v-else class="text-ink-gray-6">{{
++                    __('[Sticker]')
++                  }}</span>
++                </div>
++                <!-- Đính kèm: chỉ tệp đã lưu trong CRM (/files, /private/files) mới được vẽ thành ảnh / trình phát; còn lại là liên kết -->
++                <div
++                  v-for="att in messengerAttachmentViews(msg.attachments)"
++                  :key="att.index"
++                  class="mt-1 text-sm"
++                >
++                  <a
++                    v-if="
++                      att.kind === 'image' &&
++                      !broken[`${msg.name}:${att.index}`]
++                    "
++                    :href="att.url"
++                    target="_blank"
++                    rel="noopener noreferrer"
++                    class="block"
++                    :title="__('Mở ảnh gốc')"
++                  >
++                    <img
++                      :src="att.src"
++                      :alt="att.text"
++                      loading="lazy"
++                      referrerpolicy="no-referrer"
++                      class="max-h-60 max-w-[240px] rounded object-contain"
++                      @error="broken[`${msg.name}:${att.index}`] = true"
++                    />
++                  </a>
++                  <video
++                    v-else-if="
++                      att.kind === 'video' &&
++                      !broken[`${msg.name}:${att.index}`]
++                    "
++                    :src="att.src"
++                    controls
++                    preload="metadata"
++                    class="max-h-60 max-w-[240px] rounded"
++                    @error="broken[`${msg.name}:${att.index}`] = true"
++                  />
++                  <audio
++                    v-else-if="
++                      att.kind === 'audio' &&
++                      !broken[`${msg.name}:${att.index}`]
++                    "
++                    :src="att.src"
++                    controls
++                    preload="none"
++                    class="max-w-[240px]"
++                    @error="broken[`${msg.name}:${att.index}`] = true"
++                  />
++                  <span v-else-if="att.kind === 'note'" class="text-ink-gray-6"
++                    >📎 {{ att.text }}</span
++                  >
++                  <!-- Sticker khách gửi (ADR 0027): tệp đã lưu trong CRM thì vẽ nhỏ, chưa tải về được thì chỉ chữ -->
++                  <img
++                    v-else-if="
++                      att.kind === 'sticker' &&
++                      att.src &&
++                      !broken[`${msg.name}:${att.index}`]
++                    "
 +                    :src="att.src"
 +                    :alt="att.text"
 +                    loading="lazy"
 +                    referrerpolicy="no-referrer"
-+                    class="max-h-60 max-w-[240px] rounded object-contain"
++                    class="max-h-[120px] max-w-[120px] object-contain"
 +                    @error="broken[`${msg.name}:${att.index}`] = true"
 +                  />
-+                </a>
-+                <video
-+                  v-else-if="
-+                    att.kind === 'video' && !broken[`${msg.name}:${att.index}`]
-+                  "
-+                  :src="att.src"
-+                  controls
-+                  preload="metadata"
-+                  class="max-h-60 max-w-[240px] rounded"
-+                  @error="broken[`${msg.name}:${att.index}`] = true"
-+                />
-+                <audio
-+                  v-else-if="
-+                    att.kind === 'audio' && !broken[`${msg.name}:${att.index}`]
-+                  "
-+                  :src="att.src"
-+                  controls
-+                  preload="none"
-+                  class="max-w-[240px]"
-+                  @error="broken[`${msg.name}:${att.index}`] = true"
-+                />
-+                <span v-else-if="att.kind === 'note'" class="text-ink-gray-6"
-+                  >📎 {{ att.text }}</span
++                  <span
++                    v-else-if="att.kind === 'sticker'"
++                    class="text-ink-gray-6"
++                    :title="att.note"
++                    >{{ __('[Sticker]') }}</span
++                  >
++                  <a
++                    v-else
++                    :href="att.url"
++                    target="_blank"
++                    rel="noopener noreferrer"
++                    class="text-ink-blue-3 underline"
++                    >📎 {{ att.text }}</a
++                  >
++                </div>
++                <div
++                  v-if="msg.sandbox"
++                  class="mt-1 text-xs italic text-ink-gray-6"
 +                >
-+                <a
-+                  v-else
-+                  :href="att.url"
-+                  target="_blank"
-+                  rel="noopener noreferrer"
-+                  class="text-ink-blue-3 underline"
-+                  >📎 {{ att.text }}</a
-+                >
++                  {{ __('Thử nghiệm (sandbox), chưa gửi tới khách') }}
++                </div>
++                <div v-if="statusText(msg)" class="mt-1 text-xs text-ink-red-3">
++                  {{ statusText(msg) }}
++                </div>
++                <div class="mt-0.5 text-right text-xs text-ink-gray-5">
++                  {{ timeLabel(msg.at) }}
++                </div>
 +              </div>
++              <!-- Cảm xúc: của khách và của Page (sale thả từ CRM) -->
 +              <div
-+                v-if="msg.sandbox"
-+                class="mt-1 text-xs italic text-ink-gray-6"
++                v-if="views[msg.name].chips.length"
++                class="relative -mt-1.5 flex gap-0.5 px-2"
 +              >
-+                {{ __('Thử nghiệm (sandbox), chưa gửi tới khách') }}
-+              </div>
-+              <div v-if="statusText(msg)" class="mt-1 text-xs text-ink-red-3">
-+                {{ statusText(msg) }}
-+              </div>
-+              <div class="mt-0.5 text-right text-xs text-ink-gray-5">
-+                {{ timeLabel(msg.at) }}
++                <span
++                  v-for="chip in views[msg.name].chips"
++                  :key="chip.key"
++                  class="rounded-full border border-outline-gray-2 bg-surface-white px-1.5 text-sm leading-5 shadow-sm"
++                  :title="
++                    chip.key === 'customer'
++                      ? __('Khách')
++                      : __('Bạn / nhân viên')
++                  "
++                  >{{ chip.glyph }}</span
++                >
 +              </div>
 +            </div>
++            <!-- Thao tác trên tin (ADR 0027): thả cảm xúc, trả lời, ẩn / bỏ ẩn trong CRM. Máy chủ kiểm lại quyền. -->
++            <Popover
++              v-if="views[msg.name].actions.any"
++              class="shrink-0"
++              :placement="
++                bubbleSide(msg) === 'right' ? 'bottom-end' : 'bottom-start'
++              "
++            >
++              <template #target="{ togglePopover, isOpen }">
++                <button
++                  type="button"
++                  class="flex h-6 w-6 items-center justify-center rounded-full text-ink-gray-5 hover:bg-surface-gray-3 focus:outline-none focus-visible:opacity-100 group-hover/msg:opacity-100 disabled:cursor-not-allowed [@media(hover:none)]:opacity-100"
++                  :class="
++                    isOpen ? 'bg-surface-gray-3 opacity-100' : 'opacity-0'
++                  "
++                  :title="__('Thao tác với tin này')"
++                  :aria-label="__('Thao tác với tin này')"
++                  :disabled="acting === msg.name"
++                  @click="togglePopover()"
++                >
++                  ⋯
++                </button>
++              </template>
++              <template #body="{ close }">
++                <div
++                  class="mt-1 min-w-[12rem] rounded-lg border bg-surface-modal p-1 text-base shadow-xl"
++                >
++                  <div
++                    v-if="views[msg.name].actions.react"
++                    class="flex items-center gap-0.5 pb-1"
++                  >
++                    <button
++                      v-for="choice in reactionChoices(msg.reactions?.page)"
++                      :key="choice.emoji"
++                      type="button"
++                      class="flex h-8 w-8 items-center justify-center rounded text-xl hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none"
++                      :class="choice.active ? 'bg-surface-gray-3' : ''"
++                      :title="
++                        choice.active
++                          ? __('Bấm lại để bỏ cảm xúc')
++                          : __('Thả cảm xúc')
++                      "
++                      @click="
++                        reactTo(msg, choice.active ? '' : choice.emoji, close)
++                      "
++                    >
++                      {{ choice.glyph }}
++                    </button>
++                    <Button
++                      v-if="msg.reactions?.page"
++                      size="sm"
++                      variant="ghost"
++                      :label="__('Bỏ')"
++                      :title="__('Bỏ cảm xúc của bạn / nhân viên')"
++                      @click="reactTo(msg, '', close)"
++                    />
++                  </div>
++                  <button
++                    v-if="views[msg.name].actions.reply"
++                    type="button"
++                    class="block w-full rounded px-2 py-1.5 text-left text-ink-gray-8 hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none"
++                    @click="startReply(msg, close)"
++                  >
++                    ↩ {{ __('Trả lời') }}
++                  </button>
++                  <button
++                    v-if="
++                      views[msg.name].actions.hide ||
++                      views[msg.name].actions.unhide
++                    "
++                    type="button"
++                    class="block w-full rounded px-2 py-1.5 text-left text-ink-gray-8 hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none"
++                    @click="toggleHidden(msg, close)"
++                  >
++                    {{
++                      views[msg.name].actions.unhide
++                        ? __('Bỏ ẩn')
++                        : __('Ẩn trong CRM')
++                    }}
++                  </button>
++                </div>
++              </template>
++            </Popover>
 +          </div>
 +        </div>
 +      </template>
@@ -653,14 +844,42 @@ index 0000000..99e2ca9
 +          @click="clearFile"
 +        />
 +      </div>
-+      <div class="flex items-end gap-2">
-+        <input
-+          ref="fileInput"
-+          type="file"
-+          class="hidden"
-+          :accept="acceptList(compose.media_accept).join(',')"
-+          @change="onPickFile"
-+        />
++      <!-- Đang trả lời một tin (ADR 0027): tin gửi kế tiếp (chữ, tệp hoặc sticker) trích dẫn tin này -->
++      <div
++        v-if="replyTo"
++        class="mb-2 flex items-center gap-2 rounded border-l-2 border-blue-400 bg-surface-gray-2 px-2 py-1 text-sm text-ink-gray-8"
++      >
++        <span class="min-w-0 flex-1 truncate">{{
++          __('Đang trả lời {0}: {1}', [
++            replyTo.sender,
++            replyTo.text || __(replyTo.label),
++          ])
++        }}</span>
++        <Button
++          size="sm"
++          variant="ghost"
++          :title="__('Bỏ trả lời')"
++          :aria-label="__('Bỏ trả lời')"
++          :disabled="sending"
++          @click="replyTo = null"
++        >
++          ✕
++        </Button>
++      </div>
++      <input
++        ref="fileInput"
++        type="file"
++        class="hidden"
++        :accept="acceptList(compose.media_accept).join(',')"
++        @change="onPickFile"
++      />
++      <!-- Công cụ soạn: tệp, mẫu tin, emoji, sticker (một hàng riêng để ô soạn không bị bóp hẹp) -->
++      <div
++        v-if="
++          compose.can_send || compose.can_send_media || compose.can_send_sticker
++        "
++        class="mb-1.5 flex flex-wrap items-center gap-1.5"
++      >
 +        <Button
 +          v-if="compose.can_send_media"
 +          :title="
@@ -770,6 +989,190 @@ index 0000000..99e2ca9
 +            </div>
 +          </template>
 +        </Popover>
++        <!-- Emoji (ADR 0027): chèn tại con trỏ của ô soạn, KHÔNG gửi -->
++        <Popover v-if="compose.can_send" class="shrink-0" placement="top-start">
++          <template #target="{ togglePopover }">
++            <Button
++              :title="__('Chèn biểu tượng cảm xúc')"
++              :aria-label="__('Chèn biểu tượng cảm xúc')"
++              :disabled="sending"
++              @click="togglePopover()"
++            >
++              😊
++            </Button>
++          </template>
++          <template #body="{ close }">
++            <div
++              class="mb-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border bg-surface-modal p-1.5 shadow-xl"
++            >
++              <div class="max-h-72 overflow-y-auto">
++                <div
++                  v-for="group in EMOJI_GROUPS"
++                  :key="group.key"
++                  class="mb-1 last:mb-0"
++                >
++                  <div class="px-1 pb-0.5 text-xs text-ink-gray-5">
++                    {{ emojiGroupLabel(group.key) }}
++                  </div>
++                  <div class="grid grid-cols-8 gap-0.5">
++                    <button
++                      v-for="emoji in group.emojis"
++                      :key="emoji"
++                      type="button"
++                      class="flex h-8 items-center justify-center rounded text-xl hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none"
++                      :title="emoji"
++                      @click="pickEmoji(emoji, close)"
++                    >
++                      {{ emoji }}
++                    </button>
++                  </div>
++                </div>
++              </div>
++            </div>
++          </template>
++        </Popover>
++        <!-- Sticker (ADR 0027): bấm một sticker (hoặc 👍) là GỬI ngay, như Messenger -->
++        <Popover
++          v-if="compose.can_send_sticker"
++          class="shrink-0"
++          placement="top-start"
++        >
++          <template #target="{ togglePopover, isOpen }">
++            <Button
++              :label="__('Sticker')"
++              :title="__('Gửi sticker hoặc 👍')"
++              :disabled="sending"
++              @click="toggleStickers(togglePopover, isOpen)"
++            />
++          </template>
++          <template #body="{ close }">
++            <div
++              class="mb-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border bg-surface-modal p-1.5 text-base shadow-xl"
++            >
++              <div class="mb-1.5 flex items-center gap-1.5">
++                <Button
++                  v-if="compose.like_sticker_id"
++                  :title="__('Gửi ngay sticker 👍')"
++                  :aria-label="__('Gửi ngay sticker 👍')"
++                  :disabled="sending"
++                  @click="
++                    sendSticker({ id: compose.like_sticker_id, url: '' }, close)
++                  "
++                >
++                  👍
++                </Button>
++                <TextInput
++                  v-model="stickerSearch"
++                  class="min-w-0 flex-1"
++                  type="text"
++                  :placeholder="__('Tìm sticker (ít nhất 2 ký tự)')"
++                />
++              </div>
++              <div
++                v-if="stickerPanel.mode === 'pack'"
++                class="mb-1 flex items-center gap-1"
++              >
++                <Button
++                  size="sm"
++                  variant="ghost"
++                  :label="__('← Các bộ sticker')"
++                  @click="stickerBack()"
++                />
++                <span class="min-w-0 truncate text-sm text-ink-gray-7">{{
++                  stickerPack?.name
++                }}</span>
++              </div>
++              <div class="max-h-72 overflow-y-auto">
++                <div
++                  v-if="stickerPanel.mode === 'hint'"
++                  class="px-2 py-2 text-sm text-ink-gray-5"
++                >
++                  {{ __('Nhập ít nhất 2 ký tự để tìm') }}
++                </div>
++                <div
++                  v-else-if="stickerPanel.loading"
++                  class="flex items-center gap-2 px-2 py-3 text-sm text-ink-gray-5"
++                >
++                  <LoadingIndicator class="h-4 w-4" />
++                  <span>{{ __('Đang tải sticker...') }}</span>
++                </div>
++                <div v-else-if="stickerPanel.error" class="px-2 py-2 text-sm">
++                  <div class="text-ink-red-3">
++                    {{ __(stickerPanel.error) }}
++                  </div>
++                  <Button
++                    class="mt-2"
++                    size="sm"
++                    :label="__('Thử lại')"
++                    @click="loadStickers()"
++                  />
++                </div>
++                <div
++                  v-else-if="!stickerPanel.items.length"
++                  class="px-2 py-2 text-sm text-ink-gray-5"
++                >
++                  {{
++                    stickerPanel.mode === 'packs'
++                      ? __('Không có bộ sticker nào')
++                      : __('Không có sticker nào')
++                  }}
++                </div>
++                <div
++                  v-else-if="stickerPanel.mode === 'packs'"
++                  class="grid grid-cols-2 gap-1"
++                >
++                  <button
++                    v-for="item in stickerPanel.items"
++                    :key="item.id"
++                    type="button"
++                    class="flex min-w-0 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none"
++                    @click="openStickerPack(item)"
++                  >
++                    <img
++                      v-if="item.preview"
++                      :src="item.preview"
++                      alt=""
++                      loading="lazy"
++                      referrerpolicy="no-referrer"
++                      class="h-10 w-10 shrink-0 object-contain"
++                    />
++                    <span class="min-w-0">
++                      <span class="block truncate text-sm text-ink-gray-9">{{
++                        item.name
++                      }}</span>
++                      <span
++                        v-if="item.count"
++                        class="block text-xs text-ink-gray-5"
++                        >{{ __('{0} sticker', [item.count]) }}</span
++                      >
++                    </span>
++                  </button>
++                </div>
++                <div v-else class="grid grid-cols-4 gap-1">
++                  <button
++                    v-for="item in stickerPanel.items"
++                    :key="item.id"
++                    type="button"
++                    class="flex items-center justify-center rounded p-1 hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
++                    :title="item.name"
++                    :disabled="sending"
++                    @click="sendSticker(item, close)"
++                  >
++                    <img
++                      :src="item.url"
++                      :alt="item.name"
++                      loading="lazy"
++                      referrerpolicy="no-referrer"
++                      class="h-16 w-16 object-contain"
++                    />
++                  </button>
++                </div>
++              </div>
++            </div>
++          </template>
++        </Popover>
++      </div>
++      <div class="flex items-end gap-2">
 +        <Textarea
 +          ref="composer"
 +          v-model="text"
@@ -837,7 +1240,10 @@ index 0000000..99e2ca9
 +  toast,
 +} from 'frappe-ui'
 +import { globalStore } from '@/stores/global'
-+import { useMessengerTemplates } from '@/composables/messenger'
++import {
++  useMessengerStickers,
++  useMessengerTemplates,
++} from '@/composables/messenger'
 +import {
 +  POLL_MS,
 +  ZALO_EVENT,
@@ -849,19 +1255,28 @@ index 0000000..99e2ca9
 +  timeLabel,
 +} from '@/utils/zaloThread'
 +import {
++  EMOJI_GROUPS,
 +  acceptList,
 +  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
 +  formatSize,
++  insertAtCursor,
 +  isMessengerUpdate,
 +  mediaMaxBytes,
++  messageActions,
 +  messengerAttachmentViews,
 +  metaInboxUrl,
 +  openMetaInbox,
 +  overLimit,
 +  parseUploadResponse,
++  quoteLabel,
++  reactionChips,
++  reactionChoices,
++  replyPayload,
++  replyTarget,
 +  sendOutcome,
++  stickerView,
 +} from '@/utils/messengerThread'
 +
 +const props = defineProps({
@@ -879,15 +1294,27 @@ index 0000000..99e2ca9
 +const scroller = ref(null)
 +const loadFailed = ref(false)
 +const broken = reactive({}) // ảnh / video / âm thanh tải lỗi: rơi về liên kết có nhãn
++const replyTo = ref(null) // ADR 0027: tin đang trả lời { doctype, name, sender, text, label }
++const acting = ref('') // tên tin đang thả cảm xúc / ẩn: không gọi đôi
++const flashed = ref('') // tin gốc vừa được làm nổi khi bấm trích dẫn
++const rowEls = new Map() // tên tin -> phần tử hàng, để cuộn tới tin gốc
++let flashTimer = null
++let lastMessage = null // tin cuối đã cuộn tới
 +
 +// Dữ liệu và mọi guard (luật 24 giờ, từ chối liên hệ, sandbox, độ dài, loại/cỡ tệp) nằm ở máy chủ: omni_crm.api.messenger_tab.
 +const conversation = createResource({
 +  url: 'omni_crm.api.messenger_tab.get_conversation',
 +  makeParams: () => ({ doctype: props.doctype, name: props.docname }),
 +  auto: true,
-+  onSuccess: () => {
++  onSuccess: (data) => {
 +    loadFailed.value = false
-+    nextTick(scrollToBottom)
++    // Chỉ cuộn xuống cuối khi có tin mới (hoặc lần tải đầu): tải lại vì cảm xúc, ẩn tin, thăm dò không kéo mất chỗ đang đọc.
++    const list = data?.messages || []
++    const last = list.length ? list[list.length - 1].name : ''
++    if (last !== lastMessage) {
++      lastMessage = last
++      nextTick(scrollToBottom)
++    }
 +  },
 +  onError: () => {
 +    loadFailed.value = true
@@ -904,8 +1331,24 @@ index 0000000..99e2ca9
 +      sandbox: false,
 +      linked: false,
 +      can_send_media: false,
++      can_send_sticker: false,
++      like_sticker_id: '',
++      can_react: false,
 +    },
 +)
++
++// Hiển thị và thao tác của từng tin (ADR 0027), tính lại khi hội thoại hoặc khung soạn đổi.
++const views = computed(() => {
++  const out = {}
++  for (const msg of messages.value)
++    out[msg.name] = {
++      actions: messageActions(msg, compose.value),
++      chips: reactionChips(msg.reactions),
++      quote: quoteLabel(msg),
++      sticker: stickerView(msg.sticker, compose.value.like_sticker_id),
++    }
++  return out
++})
 +const maxMb = computed(() =>
 +  Math.round(mediaMaxBytes(compose.value.media_max_mb) / (1024 * 1024)),
 +)
@@ -959,6 +1402,162 @@ index 0000000..99e2ca9
 +  const end = el.value.length
 +  el.setSelectionRange(end, end)
 +  el.scrollTop = el.scrollHeight
++}
++
++// --- Tương tác Messenger (ADR 0027): emoji, sticker, trả lời một tin, cảm xúc, ẩn tin trong CRM ---
++
++function errorText(error, fallback) {
++  return error?.messages?.[0] || error?.message || fallback
++}
++
++function emojiGroupLabel(key) {
++  if (key === 'gestures') return __('Cử chỉ')
++  if (key === 'symbols') return __('Tim & biểu tượng')
++  if (key === 'objects') return __('Đồ vật')
++  return __('Mặt cười')
++}
++
++// Chèn emoji tại con trỏ của ô soạn (thay phần đang bôi đen; không đọc được con trỏ thì nối cuối), con trỏ đứng sau emoji.
++// Không đụng tới tin đang trả lời, không gửi.
++function pickEmoji(emoji, close) {
++  const el = composer.value?.$el?.querySelector?.('textarea')
++  const result = insertAtCursor(
++    text.value,
++    el?.selectionStart,
++    el?.selectionEnd,
++    emoji,
++  )
++  close()
++  text.value = result.text
++  nextTick(() => {
++    const box = composer.value?.$el?.querySelector?.('textarea')
++    if (!box) return
++    box.focus()
++    box.setSelectionRange(result.cursor, result.cursor)
++  })
++}
++
++// Kho sticker của Meta: đệm theo tab, tải khi mở bảng chọn / bấm bộ / ngừng gõ (omni_crm.api.messenger_tab.sticker_*).
++const {
++  query: stickerSearch,
++  pack: stickerPack,
++  view: stickerPanel,
++  open: openStickers,
++  openPack: openStickerPack,
++  back: stickerBack,
++  load: loadStickers,
++} = useMessengerStickers()
++
++function toggleStickers(togglePopover, isOpen) {
++  if (!isOpen) openStickers()
++  togglePopover()
++}
++
++// Bấm sticker (hoặc 👍) là GỬI ngay, kèm tin đang trả lời nếu có. Không đụng chữ / tệp đang soạn.
++async function sendSticker(item, close) {
++  if (sending.value || !compose.value.can_send_sticker || !item?.id) return
++  close()
++  sending.value = true
++  try {
++    const outcome = sendOutcome(
++      await call('omni_crm.api.messenger_tab.send_sticker', {
++        doctype: props.doctype,
++        name: props.docname,
++        sticker_id: item.id,
++        sticker_url: item.url || '',
++        ...replyPayload(replyTo.value),
++      }),
++    )
++    if (outcome.ok) replyTo.value = null
++    else toast.error(__(outcome.error))
++  } catch (error) {
++    toast.error(errorText(error, __('Không gửi được sticker qua Messenger')))
++  } finally {
++    sending.value = false
++    conversation.reload()
++  }
++}
++
++function startReply(msg, close) {
++  close()
++  const target = replyTarget(msg)
++  if (!target) return
++  replyTo.value = { ...target, sender: senderLabel(msg) || __('Khách') }
++  nextTick(focusComposerEnd)
++}
++
++// Thả / bỏ cảm xúc, ẩn / bỏ ẩn: gọi máy chủ (kiểm lại quyền), lỗi thì báo, xong thì tải lại hội thoại.
++async function messageAction(msg, method, params, fallback) {
++  if (acting.value) return
++  acting.value = msg.name
++  try {
++    await call(`omni_crm.api.messenger_tab.${method}`, {
++      doctype: props.doctype,
++      name: props.docname,
++      message_doctype: msg.doctype,
++      message: msg.name,
++      ...params,
++    })
++  } catch (error) {
++    toast.error(errorText(error, fallback))
++  } finally {
++    acting.value = ''
++    conversation.reload()
++  }
++}
++
++function reactTo(msg, emoji, close) {
++  close()
++  messageAction(
++    msg,
++    'react',
++    { emoji },
++    emoji ? __('Không thả được cảm xúc') : __('Không bỏ được cảm xúc'),
++  )
++}
++
++// Ẩn chỉ trong CRM (Messenger không cho thu hồi): hỏi trước; bỏ ẩn (quản lý) thì không hỏi.
++function toggleHidden(msg, close) {
++  close()
++  const hide = !msg.hidden
++  if (
++    hide &&
++    !window.confirm(
++      __(
++        'Ẩn tin này trong CRM? Khách vẫn thấy tin vì Messenger không cho thu hồi. Quản lý vẫn xem lại được.',
++      ),
++    )
++  )
++    return
++  messageAction(
++    msg,
++    'hide_message',
++    { hidden: hide ? 1 : 0 },
++    hide ? __('Không ẩn được tin') : __('Không bỏ ẩn được tin'),
++  )
++}
++
++function setRowEl(name, el) {
++  if (el) rowEls.set(name, el)
++  else rowEls.delete(name)
++}
++
++// Bấm trích dẫn: cuộn khung hội thoại tới tin gốc (nếu đang hiện) và làm nổi tin đó một lúc.
++function jumpToMessage(name) {
++  const el = rowEls.get(name)
++  const box = scroller.value
++  if (!el || !box) return
++  const offset =
++    el.getBoundingClientRect().top - box.getBoundingClientRect().top
++  box.scrollTo({
++    top: box.scrollTop + offset - box.clientHeight / 3,
++    behavior: 'smooth',
++  })
++  flashed.value = name
++  clearTimeout(flashTimer)
++  flashTimer = setTimeout(() => {
++    flashed.value = ''
++  }, 1600)
 +}
 +
 +// Tóm tắt, ý định, mức gấp, điểm do bot phân tích ghi vào Lead (cùng hàm `_bot` của tab Zalo ở máy chủ).
@@ -1057,7 +1656,10 @@ index 0000000..99e2ca9
 +
 +function applyOutcome(res) {
 +  const outcome = sendOutcome(res)
-+  if (outcome.clearText) text.value = ''
++  if (outcome.clearText) {
++    text.value = ''
++    replyTo.value = null // tin đi đầu (mang trích dẫn) đã xếp hàng
++  }
 +  if (outcome.clearFile) {
 +    pickedFile.value = null
 +    uploaded = null
@@ -1078,6 +1680,7 @@ index 0000000..99e2ca9
 +    return
 +  const file = pickedFile.value
 +  const body = text.value
++  const reply = replyPayload(replyTo.value) // ADR 0027: trả lời một tin cụ thể
 +  sending.value = true // giữ cờ đến khi xong cả tải tệp lẫn gửi: không gửi đôi
 +  try {
 +    if (file) {
@@ -1088,6 +1691,7 @@ index 0000000..99e2ca9
 +          name: props.docname,
 +          file_url: fileUrl,
 +          text: body,
++          ...reply,
 +        }),
 +      )
 +    } else {
@@ -1096,6 +1700,7 @@ index 0000000..99e2ca9
 +          doctype: props.doctype,
 +          name: props.docname,
 +          text: body,
++          ...reply,
 +        }),
 +      )
 +    }
@@ -1140,11 +1745,13 @@ index 0000000..99e2ca9
 +  clearInterval(poll)
 +  document.removeEventListener('visibilitychange', onVisible)
 +  clearTimeout(timer)
++  clearTimeout(flashTimer)
 +})
 +
 +watch(
 +  () => [props.doctype, props.docname],
 +  () => {
++    replyTo.value = null // tin đang trả lời thuộc Lead cũ
 +    conversation.reload()
 +    resetTemplates() // mẫu đã điền theo Lead cũ: tải lại khi mở bảng chọn
 +  },
@@ -1943,15 +2550,18 @@ index 0000000..7b6f7fc
 +}
 diff --git a/frontend/src/composables/messenger.js b/frontend/src/composables/messenger.js
 new file mode 100644
-index 0000000..e168c8d
+index 0000000..82d8018
 --- /dev/null
 +++ b/frontend/src/composables/messenger.js
-@@ -0,0 +1,52 @@
-+import { createResource } from 'frappe-ui'
-+import { computed, ref } from 'vue'
+@@ -0,0 +1,154 @@
++import { call, createResource } from 'frappe-ui'
++import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 +import {
 +  filterTemplates,
 +  needsTemplateSearch,
++  stickerList,
++  stickerPackList,
++  stickerQuery,
 +  templateList,
 +} from '@/utils/messengerThread'
 +
@@ -1998,6 +2608,105 @@ index 0000000..e168c8d
 +  }
 +
 +  return { resource, query, items, shown, showSearch, load, reset }
++}
++
++/** Ngừng gõ chừng này mili giây thì mới tìm sticker. */
++export const STICKER_SEARCH_DEBOUNCE_MS = 400
++
++const STICKER_API = 'omni_crm.api.messenger_tab.'
++const PENDING = Object.freeze({ loading: true, items: [], error: '' })
++
++/**
++ * Kho sticker của Meta cho bảng chọn sticker (ADR 0027), đệm theo từng tab (không phụ thuộc Lead): danh sách bộ tải khi bảng
++ * chọn mở lần đầu, sticker của một bộ khi bấm vào bộ đó, tìm kiếm khi ngừng gõ (từ 2 ký tự). Kết quả tốt giữ đến khi tab đóng;
++ * kết quả có `error` (vd. sandbox, thiếu App Secret) hoặc lời gọi lỗi thì lần mở / bấm / gõ / "Thử lại" sau gọi lại.
++ * `view`: { mode: 'packs' | 'pack' | 'search' | 'hint', loading, items, error } cho phần thân bảng chọn.
++ */
++export function useMessengerStickers() {
++  const cache = reactive({}) // 'packs' | 'pack:<mã bộ>' | 'search:<từ khóa>' -> { loading, items, error }
++  const query = ref('')
++  const pack = ref(null) // bộ đang xem: { id, name }
++  const search = computed(() => stickerQuery(query.value))
++  let timer = null
++
++  function fetchList(key, method, params, parse) {
++    const hit = cache[key]
++    if (hit && (hit.loading || !hit.error)) return
++    cache[key] = { ...PENDING }
++    call(STICKER_API + method, params)
++      .then((res) => {
++        cache[key] = { loading: false, ...parse(res) }
++      })
++      .catch((error) => {
++        cache[key] = {
++          loading: false,
++          items: [],
++          error:
++            error?.messages?.[0] ||
++            error?.message ||
++            'Không tải được sticker của Meta',
++        }
++      })
++  }
++
++  const searchKey = (q) => `search:${q.toLowerCase()}`
++  const packKey = (id) => `pack:${id}`
++
++  /** Tải phần đang xem nếu chưa có (hoặc lần trước lỗi). */
++  function load() {
++    const { q, ready } = search.value
++    if (q) {
++      if (ready) fetchList(searchKey(q), 'sticker_search', { q }, stickerList)
++    } else if (pack.value) {
++      fetchList(
++        packKey(pack.value.id),
++        'sticker_pack',
++        { pack: pack.value.id },
++        stickerList,
++      )
++    } else {
++      fetchList('packs', 'sticker_packs', {}, stickerPackList)
++    }
++  }
++
++  const view = computed(() => {
++    const { q, ready } = search.value
++    if (q && !ready)
++      return { mode: 'hint', loading: false, items: [], error: '' }
++    if (q) return { mode: 'search', ...(cache[searchKey(q)] || PENDING) }
++    if (pack.value)
++      return { mode: 'pack', ...(cache[packKey(pack.value.id)] || PENDING) }
++    return { mode: 'packs', ...(cache.packs || PENDING) }
++  })
++
++  watch(
++    () => search.value.q,
++    () => {
++      clearTimeout(timer)
++      if (search.value.ready)
++        timer = setTimeout(load, STICKER_SEARCH_DEBOUNCE_MS)
++      else load() // ô tìm trống: về danh sách bộ / bộ đang xem
++    },
++  )
++  onScopeDispose(() => clearTimeout(timer))
++
++  /** Mở bảng chọn: xóa ô tìm, giữ bộ đang xem. */
++  function open() {
++    query.value = ''
++    load()
++  }
++
++  function openPack(item) {
++    pack.value = { id: item.id, name: item.name }
++    load()
++  }
++
++  function back() {
++    pack.value = null
++    load()
++  }
++
++  return { query, pack, view, open, openPack, back, load }
 +}
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
@@ -2240,13 +2949,14 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/messengerThread.js b/frontend/src/utils/messengerThread.js
 new file mode 100644
-index 0000000..7ce28f5
+index 0000000..702edd8
 --- /dev/null
 +++ b/frontend/src/utils/messengerThread.js
-@@ -0,0 +1,377 @@
+@@ -0,0 +1,683 @@
 +// Hàm thuần cho tab "Messenger" (omni_crm, ADR 0023): đính kèm (ảnh / video / âm thanh / tệp đã lưu trong CRM), kiểm tệp
-+// sale chọn để gửi, liên kết hộp thư Meta Business Suite, mẫu tin nhắn (ADR 0026). Gom bong bóng, nhãn, giờ và luật URL
-+// dùng lại `zaloThread.js` (không sửa tệp đó). Không phụ thuộc Vue/DOM.
++// sale chọn để gửi, liên kết hộp thư Meta Business Suite, mẫu tin nhắn (ADR 0026), tương tác (ADR 0027: emoji, sticker,
++// cảm xúc, trả lời một tin, ẩn tin trong CRM). Gom bong bóng, nhãn, giờ và luật URL dùng lại `zaloThread.js` (không sửa
++// tệp đó). Không phụ thuộc Vue/DOM.
 +import {
 +  INLINE_IMAGE_TYPES,
 +  attachmentLabel,
@@ -2319,6 +3029,8 @@ index 0000000..7ce28f5
 + *   /private/files sạch (cùng gốc với CRM, người xem đã đăng nhập); `src` = `url`.
 + * - kind 'link': liên kết mở/tải tệp (đường /files có thể có dấu cách, hoặc http(s) sạch); `src` rỗng.
 + * - kind 'note': tệp không lưu được vào CRM (url rỗng, máy chủ ghi `note`): chỉ chữ "tên (ghi chú)", không liên kết.
++ * - kind 'sticker' (ADR 0027, `type` = sticker): `src` là /files hoặc /private/files sạch thì vẽ ảnh nhỏ; url rỗng thì `src`
++ *   rỗng, giao diện hiện "[Sticker]" (`note` của máy chủ, nếu có, để làm chú thích). URL khác: liên kết như tệp thường.
 + * Mục có URL lạ (javascript:, data:, //host, `..`...) bị bỏ. `text` là chữ thuần, hiển thị bằng nội suy (không chèn HTML thô).
 + */
 +export function messengerAttachmentViews(list) {
@@ -2327,6 +3039,20 @@ index 0000000..7ce28f5
 +  for (const att of list) {
 +    if (!att || typeof att !== 'object') continue
 +    const url = String(att.url || '')
++    const sticker = String(att.type || '').toLowerCase() === 'sticker'
++    if (!url && sticker) {
++      out.push({
++        index: out.length,
++        kind: 'sticker',
++        url: '',
++        src: '',
++        text: 'Sticker',
++        note: String(att.note || '')
++          .trim()
++          .slice(0, 200),
++      })
++      continue
++    }
 +    if (!url) {
 +      const note = String(att.note || '')
 +        .trim()
@@ -2347,6 +3073,17 @@ index 0000000..7ce28f5
 +    }
 +    const kind = mediaKind(att.type, att.mime)
 +    const src = kind ? localFileUrl(url) : ''
++    if (src && sticker) {
++      out.push({
++        index: out.length,
++        kind: 'sticker',
++        url: src,
++        src,
++        text: nameOf(att, src, true),
++        note: '',
++      })
++      continue
++    }
 +    if (src) {
 +      out.push({
 +        index: out.length,
@@ -2620,6 +3357,284 @@ index 0000000..7ce28f5
 +export function overLimit(text, maxChars = 6000) {
 +  const length = String(text || '').trim().length
 +  return length > maxChars ? { length, max: maxChars } : null
++}
++
++// --- Tương tác Messenger (ADR 0027): emoji, sticker, cảm xúc, trả lời một tin, ẩn tin trong CRM ---
++
++/** Hai loại tin trong hội thoại (`doctype` của từng tin); máy chủ chỉ nhận đúng hai loại này cho `*_doctype`. */
++export const MESSAGE_DOCTYPES = [
++  'Omni Inbound Message',
++  'Omni Outbound Message',
++]
++
++/** Trích dẫn và thanh "Đang trả lời" cắt còn chừng này ký tự (như `QUOTE_CHARS` của máy chủ). */
++export const QUOTE_CHARS = 80
++
++/** Bảng emoji dựng sẵn (không thêm thư viện); nhãn nhóm theo `key` do giao diện dịch. */
++// prettier-ignore
++export const EMOJI_GROUPS = [
++  {
++    key: 'smileys',
++    emojis: [
++      '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆',
++      '😉', '😊', '🙂', '😇', '😍', '🥰', '😘', '😋',
++      '😎', '🤗', '🤔', '😐', '😮', '😢', '😭', '😠',
++    ],
++  },
++  {
++    key: 'gestures',
++    emojis: [
++      '👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🙏',
++      '🤝', '💪', '👋', '🤙', '👉', '👈', '👆', '👇',
++    ],
++  },
++  {
++    key: 'symbols',
++    emojis: [
++      '❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '💔',
++      '💕', '💖', '💯', '✅', '❌', '⭐', '✨', '🔥',
++      '🎉', '🎊', '💐', '🌸',
++    ],
++  },
++  {
++    key: 'objects',
++    emojis: [
++      '🎁', '📞', '📱', '💬', '📩', '📅', '⏰', '📍',
++      '🏥', '💊', '🌿', '🍵', '☕', '🚗', '🏠', '💰',
++      '🧾', '📝',
++    ],
++  },
++]
++
++/** Tim trơn U+2764 (không kèm U+FE0F): cách máy chủ ghi cảm xúc "love". Viết bằng mã để không lẫn với tim có U+FE0F. */
++export const HEART = String.fromCodePoint(0x2764)
++const VS16 = String.fromCodePoint(0xfe0f) // bộ chọn kiểu emoji (U+FE0F), vô hình
++
++/** Hàng cảm xúc nhanh trên một tin (như Messenger), gửi đúng chuỗi này lên máy chủ. */
++export const REACTION_EMOJIS = ['👍', HEART, '😆', '😮', '😢', '😠']
++
++/** Ký tự để vẽ: tim trơn thêm U+FE0F cho ra tim màu thay vì ký hiệu đen trắng; emoji khác giữ nguyên. */
++export function emojiGlyph(emoji) {
++  const value = String(emoji ?? '')
++  return value === HEART ? HEART + VS16 : value
++}
++
++function bareEmoji(value) {
++  return String(value ?? '')
++    .split(VS16)
++    .join('')
++}
++
++/** Một dòng (gộp khoảng trắng, kể cả xuống dòng), tối đa `max` ký tự, dài hơn thì cắt và thêm "…". */
++function oneLine(value, max) {
++  const chars = [
++    ...String(value ?? '')
++      .replace(/\s+/g, ' ')
++      .trim(),
++  ]
++  return chars.length > max
++    ? `${chars.slice(0, max - 1).join('')}…`
++    : chars.join('')
++}
++
++/**
++ * Chèn `insert` vào `text` tại vùng chọn [start, end) của ô soạn (thay phần đang bôi đen): { text, cursor }, `cursor` ngay
++ * sau phần chèn. `start` không phải số nguyên (không đọc được con trỏ) thì nối vào cuối; vị trí được kẹp trong độ dài chữ.
++ */
++export function insertAtCursor(text, start, end, insert) {
++  const value = text == null ? '' : String(text)
++  const add = insert == null ? '' : String(insert)
++  const clamp = (n) => Math.min(Math.max(n, 0), value.length)
++  let from = Number.isInteger(start) ? clamp(start) : value.length
++  let to = Number.isInteger(start) && Number.isInteger(end) ? clamp(end) : from
++  if (to < from) [from, to] = [to, from]
++  return {
++    text: value.slice(0, from) + add + value.slice(to),
++    cursor: from + add.length,
++  }
++}
++
++/** Host ảnh sticker được vẽ (CDN của Meta), trùng `STICKER_HOSTS` của máy chủ: đúng host hoặc tên miền con. */
++export const STICKER_HOSTS = ['fbcdn.net', 'fbsbx.com', 'facebook.com']
++
++/** URL ảnh sticker vẽ được: https, host thuộc `STICKER_HOSTS`, không userinfo, không cổng lạ, không ký tự lạ. */
++export function isStickerUrl(url) {
++  const value = String(url || '')
++  if (!isSafeUrl(value)) return false
++  let u
++  try {
++    u = new URL(value)
++  } catch {
++    return false
++  }
++  if (u.protocol !== 'https:' || u.username || u.password) return false
++  if (u.port && u.port !== '443') return false
++  const host = u.hostname.toLowerCase()
++  return STICKER_HOSTS.some((d) => host === d || host.endsWith('.' + d))
++}
++
++/**
++ * Cách vẽ sticker của tin sale gửi (`msg.sticker` = { id, url }): { id, src, like }, hoặc null nếu tin không phải sticker.
++ * `src` chỉ khác rỗng khi URL qua `isStickerUrl`; `like` khi là sticker 👍 của Messenger (`compose.like_sticker_id`).
++ * Giao diện: có `src` thì vẽ ảnh, không thì `like` vẽ 👍 lớn, còn lại "[Sticker]".
++ */
++export function stickerView(sticker, likeId = '') {
++  if (!sticker || typeof sticker !== 'object') return null
++  const id = String(sticker.id ?? '').trim()
++  return {
++    id,
++    src: isStickerUrl(sticker.url) ? String(sticker.url) : '',
++    like: Boolean(id) && id === String(likeId ?? '').trim(),
++  }
++}
++
++const STICKER_ID = /^\d{1,30}$/
++
++/** Tìm sticker: cần ít nhất chừng này ký tự (như máy chủ `sticker_search`). */
++export const STICKER_SEARCH_MIN = 2
++
++/** Từ khóa tìm sticker như máy chủ chuẩn hóa (gộp khoảng trắng, tối đa 50 ký tự): { q, ready }; `ready` khi đủ 2 ký tự. */
++export function stickerQuery(value) {
++  const chars = [
++    ...String(value ?? '')
++      .split(/\s+/)
++      .filter(Boolean)
++      .join(' '),
++  ].slice(0, 50)
++  return { q: chars.join(''), ready: chars.length >= STICKER_SEARCH_MIN }
++}
++
++/** Kết quả `sticker_packs`: { items: [{ id, name, preview, count }], error }. Bỏ bộ không có mã số; ảnh đại diện lạ thì rỗng. */
++export function stickerPackList(res) {
++  const items = []
++  const seen = new Set()
++  for (const p of Array.isArray(res?.items) ? res.items : []) {
++    const id = String(p?.id ?? '')
++    if (!STICKER_ID.test(id) || seen.has(id)) continue
++    seen.add(id)
++    items.push({
++      id,
++      name:
++        String(p.name ?? '')
++          .trim()
++          .slice(0, 80) || 'Sticker',
++      preview: isStickerUrl(p.preview_image_url)
++        ? String(p.preview_image_url)
++        : '',
++      count: Math.max(0, Math.floor(Number(p.count) || 0)),
++    })
++  }
++  return { items, error: String(res?.error ?? '').trim() }
++}
++
++/** Kết quả `sticker_pack` / `sticker_search`: { items: [{ id, name, url, animated }], error }. Chỉ giữ sticker có mã số và ảnh vẽ được. */
++export function stickerList(res) {
++  const items = []
++  const seen = new Set()
++  for (const s of Array.isArray(res?.items) ? res.items : []) {
++    const id = String(s?.id ?? '')
++    if (!STICKER_ID.test(id) || seen.has(id) || !isStickerUrl(s.image_url))
++      continue
++    seen.add(id)
++    items.push({
++      id,
++      name: String(s.name ?? '')
++        .trim()
++        .slice(0, 80),
++      url: String(s.image_url),
++      animated: Boolean(s.animated),
++    })
++  }
++  return { items, error: String(res?.error ?? '').trim() }
++}
++
++/**
++ * Tin sale chọn để trả lời: { doctype, name, text, label }, hoặc null nếu tin thiếu loại / tên. `text`: chữ của tin trên
++ * một dòng (≤ 80 ký tự); tin không có chữ thì `text` rỗng và `label` ("Sticker", "Tệp đính kèm", "Tin nhắn") do giao diện dịch.
++ */
++export function replyTarget(msg) {
++  if (!msg || !MESSAGE_DOCTYPES.includes(msg.doctype) || !msg.name) return null
++  const text = oneLine(msg.text, QUOTE_CHARS)
++  const atts = Array.isArray(msg.attachments) ? msg.attachments : []
++  let label = ''
++  if (!text) {
++    if (
++      msg.sticker ||
++      atts.some((a) => String(a?.type).toLowerCase() === 'sticker')
++    )
++      label = 'Sticker'
++    else label = atts.length ? 'Tệp đính kèm' : 'Tin nhắn'
++  }
++  return { doctype: msg.doctype, name: String(msg.name), text, label }
++}
++
++/** Tham số trả lời gửi kèm `send` / `send_attachment` / `send_sticker`: { reply_to_doctype, reply_to }, hoặc {} nếu không trả lời. */
++export function replyPayload(replyTo) {
++  const doctype = String(replyTo?.doctype ?? '')
++  const name = String(replyTo?.name ?? '')
++  if (!MESSAGE_DOCTYPES.includes(doctype) || !name) return {}
++  return { reply_to_doctype: doctype, reply_to: name }
++}
++
++/**
++ * Trích dẫn trên bong bóng (`msg.reply_to` của máy chủ): null nếu tin không trả lời tin nào; tin gốc đã ẩn / không còn thì
++ * { missing: true, ... }; còn lại { missing: false, name, sender, customer, text } (một dòng; `customer` khi tin gốc của khách).
++ */
++export function quoteLabel(msg) {
++  const q = msg?.reply_to
++  if (!q || typeof q !== 'object') return null
++  const name = String(q.name ?? '')
++  if (q.missing || !name)
++    return { missing: true, name: '', sender: '', customer: false, text: '' }
++  return {
++    missing: false,
++    name,
++    sender: oneLine(q.sender, 40),
++    customer: q.direction === 'in',
++    text: oneLine(q.text, QUOTE_CHARS),
++  }
++}
++
++/** Chip cảm xúc dưới bong bóng (`msg.reactions`): [{ key: 'customer' | 'page', emoji, glyph }], khách trước; rỗng thì bỏ. */
++export function reactionChips(reactions) {
++  if (!reactions || typeof reactions !== 'object') return []
++  const out = []
++  for (const key of ['customer', 'page']) {
++    const value = reactions[key]
++    const emoji = typeof value === 'string' ? value.trim() : ''
++    if (emoji && emoji.length <= 32)
++      out.push({ key, emoji, glyph: emojiGlyph(emoji) })
++  }
++  return out
++}
++
++/** Hàng cảm xúc nhanh: [{ emoji, glyph, active }]; `active` là cảm xúc Page đang thả (`reactions.page`, bỏ qua U+FE0F). */
++export function reactionChoices(current) {
++  const now = bareEmoji(current).trim()
++  return REACTION_EMOJIS.map((emoji) => ({
++    emoji,
++    glyph: emojiGlyph(emoji),
++    active: Boolean(now) && bareEmoji(emoji) === now,
++  }))
++}
++
++/**
++ * Thao tác được phép trên một tin: { react, reply, hide, unhide, any }. Máy chủ quyết định (`can_react`, `can_hide`, `mid`,
++ * `compose.can_react`, `compose.can_send`) và kiểm lại khi gọi. Trả lời cần mã tin Meta; mã "sandbox:" chỉ dùng được khi
++ * site đang sandbox (như máy chủ). Tin thiếu loại / tên: không thao tác nào.
++ */
++export function messageActions(msg, compose) {
++  const ok = Boolean(msg && MESSAGE_DOCTYPES.includes(msg.doctype) && msg.name)
++  const mid = String(msg?.mid ?? '')
++  const react = ok && Boolean(compose?.can_react && msg.can_react)
++  const reply =
++    ok &&
++    Boolean(compose?.can_send) &&
++    Boolean(mid) &&
++    (!mid.startsWith('sandbox:') || Boolean(compose?.sandbox))
++  const hide = ok && Boolean(msg.can_hide) && !msg.hidden
++  const unhide = ok && Boolean(msg.can_hide) && Boolean(msg.hidden)
++  return { react, reply, hide, unhide, any: react || reply || hide || unhide }
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
@@ -3130,35 +4145,53 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/messengerThread.test.js b/frontend/tests/unit/messengerThread.test.js
 new file mode 100644
-index 0000000..304a090
+index 0000000..c19d7b8
 --- /dev/null
 +++ b/frontend/tests/unit/messengerThread.test.js
-@@ -0,0 +1,638 @@
+@@ -0,0 +1,1130 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  DEFAULT_MEDIA_ACCEPT,
++  EMOJI_GROUPS,
++  HEART,
++  MESSAGE_DOCTYPES,
 +  META_INBOX_URL,
 +  MESSENGER_CHANNEL,
++  REACTION_EMOJIS,
++  STICKER_HOSTS,
 +  TEMPLATE_SEARCH_AFTER,
 +  acceptList,
 +  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
++  emojiGlyph,
 +  filterTemplates,
 +  foldText,
 +  formatSize,
++  insertAtCursor,
 +  isMessengerUpdate,
++  isStickerUrl,
 +  localFileName,
 +  localFileUrl,
 +  mediaKind,
 +  mediaMaxBytes,
++  messageActions,
 +  messengerAttachmentViews,
 +  metaInboxUrl,
 +  needsTemplateSearch,
 +  openMetaInbox,
 +  overLimit,
 +  parseUploadResponse,
++  quoteLabel,
++  reactionChips,
++  reactionChoices,
++  replyPayload,
++  replyTarget,
 +  sendOutcome,
++  stickerList,
++  stickerPackList,
++  stickerQuery,
++  stickerView,
 +  templateList,
 +} from '@/utils/messengerThread'
 +
@@ -3770,6 +4803,480 @@ index 0000000..304a090
 +    })
 +    expect(overLimit('', 0)).toBe(null)
 +    expect(overLimit(null, 10)).toBe(null)
++  })
++})
++
++// --- Tương tác Messenger (ADR 0027) ---
++
++const VS16 = String.fromCodePoint(0xfe0f) // U+FE0F, vô hình
++const BS = String.fromCharCode(92) // dấu gạch chéo ngược
++const NL = String.fromCharCode(10) // xuống dòng
++const IN = 'Omni Inbound Message'
++const OUT = 'Omni Outbound Message'
++const LIKE = '369239263222822'
++const FB = 'https://scontent.xx.fbcdn.net/v/t39.1997-6/a.png?_nc_cat=1'
++const msgIn = (over = {}) => ({
++  name: 'IN-1',
++  doctype: IN,
++  direction: 'in',
++  sender: 'Minh',
++  text: 'Cho em hỏi giá',
++  mid: 'm_1',
++  attachments: [],
++  ...over,
++})
++
++describe('insertAtCursor', () => {
++  it('chèn tại con trỏ, con trỏ đứng ngay sau phần chèn', () => {
++    expect(insertAtCursor('Da em chao', 2, 2, '😊')).toEqual({
++      text: 'Da😊 em chao',
++      cursor: 4,
++    })
++    expect(insertAtCursor('', 0, 0, '👍')).toEqual({ text: '👍', cursor: 2 })
++  })
++  it('thay phần đang bôi đen; vùng chọn ngược vẫn đúng', () => {
++    expect(insertAtCursor('abcdef', 1, 4, 'X')).toEqual({
++      text: 'aXef',
++      cursor: 2,
++    })
++    expect(insertAtCursor('abcdef', 4, 1, 'X')).toEqual({
++      text: 'aXef',
++      cursor: 2,
++    })
++    expect(insertAtCursor('ab', 1, undefined, '!')).toEqual({
++      text: 'a!b',
++      cursor: 2,
++    })
++  })
++  it('không đọc được con trỏ: nối vào cuối', () => {
++    expect(insertAtCursor('chao', undefined, undefined, '🙏')).toEqual({
++      text: 'chao🙏',
++      cursor: 6,
++    })
++    expect(insertAtCursor('chao', null, 2, '!').text).toBe('chao!')
++    expect(insertAtCursor('chao', 1.5, 2, '!').text).toBe('chao!')
++  })
++  it('kẹp vị trí trong độ dài chữ; null thành chuỗi rỗng', () => {
++    expect(insertAtCursor('ab', 10, 20, '!')).toEqual({
++      text: 'ab!',
++      cursor: 3,
++    })
++    expect(insertAtCursor('ab', -3, -1, '!')).toEqual({
++      text: '!ab',
++      cursor: 1,
++    })
++    expect(insertAtCursor(null, 0, 0, null)).toEqual({ text: '', cursor: 0 })
++  })
++})
++
++describe('EMOJI_GROUPS / REACTION_EMOJIS / emojiGlyph', () => {
++  it('4 nhóm, 60 đến 90 emoji, không trùng, không chữ / số / ký tự HTML', () => {
++    expect(EMOJI_GROUPS.map((g) => g.key)).toEqual([
++      'smileys',
++      'gestures',
++      'symbols',
++      'objects',
++    ])
++    const all = EMOJI_GROUPS.flatMap((g) => g.emojis)
++    expect(all.length).toBeGreaterThanOrEqual(60)
++    expect(all.length).toBeLessThanOrEqual(90)
++    expect(new Set(all).size).toBe(all.length)
++    for (const e of all) expect(e).toMatch(/^[^A-Za-z0-9<>&"' ]+$/)
++  })
++  it('hàng cảm xúc nhanh như Messenger; tim là U+2764 trơn như máy chủ', () => {
++    expect(REACTION_EMOJIS).toEqual(['👍', HEART, '😆', '😮', '😢', '😠'])
++    expect(HEART).toBe(String.fromCodePoint(0x2764))
++    expect(HEART).toHaveLength(1)
++  })
++  it('tim trơn thêm U+FE0F để vẽ tim màu; emoji khác giữ nguyên', () => {
++    expect(emojiGlyph(HEART)).toBe(HEART + VS16)
++    expect(emojiGlyph(HEART + VS16)).toBe(HEART + VS16)
++    expect(emojiGlyph('👍')).toBe('👍')
++    expect(emojiGlyph(null)).toBe('')
++  })
++})
++
++describe('isStickerUrl', () => {
++  it('nhận https từ CDN của Meta (đúng host hoặc tên miền con)', () => {
++    expect(STICKER_HOSTS).toEqual(['fbcdn.net', 'fbsbx.com', 'facebook.com'])
++    for (const ok of [
++      FB,
++      'https://fbcdn.net/a.png',
++      'https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=1',
++      'https://www.facebook.com/images/x.png',
++      'https://facebook.com/x.png',
++      'https://SCONTENT.FBCDN.NET/a.png',
++      'https://scontent.fbcdn.net:443/a.png',
++    ]) {
++      expect(isStickerUrl(ok)).toBe(true)
++    }
++  })
++  it('từ chối http, host giả, userinfo, cổng lạ, ký tự lạ, URL tương đối', () => {
++    for (const bad of [
++      '',
++      null,
++      undefined,
++      'http://scontent.fbcdn.net/a.png',
++      'https://fbcdn.net.evil.example/a.png',
++      'https://evilfbcdn.net/a.png',
++      'https://notfacebook.com/a.png',
++      'https://scontent.fbcdn.net@evil.example/a.png',
++      'https://user:pw@scontent.fbcdn.net/a.png',
++      'https://scontent.fbcdn.net:8443/a.png',
++      `https://evil.example${BS}@scontent.fbcdn.net/a.png`,
++      'https://scontent.fbcdn.net/a b.png',
++      ' https://scontent.fbcdn.net/a.png',
++      '//scontent.fbcdn.net/a.png',
++      '/private/files/a.png',
++      'javascript:alert(1)//fbcdn.net',
++      'data:image/png;base64,AAAA',
++    ]) {
++      expect(isStickerUrl(bad)).toBe(false)
++    }
++  })
++})
++
++describe('stickerView (sticker sale gửi)', () => {
++  it('ảnh CDN Meta; 👍 khi là sticker thích; còn lại chỉ nhãn', () => {
++    expect(stickerView({ id: '1', url: FB }, LIKE)).toEqual({
++      id: '1',
++      src: FB,
++      like: false,
++    })
++    expect(stickerView({ id: LIKE, url: '' }, LIKE)).toEqual({
++      id: LIKE,
++      src: '',
++      like: true,
++    })
++    expect(stickerView({ id: LIKE, url: FB }, LIKE)).toMatchObject({
++      src: FB,
++      like: true,
++    })
++    expect(
++      stickerView({ id: '2', url: 'https://evil.example/a.png' }, LIKE),
++    ).toEqual({ id: '2', src: '', like: false })
++    expect(stickerView({ id: '', url: '' }, '')).toEqual({
++      id: '',
++      src: '',
++      like: false,
++    })
++  })
++  it('tin không phải sticker: null', () => {
++    expect(stickerView(null, LIKE)).toBe(null)
++    expect(stickerView(undefined)).toBe(null)
++    expect(stickerView(LIKE, LIKE)).toBe(null)
++  })
++})
++
++describe('stickerQuery', () => {
++  it('gộp khoảng trắng như máy chủ; từ 2 ký tự mới tìm; tối đa 50', () => {
++    expect(stickerQuery('  meo   con ')).toEqual({ q: 'meo con', ready: true })
++    expect(stickerQuery(`mèo${NL}con`)).toEqual({ q: 'mèo con', ready: true })
++    expect(stickerQuery('a')).toEqual({ q: 'a', ready: false })
++    expect(stickerQuery('   ')).toEqual({ q: '', ready: false })
++    expect(stickerQuery(null)).toEqual({ q: '', ready: false })
++    expect(stickerQuery('😀')).toEqual({ q: '😀', ready: false }) // một ký tự dù là 2 đơn vị UTF-16
++    expect(stickerQuery('x'.repeat(60)).q).toHaveLength(50)
++  })
++})
++
++describe('stickerPackList / stickerList', () => {
++  it('bộ sticker: giữ mã số, ảnh đại diện lạ thành rỗng, bỏ rác và mục trùng', () => {
++    expect(
++      stickerPackList({
++        items: [
++          { id: '123', name: ' Mèo ', preview_image_url: FB, count: 24 },
++          {
++            id: '456',
++            name: '',
++            preview_image_url: 'https://evil.example/p.png',
++            count: 'x',
++          },
++          { id: '123', name: 'trùng' },
++          { id: 'abc', name: 'mã lạ' },
++          null,
++          'chuoi',
++        ],
++        error: '',
++      }),
++    ).toEqual({
++      items: [
++        { id: '123', name: 'Mèo', preview: FB, count: 24 },
++        { id: '456', name: 'Sticker', preview: '', count: 0 },
++      ],
++      error: '',
++    })
++  })
++  it('sticker: chỉ giữ mục có mã số và ảnh CDN Meta', () => {
++    expect(
++      stickerList({
++        items: [
++          { id: '1', name: 'Vẫy tay', image_url: FB, animated: true },
++          { id: '2', name: 'Ảnh lạ', image_url: 'https://evil.example/a.png' },
++          { id: '3', name: 'Không ảnh' },
++          { id: '1', name: 'trùng', image_url: FB },
++          { id: '4x', image_url: FB },
++        ],
++        error: null,
++      }),
++    ).toEqual({
++      items: [{ id: '1', name: 'Vẫy tay', url: FB, animated: true }],
++      error: '',
++    })
++  })
++  it('lỗi của máy chủ được giữ để hiện; kết quả lạ thành rỗng', () => {
++    const error = 'Chế độ thử (sandbox): không tải kho sticker của Meta'
++    expect(stickerList({ items: [], error })).toEqual({ items: [], error })
++    expect(stickerPackList({ items: [], error })).toEqual({ items: [], error })
++    expect(stickerList(null)).toEqual({ items: [], error: '' })
++    expect(stickerPackList({ items: 'x' })).toEqual({ items: [], error: '' })
++  })
++})
++
++describe('replyTarget / replyPayload', () => {
++  it('tin có chữ: một dòng, tối đa 80 ký tự', () => {
++    expect(replyTarget(msgIn())).toEqual({
++      doctype: IN,
++      name: 'IN-1',
++      text: 'Cho em hỏi giá',
++      label: '',
++    })
++    expect(
++      replyTarget(msgIn({ text: `Dòng 1${NL}${NL}  Dòng 2  ` })).text,
++    ).toBe('Dòng 1 Dòng 2')
++    const long = replyTarget(msgIn({ text: 'x'.repeat(200) })).text
++    expect([...long]).toHaveLength(80)
++    expect(long.endsWith('…')).toBe(true)
++  })
++  it('tin không có chữ: nhãn theo loại', () => {
++    const label = (over) => replyTarget(msgIn({ text: '', ...over })).label
++    expect(label({ sticker: { id: LIKE, url: '' } })).toBe('Sticker')
++    expect(label({ attachments: [{ type: 'sticker', url: '' }] })).toBe(
++      'Sticker',
++    )
++    expect(
++      label({ attachments: [{ type: 'image', url: '/files/a.png' }] }),
++    ).toBe('Tệp đính kèm')
++    expect(label({ text: '   ' })).toBe('Tin nhắn')
++  })
++  it('tin thiếu loại / tên: null', () => {
++    expect(replyTarget(null)).toBe(null)
++    expect(replyTarget(msgIn({ doctype: 'Communication' }))).toBe(null)
++    expect(replyTarget(msgIn({ name: '' }))).toBe(null)
++  })
++  it('replyPayload: chỉ hai loại tin của Omni và có tên', () => {
++    expect(MESSAGE_DOCTYPES).toEqual([IN, OUT])
++    expect(replyPayload({ doctype: OUT, name: 'OUT-9', text: 'x' })).toEqual({
++      reply_to_doctype: OUT,
++      reply_to: 'OUT-9',
++    })
++    expect(replyPayload(replyTarget(msgIn()))).toEqual({
++      reply_to_doctype: IN,
++      reply_to: 'IN-1',
++    })
++    expect(replyPayload(null)).toEqual({})
++    expect(replyPayload({ doctype: 'CRM Lead', name: 'L-1' })).toEqual({})
++    expect(replyPayload({ doctype: IN, name: '' })).toEqual({})
++  })
++})
++
++describe('quoteLabel', () => {
++  it('không trả lời tin nào: null', () => {
++    expect(quoteLabel(msgIn({ reply_to: null }))).toBe(null)
++    expect(quoteLabel(msgIn())).toBe(null)
++    expect(quoteLabel(null)).toBe(null)
++  })
++  it('tin gốc không còn hiển thị (hoặc thiếu tên)', () => {
++    const missing = {
++      missing: true,
++      name: '',
++      sender: '',
++      customer: false,
++      text: '',
++    }
++    expect(quoteLabel(msgIn({ reply_to: { missing: true } }))).toEqual(missing)
++    expect(quoteLabel(msgIn({ reply_to: { sender: 'x', text: 'y' } }))).toEqual(
++      missing,
++    )
++  })
++  it('trích dẫn rút gọn một dòng; biết tin gốc là của khách hay không', () => {
++    expect(
++      quoteLabel(
++        msgIn({
++          reply_to: {
++            name: 'IN-0',
++            doctype: IN,
++            sender: 'Minh',
++            direction: 'in',
++            text: `Giá bao${NL}nhiêu ạ`,
++          },
++        }),
++      ),
++    ).toEqual({
++      missing: false,
++      name: 'IN-0',
++      sender: 'Minh',
++      customer: true,
++      text: 'Giá bao nhiêu ạ',
++    })
++    expect(
++      quoteLabel(
++        msgIn({
++          reply_to: {
++            name: 'OUT-1',
++            doctype: OUT,
++            sender: null,
++            direction: 'out',
++            text: 'Sticker',
++          },
++        }),
++      ),
++    ).toMatchObject({ customer: false, sender: '', text: 'Sticker' })
++  })
++})
++
++describe('reactionChips / reactionChoices', () => {
++  it('chip của khách trước, của Page sau; rỗng hoặc lạ thì bỏ', () => {
++    expect(reactionChips({ customer: HEART, page: '👍' })).toEqual([
++      { key: 'customer', emoji: HEART, glyph: HEART + VS16 },
++      { key: 'page', emoji: '👍', glyph: '👍' },
++    ])
++    expect(
++      reactionChips({ customer: '', page: '😆' }).map((c) => c.key),
++    ).toEqual(['page'])
++    expect(reactionChips({ customer: '', page: '' })).toEqual([])
++    expect(reactionChips(null)).toEqual([])
++    expect(reactionChips(HEART)).toEqual([])
++    expect(reactionChips({ customer: { x: 1 }, page: 5 })).toEqual([])
++    expect(reactionChips({ customer: 'x'.repeat(40) })).toEqual([])
++  })
++  it('hàng cảm xúc nhanh đánh dấu cảm xúc Page đang thả (bỏ qua U+FE0F)', () => {
++    const active = (current) =>
++      reactionChoices(current)
++        .filter((c) => c.active)
++        .map((c) => c.emoji)
++    expect(reactionChoices('').map((c) => c.glyph)).toEqual([
++      '👍',
++      HEART + VS16,
++      '😆',
++      '😮',
++      '😢',
++      '😠',
++    ])
++    expect(active('')).toEqual([])
++    expect(active(undefined)).toEqual([])
++    expect(active('😮')).toEqual(['😮'])
++    expect(active(HEART)).toEqual([HEART])
++    expect(active(HEART + VS16)).toEqual([HEART])
++    expect(active('🎉')).toEqual([])
++  })
++})
++
++describe('messageActions', () => {
++  const C = { can_send: true, can_react: true, sandbox: false }
++  const m = (over = {}) => ({
++    name: 'IN-1',
++    doctype: IN,
++    mid: 'm_1',
++    can_react: true,
++    can_hide: false,
++    hidden: false,
++    ...over,
++  })
++  const none = {
++    react: false,
++    reply: false,
++    hide: false,
++    unhide: false,
++    any: false,
++  }
++  it('đủ quyền: cảm xúc, trả lời; ẩn theo can_hide của máy chủ', () => {
++    expect(messageActions(m(), C)).toEqual({
++      react: true,
++      reply: true,
++      hide: false,
++      unhide: false,
++      any: true,
++    })
++    expect(messageActions(m({ doctype: OUT, can_hide: true }), C)).toEqual({
++      react: true,
++      reply: true,
++      hide: true,
++      unhide: false,
++      any: true,
++    })
++  })
++  it('tin đã ẩn (quản lý xem): Bỏ ẩn thay cho Ẩn', () => {
++    expect(
++      messageActions(m({ can_hide: true, hidden: true }), C),
++    ).toMatchObject({ hide: false, unhide: true, any: true })
++  })
++  it('cảm xúc cần cả compose.can_react lẫn msg.can_react', () => {
++    expect(messageActions(m({ can_react: false }), C).react).toBe(false)
++    expect(messageActions(m(), { ...C, can_react: false }).react).toBe(false)
++  })
++  it('trả lời cần compose.can_send và mã tin Meta; mã sandbox chỉ khi site sandbox', () => {
++    expect(messageActions(m(), { ...C, can_send: false }).reply).toBe(false)
++    expect(messageActions(m({ mid: '' }), C).reply).toBe(false)
++    expect(messageActions(m({ mid: undefined }), C).reply).toBe(false)
++    expect(messageActions(m({ mid: 'sandbox:abc' }), C).reply).toBe(false)
++    expect(
++      messageActions(m({ mid: 'sandbox:abc' }), { ...C, sandbox: true }).reply,
++    ).toBe(true)
++  })
++  it('không có quyền gì, khung soạn trống hoặc tin lạ: không có thao tác', () => {
++    expect(messageActions(m({ can_react: false, mid: '' }), C)).toEqual(none)
++    expect(messageActions(m(), null)).toEqual(none)
++    expect(
++      messageActions(m({ doctype: 'Communication', can_hide: true }), C),
++    ).toEqual(none)
++    expect(messageActions({ doctype: IN, can_hide: true }, C)).toEqual(none)
++    expect(messageActions(null, C)).toEqual(none)
++  })
++})
++
++describe('messengerAttachmentViews: sticker khách gửi (ADR 0027)', () => {
++  it('tệp đã lưu trong CRM: vẽ nhỏ; chưa tải về được: chỉ nhãn kèm ghi chú', () => {
++    expect(
++      messengerAttachmentViews([
++        { url: '/private/files/sticker_1.png', type: 'sticker', name: '' },
++        { url: '', type: 'sticker', note: 'Meta không cho tải tệp này về' },
++        { url: '', type: 'STICKER' },
++      ]),
++    ).toEqual([
++      {
++        index: 0,
++        kind: 'sticker',
++        url: '/private/files/sticker_1.png',
++        src: '/private/files/sticker_1.png',
++        text: 'sticker_1.png',
++        note: '',
++      },
++      {
++        index: 1,
++        kind: 'sticker',
++        url: '',
++        src: '',
++        text: 'Sticker',
++        note: 'Meta không cho tải tệp này về',
++      },
++      {
++        index: 2,
++        kind: 'sticker',
++        url: '',
++        src: '',
++        text: 'Sticker',
++        note: '',
++      },
++    ])
++  })
++  it('URL ngoài không bao giờ được vẽ; URL nguy hiểm bị bỏ', () => {
++    const views = messengerAttachmentViews([
++      { url: FB, type: 'sticker' },
++      { url: 'javascript:alert(1)', type: 'sticker' },
++      { url: '/files/../x.png', type: 'sticker' },
++    ])
++    expect(views.map((v) => [v.kind, v.src])).toEqual([['link', '']])
 +  })
 +})
 diff --git a/frontend/tests/unit/zaloThread.test.js b/frontend/tests/unit/zaloThread.test.js

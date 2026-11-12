@@ -42,7 +42,9 @@ def store(root: Path | None, items: list[dict]) -> tuple[list[dict], list[str]]:
 		entry: dict[str, Any] = {"name": name, "type": kind, "mime": mime}
 		rel = item.get("path")
 		path = _inside(root, str(rel)) if (root is not None and rel) else None
-		if not rel:
+		if not rel and kind == "sticker":  # ADR 0027: sticker chỉ có mã, Meta không gửi ảnh
+			entry["note"] = _("Sticker")
+		elif not rel:
 			entry["note"] = _("Meta không cho tải tệp này về")
 		elif path is None or not path.is_file():
 			entry["note"] = _("Tệp không còn trong thư mục của dịch vụ nhận")

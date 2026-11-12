@@ -301,6 +301,7 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 			"is_sandbox",
 			"attachment_kind",
 			"attachment_name",
+			"sticker_id",
 		],
 		as_dict=True,
 	)
@@ -310,6 +311,8 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 		from omni_crm.channels.zalo.media_out import display_text
 
 		row.text = display_text(row.text, row.attachment_kind, row.attachment_name)
+	elif row.sticker_id and not row.text:  # ADR 0027: tin sticker Messenger
+		row.text = _("[Sticker]")
 	channel_type = frappe.db.get_value("Omni Channel", row.channel, "channel_type") or ""
 	if channel_type == EMAIL:
 		return None

@@ -172,6 +172,8 @@ def ingest_envelope(env: Any) -> str:
 	channel = resolve_channel(mapped.channel_type)
 	if not channel:
 		return "thieu_kenh"
+	if mapped.reaction:
+		return ingest_reaction(env, channel)
 	if mapped.channel_type == "Web Form":
 		channel_doc = frappe.get_cached_doc("Omni Channel", channel)
 		raw = json.dumps(mapped.body, ensure_ascii=False).encode()
@@ -212,7 +214,25 @@ def ingest_messenger(env: dict, mapped: mapper.Mapped, channel: str) -> str:
 			frappe.delete_doc("File", f, ignore_permissions=True, force=True)
 		return "trung"
 	attachments.attach(files, name)
+	reply_to = mapper.reply_to_of(env)
+	if reply_to:  # ADR 0027: khách (hoặc Page) trả lời một tin cụ thể
+		frappe.db.set_value("Omni Inbound Message", name, "reply_to_mid", reply_to, update_modified=False)
 	return "moi"
+
+
+def ingest_reaction(env: dict, channel: str) -> str:
+	"""Khách thả/bỏ cảm xúc trên một tin Messenger (ADR 0027): ghi lên tin đó, không tạo tin mới."""
+	from omni_crm.channels.meta_messenger import reactions
+
+	channel_doc = frappe.get_cached_doc("Omni Channel", channel)
+	page = str((env.get("source") or {}).get("account") or "")
+	own_page = str(channel_doc.get("meta_page_id") or "").strip()
+	if own_page and page and page != own_page:
+		return "bo_qua"
+	data = mapper.reaction_of(env)
+	if not data:
+		return "bo_qua"
+	return reactions.apply_customer(channel, data)
 
 
 def backfill(

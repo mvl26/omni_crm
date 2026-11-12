@@ -264,7 +264,7 @@ class TestSendAttachment(unittest.TestCase):
 			mock.patch.object(mc.MessengerClient, "send_attachment", return_value="m_P") as send,
 		):
 			self.assertEqual(MetaMessengerAdapter().send(req, channel()), "m_P")
-		self.assertEqual(send.call_args.args, (PSID, "file", "a.pdf", b"%PDF", "application/pdf"))
+		self.assertEqual(send.call_args.args, (PSID, "file", "a.pdf", b"%PDF", "application/pdf", None))
 
 
 class TestAdapter(unittest.TestCase):

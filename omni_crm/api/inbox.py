@@ -31,6 +31,16 @@ CALL = "Omni Call"
 CALL_FINAL_STATUSES = ("Answered", "Missed", "Busy", "Failed", "Voicemail")
 MAX_CANDIDATES = 300  # số Lead gần nhất được xét cho một lần tải danh sách
 THREAD_LIMIT = 300
+# ADR 0027: trả lời tin cụ thể, cảm xúc, ẩn trong CRM (thu hồi 1 phía); có ở cả tin vào và tin ra
+INTERACT_FIELDS = (
+	"reply_to_mid",
+	"reaction_customer",
+	"reaction_page",
+	"reaction_page_by",
+	"hidden_at",
+	"hidden_by",
+)
+HIDDEN_VIEWER_ROLES = frozenset({"Sales Manager", "Omni Admin", "System Manager"})
 SNIPPET_LEN = 120
 PAGE_LENGTH_MAX = 100
 OUT_STATUSES = ("Queued", "Sent")  # tin ra tính là đã trả lời; Failed/Blocked thì chưa
@@ -334,6 +344,23 @@ def check_lead_access(lead: str) -> None:
 		frappe.throw(_("Bạn không có quyền xem Lead này"), frappe.PermissionError)
 
 
+def can_see_hidden(user: str | None = None) -> bool:
+	"""Quản lý (Sales Manager, Omni Admin, System Manager) thấy và bỏ ẩn được mọi tin đã ẩn trong CRM (ADR 0027)."""
+	user = user or frappe.session.user
+	return user == "Administrator" or bool(HIDDEN_VIEWER_ROLES & set(frappe.get_roles(user)))
+
+
+def _interact(row: Any) -> dict:
+	"""Phần tương tác Messenger của một tin trong hội thoại (ADR 0027): mã tin, tin được trả lời, cảm xúc, đã ẩn."""
+	return {
+		"mid": row.external_message_id or "",
+		"reply_to_mid": row.reply_to_mid or "",
+		"reactions": {"customer": row.reaction_customer or "", "page": row.reaction_page or ""},
+		"hidden": bool(row.hidden_at),
+		"hidden_by": row.hidden_by if row.hidden_at else None,
+	}
+
+
 @frappe.whitelist()
 def get_thread(lead: str) -> dict:
 	"""Toàn bộ hội thoại của Lead trên mọi kênh, theo thời gian tăng dần (không kèm payload gốc)."""
@@ -360,6 +387,7 @@ def thread_data(lead: str) -> dict:
 			"text",
 			"attachments",
 			"received_at",
+			*INTERACT_FIELDS,
 		],
 		order_by="received_at desc",
 		limit_page_length=THREAD_LIMIT,
@@ -383,10 +411,16 @@ def thread_data(lead: str) -> dict:
 			"attachment",
 			"attachment_kind",
 			"attachment_name",
+			"sticker_id",
+			"sticker_url",
+			*INTERACT_FIELDS,
 		],
 		order_by="creation desc",
 		limit_page_length=THREAD_LIMIT,
 	)
+	see_hidden = can_see_hidden()
+	inbound = [m for m in inbound if see_hidden or not m.hidden_at]
+	outbound = [o for o in outbound if see_hidden or not o.hidden_at]
 	bot_meta = drafts_mod.bot_sent_meta(
 		lead, [o.bot_draft for o in outbound if o.source == "Bot" and o.bot_draft]
 	)  # nhãn "Bot đã gửi", chấm điểm, nút tắt nhóm (D3-05)
@@ -441,6 +475,7 @@ def thread_data(lead: str) -> dict:
 				"attachments": _safe_attachments(m.attachments),
 				"at": m.received_at,
 				"status": None,
+				**_interact(m),
 			}
 		)
 	for c in call_rows:
@@ -472,6 +507,9 @@ def thread_data(lead: str) -> dict:
 				"source": o.source,
 				"kind": "bot" if o.source == "Bot" else "sale",
 				"bot": bot_meta.get(o.bot_draft) if o.source == "Bot" else None,
+				"sent_by": o.sent_by,
+				"sticker": {"id": o.sticker_id, "url": o.sticker_url or ""} if o.sticker_id else None,
+				**_interact(o),
 			}
 		)
 	items.sort(key=lambda i: (_ts(i["at"]), i["name"]))
@@ -695,14 +733,16 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 	return send_zalo(lead, text, confirm_paid)
 
 
-def send_messenger(lead: str, text: str, attachment: dict | None = None) -> dict:
+def send_messenger(lead: str, text: str, attachment: dict | None = None, extras: dict | None = None) -> dict:
 	"""Gửi tin của Sale qua Messenger (ADR 0022; ảnh/tệp ADR 0023); cùng các chặn như Zalo. Người gọi PHẢI đã kiểm quyền ghi.
 
 	`attachment`: {"file_url", "kind", "name"} đã kiểm thuộc Lead (`meta_messenger.media_out.attachment_for_lead`); có tệp thì
 	chữ được trống (chữ kèm tệp do người gọi xếp thành tin riêng trước).
+	`extras` (ADR 0027): {"quote_mid"} trả lời một tin cụ thể, {"sticker_id", "sticker_url"} tin sticker; người gọi đã kiểm.
 	"""
 	text = (text or "").strip()
-	if not text and not attachment:
+	extras = {k: v for k, v in (extras or {}).items() if v} or None
+	if not text and not attachment and not (extras or {}).get("sticker_id"):
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > outbound_pipeline.MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(outbound_pipeline.MAX_TEXT_CHARS))
@@ -718,7 +758,7 @@ def send_messenger(lead: str, text: str, attachment: dict | None = None) -> dict
 	identity_doc, channel_doc = target
 	ok, reason = get_adapter(MESSENGER).can_send_now(identity_doc, channel_doc, source="Sale")
 	if not ok:
-		name = _record_blocked(channel_doc, identity_doc, lead, text, reason, attachment)
+		name = _record_blocked(channel_doc, identity_doc, lead, text, reason, attachment, extras)
 		return {"status": "Blocked", "outbound": name, "reason": reason}
 	name = outbound_pipeline.queue_outbound(
 		OutboundRequest(
@@ -728,6 +768,7 @@ def send_messenger(lead: str, text: str, attachment: dict | None = None) -> dict
 			reply_to_external_id=None,
 			source="Sale",
 			attachment=attachment,
+			extras=extras,
 		),
 		user=frappe.session.user,
 	)
@@ -810,11 +851,18 @@ def queue_zalo_reply(
 
 
 def _record_blocked(
-	channel_doc: Any, identity_doc: Any, lead: str, text: str, reason: str, attachment: dict | None = None
+	channel_doc: Any,
+	identity_doc: Any,
+	lead: str,
+	text: str,
+	reason: str,
+	attachment: dict | None = None,
+	extras: dict | None = None,
 ) -> str:
 	doc = frappe.get_doc(
 		{
 			**outbound_pipeline._attachment_fields(attachment),
+			**outbound_pipeline.extra_fields(extras),
 			"doctype": OUTBOUND,
 			"channel": channel_doc.name,
 			"identity": identity_doc.name,

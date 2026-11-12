@@ -8,9 +8,11 @@ Không gửi qua kênh khác. Khác Zalo: không có xác nhận phí, quỹ tin
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 import frappe
 from frappe import _
+from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.api import inbox
@@ -22,7 +24,16 @@ from omni_crm.utils import media
 
 LEAD = "CRM Lead"
 CHANNEL = "Meta Messenger"
-MESSAGE_DOCTYPES = ("Omni Inbound Message", "Omni Outbound Message")
+INBOUND = "Omni Inbound Message"
+OUTBOUND = "Omni Outbound Message"
+MESSAGE_DOCTYPES = (INBOUND, OUTBOUND)
+# ADR 0027
+LIKE_STICKER_ID = "369239263222822"  # sticker 👍 của Messenger, luôn gửi được (không có trong kho)
+STICKER_HOSTS = ("fbcdn.net", "fbsbx.com", "facebook.com")
+STICKER_LOCALE = "vi_VN"
+STICKER_CACHE_SECONDS = 6 * 3600
+MAX_STICKER_ITEMS = 120
+QUOTE_CHARS = 80
 INBOX_URL = "https://business.facebook.com/latest/inbox/all/?asset_id={0}"
 
 
@@ -42,9 +53,14 @@ def _visible_attachments(item: dict) -> list[dict]:
 	return out
 
 
-def _message(item: dict) -> dict:
+def _message(item: dict, user: str, manager: bool) -> dict:
+	own = item.get("doctype") == OUTBOUND and item.get("sent_by") == user
+	sticker = item.get("sticker") or None
+	if sticker:
+		sticker = {"id": sticker["id"], "url": sticker["url"] if _sticker_url_ok(sticker.get("url")) else ""}
 	return {
 		"name": item["name"],
+		"doctype": item.get("doctype"),
 		"kind": item.get("kind") or ("customer" if item["direction"] == "in" else "sale"),
 		"direction": item["direction"],
 		"sender": item.get("sender") or "",
@@ -56,7 +72,43 @@ def _message(item: dict) -> dict:
 		"sandbox": bool(item.get("is_sandbox")),
 		"error": item.get("error"),
 		"bot_sent": bool(item.get("bot_sent")),
+		# ADR 0027
+		"mid": item.get("mid") or "",
+		"reply_to_mid": item.get("reply_to_mid") or "",
+		"reactions": item.get("reactions") or {"customer": "", "page": ""},
+		"sticker": sticker,
+		"hidden": bool(item.get("hidden")),
+		"can_react": bool(item.get("mid"))
+		and (not str(item.get("mid")).startswith("sandbox:") or flags.sandbox()),
+		"can_hide": manager or own,
 	}
+
+
+def _with_quotes(rows: list[dict]) -> list[dict]:
+	"""Gắn `reply_to` (tin được trả lời, rút gọn) cho tin có `reply_to_mid`; tin gốc không còn trong hội thoại thì `missing`."""
+	by_mid = {r["mid"]: r for r in rows if r.get("mid")}
+	for r in rows:
+		mid = r.get("reply_to_mid")
+		if not mid:
+			r["reply_to"] = None
+			continue
+		src = by_mid.get(mid)
+		if not src or (src.get("hidden") and not r.get("hidden")):
+			r["reply_to"] = {"missing": True}
+			continue
+		label = (
+			src["text"]
+			or (_("Sticker") if src.get("sticker") else "")
+			or (_("Tệp đính kèm") if src.get("attachments") else "")
+		)
+		r["reply_to"] = {
+			"name": src["name"],
+			"doctype": src["doctype"],
+			"sender": src["sender"],
+			"direction": src["direction"],
+			"text": label[:QUOTE_CHARS],
+		}
+	return rows
 
 
 def _contact(lead: str, data: dict) -> dict | None:
@@ -119,6 +171,12 @@ def _compose(data: dict, can_write: bool) -> dict:
 	else:
 		state["can_send"] = True
 		state["can_send_media"] = bool(flags.messenger_media_send_enabled())
+	# ADR 0027: sticker theo khung 24 giờ như tin chữ; cảm xúc chỉ cần quyền ghi và khách không từ chối liên hệ
+	state["can_send_sticker"] = state["can_send"]
+	state["like_sticker_id"] = LIKE_STICKER_ID
+	state["can_react"] = bool(
+		ms is not None and can_write and not (data.get("profile") or {}).get("person_refused")
+	)
 	return state
 
 
@@ -151,11 +209,14 @@ def get_conversation(doctype: str, name: str) -> dict:
 	can_write = bool(
 		frappe.has_permission(LEAD, "write", doc=lead) and frappe.has_permission(doctype, "write", doc=name)
 	)
-	rows = [
-		_message(i)
-		for i in data["messages"]
-		if i.get("channel_type") == CHANNEL and i.get("doctype") in MESSAGE_DOCTYPES
-	]
+	user, manager = frappe.session.user, inbox.can_see_hidden()
+	rows = _with_quotes(
+		[
+			_message(i, user, manager)
+			for i in data["messages"]
+			if i.get("channel_type") == CHANNEL and i.get("doctype") in MESSAGE_DOCTYPES
+		]
+	)
 	names = [
 		i["display_name"] for i in data["identities"] if i["channel_type"] == CHANNEL and i["display_name"]
 	]
@@ -197,28 +258,265 @@ def _write_lead(doctype: str, name: str) -> str:
 	return inbox.check_lead_write(lead)
 
 
-@frappe.whitelist(methods=["POST"])
-def send(doctype: str, name: str, text: str) -> dict:
-	"""Sale trả lời khách bằng chữ qua Messenger từ tab Messenger; mọi guard của `inbox.send_messenger` giữ nguyên."""
-	return inbox.send_messenger(_write_lead(doctype, name), text)
+def _message_of_lead(lead: str, message_doctype: str, message: str) -> dict:
+	"""Tin Messenger `message` thuộc Lead `lead` (ném lỗi nếu không): {doctype, name, mid, sent_by, channel, hidden_at}."""
+	if message_doctype not in MESSAGE_DOCTYPES or not message:
+		frappe.throw(_("Tin nhắn không hợp lệ"))
+	fields = ["name", "lead", "external_message_id", "hidden_at", "hidden_by"]
+	fields += ["channel_type", "channel"] if message_doctype == INBOUND else ["channel", "sent_by"]
+	row = frappe.db.get_value(message_doctype, message, fields, as_dict=True)
+	if not row or row.lead != lead:
+		frappe.throw(_("Tin nhắn không thuộc Lead đang mở"), frappe.PermissionError)
+	channel_type = row.get("channel_type") or frappe.db.get_value("Omni Channel", row.channel, "channel_type")
+	if channel_type != CHANNEL:
+		frappe.throw(_("Chỉ áp dụng cho tin Messenger"))
+	return {
+		"doctype": message_doctype,
+		"name": row.name,
+		"mid": row.external_message_id or "",
+		"sent_by": row.get("sent_by"),
+		"channel": row.channel,
+		"hidden_at": row.hidden_at,
+	}
+
+
+def _quote_mid(lead: str, reply_to_doctype: str | None, reply_to: str | None) -> str | None:
+	"""Mã tin Meta của tin được trả lời (ADR 0027); None nếu không trả lời tin nào."""
+	if not reply_to:
+		return None
+	target = _message_of_lead(lead, reply_to_doctype or "", reply_to)
+	mid = target["mid"]
+	if not mid or (mid.startswith("sandbox:") and not flags.sandbox()):
+		frappe.throw(_("Tin này chưa có mã tin của Meta (chưa gửi tới khách) nên không trả lời riêng được"))
+	return mid
 
 
 @frappe.whitelist(methods=["POST"])
-def send_attachment(doctype: str, name: str, file_url: str, text: str = "") -> dict:
+def send(
+	doctype: str, name: str, text: str, reply_to_doctype: str | None = None, reply_to: str | None = None
+) -> dict:
+	"""Sale trả lời khách bằng chữ qua Messenger từ tab Messenger; mọi guard của `inbox.send_messenger` giữ nguyên.
+
+	`reply_to_doctype` + `reply_to` (ADR 0027): trả lời một tin cụ thể (Messenger hiện trích dẫn tin đó).
+	"""
+	lead = _write_lead(doctype, name)
+	quote = _quote_mid(lead, reply_to_doctype, reply_to)
+	return inbox.send_messenger(lead, text, extras={"quote_mid": quote})
+
+
+@frappe.whitelist(methods=["POST"])
+def send_attachment(
+	doctype: str,
+	name: str,
+	file_url: str,
+	text: str = "",
+	reply_to_doctype: str | None = None,
+	reply_to: str | None = None,
+) -> dict:
 	"""Sale gửi ảnh/video/âm thanh/tệp của Lead qua Messenger (ADR 0023). Tệp phải đã đính kèm vào Lead (hoặc Deal của Lead).
 
 	Messenger không cho chữ đi cùng tệp: có chữ thì xếp tin chữ TRƯỚC, rồi tin tệp. Công tắc `messenger_media_send_enabled`.
+	Trả lời tin cụ thể (ADR 0027): gắn vào tin đi đầu (chữ nếu có, không thì tệp).
 	"""
 	lead = _write_lead(doctype, name)
 	if not flags.messenger_media_send_enabled():
 		frappe.throw(_("Chưa bật gửi ảnh/tệp qua Messenger"), frappe.PermissionError)
 	attachment = media_out.attachment_for_lead(file_url, lead)
+	quote = _quote_mid(lead, reply_to_doctype, reply_to)
 	text = (text or "").strip()
 	if text:
-		first = inbox.send_messenger(lead, text)
+		first = inbox.send_messenger(lead, text, extras={"quote_mid": quote})
 		if first.get("status") != "Queued":
 			return first
 		result = inbox.send_messenger(lead, "", attachment=attachment)
 		result["text_outbound"] = first.get("outbound")
 		return result
-	return inbox.send_messenger(lead, "", attachment=attachment)
+	return inbox.send_messenger(lead, "", attachment=attachment, extras={"quote_mid": quote})
+
+
+def _sticker_url_ok(url: Any) -> bool:
+	"""Ảnh sticker chỉ hiện khi là https từ CDN của Meta (không lưu/hiện URL lạ do trình duyệt gửi lên)."""
+	try:
+		parts = urlsplit(str(url or ""))
+	except ValueError:
+		return False
+	host = (parts.hostname or "").lower()
+	return parts.scheme == "https" and any(host == d or host.endswith("." + d) for d in STICKER_HOSTS)
+
+
+@frappe.whitelist(methods=["POST"])
+def send_sticker(
+	doctype: str,
+	name: str,
+	sticker_id: str,
+	sticker_url: str = "",
+	reply_to_doctype: str | None = None,
+	reply_to: str | None = None,
+) -> dict:
+	"""Sale gửi một sticker miễn phí của Meta (hoặc 👍) qua Messenger (ADR 0027); trong khung 24 giờ như tin chữ."""
+	lead = _write_lead(doctype, name)
+	sticker_id = str(sticker_id or "").strip()
+	if not sticker_id.isdigit() or len(sticker_id) > 30:
+		frappe.throw(_("Mã sticker không hợp lệ"))
+	quote = _quote_mid(lead, reply_to_doctype, reply_to)
+	extras = {
+		"sticker_id": sticker_id,
+		"sticker_url": sticker_url if _sticker_url_ok(sticker_url) else "",
+		"quote_mid": quote,
+	}
+	return inbox.send_messenger(lead, "", extras=extras)
+
+
+def _valid_emoji(emoji: str) -> str:
+	emoji = (emoji or "").strip()
+	if len(emoji) > 16 or any(ch.isascii() and ch.isalnum() for ch in emoji):
+		frappe.throw(_("Cảm xúc không hợp lệ"))
+	return emoji
+
+
+@frappe.whitelist(methods=["POST"])
+def react(doctype: str, name: str, message_doctype: str, message: str, emoji: str = "") -> dict:
+	"""Sale thả (emoji) hoặc bỏ (emoji rỗng) cảm xúc lên một tin Messenger của Lead (ADR 0027; Send API sender_action)."""
+	from omni_crm.channels.meta_messenger import reactions
+	from omni_crm.channels.meta_messenger.client import MessengerClient, MessengerError
+
+	lead = _write_lead(doctype, name)
+	emoji = _valid_emoji(emoji)
+	target = _message_of_lead(lead, message_doctype, message)
+	from omni_crm.api import customer as customer_api
+
+	if customer_api._person_flags(lead)["refused"]:
+		frappe.throw(_("Người này đã từ chối nhận liên hệ: không tương tác từ hệ thống."))
+	conv = inbox._channel_target(lead, CHANNEL)
+	if not conv:
+		frappe.throw(_("Khách này chưa có tài khoản Messenger liên kết với Lead"))
+	identity_doc, channel_doc = conv
+	try:
+		MessengerClient(channel_doc).react(identity_doc.external_id, target["mid"], emoji)
+	except MessengerError as e:
+		frappe.throw(e.message_vi)
+	reactions.set_page(target["doctype"], target["name"], emoji, frappe.session.user)
+	inbox.timeline.notify(lead, [CHANNEL])
+	return {"ok": True, "reaction": emoji}
+
+
+@frappe.whitelist(methods=["POST"])
+def hide_message(doctype: str, name: str, message_doctype: str, message: str, hidden: int | str = 1) -> dict:
+	"""Thu hồi 1 phía (ADR 0027): ẩn/bỏ ẩn một tin Messenger TRONG CRM; khách vẫn thấy (Meta không có API thu hồi).
+
+	Người gửi ẩn/bỏ ẩn được tin do mình gửi từ CRM; Sales Manager/Omni Admin/System Manager được mọi tin. Bản ghi gốc giữ nguyên,
+	ghi người ẩn và lúc ẩn; quản lý vẫn thấy tin đã ẩn (đánh dấu) trong tab.
+	"""
+	lead = _write_lead(doctype, name)
+	target = _message_of_lead(lead, message_doctype, message)
+	user = frappe.session.user
+	own = target["doctype"] == OUTBOUND and target["sent_by"] == user
+	if not (own or inbox.can_see_hidden(user)):
+		frappe.throw(_("Chỉ người gửi tin hoặc quản lý mới được ẩn tin này"), frappe.PermissionError)
+	hide = bool(cint(hidden))
+	frappe.db.set_value(
+		target["doctype"],
+		target["name"],
+		{"hidden_at": now_datetime() if hide else None, "hidden_by": user if hide else None},
+		update_modified=False,
+	)
+	inbox.timeline.notify(lead, [CHANNEL])
+	return {"ok": True, "hidden": hide}
+
+
+# ---- Kho sticker của Meta (ADR 0027): chỉ đọc, đệm 6 giờ, App Access Token của kênh ----
+
+
+def _catalog_client():
+	from omni_crm.channels.meta_messenger.client import MessengerClient
+
+	name = frappe.db.get_value(
+		"Omni Channel", {"channel_type": CHANNEL, "enabled": 1, "meta_app_id": ["is", "set"]}, "name"
+	)
+	if not name:
+		frappe.throw(_("Chưa có kênh Messenger đang bật có App ID"))
+	return MessengerClient(frappe.get_doc("Omni Channel", name))
+
+
+def _catalog(kind: str, arg: str, fetch) -> dict:
+	from omni_crm.channels.meta_messenger.client import MessengerError
+
+	if not flags.messenger_tab_enabled() or frappe.session.user == "Guest":
+		frappe.throw(_("Tab Messenger đang bị tắt"), frappe.PermissionError)
+	if flags.sandbox():
+		return {"items": [], "error": _("Chế độ thử (sandbox): không tải kho sticker của Meta")}
+	key = f"omni:messenger:stickers:{kind}:{arg}:{STICKER_LOCALE}"
+	cached = frappe.cache().get_value(key)
+	if cached is not None:
+		return {"items": cached, "error": ""}
+	try:
+		items = fetch()
+	except MessengerError as e:
+		return {"items": [], "error": e.message_vi}
+	frappe.cache().set_value(key, items, expires_in_sec=STICKER_CACHE_SECONDS)
+	return {"items": items, "error": ""}
+
+
+def _clean_sticker(s: dict) -> dict | None:
+	sid = str(s.get("id") or "")
+	url = str(s.get("image_url") or "")
+	if not sid.isdigit() or not _sticker_url_ok(url):
+		return None
+	return {
+		"id": sid,
+		"name": str(s.get("name") or "")[:80],
+		"image_url": url,
+		"animated": bool(s.get("is_animated")),
+	}
+
+
+@frappe.whitelist()
+def sticker_packs() -> dict:
+	"""Các bộ sticker miễn phí của Meta (tên, ảnh đại diện, số sticker)."""
+
+	def fetch():
+		out = []
+		for p in _catalog_client().sticker_packs(STICKER_LOCALE)[:MAX_STICKER_ITEMS]:
+			pid, preview = str(p.get("id") or ""), str(p.get("preview_image_url") or "")
+			if pid.isdigit():
+				out.append(
+					{
+						"id": pid,
+						"name": str(p.get("name") or "")[:80],
+						"preview_image_url": preview if _sticker_url_ok(preview) else "",
+						"count": cint(p.get("sticker_count")),
+					}
+				)
+		return out
+
+	return _catalog("packs", "-", fetch)
+
+
+@frappe.whitelist()
+def sticker_pack(pack: str) -> dict:
+	"""Sticker trong một bộ."""
+	pack = str(pack or "").strip()
+	if not pack.isdigit():
+		frappe.throw(_("Mã bộ sticker không hợp lệ"))
+	return _catalog(
+		"pack",
+		pack,
+		lambda: [c for c in map(_clean_sticker, _catalog_client().pack_stickers(pack, STICKER_LOCALE)) if c][
+			:MAX_STICKER_ITEMS
+		],
+	)
+
+
+@frappe.whitelist()
+def sticker_search(q: str) -> dict:
+	"""Tìm sticker theo từ khóa (tối thiểu 2 ký tự; tiếng Việt, Meta tự lùi về tiếng Anh nếu không thấy)."""
+	q = " ".join(str(q or "").split())[:50]
+	if len(q) < 2:
+		return {"items": [], "error": _("Nhập ít nhất 2 ký tự")}
+	return _catalog(
+		"search",
+		q.lower(),
+		lambda: [c for c in map(_clean_sticker, _catalog_client().search_stickers(q, STICKER_LOCALE)) if c][
+			:MAX_STICKER_ITEMS
+		],
+	)

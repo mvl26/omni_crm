@@ -53,6 +53,7 @@ class Mapped:
 		None  # chỉ Web Form: body JSON để WebFormAdapter.parse đọc (bao gồm cả honeypot, giới hạn độ dài)
 	)
 	skip: str | None = None
+	reaction: bool = False  # ADR 0027: sự kiện khách thả/bỏ cảm xúc Messenger, không phải tin mới
 
 
 def _dt(value: Any) -> datetime | None:
@@ -253,6 +254,44 @@ def echo_app_id(env: dict) -> str:
 	return str(message.get("app_id") or "")
 
 
+def reply_to_of(env: dict) -> str:
+	"""Mã tin (mid) mà tin Messenger này trả lời (`message.reply_to.mid`, ADR 0027); rỗng nếu không trả lời tin nào."""
+	message = ((env.get("raw") or {}).get("event") or {}).get("message") or {}
+	reply = message.get("reply_to") if isinstance(message, dict) else None
+	return str((reply or {}).get("mid") or "")[:140] if isinstance(reply, dict) else ""
+
+
+# Meta gửi cả tên (`reaction`) lẫn emoji; thiếu emoji thì dùng bảng này.
+REACTION_EMOJI = {
+	"love": "❤",
+	"like": "👍",
+	"smile": "😆",
+	"wow": "😮",
+	"sad": "😢",
+	"angry": "😠",
+	"dislike": "👎",
+}
+
+
+def reaction_of(env: dict) -> dict | None:
+	"""Sự kiện cảm xúc Messenger (webhook `message_reactions`, intake ghi `kind = "reaction"`) -> dữ liệu cần áp; None nếu thiếu."""
+	reaction = ((env.get("raw") or {}).get("event") or {}).get("reaction") or {}
+	if not isinstance(reaction, dict):
+		return None
+	mid, action = str(reaction.get("mid") or ""), str(reaction.get("action") or "")
+	psid = str((env.get("sender") or {}).get("value") or "")
+	if not mid or not psid or action not in ("react", "unreact"):
+		return None
+	emoji = str(reaction.get("emoji") or "") or REACTION_EMOJI.get(str(reaction.get("reaction") or ""), "")
+	return {
+		"mid": mid[:140],
+		"psid": psid,
+		"action": action,
+		"emoji": emoji[:32] if action == "react" else "",
+		"at": _dt(env.get("occurred_at")) or _dt(env.get("received_at")) or datetime.now(),
+	}
+
+
 def map_envelope(env: Any) -> Mapped:
 	"""Phân loại và ánh xạ một envelope. `channel` thật được gắn sau (cần tra DB) bằng `with_channel`."""
 	if not isinstance(env, dict) or str(env.get("schema")) != SCHEMA:
@@ -268,6 +307,8 @@ def map_envelope(env: Any) -> Mapped:
 		return Mapped(skip=SKIP_LIVE_PATH)
 	if kind == "message" and env.get("channel") == "messenger":
 		return Mapped(MESSENGER)
+	if kind == "reaction" and env.get("channel") == "messenger":
+		return Mapped(MESSENGER, reaction=True)
 	return Mapped(skip=SKIP_NO_CHANNEL_TYPE)  # Instagram, v.v.
 
 

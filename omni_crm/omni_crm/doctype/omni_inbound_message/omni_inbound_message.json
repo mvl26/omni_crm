@@ -34,7 +34,16 @@
   "batch_id",
   "error_kind",
   "requeue_count",
-  "error_alerted"
+  "error_alerted",
+  "sec_messenger_interact",
+  "reply_to_mid",
+  "reaction_customer",
+  "reaction_customer_at",
+  "col_messenger_interact",
+  "reaction_page",
+  "reaction_page_by",
+  "hidden_at",
+  "hidden_by"
  ],
  "fields": [
   {
@@ -208,6 +217,65 @@
    "read_only": 1,
    "no_copy": 1,
    "description": "V21-03: đã nằm trong một cảnh báo gộp của đối soát Meta (không cảnh báo lại mỗi giờ)."
+  },
+  {
+   "fieldname": "sec_messenger_interact",
+   "fieldtype": "Section Break",
+   "label": "Tương tác Messenger (ADR 0027)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "reply_to_mid",
+   "fieldtype": "Data",
+   "label": "Trả lời tin (mã tin Meta)",
+   "length": 140,
+   "read_only": 1,
+   "description": "Mã tin (mid) mà tin này trả lời (reply một tin cụ thể)."
+  },
+  {
+   "fieldname": "reaction_customer",
+   "fieldtype": "Data",
+   "label": "Khách thả cảm xúc",
+   "length": 32,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reaction_customer_at",
+   "fieldtype": "Datetime",
+   "label": "Lúc khách thả cảm xúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_messenger_interact",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reaction_page",
+   "fieldtype": "Data",
+   "label": "Page thả cảm xúc",
+   "length": 32,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reaction_page_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Người thả cảm xúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "hidden_at",
+   "fieldtype": "Datetime",
+   "label": "Ẩn trong CRM lúc",
+   "read_only": 1,
+   "description": "Thu hồi 1 phía: tin chỉ bị ẩn trong CRM, khách vẫn thấy (Meta không có API thu hồi). Bản ghi gốc giữ nguyên."
+  },
+  {
+   "fieldname": "hidden_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Người ẩn",
+   "read_only": 1
   }
  ],
  "permissions": [

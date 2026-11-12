@@ -140,7 +140,7 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 	miễn phí. send_outbound chỉ cho tin Sale đi khi khung có phí nếu cờ là "paid" (free chuyển sang paid giữa chừng bị chặn).
 	"""
 	text = (req.text or "").strip()
-	if not text and not req.attachment:
+	if not text and not req.attachment and not (req.extras or {}).get("sticker_id"):
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(MAX_TEXT_CHARS))
@@ -162,6 +162,7 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 			"is_sandbox": 1 if flags.sandbox() else 0,
 			**(route.fields() if route else {}),
 			**_attachment_fields(req.attachment),
+			**extra_fields(req.extras),
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -187,6 +188,27 @@ def _attachment_of(row: Any) -> dict | None:
 	if not row.get("attachment"):
 		return None
 	return {"file_url": row.attachment, "kind": row.attachment_kind, "name": row.attachment_name}
+
+
+def extra_fields(extras: dict | None) -> dict:
+	"""Trường Messenger ghi vào Omni Outbound Message (ADR 0027): tin được trả lời, sticker."""
+	extras = extras or {}
+	out = {}
+	if extras.get("quote_mid"):
+		out["reply_to_mid"] = str(extras["quote_mid"])[:140]
+	if extras.get("sticker_id"):
+		out["sticker_id"] = str(extras["sticker_id"])[:32]
+		out["sticker_url"] = str(extras.get("sticker_url") or "")[:1000]
+	return out
+
+
+def _extras_of(row: Any) -> dict | None:
+	extras = {
+		"quote_mid": row.get("reply_to_mid") or None,
+		"sticker_id": row.get("sticker_id") or None,
+		"sticker_url": row.get("sticker_url") or None,
+	}
+	return {k: v for k, v in extras.items() if v} or None
 
 
 def _route_for(req: OutboundRequest, user: str | None, confirmed_paid: bool) -> Any:
@@ -254,6 +276,9 @@ def _row(name: str, lock: bool = False) -> Any:
 			"attachment",
 			"attachment_kind",
 			"attachment_name",
+			"reply_to_mid",  # ADR 0027
+			"sticker_id",
+			"sticker_url",
 		],
 		as_dict=True,
 		for_update=lock,
@@ -481,6 +506,7 @@ def send_outbound(outbound_name: str) -> str:
 		source=claimed.source,
 		purpose=claimed.purpose or "reply",
 		attachment=_attachment_of(claimed),
+		extras=_extras_of(claimed),
 	)
 	try:
 		external_id = adapter.send(req, channel_doc)  # ngoài khóa DB; sandbox đã chặn ở trên

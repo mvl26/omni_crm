@@ -60,13 +60,17 @@ class MetaMessengerAdapter:
 		psid = frappe.db.get_value("Omni Identity", req.identity, "external_id")
 		if not psid:
 			raise ValueError(_("Định danh chưa có mã người dùng Messenger (PSID)"))
+		extras = getattr(req, "extras", None) or {}
+		quote = extras.get("quote_mid") or None  # ADR 0027: trả lời một tin cụ thể
+		if extras.get("sticker_id"):
+			return MessengerClient(channel_doc).send_sticker(psid, extras["sticker_id"], quote)
 		attachment = getattr(req, "attachment", None)
 		if attachment:
-			return self._send_attachment(channel_doc, psid, attachment)
-		return MessengerClient(channel_doc).send_text(psid, req.text)
+			return self._send_attachment(channel_doc, psid, attachment, quote)
+		return MessengerClient(channel_doc).send_text(psid, req.text, quote)
 
 	@staticmethod
-	def _send_attachment(channel_doc, psid: str, attachment: dict) -> str:
+	def _send_attachment(channel_doc, psid: str, attachment: dict, quote_mid: str | None = None) -> str:
 		"""Tin ảnh/tệp (ADR 0023): chặn khi công tắc tắt, đọc tệp trong CRM lúc gửi; lỗi tệp là lỗi vĩnh viễn."""
 		from omni_crm import flags
 		from omni_crm.channels.meta_messenger import media_out
@@ -80,7 +84,7 @@ class MetaMessengerAdapter:
 			raise MessengerError(None, PERMANENT, str(e)) from e
 		kind = attachment.get("kind") or media_out.kind_of(name) or media_out.FILE
 		return MessengerClient(channel_doc).send_attachment(
-			psid, kind, name, content, media_out.mime_of(name)
+			psid, kind, name, content, media_out.mime_of(name), quote_mid
 		)
 
 	# Điểm nối với worker (không thuộc Protocol bắt buộc)

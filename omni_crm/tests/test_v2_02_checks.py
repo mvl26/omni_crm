@@ -88,6 +88,12 @@ EXPECTED_WHITELISTED = {
 		"send",
 		"send_attachment",  # ADR 0023: 1 ảnh/tệp của chính Lead tới 1 khách/lần, qua mọi guard của send_messenger
 		"get_templates",  # ADR 0026: chỉ đọc, điền mẫu tin nhắn cho 1 Lead, không gửi
+		"send_sticker",  # ADR 0027: 1 sticker tới 1 khách/lần, qua mọi guard của send_messenger
+		"react",  # ADR 0027: cảm xúc lên 1 tin của 1 Lead (sender_action, không tạo tin)
+		"hide_message",  # ADR 0027: ẩn 1 tin trong CRM (thu hồi 1 phía), không gửi gì
+		"sticker_packs",  # ADR 0027: chỉ đọc kho sticker của Meta
+		"sticker_pack",
+		"sticker_search",
 	},  # ADR 0023: tab Messenger, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {
