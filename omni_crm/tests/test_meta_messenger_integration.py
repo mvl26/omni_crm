@@ -14,6 +14,7 @@ from frappe.utils import now_datetime
 from PIL import Image
 
 from omni_crm.api import inbox
+from omni_crm.channels.meta_messenger import worker_hooks
 from omni_crm.intake_files import runner
 from omni_crm.tests.ads_helpers import work
 
@@ -216,6 +217,41 @@ class TestMessengerIntegration(FrappeTestCase):
 		res = inbox.send_messenger(lead, "Tin muộn")
 		self.assertEqual(res["status"], "Blocked")
 		self.assertIn("24", res["reason"])
+
+	def _client(self, name=None, error=None):
+		fake = mock.MagicMock()
+		fake.return_value.get_name.side_effect = error or (lambda psid: name)
+		return mock.patch("omni_crm.channels.meta_messenger.worker_hooks.MessengerClient", fake)
+
+	def test_ten_that_cua_khach(self):
+		self.put("a", menv("messenger:m_td22_n1"))
+		runner.run()
+		with self._client("Tống Bị Minh"):
+			work(f"Meta Messenger:{PSID}")
+		lead = self.rows()[0].lead
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead, "first_name"), "Tống Bị Minh")
+
+	def test_lay_lai_ten_cho_khach_cu(self):
+		self.put("a", menv("messenger:m_td22_n2"))
+		runner.run()
+		with self._client(error=RuntimeError("chua co token")):
+			work(f"Meta Messenger:{PSID}")
+		lead = self.rows()[0].lead
+		self.assertTrue(
+			frappe.db.get_value("CRM Lead", lead, "first_name").startswith("Khách Meta Messenger")
+		)
+		self.assertEqual(worker_hooks.refresh_names(apply=0)["can_lay"], 1)
+		frappe.db.set_value(
+			"CRM Lead", lead, "omni_manual_fields", '["first_name"]'
+		)  # sale đã sửa tay: không đè
+		with self._client("Tên Meta"):
+			stats = worker_hooks.refresh_names(apply=1)
+		self.assertEqual((stats["da_lay_ten"], stats["da_doi_ten_lead"]), (1, 0), stats)
+		frappe.db.set_value("CRM Lead", lead, "omni_manual_fields", None)
+		with self._client("Tên Meta"):
+			stats = worker_hooks.refresh_names(apply=1)
+		self.assertEqual(stats["da_doi_ten_lead"], 1, stats)
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead, "first_name"), "Tên Meta")
 
 	def test_nap_bu(self):
 		self.put("a", menv("messenger:m_td22_b1"))
