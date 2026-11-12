@@ -22,6 +22,7 @@ DEFAULT_SOURCE_MAP = {
 	"Meta Lead Ads": "Quảng cáo Meta",
 	"Google Lead Form": "Quảng cáo Google",
 	"Web Form": "Website",
+	"Meta Messenger": "Facebook Messenger",  # ADR 0022
 }
 INBOX_ROUTE = "/app/omni-inbox"
 

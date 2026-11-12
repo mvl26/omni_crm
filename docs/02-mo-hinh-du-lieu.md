@@ -83,7 +83,7 @@ Mỗi bản ghi là một kênh cụ thể (một hộp thư, một OA, một t�
 | Trường | Kiểu | Options | Ghi chú |
 | --- | --- | --- | --- |
 | `channel_name` | Data | Bắt buộc, duy nhất | Đặt tên, làm `name` |
-| `channel_type` | Select | Email / Zalo OA / Telephony / Meta Lead Ads / Google Lead Form / Web Form | Ba loại sau: D1-15 |
+| `channel_type` | Select | Email / Zalo OA / Telephony / Meta Lead Ads / Google Lead Form / Web Form / Meta Messenger | Ba loại sau: D1-15; `Meta Messenger`: ADR 0022 (cả ở `Omni Identity.channel_type`) |
 | `enabled` | Check | | Công tắc kênh: tắt thì webhook trả 200 nhưng **chỉ lưu**, không enqueue |
 | `outbound_enabled` | Check | | Công tắc chiều ra |
 | `webhook_token` | Password | | Token bí mật trong URL webhook (tổng đài, lớp bảo vệ thêm) |

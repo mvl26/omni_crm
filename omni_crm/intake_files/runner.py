@@ -13,7 +13,11 @@ vào Redis (14 ngày) và chỉ quét các thư mục ngày trong `omni_intake_d
 vô hại vì chống trùng ở cổng và ở Communication.
 
 Có quyền ghi: sau khi nạp, file chuyển sang `archive/` (cùng cấu trúc ngày), giống quy ước trong README của miyano-intake;
-file hỏng sang `dead_crm/` kèm tệp `.loi.txt`; loại tin CRM chưa hỗ trợ (Messenger) sang `chua_nap/` để nạp sau.
+file hỏng sang `dead_crm/` kèm tệp `.loi.txt`; loại tin CRM chưa hỗ trợ (ví dụ Instagram) sang `chua_nap/` để nạp sau.
+
+Messenger (ADR 0022): tin của Page khác `meta_page_id` của kênh bị bỏ; echo của chính tin CRM đã gửi (`app_id` = `meta_app_id`)
+bị bỏ; đính kèm được chép vào File riêng tư trước khi lưu tin. Tin cũ đã bị cất/ghi dấu trước khi có kênh: nạp bù bằng
+`backfill` (bỏ qua dấu Redis và cửa sổ ngày, an toàn nhờ chống trùng).
 Chạy lại an toàn: chống trùng bằng `dedupe_key` của cổng (cùng khóa với đường trực tiếp).
 
 Hai nơi gọi `run`: cron mỗi phút (lưới an toàn) và `kick` do tiến trình `watcher` đẩy ngay khi thấy file mới. Mỗi lúc chỉ
@@ -24,6 +28,7 @@ lượt cùng nạp một file và không file nào phải chờ cron.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import hashlib
 import json
 import os
@@ -36,7 +41,7 @@ import frappe
 from omni_crm.channels.email import adapter as email_adapter
 from omni_crm.channels.registry import get_adapter
 from omni_crm.ingest import gateway
-from omni_crm.intake_files import mapper
+from omni_crm.intake_files import attachments, mapper
 from omni_crm.pipeline.retry import is_transient, redact
 
 KIND_DIRS = {"email": "gmail", "call": "voice", "web_form": "web_form", "messenger": "messenger"}
@@ -174,12 +179,97 @@ def ingest_envelope(env: Any) -> str:
 		if not events:
 			return "bo_qua"  # honeypot / mã biểu mẫu chưa cấu hình / không có dữ liệu
 		names = [gateway.save_inbound(e) for e in events]
+	elif mapped.channel_type == mapper.MESSENGER:
+		return ingest_messenger(env, mapped, channel)
 	else:
 		mapped = mapper.with_channel(env, mapped, channel)
 		if mapped.skip:
 			return "bo_qua"
 		names = [gateway.save_inbound(mapped.event)]
 	return "moi" if any(names) else "trung"
+
+
+def ingest_messenger(env: dict, mapped: mapper.Mapped, channel: str) -> str:
+	"""Một tin Messenger: lọc Page và echo của chính ta, chép đính kèm vào File, lưu qua cổng; trả một trong RESULTS."""
+	channel_doc = frappe.get_cached_doc("Omni Channel", channel)
+	page = str((env.get("source") or {}).get("account") or "")
+	own_page = str(channel_doc.get("meta_page_id") or "").strip()
+	if own_page and page and page != own_page:
+		return "bo_qua"  # tin của Page khác: không thuộc kênh này
+	mapped = mapper.with_channel(env, mapped, channel)
+	if mapped.skip or mapped.event is None:
+		return "bo_qua"
+	event = mapped.event
+	app_id = str(channel_doc.get("meta_app_id") or "").strip()
+	if event.event_type == mapper.ECHO and app_id and mapper.echo_app_id(env) == app_id:
+		return "bo_qua"  # echo của tin CRM vừa gửi qua Send API: đã có Omni Outbound Message
+	if frappe.db.exists("Omni Inbound Message", {"dedupe_key": f"{channel}:{event.external_message_id}"}):
+		return "trung"  # kiểm trước khi chép tệp để không sinh File thừa
+	stored, files = attachments.store(spool_root(), list(event.attachments))
+	name = gateway.save_inbound(dataclasses.replace(event, attachments=stored))
+	if not name:
+		for f in files:  # trùng do chạy song song: bỏ File vừa tạo
+			frappe.delete_doc("File", f, ignore_permissions=True, force=True)
+		return "trung"
+	attachments.attach(files, name)
+	return "moi"
+
+
+def backfill(
+	kinds: list[str] | str | None = None, since: str | None = None, apply: int | str = 0, limit: int = 5000
+) -> dict[str, Any]:
+	"""Nạp bù các file trong `inbox/` và `chua_nap/` từ ngày `since` (YYYY-MM-DD), bỏ qua dấu Redis và cửa sổ ngày.
+
+	Dùng sau khi bật một loại kênh mới (Messenger): tin cũ đã bị cất sang `chua_nap/` hoặc ghi dấu "đã xử lý" nên `run`
+	không nạp lại. Mặc định chỉ đếm (`apply=0`); `apply=1` mới nạp. Không di chuyển file; chạy lại vô hại nhờ chống trùng.
+	"""
+	if isinstance(kinds, str):
+		kinds = json.loads(kinds) if kinds.strip().startswith("[") else [kinds]
+	dirs = {KIND_DIRS[k] for k in (kinds or ["messenger"]) if k in KIND_DIRS}
+	root = spool_root()
+	stats: dict[str, Any] = {"file": 0, "apply": bool(int(apply)), **dict.fromkeys(RESULTS, 0)}
+	if root is None or not dirs:
+		return stats
+	start = date.fromisoformat(since) if since else None
+	files = []
+	for bucket in ("inbox", "chua_nap"):
+		base = root / bucket
+		if not base.is_dir():
+			continue
+		for p in base.rglob("*.json"):
+			if p.parent.name not in dirs or not p.is_file() or p.name.startswith("."):
+				continue
+			try:
+				year, month, day = p.relative_to(base).parts[:3]
+				when = date(int(year), int(month), int(day))
+			except (ValueError, TypeError):
+				when = None
+			if start and when and when < start:
+				continue
+			files.append(p)
+	files.sort(key=lambda p: p.relative_to(root).parts[1:])
+	stats["file"] = len(files)
+	if not int(apply):
+		return stats
+	for path in files[:limit]:
+		try:
+			if path.stat().st_size > MAX_FILE_BYTES:
+				raise ValueError("file lớn quá 2 MB")
+			result = ingest_envelope(json.loads(path.read_text(encoding="utf-8")))
+			frappe.db.commit()
+		except Exception as e:
+			frappe.db.rollback()
+			stats["loi"] += 1
+			frappe.log_error(
+				title="Omni: lỗi nạp bù file intake",
+				message=redact(f"{path.name}\n{type(e).__name__}: {e}")[:1000],
+			)
+			frappe.db.commit()
+			continue
+		stats[result] += 1
+		if path.relative_to(root).parts[0] == "inbox" and result in ("moi", "trung", "bo_qua"):
+			_mark_done(path)  # để `run` (spool chỉ đọc) không quét lại
+	return stats
 
 
 def run(limit: int = MAX_PER_RUN) -> dict[str, int]:

@@ -532,7 +532,7 @@ Bước 0 của D1-08 không làm được: developers.zalo.me là trang SPA, We
 
 ## Phát hiện: nạp file miyano-intake (nhánh feat/nap-file-intake)
 
-- Messenger không có loại Omni Channel tương ứng; cần quyết định thêm loại kênh (ADR) hoặc bỏ. Hiện chỉ cất file ở `chua_nap/`.
+- ~~Messenger không có loại Omni Channel tương ứng~~: đã quyết 12/11/2026, ADR 0022 (loại kênh `Meta Messenger`, nạp qua file, đính kèm vào File, trả lời chữ trong 24 giờ, ghi tin echo).
 - Kênh Email bật phải có `email_account`; hộp thư đọc qua Gmail API của intake không có. Xem `docs/16`.
 - Chưa kiểm trên site thật (repo này chưa cài trên bench hiện tại): mới có test thuần cho ánh xạ và luồng tệp; test tích hợp với DB cần site `omni.test`.
 

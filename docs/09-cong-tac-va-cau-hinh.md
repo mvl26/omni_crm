@@ -76,6 +76,7 @@ Mỗi phần có thể tắt **tức thì, không cần deploy, không mất d�
 | Theo dõi sửa tay Lead | Không tắt được riêng; hệ thống ghi qua `flags.omni_bot()` thì không bị tính là sửa tay |
 | Trang Hộp thư (`omni-inbox`) | Gỡ vai trò khỏi trang; tin vẫn được lưu và xử lý |
 | Bộ định danh | Tắt `enabled` của kênh: tin vẫn lưu, không xử lý |
+| Kênh Meta Messenger (ADR 0022) | Nhận: bỏ `messenger` khỏi `omni_intake_kinds` (file nằm lại trong spool, nạp bù sau) hoặc tắt `enabled` của kênh. Trả lời: `outbound_enabled = 0` |
 | Đồng bộ lead Facebook có sẵn của app `crm` (`Lead Sync Source`) | **Không dùng** (V2-01, ĐQ-11): giữ mọi nguồn ở trạng thái tắt; nếu bật, màn giám sát nổ cảnh báo `dong_bo_lead_crm_dang_bat`. Lead từ Meta chỉ đi qua kênh `Meta Lead Ads` của Omni (V2-05) |
 
 ## 2. Đọc công tắc — `flags.py`

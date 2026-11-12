@@ -174,7 +174,7 @@ def _name_tokens(name: str | None) -> list[str]:
 
 # Tên mặc định do hệ thống đặt ("Khách Zalo OA 4821", "Khách Email .com"): luôn là tên giữ chỗ.
 _DEFAULT_NAME_RE = re.compile(
-	r"^khach (zalo oa|zalo|email|telephony|meta lead ads|google lead form|web form)\b"
+	r"^khach (zalo oa|zalo|email|telephony|meta lead ads|google lead form|web form|meta messenger)\b"
 )
 
 

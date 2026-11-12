@@ -38,6 +38,7 @@ class OmniInbox {
 						<select class="form-control oi-channel" style="width:auto">
 							<option value="">${e(__("Mọi kênh"))}</option>
 							<option value="Zalo OA">Zalo OA</option>
+							<option value="Meta Messenger">Messenger</option>
 							<option value="Email">Email</option>
 							<option value="Telephony">${e(__("Điện thoại"))}</option>
 						</select>
@@ -190,9 +191,7 @@ class OmniInbox {
 		const lead = data.lead;
 		const msgs = data.messages
 			.map((m) => {
-				const atts = (m.attachments || [])
-					.map((a) => `<div><a href="${e(a.url)}" target="_blank" rel="noopener">${e(a.name)}</a></div>`)
-					.join("");
+				const atts = (m.attachments || []).map((a) => this.attachment_html(a)).join("");
 				const labels = {
 					Queued: __("Đang gửi"),
 					Sent: __("Đã gửi"),
@@ -481,6 +480,26 @@ class OmniInbox {
 			.finally(() => this.load_thread(lead));
 	}
 
+	attachment_html(a) {
+		// Tệp đã lưu trong File của hệ thống (/files, /private/files): ảnh/sticker hiện ảnh, video/âm thanh có trình phát (ADR 0022).
+		const e = frappe.utils.escape_html;
+		const url = a.url || "";
+		if (!url) return `<div class="oi-meta">📎 ${e(a.name || "")}${a.note ? " (" + e(a.note) + ")" : ""}</div>`;
+		const local = url.startsWith("/files/") || url.startsWith("/private/files/");
+		const mime = a.mime || "";
+		const link = `<a href="${e(url)}" target="_blank" rel="noopener">${e(a.name || url)}</a>`;
+		if (local && (a.type === "image" || a.type === "sticker" || mime.startsWith("image/"))) {
+			return `<div><a href="${e(url)}" target="_blank" rel="noopener"><img src="${e(url)}" alt="${e(a.name || "")}" style="max-width:240px;max-height:240px;border-radius:6px"></a></div>`;
+		}
+		if (local && (a.type === "video" || mime.startsWith("video/"))) {
+			return `<div><video controls preload="metadata" src="${e(url)}" style="max-width:320px;max-height:240px"></video><br>${link}</div>`;
+		}
+		if (local && (a.type === "audio" || mime.startsWith("audio/"))) {
+			return `<div><audio controls preload="none" src="${e(url)}"></audio><br>${link}</div>`;
+		}
+		return `<div>📎 ${link}</div>`;
+	}
+
 	compose_html(data) {
 		const e = frappe.utils.escape_html;
 		const c = data.compose || {};
@@ -497,6 +516,15 @@ class OmniInbox {
 			else if (z.paid) html += `<div class="oi-warn">${e(z.message)}</div>`;
 			if (z.quota) html += `<div class="oi-meta ${z.quota.over ? "text-danger" : ""}">${e(z.quota.text)}</div>`;
 		}
+		const ms = c.messenger;
+		if (ms && c.can_write) {
+			html += `<textarea class="form-control oi-text-m" rows="3" maxlength="6000" placeholder="${e(__("Nhập tin trả lời Messenger"))}" ${ms.can_send ? "" : "disabled"}></textarea>
+				<div class="oi-actions">
+					<button class="btn btn-primary btn-sm oi-send-m" ${ms.can_send ? "" : "disabled"}>${e(__("Gửi qua Messenger"))}</button>
+					${ms.sandbox ? `<span class="oi-meta">${e(__("Chế độ thử: không gửi thật"))}</span>` : ""}
+				</div>`;
+			if (!ms.can_send) html += `<div class="oi-error">${e(ms.message || "")}</div>`;
+		}
 		if (c.email) {
 			html += `<div class="oi-actions"><a class="btn btn-default btn-sm" href="${e(data.crm_url)}" target="_blank" rel="noopener">${e(__("Trả lời email trong CRM"))}</a></div>`;
 		}
@@ -506,20 +534,21 @@ class OmniInbox {
 	bind_compose(data) {
 		const $r = this.$right;
 		$r.find(".oi-send").on("click", () => this.send($r.find(".oi-text").val(), 0));
+		$r.find(".oi-send-m").on("click", () => this.send($r.find(".oi-text-m").val(), 0, "Meta Messenger"));
 		$r.find(".oi-phone").on("click", () => this.ask_phone(0));
 	}
 
-	send(text, confirm_paid) {
+	send(text, confirm_paid, channel = "Zalo OA") {
 		const lead = this.current;
 		if (!(text || "").trim()) {
 			frappe.show_alert({ message: __("Nội dung tin nhắn đang trống"), indicator: "orange" });
 			return;
 		}
-		this.$right.find(".oi-send").prop("disabled", true); // chống bấm hai lần
+		this.$right.find(channel === "Zalo OA" ? ".oi-send" : ".oi-send-m").prop("disabled", true); // chống bấm hai lần
 		frappe
 			.call({
 				method: "omni_crm.api.inbox.send_reply",
-				args: { lead, channel: "Zalo OA", text, confirm_paid },
+				args: { lead, channel, text, confirm_paid },
 				freeze: false,
 			})
 			.then((r) => {
@@ -527,7 +556,7 @@ class OmniInbox {
 				if (res.status === "confirm_required") {
 					frappe.confirm(
 						frappe.utils.escape_html(res.warning) + "<br>" + __("Bạn vẫn muốn gửi?"),
-						() => this.send(text, 1),
+						() => this.send(text, 1, channel),
 						() => this.load_thread(lead, true)
 					);
 					return;

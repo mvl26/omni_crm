@@ -95,6 +95,7 @@ BULK_NAME = re.compile(r"bulk|broadcast|mass|blast|newsletter|campaign_send|send
 OUTBOUND_CREATORS = {
 	"api/inbox.py",
 	"channels/zalo/worker_hooks.py",
+	"channels/meta_messenger/worker_hooks.py",  # ADR 0022: ghi echo (tin nhân viên đã gửi), một tin một Lead
 	"pipeline/outbound.py",
 	"channels/zalo/phone_request.py",  # V3-07: thẻ xin số, mỗi lần MỘT định danh (hẹn theo lô tin vừa Done)
 }

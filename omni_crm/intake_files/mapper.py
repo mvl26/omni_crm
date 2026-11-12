@@ -5,12 +5,15 @@ nên không cần DocType mới. Chống trùng dùng đúng `dedupe_key` của 
 `external_message_id` trùng với đường nhận trực tiếp để một tin đi cả hai đường vẫn chỉ vào một lần:
 - email: đi qua Communication + Email Account có sẵn của CRM (không có đường email thứ hai), khóa là Message-ID;
 - cuộc gọi: call_id;
-- form landing: sha1(event_key) làm submission_id (giống relay của miyano-intake).
+- form landing: sha1(event_key) làm submission_id (giống relay của miyano-intake);
+- Messenger (ADR 0022): phần sau "messenger:" của event_key (mid của Meta; Send API trả đúng mã này nên echo của tin
+  ta gửi trùng khóa với Omni Outbound Message).
 """
 
 from __future__ import annotations
 
 import hashlib
+import posixpath
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -32,7 +35,7 @@ DISPOSITION = {
 
 # Lý do bỏ qua (khóa ổn định để thống kê / test)
 SKIP_UNSUPPORTED_SCHEMA = "schema_la"
-SKIP_NO_CHANNEL_TYPE = "kenh_chua_ho_tro"  # ví dụ Messenger: CRM chưa có loại kênh (cần ADR)
+SKIP_NO_CHANNEL_TYPE = "kenh_chua_ho_tro"  # loại tin CRM chưa có kênh (ví dụ Instagram)
 SKIP_LIVE_PATH = "da_co_duong_truc_tiep"  # lead Meta chạy qua webhook meta_leads, không nạp từ file
 SKIP_EMPTY = "khong_co_du_lieu"
 
@@ -183,6 +186,73 @@ def _call(env: dict, channel: str) -> Mapped:
 	return Mapped("Telephony", event)
 
 
+MESSENGER = "Meta Messenger"
+ECHO = "oa_echo"  # tin Page gửi ngoài hệ thống: cùng loại sự kiện với Zalo (ADR 0022 mục 9)
+
+
+def _messenger(env: dict, channel: str) -> Mapped:
+	"""Tin Messenger -> InboundEvent của kênh Meta Messenger (ADR 0022). Đính kèm giữ `path` trong spool; runner chép
+	vào File rồi thay bằng `url` trước khi lưu.
+
+	- Tin của khách và postback (khách bấm nút) -> `message`; tin Page gửi ngoài hệ thống (`direction = "out"`) -> `oa_echo`.
+	- Referral đứng riêng (khách mở hội thoại từ quảng cáo, chưa nhắn) -> `ignored`: lưu để tra cứu, không tạo Lead.
+	"""
+	key = str(env.get("event_key") or "")
+	if not key.startswith("messenger:") or len(key) <= len("messenger:"):
+		return Mapped(skip=SKIP_EMPTY)
+	ext = key.split(":", 1)[1]
+	echo = env.get("direction") == "out"
+	if echo:
+		thread = str(env.get("thread_ref") or "")
+		psid = thread.split(":", 1)[1] if thread.startswith("messenger:") else ""
+	else:
+		psid = str((env.get("sender") or {}).get("value") or "")
+	if not psid:
+		return Mapped(skip=SKIP_EMPTY)
+	content = env.get("content") or {}
+	text = str(content.get("text") or "")[:MAX_TEXT] or None
+	attachments = [
+		{
+			"type": str(a.get("type") or "file"),
+			"path": a.get("path"),
+			"name": posixpath.basename(str(a.get("path") or "")) or str(a.get("type") or "file"),
+		}
+		for a in content.get("attachments") or []
+		if isinstance(a, dict)
+	]
+	if echo:
+		event_type = ECHO
+	elif ext.startswith("referral:"):
+		event_type = "ignored"
+	else:
+		event_type = "message"
+	if event_type == "message" and not text and not attachments:
+		return Mapped(skip=SKIP_EMPTY)
+	profile = {"psid": psid, "page_id": str((env.get("source") or {}).get("account") or "")}
+	name = (env.get("sender") or {}).get("display_name")
+	if name and not echo:
+		profile["display_name"] = str(name)[:140]
+	event = InboundEvent(
+		channel=channel,
+		channel_type=MESSENGER,
+		event_type=event_type,
+		external_message_id=ext[:140],
+		external_sender_id=psid,
+		received_at=_dt(env.get("occurred_at")) or _dt(env.get("received_at")) or datetime.now(),
+		text=text,
+		attachments=attachments,
+		sender_profile=profile,
+		raw={"intake": env},
+	)
+	return Mapped(MESSENGER, event)
+
+
+def echo_app_id(env: dict) -> str:
+	"""`app_id` của tin echo (ứng dụng đã gửi tin); rỗng nếu không có."""
+	message = ((env.get("raw") or {}).get("event") or {}).get("message") or {}
+	return str(message.get("app_id") or "")
+
+
 def map_envelope(env: Any) -> Mapped:
 	"""Phân loại và ánh xạ một envelope. `channel` thật được gắn sau (cần tra DB) bằng `with_channel`."""
 	if not isinstance(env, dict) or str(env.get("schema")) != SCHEMA:
@@ -196,11 +266,15 @@ def map_envelope(env: Any) -> Mapped:
 		return Mapped("Web Form", body=webform_body(env))
 	if kind == "lead_form":
 		return Mapped(skip=SKIP_LIVE_PATH)
-	return Mapped(skip=SKIP_NO_CHANNEL_TYPE)  # message (Messenger), v.v.
+	if kind == "message" and env.get("channel") == "messenger":
+		return Mapped(MESSENGER)
+	return Mapped(skip=SKIP_NO_CHANNEL_TYPE)  # Instagram, v.v.
 
 
 def with_channel(env: dict, mapped: Mapped, channel: str) -> Mapped:
-	"""Dựng InboundEvent cho loại cần tên kênh (Telephony)."""
+	"""Dựng InboundEvent cho loại cần tên kênh (Telephony, Meta Messenger)."""
 	if mapped.channel_type == "Telephony":
 		return _call(env, channel)
+	if mapped.channel_type == MESSENGER:
+		return _messenger(env, channel)
 	return mapped

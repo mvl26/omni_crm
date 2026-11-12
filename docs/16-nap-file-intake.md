@@ -14,7 +14,7 @@ Dịch vụ `miyano-intake` ghi mỗi sự kiện (Gmail, Messenger, tổng đà
 | `call` (stringee, asterisk) | Telephony | `call_ended` (chỉ cuộc gọi đã kết thúc) | `call_id` |
 | `lead_form`, `booking` (web_form) | Web Form | `form_lead`, qua `WebFormAdapter.parse` | sha1(`event_key`), đúng `submission_id` mà relay của intake gửi |
 | `lead_form` (meta) | — | bỏ qua | đã có webhook `meta_leads` (CRM tự lấy lead) |
-| `message` (messenger) | — | **chưa hỗ trợ** | xem dưới |
+| `message` (messenger) | Meta Messenger (ADR 0022) | `message` (tin khách, postback); `oa_echo` (Page gửi, `direction = "out"`); referral đứng riêng -> `ignored` | phần sau `messenger:` của `event_key` (mid) |
 
 Thư Gmail xếp vào Spam: intake (từ nhánh `feat/gmail-doc-spam`) vẫn ghi file với `review_reasons: ["gmail_spam"]`; khi nạp, tiêu đề Communication có tiền tố `[Gmail xếp vào Spam - cần xem lại]` để sale thấy ngay ở tab email của Lead. Spam là bản tin/thư tự động thì intake vẫn đánh dấu `ignored` và CRM bỏ qua.
 
@@ -25,7 +25,8 @@ Vì khóa trùng với đường trực tiếp, một tin đi cả hai đường
 ## Cấu hình (site_config, không thêm trường DocType)
 
 - `omni_intake_dir`: thư mục spool của intake (chứa `inbox/`). Vắng = tắt hoàn toàn.
-- `omni_intake_channels` (tùy chọn): `{"Telephony": "<Omni Channel>", "Web Form": "..."}` (email không cần khai). Vắng thì dùng kênh **duy nhất đang bật** của loại đó; không có hoặc nhiều hơn một thì file nằm lại trong `inbox/`, không đoán.
+- `omni_intake_kinds`: thêm `"messenger"` để nạp Messenger (mặc định chỉ `email`).
+- `omni_intake_channels` (tùy chọn): `{"Telephony": "<Omni Channel>", "Web Form": "...", "Meta Messenger": "..."}` (email không cần khai). Vắng thì dùng kênh **duy nhất đang bật** của loại đó; không có hoặc nhiều hơn một thì file nằm lại trong `inbox/`, không đoán.
 - Chạy ngay khi có file nhờ tiến trình `watcher` (mục "Độ trễ thấp"); cron `omni_crm.intake_files.runner.run` mỗi phút là lưới an toàn. Mỗi lúc một lượt (khóa Redis), tối đa 200 file/vòng, cũ trước.
 - Thủ công: `bench --site <site> execute omni_crm.intake_files.runner.run`.
 
@@ -60,7 +61,7 @@ Cập nhật mã omni_crm thì khởi động lại cả nó: `sudo supervisorct
 
 ## Số phận của file
 
-`archive/` (đã nạp hoặc trùng hoặc bỏ qua có chủ đích), `chua_nap/` (loại chưa hỗ trợ, giữ để nạp sau), `dead_crm/` + `.loi.txt` (hỏng, quá 2 MB, lỗi DB), nằm lại `inbox/` (thiếu kênh). Cùng cấu trúc ngày để tra cứu.
+`archive/` (đã nạp hoặc trùng hoặc bỏ qua có chủ đích), `chua_nap/` (loại chưa hỗ trợ, ví dụ Instagram, giữ để nạp sau), `dead_crm/` + `.loi.txt` (hỏng, quá 2 MB, lỗi DB), nằm lại `inbox/` (thiếu kênh). Cùng cấu trúc ngày để tra cứu.
 
 ## Dựng kênh email cho hộp thư chỉ đọc qua intake
 
@@ -80,9 +81,24 @@ Hiện trạng site yhct (ảnh chụp 10/11/2026): có 3 Omni Channel là `zalo
 
 ## Việc cần quyết (xem docs/12 mục Phát hiện)
 
-1. **Messenger**: Omni Channel chưa có loại "Meta Messenger"; thêm cần ADR (quy ước CLAUDE.md mục 3). Hiện file Messenger được cất ở `chua_nap/`, không mất.
+1. **Messenger**: đã quyết, ADR 0022 (mục "Messenger" bên dưới).
 2. **Email qua Gmail API**: hộp thư chỉ đọc qua intake cần một Email Account "vỏ" (`enable_incoming` tắt, `email_id` = địa chỉ hộp thư) và một Omni Channel Email trỏ vào nó. Nếu CRM đã tự kéo hộp thư đó thì file Gmail bị bỏ qua, không cần làm gì.
-3. **Đính kèm**: file đính kèm của intake nằm trong `<spool>/attachments/`, mới được ghi là tham chiếu đường dẫn, chưa chép vào File của Frappe.
+3. **Đính kèm**: Messenger chép vào File riêng tư của Frappe (ADR 0022). Email và cuộc gọi vẫn chỉ ghi tham chiếu đường dẫn.
+
+## Messenger (ADR 0022)
+
+- Một đường nhận duy nhất: file của miyano-intake. Không có webhook Messenger vào omni_crm (`MetaMessengerAdapter.verify_request` luôn từ chối).
+- Kênh: Omni Channel loại `Meta Messenger` (trên yhct: `messenger-mvl`), điền `meta_page_id` (bắt buộc khi bật), `meta_app_id`, `meta_page_access_token` (gửi tin, lấy tên); `outbound_enabled` để trả lời từ Hộp thư.
+- Bỏ: tin của Page khác `meta_page_id`; echo của chính tin CRM gửi (`raw.event.message.app_id` = `meta_app_id`, và trong worker: đã có Omni Outbound Message cùng mã tin).
+- Đính kèm: `content.attachments[].path` (trong `<spool>/attachments/`, chặn đường dẫn ra ngoài) được chép vào File riêng tư rồi gắn vào Omni Inbound Message (quyền mở tệp theo quyền đọc tin). Tệp thiếu, quá `max_file_size` hoặc không lưu được (ảnh hỏng) chỉ ghi tên và lý do; tin vẫn được nạp. Hộp thư và tab Hoạt động hiện ảnh/sticker, trình phát video/âm thanh, liên kết tải cho tệp khác.
+- Lead: tin đầu của PSID mới tạo Lead nguồn `Facebook Messenger`; tên lấy qua Graph (lỗi thì tên giữ chỗ "Khách Meta Messenger …"). Tin hiện ở tab Hoạt động (Communication thường) và Hộp thư.
+- Trả lời: Hộp thư, chỉ chữ, trong 24 giờ kể từ tin cuối của khách (`messaging_type = RESPONSE`); ngoài 24 giờ bị chặn kèm lý do.
+- **Nạp bù** tin nhận trước khi bật kênh (đã bị cất `chua_nap/` hoặc ghi dấu Redis ở spool chỉ đọc):
+
+```bash
+bench --site <site> execute omni_crm.intake_files.runner.backfill --kwargs '{"kinds": ["messenger"], "since": "2026-11-01"}'             # chỉ đếm
+bench --site <site> execute omni_crm.intake_files.runner.backfill --kwargs '{"kinds": ["messenger"], "since": "2026-11-01", "apply": 1}' # nạp
+```
 
 ## Triển khai lên server (email thử nghiệm)
 

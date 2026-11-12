@@ -26,6 +26,7 @@ LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
 OUTBOUND = "Omni Outbound Message"
 IDENTITY = "Omni Identity"
+MESSENGER = "Meta Messenger"  # ADR 0022
 CALL = "Omni Call"
 CALL_FINAL_STATUSES = ("Answered", "Missed", "Busy", "Failed", "Voicemail")
 MAX_CANDIDATES = 300  # số Lead gần nhất được xét cho một lần tải danh sách
@@ -279,11 +280,19 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 
 
 def _safe_attachments(raw: Any) -> list[dict]:
-	"""Đính kèm đã lọc URL: {url, name} (+ type, thumb, inline nếu có). `inline` = được vẽ thành ảnh (ADR 0020)."""
+	"""Đính kèm đã lọc URL: {url, name} (+ type, thumb, inline nếu có). `inline` = được vẽ thành ảnh (ADR 0020).
+
+	Messenger (ADR 0022): thêm `mime` nếu có; tệp không lưu được vào File (không có url) chỉ hiện tên và ghi chú.
+	"""
 	out = []
 	for a in parse_attachments(raw):
 		url = str(a.get("url") or "")
 		if not media.is_safe_link(url):
+			if not url and a.get("note"):
+				item = {"url": "", "name": str(a.get("name") or ""), "note": str(a.get("note"))[:200]}
+				if a.get("type"):
+					item["type"] = str(a.get("type")).strip().lower()[:30]
+				out.append(item)
 			continue
 		kind = str(a.get("type") or "").strip().lower()[:30]
 		name = str(a.get("name") or "")
@@ -296,6 +305,8 @@ def _safe_attachments(raw: Any) -> list[dict]:
 		item = {"url": url, "name": name}
 		if kind:
 			item["type"] = kind
+		if a.get("mime"):
+			item["mime"] = str(a.get("mime"))[:100]
 		thumb = str(a.get("thumb") or "")
 		if thumb and media.is_inline_image_url(thumb):
 			item["thumb"] = thumb
@@ -576,9 +587,14 @@ def check_lead_write(lead: str) -> str:
 
 def _zalo_target(lead: str) -> tuple[Any, Any] | None:
 	"""(identity_doc, channel_doc) Zalo mới nhất của Lead; None nếu Lead chưa có định danh Zalo."""
+	return _channel_target(lead, "Zalo OA")
+
+
+def _channel_target(lead: str, channel_type: str) -> tuple[Any, Any] | None:
+	"""(identity_doc, channel_doc) mới nhất của Lead trên loại kênh chat; None nếu Lead chưa có định danh loại đó."""
 	ident = frappe.get_all(
 		IDENTITY,
-		filters={"lead": lead, "channel_type": "Zalo OA"},
+		filters={"lead": lead, "channel_type": channel_type},
 		pluck="name",
 		order_by="last_inbound_at desc, creation desc",
 		limit_page_length=1,
@@ -588,7 +604,7 @@ def _zalo_target(lead: str) -> tuple[Any, Any] | None:
 	identity_doc = frappe.get_doc(IDENTITY, ident[0])
 	channel = frappe.db.get_value(
 		INBOUND, {"identity": identity_doc.name}, "channel", order_by="received_at desc"
-	) or frappe.db.get_value("Omni Channel", {"channel_type": "Zalo OA", "enabled": 1}, "name")
+	) or frappe.db.get_value("Omni Channel", {"channel_type": channel_type, "enabled": 1}, "name")
 	if not channel or not frappe.db.exists("Omni Channel", channel):
 		return None
 	return identity_doc, frappe.get_doc("Omni Channel", channel)
@@ -598,6 +614,7 @@ def compose_state(lead: str) -> dict:
 	"""Trạng thái khung soạn tin của Lead: khả năng gửi Zalo, cảnh báo phí, nút xin SĐT, quyền ghi."""
 	can_write = bool(frappe.has_permission(LEAD, "write", doc=lead))
 	state: dict = {"can_write": can_write, "zalo": None, "email": bool(_has_channel(lead, "Email"))}
+	state["messenger"] = _messenger_state(lead)
 	target = _zalo_target(lead)
 	if not target:
 		return state
@@ -626,6 +643,19 @@ def compose_state(lead: str) -> dict:
 		"quota": _quota_safe() if paid else None,
 	}
 	return state
+
+
+def _messenger_state(lead: str) -> dict | None:
+	"""Khung soạn Messenger (ADR 0022): gửi được không và lý do; None nếu Lead chưa có định danh Messenger."""
+	target = _channel_target(lead, MESSENGER)
+	if not target:
+		return None
+	identity_doc, channel_doc = target
+	try:
+		ok, reason = get_adapter(MESSENGER).can_send_now(identity_doc, channel_doc, source="Sale")
+	except AdapterNotFoundError:
+		ok, reason = False, _("Chưa có adapter Messenger")
+	return {"can_send": bool(ok), "message": reason or "", "sandbox": bool(flags.sandbox())}
 
 
 def _quota_safe() -> dict | None:
@@ -658,9 +688,46 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 	lead = check_lead_write(lead)
 	if channel == "Email":
 		frappe.throw(_("Email được trả lời bằng trình soạn thư của CRM; hãy mở Lead trong CRM."))
+	if channel == MESSENGER:
+		return send_messenger(lead, text)
 	if channel != "Zalo OA":
 		frappe.throw(_("Kênh {0} chưa hỗ trợ trả lời từ Hộp thư").format(channel))
 	return send_zalo(lead, text, confirm_paid)
+
+
+def send_messenger(lead: str, text: str) -> dict:
+	"""Gửi tin chữ của Sale qua Messenger (ADR 0022, D1); cùng các chặn như Zalo. Người gọi PHẢI đã kiểm quyền ghi."""
+	text = (text or "").strip()
+	if not text:
+		frappe.throw(_("Nội dung tin nhắn đang trống"))
+	if len(text) > outbound_pipeline.MAX_TEXT_CHARS:
+		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(outbound_pipeline.MAX_TEXT_CHARS))
+	target = _channel_target(lead, MESSENGER)
+	if not target:
+		frappe.throw(_("Khách này chưa có tài khoản Messenger liên kết với Lead"))
+	from omni_crm.api import customer as customer_api
+
+	if customer_api._person_flags(lead)["refused"]:
+		frappe.throw(
+			_("Người này đã từ chối nhận liên hệ (hoặc đã bị xóa dữ liệu): không gửi tin nhắn từ hệ thống.")
+		)
+	identity_doc, channel_doc = target
+	ok, reason = get_adapter(MESSENGER).can_send_now(identity_doc, channel_doc, source="Sale")
+	if not ok:
+		name = _record_blocked(channel_doc, identity_doc, lead, text, reason)
+		return {"status": "Blocked", "outbound": name, "reason": reason}
+	name = outbound_pipeline.queue_outbound(
+		OutboundRequest(
+			channel=channel_doc.name,
+			identity=identity_doc.name,
+			text=text,
+			reply_to_external_id=None,
+			source="Sale",
+		),
+		user=frappe.session.user,
+	)
+	timeline.notify(lead, [MESSENGER])
+	return {"status": "Queued", "outbound": name, "warning": ""}
 
 
 def send_zalo(lead: str, text: str, confirm_paid: int | str = 0, attachment: dict | None = None) -> dict:
@@ -756,7 +823,7 @@ def _record_blocked(
 		}
 	)
 	doc.insert(ignore_permissions=True)
-	timeline.notify(lead, ["Zalo OA"])
+	timeline.notify(lead, [channel_doc.channel_type])
 	return doc.name
 
 

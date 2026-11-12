@@ -293,17 +293,22 @@ class TestIntakeFilesIntegration(FrappeTestCase):
 		leads.discard(None)
 		self.assertEqual(len(leads), 1, "form và lịch demo của cùng một khách phải về một Lead")
 
-	def test_messenger_duoc_cat_lai_va_thieu_kenh_giu_nguyen(self):
+	def test_thieu_kenh_giu_nguyen(self):
+		# ADR 0022: Messenger không còn bị cất vào chua_nap; chưa có kênh Meta Messenger thì giữ trong inbox như loại khác.
 		self.put("messenger", "m", envelope("message", "messenger:m_1", channel="messenger"))
 		self.put(
 			"web_form", "f", envelope("lead_form", "web:spd:x", channel="web_form", source={"account": "spd"})
 		)
-		with mock.patch.dict(frappe.conf, {"omni_intake_channels": {"Web Form": "khong-ton-tai"}}):
+		with mock.patch.dict(
+			frappe.conf,
+			{"omni_intake_channels": {"Web Form": "khong-ton-tai", "Meta Messenger": "khong-ton-tai"}},
+		):
 			stats = runner.run()
-		self.assertEqual((stats["chua_ho_tro"], stats["thieu_kenh"], stats["moi"]), (1, 1, 0), stats)
-		self.assertTrue((self.root / "chua_nap" / "2026/11/03/messenger/m.json").exists())
+		self.assertEqual((stats["thieu_kenh"], stats["moi"]), (2, 0), stats)
+		self.assertTrue((self.dir / "messenger" / "m.json").exists())
 		self.assertTrue((self.dir / "web_form" / "f.json").exists())  # nạp lại được khi kênh sẵn sàng
-		self.assertEqual(runner.run()["moi"], 1)
+		with mock.patch.dict(frappe.conf, {"omni_intake_channels": {"Meta Messenger": "khong-ton-tai"}}):
+			self.assertEqual(runner.run()["moi"], 1)
 
 
 class TestEnsureEmailChannel(FrappeTestCase):
