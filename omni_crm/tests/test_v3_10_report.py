@@ -348,3 +348,42 @@ class TestViews(ReportCase):
 		with self.assertRaises(frappe.ValidationError):
 			api.score_item(a)
 		self.assertTrue(callable(scoring.score_item))
+
+	def test_marketing_user_cannot_schedule_or_rescore_via_pages(self):
+		"""Các trang gọi frappe.client trực tiếp: Marketing User không được tự lên lịch, đổi trạng thái hay điểm."""
+		from frappe.client import insert, set_value
+
+		from omni_crm.tests.test_v3_10_marketing import make_user
+
+		writer = make_user(f"{PREFIX.lower()}-writer@example.com", roles.USER)
+		good = self.item("Đủ điểm", status=rules.I_DRAFT, score=95)
+		t = self.target(good, status=rules.T_REVIEW)
+		frappe.db.set_value(TARGET, t, "scheduled_at", add_to_date(now_datetime(), hours=5))
+		frappe.db.commit()
+		frappe.set_user(writer)
+		results = {r["title"]: r for r in api.approve_campaign(self.camp.name)}
+		self.assertEqual(results["Đủ điểm"]["status"], rules.I_REVIEW)  # chỉ gửi duyệt, không lên lịch
+		self.assertEqual(frappe.db.get_value(TARGET, t, "status"), rules.T_REVIEW)
+		for doctype, name, field, value in (
+			(TARGET, t, "status", rules.T_SCHEDULED),
+			(ITEM, good, "status", rules.I_SCHEDULED),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				set_value(doctype, name, field, value)
+		frappe.db.set_value(ITEM, good, "status", rules.I_DRAFT)
+		with self.assertRaises(frappe.ValidationError):
+			set_value(ITEM, good, "quality_score", 100)
+		self.assertEqual(frappe.db.get_value(ITEM, good, "quality_score"), 95)
+		frappe.db.set_value(ITEM, good, "status", rules.I_REVIEW)
+		new = insert(
+			{
+				"doctype": TARGET,
+				"content_item": good,
+				"platform": rules.FACEBOOK,
+				"channel_account": self.meta,
+				"post_format": "fb_link",
+				"scheduled_at": add_to_date(now_datetime(), hours=6),
+				"status": rules.T_SCHEDULED,
+			}
+		)
+		self.assertEqual(new["status"], rules.T_REVIEW)
