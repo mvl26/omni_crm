@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-13 10:00:00.000000",
- "modified": "2026-11-13 10:00:00.000000",
+ "modified": "2026-11-13 11:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -82,12 +82,15 @@
    "fieldname": "quality_score",
    "fieldtype": "Int",
    "label": "Điểm chất lượng",
-   "non_negative": 1
+   "non_negative": 1,
+   "read_only": 1,
+   "description": "Do AI chấm; sửa tiêu đề/caption/ảnh thì về 0 và phải chấm lại"
   },
   {
    "fieldname": "quality_note",
    "fieldtype": "Small Text",
-   "label": "Lý do chấm điểm"
+   "label": "Lý do chấm điểm",
+   "read_only": 1
   },
   {
    "fieldname": "sec_content",

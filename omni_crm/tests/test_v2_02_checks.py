@@ -32,6 +32,15 @@ EXPECTED_WHITELISTED = {
 		"submit_item",
 		"approve_item",
 		"cancel_item",
+		"ai_budget",  # Prompt 4: AI chỉ soạn / chấm, không đăng; mỗi lời gọi MỘT phiên / MỘT bài / MỘT câu hỏi
+		"planner_send",
+		"planner_state",
+		"planner_create",
+		"score_item",
+		"kb_overview",
+		"kb_reindex",
+		"kb_ask",
+		"kb_feedback",
 	},
 	"api/admin.py": {
 		"reprocess",

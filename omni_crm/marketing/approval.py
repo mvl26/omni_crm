@@ -19,6 +19,25 @@ from omni_crm.marketing import settings as mk_settings
 ITEM = "Omni Content Item"
 TARGET = "Omni Content Target"
 CAMPAIGN = "Omni Campaign"
+PLACEHOLDER = "[cần bổ sung]"
+NEED_IMAGE = {"fb_photo": 1, "fb_multi_photo": 2, "zalo_article": 1}
+
+
+def _check_media(doc, item: str) -> None:
+	"""Định dạng cần ảnh (ảnh FB, nhiều ảnh FB, bài viết Zalo cần ảnh bìa) phải có đủ ảnh trước khi lên lịch."""
+	images = len([x for x in [doc.media] + [m.image for m in (doc.get("media_items") or [])] if x])
+	for t in frappe.get_all(
+		TARGET,
+		filters={"content_item": item, "status": ["!=", rules.T_CANCELLED]},
+		fields=["platform", "post_format"],
+	):
+		need = NEED_IMAGE.get(t.post_format, 0)
+		if images < need:
+			frappe.throw(
+				_("Định dạng {0} trên {1} cần ít nhất {2} ảnh: thêm ảnh trước khi duyệt").format(
+					t.post_format, t.platform, need
+				)
+			)
 
 
 def _targets(item: str, exclude_cancelled: bool = True) -> list:
@@ -82,9 +101,12 @@ def approve(item: str) -> str:
 	score = doc.quality_score or 0
 	if score < threshold:
 		frappe.throw(_("Điểm chất lượng {0} dưới ngưỡng {1}: chưa lên lịch được").format(score, threshold))
+	if PLACEHOLDER in f"{doc.title or ''} {doc.caption or ''}":
+		frappe.throw(_("Bài còn chỗ [cần bổ sung]: điền đủ thông tin trước khi duyệt"))
 	targets = _targets(item)
 	if not targets:
 		frappe.throw(_("Bài chưa chọn nền tảng đăng nào"))
+	_check_media(doc, item)
 	earliest = add_to_date(now_datetime(), minutes=-mk_settings.late_window_minutes())
 	for t in targets:
 		if get_datetime(t.scheduled_at) < earliest:

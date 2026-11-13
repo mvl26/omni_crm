@@ -101,20 +101,19 @@ class MarketingCase(FrappeTestCase):
 		)
 
 	def item(self, campaign: str, score: int = 90, **kw) -> str:
-		return (
-			frappe.get_doc(
-				{
-					"doctype": ITEM,
-					"campaign": campaign,
-					"title": "Bài thử",
-					"caption": "Miyano giới thiệu SPD",
-					"quality_score": score,
-					**kw,
-				}
-			)
-			.insert(ignore_permissions=True)
-			.name
+		doc = frappe.get_doc(
+			{
+				"doctype": ITEM,
+				"campaign": campaign,
+				"title": "Bài thử",
+				"caption": "Miyano giới thiệu SPD",
+				"media": "/files/tm-cover.png",  # bài viết Zalo cần ảnh bìa trước khi duyệt
+				"quality_score": score,
+				**kw,
+			}
 		)
+		doc.flags.score_via_ai = True  # điểm chỉ do bộ chấm AI ghi (Prompt 4)
+		return doc.insert(ignore_permissions=True).name
 
 	def target(self, item: str, platform: str = rules.ZALO, minutes: int = 120, **kw) -> str:
 		channel = {rules.ZALO: self.zalo, rules.FACEBOOK: self.meta}.get(platform)

@@ -17,6 +17,7 @@ from frappe.utils import cint, today
 from jsonschema import Draft202012Validator
 
 from omni_crm import flags
+from omni_crm.bot import pricing
 from omni_crm.monitoring.alerts import Alert, deliver_now
 from omni_crm.pipeline.retry import redact
 
@@ -65,6 +66,7 @@ class AIResponse:
 	output_tokens: int = 0
 	cache_read_tokens: int = 0
 	cache_creation_tokens: int = 0
+	stop_reason: str = ""
 
 
 @dataclass
@@ -154,6 +156,7 @@ class AnthropicClient:
 			output_tokens=cint(usage.output_tokens),
 			cache_read_tokens=cint(getattr(usage, "cache_read_input_tokens", 0)),
 			cache_creation_tokens=cint(getattr(usage, "cache_creation_input_tokens", 0)),
+			stop_reason=str(getattr(resp, "stop_reason", "") or ""),
 		)
 
 	def converse(
@@ -251,7 +254,8 @@ def _counter_key() -> str:
 
 def _tokens_from_db() -> int:
 	row = frappe.db.sql(
-		f"select coalesce(sum(input_tokens + output_tokens), 0) from `tab{BOT_RUN}` where creation >= %s",
+		f"select coalesce(sum(input_tokens + output_tokens), 0) from `tab{BOT_RUN}` "
+		"where creation >= %s and kind != 'Marketing'",  # Marketing có ngân sách USD/tháng riêng
 		today(),
 	)
 	return cint(row[0][0]) if row else 0
@@ -368,6 +372,10 @@ def switch_on(kind: str) -> bool:
 		return flags.recording_enabled()
 	if kind == "Assistant":
 		return flags.assistant_enabled()
+	if kind == "Marketing":
+		from omni_crm.marketing import settings as mk_settings
+
+		return mk_settings.hub_enabled()
 	return kind == "Judge"  # bộ đề: chạy tay, chỉ chịu hạn mức token
 
 
@@ -407,12 +415,24 @@ class _Outcome:
 	input_tokens: int = 0
 	output_tokens: int = 0
 	cache_read_tokens: int = 0
+	cache_creation_tokens: int = 0
 	started: float = field(default_factory=time.monotonic)
 
 
-def _record(kind: str, model: str, outcome: _Outcome, **meta: Any) -> None:
+@dataclass
+class ToolResult:
+	"""Kết quả `call_tool_result`: `output` None khi bị bỏ qua/lỗi; `status` theo Omni Bot Run; `run` là tên Bot Run."""
+
+	output: dict | None
+	status: str
+	error: str = ""
+	run: str | None = None
+	cost_usd: float = 0.0
+
+
+def _record(kind: str, model: str, outcome: _Outcome, **meta: Any) -> str:
 	settings = frappe.get_cached_doc("Omni Settings")
-	frappe.get_doc(
+	doc = frappe.get_doc(
 		{
 			"doctype": BOT_RUN,
 			"kind": kind,
@@ -428,6 +448,13 @@ def _record(kind: str, model: str, outcome: _Outcome, **meta: Any) -> None:
 			"input_tokens": outcome.input_tokens,
 			"output_tokens": outcome.output_tokens,
 			"cache_read_tokens": outcome.cache_read_tokens,
+			"cost_usd": pricing.cost_usd(
+				model,
+				outcome.input_tokens,
+				outcome.output_tokens,
+				outcome.cache_read_tokens,
+				outcome.cache_creation_tokens,
+			),
 			"latency_ms": int((time.monotonic() - outcome.started) * 1000),
 			"request_digest": meta.get("digest"),
 			"output_json": json.dumps(outcome.output, ensure_ascii=False) if outcome.output else None,
@@ -435,6 +462,7 @@ def _record(kind: str, model: str, outcome: _Outcome, **meta: Any) -> None:
 		}
 	).insert(ignore_permissions=True)
 	frappe.db.commit()  # một lần gọi = một đơn vị việc
+	return doc.name
 
 
 def _sleep(seconds: float) -> None:
@@ -442,6 +470,29 @@ def _sleep(seconds: float) -> None:
 
 
 def call_tool(
+	kind: str, model: str, system: str, messages: list[dict], tool: dict, **kwargs: Any
+) -> dict | None:
+	"""Như `call_tool_result` nhưng chỉ trả đầu vào tool đã kiểm schema (None nếu bị bỏ qua hoặc lỗi)."""
+	return call_tool_result(kind, model, system, messages, tool, **kwargs).output
+
+
+def _with_repair_note(messages: list[dict], problem: str) -> list[dict]:
+	"""Bản sao hội thoại, thêm vào lượt user cuối lời nhắc sửa đầu ra (mô tả lỗi không chứa dữ liệu khách)."""
+	note = (
+		"Lần trả lời trước chưa hợp lệ: "
+		+ problem
+		+ ". Hãy gọi lại công cụ với dữ liệu đúng schema và đúng các ràng buộc đã nêu."
+	)
+	out = [dict(m) for m in messages]
+	last = out[-1]
+	content = last.get("content")
+	blocks = list(content) if isinstance(content, list) else [{"type": "text", "text": str(content or "")}]
+	blocks.append({"type": "text", "text": note})
+	last["content"] = blocks
+	return out
+
+
+def call_tool_result(
 	kind: str,
 	model: str,
 	system: str,
@@ -456,7 +507,13 @@ def call_tool(
 	max_tokens: int = DEFAULT_MAX_TOKENS,
 	synthetic: bool = False,
 	eval_mode: bool = False,
-) -> dict | None:
+	customer_data: bool = True,
+	budget_gate: Any = None,
+	schema_retries: int = SCHEMA_RETRIES,
+	repair: bool = False,
+	check: Any = None,
+	timeout: float | None = None,
+) -> ToolResult:
 	"""Gọi AI ép dùng `tool`, trả đầu vào tool đã kiểm schema; None nếu bị bỏ qua hoặc lỗi (đã ghi Omni Bot Run).
 
 	Bỏ qua (Skipped Switch) khi công tắc tắt, thiếu khóa, hoặc dữ liệu khách chưa được cho phép gửi sang AI (Q11;
@@ -464,6 +521,16 @@ def call_tool(
 	bot nên không đòi công tắc Analyze/Reply; cổng Q11, hạn mức token và ngắt mạch vẫn áp dụng.
 	Bỏ qua (Skipped Budget) khi vượt `daily_token_budget`. Thử lại tối đa 2 lần khi lỗi tạm thời và 1 lần khi sai
 	schema.
+
+	Tham số cho Marketing Hub (V3-10, Prompt 4):
+	- `customer_data=False`: nội dung gửi đi không phải dữ liệu khách (brief chiến dịch, tài liệu nội bộ) nên không
+	  chịu cổng Q11 (docs/12 mục "Đã xác nhận"). Mặc định True: mọi chỗ cũ giữ nguyên hành vi.
+	- `budget_gate(estimate_tokens) -> str | None`: thay hạn mức token/ngày bằng hạn mức riêng (ngân sách USD/tháng);
+	  trả lý do khi phải chặn.
+	- `schema_retries`, `repair=True`: số lần sửa đầu ra sai; khi `repair` mỗi lần sửa gửi kèm mô tả lỗi cho mô hình.
+	- `check(output) -> str | None`: kiểm thêm ngoài JSON Schema (ràng buộc nghiệp vụ); lỗi thì tính như sai schema.
+	- `timeout`: timeout riêng mỗi lần gọi (giây).
+	Mô hình từ chối (`stop_reason == "refusal"`) ghi Error, không thử lại (bên gọi tự chuyển mô hình dự phòng).
 	"""
 	outcome = _Outcome()
 	meta = {
@@ -476,13 +543,15 @@ def call_tool(
 
 	reserved = 0  # token đã giữ chỗ trong bộ đếm; finish hiệu chỉnh về số thật
 
-	def finish(status: str, error: str = "", output: dict | None = None) -> dict | None:
+	def finish(status: str, error: str = "", output: dict | None = None) -> ToolResult:
 		nonlocal reserved
 		outcome.status, outcome.error, outcome.output = status, error, output
-		_add_tokens(outcome.input_tokens + outcome.output_tokens - reserved)
+		if budget_gate is None:  # lần gọi có hạn mức riêng không tính vào bộ đếm token/ngày của bot
+			_add_tokens(outcome.input_tokens + outcome.output_tokens - reserved)
 		reserved = 0
+		run = None
 		try:
-			_record(kind, model, outcome, **meta)
+			run = _record(kind, model, outcome, **meta)
 		except Exception as e:  # lỗi ghi nhật ký không được làm mất kết quả AI đã trả
 			try:
 				frappe.db.rollback()
@@ -493,47 +562,61 @@ def call_tool(
 				frappe.db.commit()
 			except Exception:
 				pass
-		return output
+		cost = pricing.cost_usd(
+			model,
+			outcome.input_tokens,
+			outcome.output_tokens,
+			outcome.cache_read_tokens,
+			outcome.cache_creation_tokens,
+		)
+		return ToolResult(output, status, error, run, cost)
 
 	if not eval_mode and not switch_on(kind):
 		return finish("Skipped Switch", _("Công tắc tương ứng đang tắt"))
-	budget = cint(frappe.get_cached_doc("Omni Settings").get("daily_token_budget"))
-	used = tokens_today()
-	if budget <= 0 or used >= budget:
+	estimate = estimate_tokens(system, messages, cache_blocks, max_tokens)
+	if budget_gate is not None:
+		blocked = budget_gate(estimate)
+		if blocked:
+			return finish("Skipped Budget", blocked)
+		budget = 0
+	else:
+		budget = cint(frappe.get_cached_doc("Omni Settings").get("daily_token_budget"))
+		used = tokens_today()
+	if budget_gate is None and (budget <= 0 or used >= budget):
 		if budget > 0:
 			_alert_budget_once(used, budget)
 		return finish("Skipped Budget", _("Đã dùng {0} / hạn mức {1} token").format(used, budget))
 	client = get_client()
 	if client is None:
 		return finish("Skipped Switch", _("Chưa cấu hình khóa Claude API"))
-	if client.is_real and not synthetic and not cint(frappe.conf.get(ALLOW_DATA_CONF)):
+	if client.is_real and customer_data and not synthetic and not cint(frappe.conf.get(ALLOW_DATA_CONF)):
 		return finish("Skipped Switch", _("Chính sách gửi dữ liệu khách sang AI (Q11) chưa được chốt"))
 
 	if breaker_open():
 		return finish("Skipped Switch", _("Ngắt mạch: AI lỗi liên tiếp, tạm ngừng gọi"))
 	# Giữ chỗ token ước lượng để các lần gọi song song thấy nhau; hạn mức vẫn là mềm (có thể vượt chút ít)
-	estimate = estimate_tokens(system, messages, cache_blocks, max_tokens)
-	before = _reserve(estimate)
-	reserved = estimate
-	if before >= budget:
+	before = _reserve(estimate) if budget_gate is None else 0
+	reserved = estimate if budget_gate is None else 0
+	if budget_gate is None and before >= budget:
 		_add_tokens(-reserved)
 		reserved = 0
 		_alert_budget_once(before, budget)
 		return finish("Skipped Budget", _("Đã dùng {0} / hạn mức {1} token").format(before, budget))
 	frappe.db.commit()  # nhả khóa DB trước khi gọi API ngoài
-	transient_left, schema_left = TRANSIENT_RETRIES, SCHEMA_RETRIES
+	transient_left, schema_left = TRANSIENT_RETRIES, schema_retries
 	attempt_transient = 0
+	send = messages
 	while True:
 		try:
 			resp = client.create(
 				kind=kind,
 				model=model,
 				system=system,
-				messages=messages,
+				messages=send,
 				tool=tool,
 				cache_blocks=cache_blocks,
 				max_tokens=max_tokens,
-				timeout=timeout_seconds(),
+				timeout=timeout or timeout_seconds(),
 			)
 		except TransientAIError as e:
 			if transient_left > 0:
@@ -553,11 +636,18 @@ def call_tool(
 		outcome.input_tokens += resp.input_tokens
 		outcome.output_tokens += resp.output_tokens
 		outcome.cache_read_tokens += resp.cache_read_tokens
+		outcome.cache_creation_tokens += getattr(resp, "cache_creation_tokens", 0) or 0
+		if getattr(resp, "stop_reason", "") == "refusal":
+			return finish("Error", "mô hình từ chối yêu cầu (refusal)")
 		problem = validate_output(resp.tool_input, tool.get("input_schema") or {"type": "object"})
+		if problem is None and check is not None:
+			problem = check(resp.tool_input)
 		if problem is None:
 			return finish("Success", output=resp.tool_input)
 		if schema_left > 0:
 			schema_left -= 1
+			if repair:
+				send = _with_repair_note(messages, problem)
 			continue
 		return finish("Invalid Output", problem)
 

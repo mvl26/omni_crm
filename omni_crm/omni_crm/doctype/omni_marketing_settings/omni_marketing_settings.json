@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-13 10:00:00.000000",
- "modified": "2026-11-13 10:00:00.000000",
+ "modified": "2026-11-13 11:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -122,18 +122,22 @@
   {
    "fieldname": "ai_model",
    "fieldtype": "Data",
-   "label": "Mô hình AI chính"
+   "label": "Mô hình AI chính",
+   "description": "Để trống: claude-opus-5-5"
   },
   {
    "fieldname": "ai_fallback_model",
    "fieldtype": "Data",
-   "label": "Mô hình AI dự phòng"
+   "label": "Mô hình AI dự phòng",
+   "description": "Để trống: claude-sonnet-5-5"
   },
   {
    "fieldname": "monthly_ai_budget",
-   "fieldtype": "Currency",
-   "label": "Hạn mức chi phí AI mỗi tháng",
-   "non_negative": 1
+   "fieldtype": "Float",
+   "label": "Ngân sách AI mỗi tháng (USD)",
+   "non_negative": 1,
+   "precision": "2",
+   "description": "Tính theo bảng giá Claude API. 0 = tắt AI marketing."
   },
   {
    "fieldname": "sec_voice",

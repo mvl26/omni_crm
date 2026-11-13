@@ -42,6 +42,22 @@ def platform_of(channel_type: str | None) -> str | None:
 	return None
 
 
+def default_channel(platform: str) -> str | None:
+	"""Kênh đăng mặc định của nền tảng: kênh bật, tạo sớm nhất (Facebook: kênh Meta có Page ID)."""
+	for r in frappe.get_all(
+		CHANNEL,
+		filters={"enabled": 1},
+		fields=["name", "channel_type", "meta_page_id"],
+		order_by="creation asc",
+	):
+		if platform_of(r.channel_type) != platform:
+			continue
+		if platform == rules.FACEBOOK and not (r.meta_page_id or "").strip():
+			continue
+		return r.name
+	return None
+
+
 def _checks() -> dict[str, Any]:
 	raw = frappe.db.get_single_value(SETTINGS, "channel_checks")
 	if isinstance(raw, dict):

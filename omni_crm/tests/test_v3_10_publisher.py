@@ -116,7 +116,7 @@ class PublisherCase(FrappeTestCase):
 		self.addCleanup(cleanup)
 
 	def approved_item(
-		self, platforms=(rules.FACEBOOK,), fmt=None, caption="Miyano giới thiệu SPD"
+		self, platforms=(rules.FACEBOOK,), fmt=None, caption="Miyano giới thiệu SPD", media=None
 	) -> tuple[str, list[str]]:
 		camp = frappe.get_doc(
 			{
@@ -132,9 +132,12 @@ class PublisherCase(FrappeTestCase):
 				"campaign": camp.name,
 				"title": "Bài thử",
 				"caption": caption,
+				"media": media,
 				"quality_score": 95,
 			}
-		).insert(ignore_permissions=True)
+		)
+		item.flags.score_via_ai = True  # điểm chỉ do bộ chấm AI ghi (Prompt 4)
+		item.insert(ignore_permissions=True)
 		names = []
 		for p in platforms:
 			names.append(
@@ -363,7 +366,10 @@ class TestPublish(PublisherCase):
 		self.assertEqual(frappe.db.get_value(TARGET, name, "error_type"), "validation")
 
 	def test_zalo_without_cover_is_validation_error(self):
-		_item, [name] = self.approved_item(platforms=(rules.ZALO,))
+		# duyệt đòi ảnh bìa; ảnh bị gỡ sau khi duyệt thì bộ đăng bài vẫn chặn (lớp kiểm thứ hai)
+		item, [name] = self.approved_item(platforms=(rules.ZALO,), media="/files/tm320-cover.png")
+		frappe.db.set_value(ITEM, item, "media", "")
+		frappe.db.commit()
 		self._start(name)
 		self.assertEqual(self.run_with(FakeAdapter(), name), rules.T_FAILED)
 		self.assertIn("ảnh bìa", frappe.db.get_value(TARGET, name, "last_error"))

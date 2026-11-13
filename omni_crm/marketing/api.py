@@ -7,7 +7,7 @@ from typing import Any
 import frappe
 from frappe import _
 
-from omni_crm.marketing import approval, channels, roles
+from omni_crm.marketing import ai, approval, channels, kb, planner, prompts, roles, rules, scoring
 from omni_crm.marketing import settings as mk_settings
 
 
@@ -87,3 +87,168 @@ def cancel_item(name: str) -> str:
 	"""Hủy lịch một bài: nền tảng chưa đăng -> Đã hủy."""
 	_require_hub()
 	return approval.cancel(name)
+
+
+# --- AI (Prompt 4) --------------------------------------------------------------------------------------------
+
+
+def _require_editor() -> None:
+	_require_hub()
+	if not roles.can_edit():
+		frappe.throw(_("Bạn không có quyền dùng AI marketing"), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def ai_budget() -> dict[str, Any]:
+	"""Ngân sách AI marketing tháng này (USD): {budget, spent, remaining}."""
+	_require_editor()
+	return ai.budget_state()
+
+
+@frappe.whitelist(methods=["POST"])
+def planner_send(text: str = "", files: Any = None, session_id: str | None = None) -> dict[str, Any]:
+	"""Khung chat tạo chiến dịch: gửi một lượt (mô tả / trả lời câu hỏi, kèm tệp); AI chạy nền, kết quả báo realtime."""
+	_require_editor()
+	files = frappe.parse_json(files) if isinstance(files, str) else files
+	return planner.start_turn(text, [str(f) for f in (files or [])], session_id or None)
+
+
+@frappe.whitelist()
+def planner_state(session_id: str) -> dict[str, Any]:
+	"""Trạng thái phiên tạo chiến dịch (câu hỏi, kế hoạch, điểm từng bài)."""
+	_require_editor()
+	return planner.public_state(planner.load(session_id))
+
+
+@frappe.whitelist(methods=["POST"])
+def planner_create(session_id: str) -> dict[str, Any]:
+	"""Nút "Duyệt và lên lịch" trên kế hoạch: tạo chiến dịch, bài, nền tảng rồi gửi duyệt / duyệt theo quy tắc."""
+	_require_editor()
+	return planner.create_from_plan(session_id)
+
+
+@frappe.whitelist(methods=["POST"])
+def score_item(name: str) -> dict[str, Any]:
+	"""Chấm điểm lại một bài (job nền); kết quả báo qua realtime oc_publish_update."""
+	_require_editor()
+	doc = frappe.get_doc("Omni Content Item", name)
+	doc.check_permission("write")
+	if doc.status not in (rules.I_DRAFT, rules.I_REVIEW):
+		frappe.throw(_("Chỉ chấm lại được bài Nháp hoặc Chờ duyệt"))
+	frappe.enqueue(
+		"omni_crm.marketing.scoring.score_item",
+		queue="long",
+		job_id=f"oc-score-{name}",
+		deduplicate=True,
+		item=name,
+	)
+	return {"queued": True}
+
+
+@frappe.whitelist()
+def kb_overview() -> dict[str, Any]:
+	"""Trang Kho tri thức: danh mục kèm số tài liệu, danh sách tài liệu."""
+	_require_editor()
+	cats = frappe.get_all(
+		kb.CATEGORY, fields=["name", "category_name", "is_active", "description"], order_by="category_name"
+	)
+	counts = dict(
+		frappe.db.sql(f"select coalesce(category, ''), count(*) from `tab{kb.DOCUMENT}` group by category")
+	)
+	docs = frappe.get_all(
+		kb.DOCUMENT,
+		fields=[
+			"name",
+			"title",
+			"category",
+			"status",
+			"is_active",
+			"source_file",
+			"chunk_count",
+			"indexed_at",
+			"index_error",
+			"modified",
+			"owner",
+		],
+		order_by="modified desc",
+		limit=500,
+	)
+	return {
+		"categories": [{**c, "document_count": counts.get(c.name, 0)} for c in cats],
+		"uncategorized": counts.get("", 0),
+		"documents": docs,
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def kb_reindex(name: str) -> dict[str, Any]:
+	"""Lập chỉ mục lại một tài liệu (job nền)."""
+	_require_editor()
+	frappe.get_doc(kb.DOCUMENT, name).check_permission("write")
+	kb.queue_index(name)
+	return {"queued": True}
+
+
+@frappe.whitelist(methods=["POST"])
+def kb_ask(question: str) -> dict[str, Any]:
+	"""Ô "Hỏi thử Kho tri thức": trả lời chỉ dựa trên kho, kèm nguồn trích; `run` dùng để gửi đánh giá."""
+	_require_editor()
+	question = (question or "").strip()[:2000]
+	if not question:
+		frappe.throw(_("Nhập câu hỏi"))
+	passages = kb.search(question, limit=6)
+	messages = [
+		{
+			"role": "user",
+			"content": [
+				{"type": "text", "text": kb.render_passages(passages)},
+				{"type": "text", "text": f"<cau_hoi>{kb.esc(question)}</cau_hoi>"},
+			],
+		}
+	]
+	ids = {p.id for p in passages}
+	result = ai.call(
+		"kb-ask",
+		prompts.system_kb_answer(),
+		messages,
+		prompts.kb_answer_tool(),
+		max_tokens=3000,
+		timeout=90,
+		check=lambda out: None
+		if set(out.get("sources") or []) <= ids
+		else "sources chỉ được chứa id của các thẻ <doan> đã cho",
+	)
+	if result.status != "Success":
+		return {"ok": False, "message": ai.user_message(result), "run": result.run}
+	by_id = {p.id: p for p in passages}
+	sources = [
+		{"id": s, "source": by_id[s].source, "document": by_id[s].document, "excerpt": by_id[s].text[:400]}
+		for s in result.output.get("sources") or []
+		if s in by_id
+	]
+	return {
+		"ok": True,
+		"answer": result.output.get("answer") or "",
+		"insufficient": bool(result.output.get("insufficient")),
+		"sources": sources,
+		"run": result.run,
+		"cost_usd": result.cost_usd,
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def kb_feedback(run: str, verdict: str, note: str = "") -> dict[str, Any]:
+	"""Đánh giá câu trả lời Hỏi thử: Đúng / Cần sửa / Sai (lưu vào Omni Bot Run của câu trả lời)."""
+	_require_editor()
+	if verdict not in ("Đúng", "Cần sửa", "Sai"):
+		frappe.throw(_("Đánh giá không hợp lệ"))
+	row = frappe.db.get_value("Omni Bot Run", run, ["kind", "prompt_version"], as_dict=True)
+	if not row or row.kind != ai.KIND or row.prompt_version != f"{ai.PROMPT_VERSION}-kb-ask":
+		frappe.throw(_("Không tìm thấy câu trả lời"), frappe.DoesNotExistError)
+	frappe.db.set_value(
+		"Omni Bot Run",
+		run,
+		{"feedback": verdict, "feedback_note": (note or "")[:1000], "feedback_by": frappe.session.user},
+		update_modified=False,
+	)
+	return {"ok": True}

@@ -8,9 +8,11 @@ from __future__ import annotations
 from typing import Any
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 DOCTYPE = "Omni Marketing Settings"
+DEFAULT_AI_MODEL = "claude-opus-5-5"
+DEFAULT_FALLBACK_MODEL = "claude-sonnet-5-5"
 DEFAULTS: dict[str, Any] = {
 	"hub_disabled": 0,
 	"dry_run": 1,
@@ -81,6 +83,22 @@ def quality_threshold() -> int:
 
 def late_window_minutes() -> int:
 	return max(cint(get("late_window_minutes")), 0)
+
+
+def ai_models() -> tuple[str, str]:
+	"""(mô hình chính, mô hình dự phòng) cho AI marketing; để trống thì dùng mặc định (ADR 0029)."""
+	main = (get("ai_model") or "").strip() or DEFAULT_AI_MODEL
+	fallback = (get("ai_fallback_model") or "").strip() or DEFAULT_FALLBACK_MODEL
+	return main, fallback
+
+
+def monthly_budget_usd() -> float:
+	"""Ngân sách AI marketing mỗi tháng (USD); 0 = tắt AI marketing."""
+	return max(flt(get("monthly_ai_budget")), 0.0)
+
+
+def brand_voice() -> str:
+	return (get("brand_voice") or "").strip()
 
 
 def ensure_initialized() -> None:

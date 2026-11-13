@@ -92,6 +92,8 @@ def validate(p: Payload) -> None:
 	"""Kiểm trước khi đăng (Prompt 2 mục 5): caption rỗng, ảnh thiếu, tiêu đề Zalo quá dài."""
 	if not p.caption:
 		raise PublishValidationError(_("Caption rỗng"))
+	if "[cần bổ sung]" in f"{p.title or ''} {p.caption}":
+		raise PublishValidationError(_("Bài còn chỗ [cần bổ sung]"))
 	if p.post_format == "fb_photo" and not p.images:
 		raise PublishValidationError(_("Bài ảnh Facebook chưa có ảnh"))
 	if p.post_format == "fb_multi_photo" and len(p.images) < 2:

@@ -40,6 +40,7 @@ class OmniContentItem(Document):
 			except ValueError as e:
 				frappe.throw(_(str(e)))
 		before = self.get_doc_before_save()
+		self._guard_score(before)
 		if before is None:
 			return
 		if before.status != self.status and not self.flags.status_via_rules:
@@ -48,3 +49,31 @@ class OmniContentItem(Document):
 			frappe.throw(_("Không đổi chiến dịch của bài đã tạo"))
 		if before.status not in (rules.I_DRAFT, rules.I_REVIEW) and not self.flags.status_via_rules:
 			frappe.throw(_("Bài đã duyệt: hủy lịch rồi tạo bài mới nếu cần sửa"))
+
+	def _guard_score(self, before) -> None:
+		"""Điểm chỉ do bộ chấm ghi (cờ score_via_ai); sửa tiêu đề / caption / ảnh của bài đã chấm thì điểm về 0."""
+		if self.flags.score_via_ai:
+			return
+		if before is None:
+			self.quality_score = 0
+			self.quality_note = ""
+			return
+		if (before.quality_score or 0) != (self.quality_score or 0) or (before.quality_note or "") != (
+			self.quality_note or ""
+		):
+			frappe.throw(_("Điểm chất lượng do AI chấm, không sửa tay được"))
+		if self.status in (rules.I_DRAFT, rules.I_REVIEW) and _content_changed(before, self):
+			self.quality_score = 0
+			self.quality_note = _("Nội dung đã sửa sau khi chấm: bấm Chấm điểm lại")
+
+
+def _media_key(doc) -> list:
+	return [doc.media or ""] + [(m.image or "") for m in (doc.get("media_items") or [])]
+
+
+def _content_changed(before, after) -> bool:
+	return (
+		(before.title or "") != (after.title or "")
+		or (before.caption or "") != (after.caption or "")
+		or _media_key(before) != _media_key(after)
+	)

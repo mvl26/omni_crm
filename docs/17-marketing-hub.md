@@ -40,3 +40,26 @@ Trang đích luôn chuẩn hóa thành thư mục có `/` cuối, vì nginx bỏ
 
 - `hub_disabled`: ẩn Marketing Hub.
 - `dry_run`: không gọi API đăng bài. Chưa lưu cấu hình thì coi là bật. `Omni Settings.sandbox_mode` cũng tính.
+- `monthly_ai_budget` (USD/tháng): 0 = tắt mọi lời gọi AI marketing.
+
+## AI (Prompt 4, ADR 0029)
+
+- Cổng: `bot/ai_client.call_tool_result`, loại Bot Run `Marketing`, chi phí `cost_usd` theo `bot/pricing.py`.
+  Lớp `marketing/ai.py` chặn theo ngân sách USD/tháng và chuyển sang `ai_fallback_model` khi mô hình chính lỗi
+  hoặc trả sai schema sau 2 lần sửa. Token Marketing không tính vào hạn mức token/ngày của bot chat.
+- Q11: brief chiến dịch và tài liệu nội bộ không phải dữ liệu khách, gọi với `customer_data=False`.
+  (Ghi ở đây và ADR 0029; sẽ chép sang docs/12 "Đã xác nhận" khi docs/12 trên máy chủ hết thay đổi dở.)
+- Khung chat: `planner_send(text, files, session_id)` -> job nền -> hỏi lại tối đa 3 câu cả phiên (nút gợi ý) hoặc
+  kế hoạch JSON -> chấm điểm từng bài -> `planner_create(session_id)` tạo chiến dịch + bài + nền tảng rồi đi qua
+  `approval.submit` / `approve` (Manager: lên lịch; User: Chờ duyệt; dưới ngưỡng: dừng ở Chờ duyệt kèm lý do).
+  Realtime `oc_plan_update`. Phiên lưu cache 24 giờ, chỉ chủ phiên đọc.
+- AI chỉ lên bài Facebook / Zalo OA (TikTok chưa có quyền đăng). Giờ đăng phải sau hiện tại ≥ 30 phút và trong
+  khoảng ngày chiến dịch. Kênh đăng mặc định: kênh bật tạo sớm nhất của nền tảng (`channels.default_channel`).
+- Chấm điểm: 4 tiêu chí (thông tin 40, kêu gọi 20, giọng văn 20, độ dài 20), luật cứng chỉ hạ điểm (số tiền /
+  phần trăm không có nguồn, tiêu đề Zalo > 150). `quality_score` chỉ bộ chấm ghi được; sửa tiêu đề/caption/ảnh
+  thì điểm về 0. Duyệt bị chặn khi còn `[cần bổ sung]` hoặc thiếu ảnh cho fb_photo / fb_multi_photo / zalo_article.
+- Kho tri thức: `Omni KB Category`, `Omni KB Document`, `Omni KB Chunk`. Lưu tài liệu -> job `long` lập chỉ mục
+  (PDF qua pypdf, DOCX đọc XML, TXT/MD). Truy hồi BM25 không dấu, gộp `Omni Knowledge Item`. `kb_ask` trả lời kèm
+  nguồn; `kb_feedback(run, Đúng|Cần sửa|Sai)` lưu vào Bot Run.
+- API mới: `ai_budget`, `planner_send`, `planner_state`, `planner_create`, `score_item`, `kb_overview`, `kb_reindex`,
+  `kb_ask`, `kb_feedback`.
