@@ -34,6 +34,7 @@ STICKER_LOCALE = "vi_VN"
 STICKER_CACHE_SECONDS = 6 * 3600
 MAX_STICKER_ITEMS = 120
 QUOTE_CHARS = 80
+MAX_FORWARD_FILES = 5
 INBOX_URL = "https://business.facebook.com/latest/inbox/all/?asset_id={0}"
 
 
@@ -81,7 +82,18 @@ def _message(item: dict, user: str, manager: bool) -> dict:
 		"can_react": bool(item.get("mid"))
 		and (not str(item.get("mid")).startswith("sandbox:") or flags.sandbox()),
 		"can_hide": manager or own,
+		# ADR 0027 đợt 2: chỉ chuyển tiếp tin Page đã gửi (không đưa tin của khách này cho khách khác)
+		"forwarded": bool(item.get("forwarded")),
+		"can_forward": _forwardable(item),
 	}
+
+
+def _forwardable(item: dict) -> bool:
+	if item.get("direction") != "out" or item.get("hidden"):
+		return False
+	if item.get("doctype") == OUTBOUND and item.get("status") != "Sent":
+		return False
+	return bool(item.get("text") or item.get("attachments") or item.get("sticker"))
 
 
 def _with_quotes(rows: list[dict]) -> list[dict]:
@@ -176,6 +188,15 @@ def _compose(data: dict, can_write: bool) -> dict:
 	state["like_sticker_id"] = LIKE_STICKER_ID
 	state["can_react"] = bool(
 		ms is not None and can_write and not (data.get("profile") or {}).get("person_refused")
+	)
+	# ADR 0027 đợt 2: ghi âm là tệp (cần công tắc gửi tệp) và cần ffmpeg trên máy chủ để đổi sang MP3
+	has_ffmpeg = bool(media_out.ffmpeg_path())
+	state["can_send_voice"] = bool(state["can_send_media"] and has_ffmpeg)
+	state["voice_max_seconds"] = media_out.VOICE_MAX_SECONDS
+	state["voice_reason"] = (
+		""
+		if state["can_send_voice"] or not state["can_send_media"]
+		else _("Máy chủ chưa cài ffmpeg nên chưa gửi được ghi âm")
 	)
 	return state
 
@@ -422,6 +443,148 @@ def hide_message(doctype: str, name: str, message_doctype: str, message: str, hi
 	)
 	inbox.timeline.notify(lead, [CHANNEL])
 	return {"ok": True, "hidden": hide}
+
+
+# ---- Đợt 2 (ADR 0027): ghi âm (đổi sang MP3), chuyển tiếp ----
+
+
+@frappe.whitelist(methods=["POST"])
+def send_voice(
+	doctype: str, name: str, file_url: str, reply_to_doctype: str | None = None, reply_to: str | None = None
+) -> dict:
+	"""Gửi bản ghi âm sale vừa ghi trong tab: tệp `ghi-am-…` đã tải lên Lead, máy chủ đổi sang MP3 rồi gửi kiểu `audio`.
+
+	Cần công tắc `messenger_media_send_enabled` và ffmpeg. Mọi guard gửi tin (24 giờ, từ chối liên hệ, sandbox) giữ nguyên.
+	"""
+	lead = _write_lead(doctype, name)
+	if not flags.messenger_media_send_enabled():
+		frappe.throw(_("Chưa bật gửi ảnh/tệp qua Messenger"), frappe.PermissionError)
+	quote = _quote_mid(lead, reply_to_doctype, reply_to)
+	attachment = media_out.voice_to_mp3(file_url, lead)
+	return inbox.send_messenger(lead, "", attachment=attachment, extras={"quote_mid": quote})
+
+
+def _read_lead(doctype: str, name: str) -> str:
+	if not flags.messenger_tab_enabled():
+		frappe.throw(_("Tab Messenger đang bị tắt"), frappe.PermissionError)
+	lead = resolve_lead(doctype, name, "read")
+	if not lead:
+		frappe.throw(_("Không có Lead gốc để gắn hội thoại Messenger"))
+	inbox.check_lead_access(lead)
+	return lead
+
+
+@frappe.whitelist()
+def forward_targets(doctype: str, name: str, q: str = "") -> dict:
+	"""Khách Messenger khác (Lead người dùng được sửa) để chuyển tiếp tới, kèm trạng thái gửi được hay lý do (24 giờ…)."""
+	lead = _read_lead(doctype, name)
+	q = " ".join(str(q or "").split())[:80]
+	leads = sorted(
+		set(
+			frappe.get_all(
+				"Omni Identity", filters={"channel_type": CHANNEL, "lead": ["is", "set"]}, pluck="lead"
+			)
+		)
+		- {lead}
+	)
+	if not leads:
+		return {"items": []}
+	filters: dict[str, Any] = {"name": ["in", leads]}
+	if q:
+		filters["lead_name"] = ["like", f"%{q}%"]
+	rows = frappe.get_list(
+		LEAD, filters=filters, fields=["name", "lead_name"], order_by="modified desc", limit_page_length=20
+	)
+	from omni_crm.channels.registry import get_adapter
+
+	adapter = get_adapter(CHANNEL)
+	out = []
+	for r in rows:
+		if not frappe.has_permission(LEAD, "write", doc=r.name):
+			continue
+		target = inbox._channel_target(r.name, CHANNEL)
+		if not target:
+			continue
+		ok, reason = adapter.can_send_now(target[0], target[1], source="Sale")
+		out.append(
+			{"lead": r.name, "lead_name": r.lead_name or r.name, "can_send": bool(ok), "reason": reason or ""}
+		)
+	return {"items": out}
+
+
+def _forward_content(message_doctype: str, message: str) -> dict:
+	"""Nội dung tin gốc: {text, files: [(file_url, name)], sticker}; chỉ tin Page đã gửi."""
+	if message_doctype == OUTBOUND:
+		row = frappe.db.get_value(
+			OUTBOUND,
+			message,
+			["text", "status", "attachment", "attachment_name", "sticker_id", "sticker_url", "hidden_at"],
+			as_dict=True,
+		)
+		if not row or row.status != "Sent" or row.hidden_at:
+			frappe.throw(_("Chỉ chuyển tiếp được tin đã gửi"))
+		files = [(row.attachment, row.attachment_name)] if row.attachment else []
+		sticker = (
+			{"sticker_id": row.sticker_id, "sticker_url": row.sticker_url or ""} if row.sticker_id else None
+		)
+		return {"text": row.text or "", "files": files, "sticker": sticker}
+	row = frappe.db.get_value(INBOUND, message, ["event_type", "text", "hidden_at"], as_dict=True)
+	if not row or row.event_type != "oa_echo" or row.hidden_at:
+		frappe.throw(
+			_(
+				"Chỉ chuyển tiếp được tin do Page gửi; tin của khách không chuyển cho khách khác (bảo vệ dữ liệu cá nhân)."
+			),
+			frappe.PermissionError,
+		)
+	files = [
+		(f.file_url, f.file_name)
+		for f in frappe.get_all(
+			"File",
+			filters={"attached_to_doctype": INBOUND, "attached_to_name": message, "is_folder": 0},
+			fields=["file_url", "file_name"],
+			order_by="creation asc",
+			limit=MAX_FORWARD_FILES + 1,
+		)
+	]
+	return {"text": row.text or "", "files": files, "sticker": None}
+
+
+@frappe.whitelist(methods=["POST"])
+def forward(doctype: str, name: str, message_doctype: str, message: str, target_lead: str) -> dict:
+	"""Chuyển tiếp một tin Page đã gửi sang khách Messenger của Lead khác (ADR 0027 đợt 2): gửi lại chữ, tệp (chép sang Lead
+	nhận), sticker như tin mới của sale, qua mọi guard của Lead nhận (24 giờ, từ chối liên hệ, quyền ghi). Một tin, một khách.
+	"""
+	source_lead = _read_lead(doctype, name)
+	_message_of_lead(source_lead, message_doctype, message)
+	target_lead = str(target_lead or "").strip()
+	if not target_lead or target_lead == source_lead or not frappe.db.exists(LEAD, target_lead):
+		frappe.throw(_("Chọn một khách khác để chuyển tiếp"))
+	target_lead = inbox.check_lead_write(target_lead)
+	content = _forward_content(message_doctype, message)
+	if len(content["files"]) > MAX_FORWARD_FILES:
+		frappe.throw(_("Tin có quá {0} tệp, không chuyển tiếp được").format(MAX_FORWARD_FILES))
+	if content["files"] and not flags.messenger_media_send_enabled():
+		frappe.throw(_("Chưa bật gửi ảnh/tệp qua Messenger"), frappe.PermissionError)
+	attachments = [media_out.copy_to_lead(url, fname, target_lead) for url, fname in content["files"]]
+	origin = {"forwarded_from": f"{message_doctype}:{message}"}
+	results = []
+	if content["text"]:
+		results.append(inbox.send_messenger(target_lead, content["text"], extras=origin))
+	for att in attachments:
+		if results and results[-1].get("status") != "Queued":
+			break
+		results.append(inbox.send_messenger(target_lead, "", attachment=att, extras=origin))
+	if content["sticker"] and (not results or results[-1].get("status") == "Queued"):
+		results.append(inbox.send_messenger(target_lead, "", extras={**origin, **content["sticker"]}))
+	if not results:
+		frappe.throw(_("Tin này không có nội dung để chuyển tiếp"))
+	last = results[-1]
+	return {
+		"status": last.get("status"),
+		"reason": last.get("reason", ""),
+		"target": target_lead,
+		"outbounds": [r.get("outbound") for r in results],
+	}
 
 
 # ---- Kho sticker của Meta (ADR 0027): chỉ đọc, đệm 6 giờ, App Access Token của kênh ----

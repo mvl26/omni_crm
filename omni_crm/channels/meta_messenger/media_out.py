@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import shutil
+import subprocess
+import tempfile
+from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, now_datetime
 
 IMAGE, VIDEO, AUDIO, FILE = "image", "video", "audio", "file"
 MB = 1024 * 1024
@@ -46,12 +50,8 @@ def allowed_types_text() -> str:
 	return "JPG, PNG, GIF, MP4, MP3, M4A, PDF, Word, Excel, CSV, TXT, ZIP"
 
 
-def attachment_for_lead(file_url: str, lead: str) -> dict:
-	"""{"file_url", "kind", "name"} nếu `file_url` là File gắn vào Lead (hoặc Deal của Lead), đúng loại và cỡ; ném MediaError.
-
-	Người gọi đã kiểm quyền ghi Lead.
-	"""
-	file_url = str(file_url or "").strip()
+def _lead_file(file_url: str, lead: str) -> Any:
+	"""Dòng File có `file_url` gắn vào Lead (hoặc Deal của Lead); ném MediaError nếu không có."""
 	if not file_url.startswith(("/files/", "/private/files/")):
 		raise MediaError(_("Tệp đính kèm không hợp lệ"))
 	rows = frappe.get_all(
@@ -72,6 +72,16 @@ def attachment_for_lead(file_url: str, lead: str) -> dict:
 	)
 	if not row:
 		raise MediaError(_("Tệp này không thuộc Lead đang mở"))
+	return row
+
+
+def attachment_for_lead(file_url: str, lead: str) -> dict:
+	"""{"file_url", "kind", "name"} nếu `file_url` là File gắn vào Lead (hoặc Deal của Lead), đúng loại và cỡ; ném MediaError.
+
+	Người gọi đã kiểm quyền ghi Lead.
+	"""
+	file_url = str(file_url or "").strip()
+	row = _lead_file(file_url, lead)
 	name = (row.file_name or os.path.basename(file_url))[:140]
 	kind = kind_of(name) or kind_of(file_url)
 	if not kind:
@@ -94,3 +104,96 @@ def read_content(file_url: str) -> bytes:
 	if len(content) > MAX_BYTES:
 		raise MediaError(_("Tệp lớn hơn {0} MB, Messenger không nhận").format(MAX_BYTES // MB))
 	return content
+
+
+# ---- Ghi âm (ADR 0027 đợt 2): trình duyệt ghi WebM/Ogg/MP4, máy chủ đổi sang MP3 bằng ffmpeg rồi gửi kiểu audio ----
+
+VOICE_PREFIX = (
+	"ghi-am-"  # tên tệp ghi âm do tab Messenger tải lên; chỉ tệp có tiền tố này mới bị xóa sau khi đổi
+)
+VOICE_INPUT = (".webm", ".ogg", ".oga", ".opus", ".mp4", ".m4a", ".aac", ".wav", ".mp3")
+VOICE_MAX_INPUT = 15 * MB
+VOICE_MAX_SECONDS = 300
+FFMPEG_TIMEOUT = 90
+FFMPEG_CONF = "omni_ffmpeg_path"  # site_config, tùy chọn; mặc định tìm `ffmpeg` trong PATH
+# Chỉ đọc tệp cục bộ, chỉ các định dạng âm thanh/hộp chứa trình duyệt ghi ra: không theo danh sách phát, không mở URL.
+FFMPEG_FORMATS = "matroska,webm,ogg,mov,mp4,m4a,3gp,3g2,mj2,wav,mp3,aac"
+
+
+def ffmpeg_path() -> str | None:
+	"""Đường dẫn ffmpeg dùng được, hoặc None (tab ẩn nút ghi âm, API từ chối)."""
+	conf = str(frappe.conf.get(FFMPEG_CONF) or "").strip()
+	if conf:
+		return conf if os.path.isfile(conf) and os.access(conf, os.X_OK) else None
+	return shutil.which("ffmpeg")
+
+
+def voice_to_mp3(file_url: str, lead: str) -> dict:
+	"""Đổi bản ghi âm (File của Lead) sang MP3 mono 64 kbps, lưu thành File riêng tư mới của Lead; trả attachment `audio`.
+
+	Bản ghi gốc do tab tải lên (tên `ghi-am-…`) bị xóa sau khi đổi xong; tệp khác của Lead giữ nguyên. Ném MediaError.
+	"""
+	file_url = str(file_url or "").strip()
+	row = _lead_file(file_url, lead)
+	name = row.file_name or os.path.basename(file_url)
+	if not name.lower().endswith(VOICE_INPUT):
+		raise MediaError(_("Bản ghi âm không đúng định dạng"))
+	if cint(row.file_size) > VOICE_MAX_INPUT:
+		raise MediaError(_("Bản ghi âm lớn hơn {0} MB").format(VOICE_MAX_INPUT // MB))
+	ffmpeg = ffmpeg_path()
+	if not ffmpeg:
+		raise MediaError(_("Máy chủ chưa cài ffmpeg nên chưa gửi được ghi âm"))
+	src_doc = frappe.get_doc("File", row.name)
+	src = src_doc.get_full_path()
+	with tempfile.TemporaryDirectory(prefix="omni-voice-") as tmp:
+		dst = os.path.join(tmp, "out.mp3")
+		cmd = [
+			ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+			"-protocol_whitelist", "file", "-format_whitelist", FFMPEG_FORMATS,
+			"-i", src, "-t", str(VOICE_MAX_SECONDS), "-map", "0:a:0", "-vn",
+			"-ac", "1", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "64k", dst,
+		]  # fmt: skip
+		try:
+			res = subprocess.run(cmd, capture_output=True, timeout=FFMPEG_TIMEOUT, check=False)
+		except subprocess.TimeoutExpired as e:
+			raise MediaError(_("Đổi định dạng ghi âm quá lâu")) from e
+		if res.returncode != 0 or not os.path.isfile(dst) or not os.path.getsize(dst):
+			frappe.log_error(
+				title="Omni: đổi ghi âm Messenger lỗi",
+				message=(res.stderr or b"").decode("utf-8", "replace")[-2000:],
+			)
+			raise MediaError(_("Không đổi được bản ghi âm sang MP3"))
+		with open(dst, "rb") as fh:
+			content = fh.read()
+	if len(content) > MAX_BYTES:
+		raise MediaError(_("Tệp lớn hơn {0} MB, Messenger không nhận").format(MAX_BYTES // MB))
+	mp3_name = f"{VOICE_PREFIX}{now_datetime().strftime('%Y%m%d-%H%M%S')}.mp3"
+	mp3 = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": mp3_name,
+			"is_private": 1,
+			"content": content,
+			"attached_to_doctype": row.attached_to_doctype,
+			"attached_to_name": row.attached_to_name,
+		}
+	).insert(ignore_permissions=True)
+	if name.startswith(VOICE_PREFIX) and not name.lower().endswith(".mp3"):
+		frappe.delete_doc("File", src_doc.name, ignore_permissions=True, force=True)
+	return {"file_url": mp3.file_url, "kind": AUDIO, "name": mp3_name}
+
+
+def copy_to_lead(file_url: str, name: str, lead: str) -> dict:
+	"""Chép một tệp trong CRM sang File riêng tư của Lead `lead` (chuyển tiếp, ADR 0027 đợt 2); trả attachment đã kiểm."""
+	content = read_content(file_url)
+	doc = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": (name or os.path.basename(file_url) or "tep")[:140],
+			"is_private": 1,
+			"content": content,
+			"attached_to_doctype": LEAD,
+			"attached_to_name": lead,
+		}
+	).insert(ignore_permissions=True)
+	return attachment_for_lead(doc.file_url, lead)

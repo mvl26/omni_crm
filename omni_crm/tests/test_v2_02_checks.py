@@ -94,6 +94,9 @@ EXPECTED_WHITELISTED = {
 		"sticker_packs",  # ADR 0027: chỉ đọc kho sticker của Meta
 		"sticker_pack",
 		"sticker_search",
+		"send_voice",  # ADR 0027 đợt 2: 1 bản ghi âm (đổi MP3) tới 1 khách/lần, qua mọi guard của send_messenger
+		"forward_targets",  # ADR 0027 đợt 2: chỉ đọc, Lead Messenger người dùng được sửa
+		"forward",  # ADR 0027 đợt 2: 1 tin Page đã gửi tới MỘT Lead khác/lần, qua mọi guard của Lead nhận
 	},  # ADR 0023: tab Messenger, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {

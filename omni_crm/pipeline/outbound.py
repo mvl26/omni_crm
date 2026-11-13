@@ -199,6 +199,8 @@ def extra_fields(extras: dict | None) -> dict:
 	if extras.get("sticker_id"):
 		out["sticker_id"] = str(extras["sticker_id"])[:32]
 		out["sticker_url"] = str(extras.get("sticker_url") or "")[:1000]
+	if extras.get("forwarded_from"):  # ADR 0027 đợt 2: chỉ ghi nhận nguồn, không ảnh hưởng cách gửi
+		out["forwarded_from"] = str(extras["forwarded_from"])[:200]
 	return out
 
 

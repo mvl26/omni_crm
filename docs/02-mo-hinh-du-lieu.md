@@ -186,7 +186,7 @@ V3-07 (ADR 0019): `source = Bot` không có `bot_draft` là tin OA gửi ngoài 
 
 D1-06 bổ sung: chỉ mục ghép (`lead`, `creation`) cho Hộp thư.
 
-ADR 0027 (tương tác Messenger), có ở **cả Omni Inbound Message và Omni Outbound Message**, chỉ đọc trên form: `reply_to_mid` (mã tin Meta mà tin này trả lời), `reaction_customer` + `reaction_customer_at` (emoji khách thả, thời điểm sự kiện; rỗng = đã bỏ), `reaction_page` + `reaction_page_by` (emoji sale thả qua CRM, người thả), `hidden_at` + `hidden_by` (thu hồi 1 phía: ẩn trong CRM, khách vẫn thấy; bản ghi gốc giữ nguyên). Riêng Omni Outbound Message: `sticker_id`, `sticker_url` (tin sticker của Meta; ảnh chỉ nhận https từ CDN của Meta).
+ADR 0027 (tương tác Messenger), có ở **cả Omni Inbound Message và Omni Outbound Message**, chỉ đọc trên form: `reply_to_mid` (mã tin Meta mà tin này trả lời), `reaction_customer` + `reaction_customer_at` (emoji khách thả, thời điểm sự kiện; rỗng = đã bỏ), `reaction_page` + `reaction_page_by` (emoji sale thả qua CRM, người thả), `hidden_at` + `hidden_by` (thu hồi 1 phía: ẩn trong CRM, khách vẫn thấy; bản ghi gốc giữ nguyên). Riêng Omni Outbound Message: `sticker_id`, `sticker_url` (tin sticker của Meta; ảnh chỉ nhận https từ CDN của Meta); đợt 2: `forwarded_from` (`"<DocType>:<tên>"` của tin gốc khi là bản chuyển tiếp), `attachment_kind` thêm `video`, `audio` (Messenger; Zalo vẫn chỉ `image/gif/file`).
 
 ## 7. Omni Duplicate Candidate
 

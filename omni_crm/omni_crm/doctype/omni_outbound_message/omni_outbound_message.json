@@ -43,7 +43,8 @@
   "hidden_at",
   "hidden_by",
   "sticker_id",
-  "sticker_url"
+  "sticker_url",
+  "forwarded_from"
  ],
  "fields": [
   {
@@ -83,8 +84,9 @@
    "fieldname": "attachment_kind",
    "fieldtype": "Select",
    "label": "Loại đính kèm",
-   "options": "\nimage\ngif\nfile",
-   "read_only": 1
+   "options": "\nimage\ngif\nfile\nvideo\naudio",
+   "read_only": 1,
+   "description": "video, audio: Messenger (ADR 0023/0027); Zalo chỉ dùng image, gif, file."
   },
   {
    "fieldname": "attachment_name",
@@ -281,6 +283,14 @@
    "fieldtype": "Small Text",
    "label": "Ảnh sticker",
    "read_only": 1
+  },
+  {
+   "fieldname": "forwarded_from",
+   "fieldtype": "Data",
+   "label": "Chuyển tiếp từ tin",
+   "length": 200,
+   "read_only": 1,
+   "description": "ADR 0027 đợt 2: \"<DocType>:<tên>\" của tin gốc khi tin này là bản chuyển tiếp."
   }
  ],
  "permissions": [

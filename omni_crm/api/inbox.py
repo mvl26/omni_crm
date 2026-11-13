@@ -413,6 +413,7 @@ def thread_data(lead: str) -> dict:
 			"attachment_name",
 			"sticker_id",
 			"sticker_url",
+			"forwarded_from",
 			*INTERACT_FIELDS,
 		],
 		order_by="creation desc",
@@ -509,6 +510,7 @@ def thread_data(lead: str) -> dict:
 				"bot": bot_meta.get(o.bot_draft) if o.source == "Bot" else None,
 				"sent_by": o.sent_by,
 				"sticker": {"id": o.sticker_id, "url": o.sticker_url or ""} if o.sticker_id else None,
+				"forwarded": bool(o.forwarded_from),
 				**_interact(o),
 			}
 		)

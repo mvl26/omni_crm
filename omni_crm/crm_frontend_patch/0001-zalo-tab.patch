@@ -429,10 +429,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/MessengerTab.vue b/frontend/src/components/Activities/MessengerTab.vue
 new file mode 100644
-index 0000000..d21f995
+index 0000000..055c7e1
 --- /dev/null
 +++ b/frontend/src/components/Activities/MessengerTab.vue
-@@ -0,0 +1,1324 @@
+@@ -0,0 +1,1701 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot (cùng khối `bot` như tab Zalo): chữ xuống dòng theo nội dung; quá dài thì cuộn trong thẻ -->
@@ -528,6 +528,13 @@ index 0000000..d21f995
 +                  class="mb-0.5 text-xs italic text-ink-gray-6"
 +                >
 +                  {{ __('Đã ẩn trong CRM') }}
++                </div>
++                <!-- Bản chuyển tiếp từ tin của khách khác (ADR 0027 đợt 2) -->
++                <div
++                  v-if="msg.forwarded"
++                  class="mb-0.5 text-xs italic text-ink-gray-5"
++                >
++                  {{ __('Đã chuyển tiếp') }}
 +                </div>
 +                <!-- Trích dẫn tin được trả lời: bấm để cuộn tới tin gốc -->
 +                <button
@@ -698,7 +705,7 @@ index 0000000..d21f995
 +                >
 +              </div>
 +            </div>
-+            <!-- Thao tác trên tin (ADR 0027): thả cảm xúc, trả lời, ẩn / bỏ ẩn trong CRM. Máy chủ kiểm lại quyền. -->
++            <!-- Thao tác trên tin (ADR 0027): thả cảm xúc, trả lời, chuyển tiếp (đợt 2), ẩn / bỏ ẩn trong CRM. Máy chủ kiểm lại quyền. -->
 +            <Popover
 +              v-if="views[msg.name].actions.any"
 +              class="shrink-0"
@@ -762,6 +769,14 @@ index 0000000..d21f995
 +                    @click="startReply(msg, close)"
 +                  >
 +                    ↩ {{ __('Trả lời') }}
++                  </button>
++                  <button
++                    v-if="views[msg.name].actions.forward"
++                    type="button"
++                    class="block w-full rounded px-2 py-1.5 text-left text-ink-gray-8 hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none"
++                    @click="openForward(msg, close)"
++                  >
++                    ➦ {{ __('Chuyển tiếp') }}
 +                  </button>
 +                  <button
 +                    v-if="
@@ -866,6 +881,91 @@ index 0000000..d21f995
 +          ✕
 +        </Button>
 +      </div>
++      <!-- Ghi âm (ADR 0027 đợt 2): đang xin micro / đang ghi / nghe lại rồi gửi. Máy chủ đổi sang MP3 trước khi gửi -->
++      <div
++        v-if="voice.phase !== 'idle'"
++        class="mb-2 flex flex-wrap items-center gap-2 rounded bg-surface-gray-2 px-2 py-1.5 text-sm text-ink-gray-8"
++      >
++        <template v-if="voice.phase === 'starting'">
++          <LoadingIndicator class="h-4 w-4 shrink-0" />
++          <span class="min-w-0 flex-1">{{
++            __('Đang chờ trình duyệt cho dùng micro...')
++          }}</span>
++          <Button
++            size="sm"
++            variant="ghost"
++            :label="__('Hủy')"
++            @click="cancelVoice"
++          />
++        </template>
++        <template
++          v-else-if="voice.phase === 'recording' || voice.phase === 'stopping'"
++        >
++          <span
++            class="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500"
++            aria-hidden="true"
++          />
++          <span class="font-medium tabular-nums">{{
++            formatDuration(voice.elapsed)
++          }}</span>
++          <span class="text-xs tabular-nums text-ink-gray-5"
++            >/ {{ formatDuration(voiceMax) }}</span
++          >
++          <span class="min-w-0 flex-1 truncate text-xs text-ink-gray-5">{{
++            __('Đang ghi âm')
++          }}</span>
++          <Button
++            size="sm"
++            variant="solid"
++            :label="__('Dừng')"
++            :disabled="voice.phase === 'stopping'"
++            @click="stopVoice"
++          />
++          <Button
++            size="sm"
++            variant="ghost"
++            :label="__('Hủy')"
++            @click="cancelVoice"
++          />
++        </template>
++        <template v-else-if="voice.phase === 'recorded'">
++          <audio
++            :src="voice.url"
++            controls
++            preload="metadata"
++            class="h-8 min-w-0 max-w-full flex-1"
++          />
++          <span class="shrink-0 text-xs tabular-nums text-ink-gray-5">{{
++            formatDuration(voice.elapsed)
++          }}</span>
++          <div class="flex w-full flex-wrap items-center gap-2">
++            <Button
++              size="sm"
++              variant="solid"
++              :label="__('Gửi ghi âm')"
++              :loading="voiceSending"
++              :disabled="sending"
++              @click="sendVoice"
++            />
++            <Button
++              size="sm"
++              :label="__('Ghi lại')"
++              :disabled="sending"
++              @click="redoVoice"
++            />
++            <Button
++              size="sm"
++              variant="ghost"
++              :label="__('Hủy')"
++              :disabled="sending"
++              @click="cancelVoice"
++            />
++            <span v-if="voiceSending" class="text-xs text-ink-gray-6">{{
++              __('Đang đổi sang MP3 và gửi…')
++            }}</span>
++          </div>
++        </template>
++      </div>
 +      <input
 +        ref="fileInput"
 +        type="file"
@@ -890,6 +990,31 @@ index 0000000..d21f995
 +        >
 +          📎
 +        </Button>
++        <!-- Ghi âm (ADR 0027 đợt 2): cần công tắc gửi tệp và ffmpeg trên máy chủ; thiếu ffmpeg thì nút khóa, rê chuột thấy lý do -->
++        <Button
++          v-if="compose.can_send_voice"
++          :title="
++            __('Ghi âm rồi gửi (tối đa {0} phút)', [Math.ceil(voiceMax / 60)])
++          "
++          :aria-label="__('Ghi âm')"
++          :disabled="sending || voice.phase !== 'idle'"
++          @click="startVoice"
++        >
++          🎤
++        </Button>
++        <span
++          v-else-if="compose.can_send_media && compose.voice_reason"
++          class="inline-flex"
++          :title="compose.voice_reason"
++        >
++          <Button
++            :title="compose.voice_reason"
++            :aria-label="__('Ghi âm')"
++            disabled
++          >
++            🎤
++          </Button>
++        </span>
 +        <!-- Mẫu tin nhắn (ADR 0026): chọn mẫu chỉ điền vào ô soạn, KHÔNG tự gửi -->
 +        <Popover v-if="compose.can_send" class="shrink-0" placement="top-start">
 +          <template #target="{ togglePopover, isOpen }">
@@ -1216,6 +1341,87 @@ index 0000000..d21f995
 +        }}
 +      </div>
 +    </div>
++
++    <!-- Chuyển tiếp (ADR 0027 đợt 2): chỉ tin Page đã gửi, tới khách Messenger của Lead khác; máy chủ kiểm 24 giờ, quyền ghi -->
++    <Dialog
++      v-model="forwardOpen"
++      :options="{ title: __('Chuyển tiếp tin nhắn'), size: 'md' }"
++    >
++      <template #body-content>
++        <div
++          v-if="forwardPreview"
++          class="mb-3 truncate rounded border-l-2 border-blue-400 bg-surface-gray-2 px-2 py-1 text-sm text-ink-gray-7"
++        >
++          {{ forwardPreview }}
++        </div>
++        <TextInput
++          v-model="forwardSearch"
++          type="text"
++          :placeholder="__('Tìm khách Messenger theo tên')"
++        />
++        <div class="mt-2 max-h-80 overflow-y-auto">
++          <div
++            v-if="forwardTargets.loading && !forwardTargets.items.length"
++            class="flex items-center gap-2 px-2 py-3 text-sm text-ink-gray-5"
++          >
++            <LoadingIndicator class="h-4 w-4" />
++            <span>{{ __('Đang tải danh sách khách...') }}</span>
++          </div>
++          <div v-else-if="forwardTargets.error" class="px-2 py-2 text-sm">
++            <div class="text-ink-red-3">{{ __(forwardTargets.error) }}</div>
++            <Button
++              class="mt-2"
++              size="sm"
++              :label="__('Thử lại')"
++              @click="loadForwardTargets()"
++            />
++          </div>
++          <div
++            v-else-if="!forwardTargets.items.length"
++            class="px-2 py-2 text-sm text-ink-gray-5"
++          >
++            {{ __('Không có khách Messenger nào khớp') }}
++          </div>
++          <template v-else>
++            <button
++              v-for="item in forwardTargets.items"
++              :key="item.lead"
++              type="button"
++              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-surface-gray-2 focus:bg-surface-gray-2 focus:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent"
++              :disabled="!item.canSend || Boolean(forwarding)"
++              :title="
++                item.canSend ? __('Chuyển tiếp tới {0}', [item.name]) : ''
++              "
++              @click="chooseForwardTarget(item)"
++            >
++              <span class="min-w-0 flex-1">
++                <span
++                  class="block truncate text-base"
++                  :class="item.canSend ? 'text-ink-gray-9' : 'text-ink-gray-5'"
++                  >{{ item.name }}</span
++                >
++                <span
++                  class="block break-words text-xs"
++                  :class="item.canSend ? 'text-ink-green-3' : 'text-ink-gray-5'"
++                  >{{ __(item.status) }}</span
++                >
++              </span>
++              <LoadingIndicator
++                v-if="forwarding === item.lead"
++                class="h-4 w-4 shrink-0"
++              />
++            </button>
++          </template>
++        </div>
++        <div class="mt-3 text-xs text-ink-gray-5">
++          {{
++            __(
++              'Chỉ chuyển tiếp được tin do Page gửi. Khách nhận thấy như tin mới từ Page.',
++            )
++          }}
++        </div>
++      </template>
++    </Dialog>
 +  </div>
 +</template>
 +
@@ -1231,6 +1437,7 @@ index 0000000..d21f995
 +} from 'vue'
 +import {
 +  Button,
++  Dialog,
 +  LoadingIndicator,
 +  Popover,
 +  TextInput,
@@ -1241,8 +1448,10 @@ index 0000000..d21f995
 +} from 'frappe-ui'
 +import { globalStore } from '@/stores/global'
 +import {
++  useForwardTargets,
 +  useMessengerStickers,
 +  useMessengerTemplates,
++  useVoiceRecorder,
 +} from '@/composables/messenger'
 +import {
 +  POLL_MS,
@@ -1260,6 +1469,7 @@ index 0000000..d21f995
 +  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
++  formatDuration,
 +  formatSize,
 +  insertAtCursor,
 +  isMessengerUpdate,
@@ -1277,6 +1487,8 @@ index 0000000..d21f995
 +  replyTarget,
 +  sendOutcome,
 +  stickerView,
++  voiceFileName,
++  voiceMaxSeconds,
 +} from '@/utils/messengerThread'
 +
 +const props = defineProps({
@@ -1334,6 +1546,9 @@ index 0000000..d21f995
 +      can_send_sticker: false,
 +      like_sticker_id: '',
 +      can_react: false,
++      can_send_voice: false,
++      voice_max_seconds: 300,
++      voice_reason: '',
 +    },
 +)
 +
@@ -1560,6 +1775,160 @@ index 0000000..d21f995
 +  }, 1600)
 +}
 +
++// --- ADR 0027 đợt 2: ghi âm, chuyển tiếp ---
++
++// Ghi âm: trình duyệt ghi WebM / Ogg / MP4, tải lên CRM tên `ghi-am-…` (riêng tư, gắn Lead/Deal đang mở) rồi gọi send_voice;
++// máy chủ đổi sang MP3, xóa bản gốc và gửi kiểu audio. Micro luôn tắt khi dừng / hủy / đóng tab (useVoiceRecorder).
++const voiceSending = ref(false)
++let voiceUpload = null // { blob, url }: bản ghi đã tải lên nhưng lời gửi lỗi; bấm gửi lại thì dùng lại, không tải trùng
++const voiceMax = computed(() =>
++  voiceMaxSeconds(compose.value.voice_max_seconds),
++)
++const {
++  voice,
++  start: startRecording,
++  stop: stopVoice,
++  cancel: cancelRecording,
++} = useVoiceRecorder({
++  getMaxSeconds: () => voiceMax.value,
++  onError: (message) => toast.error(__(message)),
++})
++
++// Không bắt đầu ghi khi đang gửi tin khác.
++function startVoice() {
++  if (sending.value || !compose.value.can_send_voice) return
++  voiceUpload = null
++  startRecording()
++}
++
++function cancelVoice() {
++  voiceUpload = null
++  cancelRecording()
++}
++
++function redoVoice() {
++  if (sending.value) return
++  cancelVoice()
++  startVoice()
++}
++
++// Gửi bản ghi (kèm tin đang trả lời nếu có). Cờ `sending` giữ suốt lúc tải lên, đổi MP3 và gửi: mọi nút gửi khác khóa.
++async function sendVoice() {
++  if (sending.value || voice.phase !== 'recorded' || !voice.blob) return
++  if (!compose.value.can_send_voice) {
++    toast.error(
++      compose.value.voice_reason ||
++        compose.value.reason ||
++        __('Hiện chưa gửi được ghi âm qua Messenger'),
++    )
++    return
++  }
++  const blob = voice.blob
++  const fileName = voiceFileName(new Date(), voice.mime)
++  if (!fileName) {
++    toast.error(__('Định dạng ghi âm không được hỗ trợ'))
++    return
++  }
++  sending.value = true
++  voiceSending.value = true
++  try {
++    let fileUrl = voiceUpload?.blob === blob ? voiceUpload.url : ''
++    if (!fileUrl) {
++      fileUrl = await postUpload(
++        new File([blob], fileName, { type: voice.mime }),
++      )
++      voiceUpload = { blob, url: fileUrl }
++    }
++    const res = await call('omni_crm.api.messenger_tab.send_voice', {
++      doctype: props.doctype,
++      name: props.docname,
++      file_url: fileUrl,
++      ...replyPayload(replyTo.value),
++    })
++    voiceUpload = null // máy chủ đã nhận bản ghi (đổi xong thì xóa bản gốc): lần gửi sau phải tải lại
++    const outcome = sendOutcome(res)
++    if (outcome.ok) {
++      replyTo.value = null
++      cancelRecording()
++    } else toast.error(__(outcome.error))
++  } catch (error) {
++    toast.error(errorText(error, __('Không gửi được ghi âm qua Messenger')))
++  } finally {
++    voiceSending.value = false
++    sending.value = false
++    conversation.reload()
++  }
++}
++
++// Chuyển tiếp: chỉ tin Page đã gửi (`msg.can_forward`), tới khách Messenger của Lead khác; máy chủ kiểm lại mọi guard.
++const forwardMsg = ref(null) // tin đang chọn khách để chuyển tiếp
++const forwarding = ref('') // Lead đang được chuyển tiếp tới: không gọi đôi
++const {
++  query: forwardSearch,
++  state: forwardTargets,
++  open: openForwardTargets,
++  close: closeForwardTargets,
++  load: loadForwardTargets,
++} = useForwardTargets(() => ({ doctype: props.doctype, name: props.docname }))
++
++const forwardOpen = computed({
++  get: () => Boolean(forwardMsg.value),
++  set: (value) => {
++    if (!value) closeForward()
++  },
++})
++
++const forwardPreview = computed(() => {
++  const target = replyTarget(forwardMsg.value)
++  return target ? target.text || __(target.label) : ''
++})
++
++function openForward(msg, close) {
++  close()
++  if (!msg?.can_forward) return
++  forwardMsg.value = msg
++  openForwardTargets()
++}
++
++function closeForward() {
++  forwardMsg.value = null
++  closeForwardTargets()
++}
++
++async function chooseForwardTarget(item) {
++  const msg = forwardMsg.value
++  if (!msg || !item?.canSend || forwarding.value) return
++  if (
++    !window.confirm(
++      __(
++        'Chuyển tiếp tin này tới {0}? Khách nhận sẽ thấy như tin mới từ Page.',
++        [item.name],
++      ),
++    )
++  )
++    return
++  forwarding.value = item.lead
++  try {
++    const outcome = sendOutcome(
++      await call('omni_crm.api.messenger_tab.forward', {
++        doctype: props.doctype,
++        name: props.docname,
++        message_doctype: msg.doctype,
++        message: msg.name,
++        target_lead: item.lead,
++      }),
++    )
++    if (outcome.ok) toast.success(__('Đã chuyển tiếp'))
++    else toast.error(__(outcome.error))
++    if (forwardMsg.value === msg) closeForward()
++    conversation.reload()
++  } catch (error) {
++    toast.error(errorText(error, __('Không chuyển tiếp được tin')))
++  } finally {
++    forwarding.value = ''
++  }
++}
++
 +// Tóm tắt, ý định, mức gấp, điểm do bot phân tích ghi vào Lead (cùng hàm `_bot` của tab Zalo ở máy chủ).
 +const bot = computed(() => botCard(conversation.data?.bot))
 +function chipLabel(chip) {
@@ -1633,6 +2002,13 @@ index 0000000..d21f995
 +// Tải tệp lên CRM (gắn vào Lead/Deal đang mở, riêng tư) như tab Zalo, trả file_url. Máy chủ kiểm lại tệp thuộc Lead.
 +async function uploadToCrm(file) {
 +  if (uploaded?.file === file) return uploaded.url
++  const url = await postUpload(file)
++  uploaded = { file, url }
++  return url
++}
++
++// Một lần gọi upload_file (dùng chung cho 📎 và bản ghi âm), trả file_url hoặc ném lỗi có câu của máy chủ.
++async function postUpload(file) {
 +  const form = new FormData()
 +  form.append('file', file, file.name)
 +  form.append('doctype', props.doctype)
@@ -1650,7 +2026,6 @@ index 0000000..d21f995
 +  const result = parseUploadResponse(resp.ok, data)
 +  if (!result.url)
 +    throw new Error(result.error || __('Không tải được tệp lên CRM'))
-+  uploaded = { file, url: result.url }
 +  return result.url
 +}
 +
@@ -1752,6 +2127,8 @@ index 0000000..d21f995
 +  () => [props.doctype, props.docname],
 +  () => {
 +    replyTo.value = null // tin đang trả lời thuộc Lead cũ
++    cancelVoice() // bản ghi âm dở và tin đang chuyển tiếp thuộc Lead cũ
++    closeForward()
 +    conversation.reload()
 +    resetTemplates() // mẫu đã điền theo Lead cũ: tải lại khi mở bảng chọn
 +  },
@@ -2550,19 +2927,27 @@ index 0000000..7b6f7fc
 +}
 diff --git a/frontend/src/composables/messenger.js b/frontend/src/composables/messenger.js
 new file mode 100644
-index 0000000..82d8018
+index 0000000..2b223ac
 --- /dev/null
 +++ b/frontend/src/composables/messenger.js
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,399 @@
 +import { call, createResource } from 'frappe-ui'
 +import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 +import {
++  FORWARD_SEARCH_DEBOUNCE_MS,
 +  filterTemplates,
++  forwardQuery,
++  forwardTargetList,
++  micErrorText,
 +  needsTemplateSearch,
++  pickRecorderMime,
 +  stickerList,
 +  stickerPackList,
 +  stickerQuery,
 +  templateList,
++  voiceBaseMime,
++  voiceExtension,
++  voiceMaxSeconds,
 +} from '@/utils/messengerThread'
 +
 +// Tab Messenger (ADR 0023) chỉ hiện khi app omni_crm đã cài và công tắc không bị tắt (Omni Settings.messenger_tab_disabled).
@@ -2707,6 +3092,243 @@ index 0000000..82d8018
 +  }
 +
 +  return { query, pack, view, open, openPack, back, load }
++}
++
++/**
++ * Ghi âm trong trình duyệt cho tab Messenger (ADR 0027 đợt 2): xin micro, ghi bằng MediaRecorder (kiểu đầu tiên trình duyệt
++ * nhận trong `VOICE_MIMES`), tự dừng ở `getMaxSeconds()` giây, nghe lại bằng object URL. Không gửi gì: tab tải `voice.blob`
++ * lên CRM rồi gọi `send_voice`.
++ * `voice`: { phase: 'idle' | 'starting' | 'recording' | 'stopping' | 'recorded', elapsed (giây), blob, mime (kiểu gốc, vd.
++ * audio/webm), url (object URL để nghe lại) }. Dừng / hủy / tab đóng: luôn tắt micro (dừng mọi track) và thu hồi object URL.
++ * `onError(câu chưa dịch)`: micro bị chặn / không có, trình duyệt không hỗ trợ, bản ghi trống.
++ */
++export function useVoiceRecorder({ getMaxSeconds, onError } = {}) {
++  const voice = reactive({
++    phase: 'idle',
++    elapsed: 0,
++    blob: null,
++    mime: '',
++    url: '',
++  })
++  let stream = null
++  let recorder = null
++  let chunks = []
++  let timer = null
++  let startedAt = 0
++  let max = 0
++  let token = 0 // tăng mỗi lần bắt đầu / hủy: kết quả xin micro đến muộn của lần trước bị bỏ
++
++  const fail = (message) => onError?.(message)
++
++  function stopTracks() {
++    if (stream) for (const track of stream.getTracks()) track.stop()
++    stream = null
++  }
++
++  function measure() {
++    voice.elapsed = Math.min(max, (Date.now() - startedAt) / 1000)
++  }
++
++  /** Về trạng thái chờ: tắt micro, bỏ bản ghi, thu hồi object URL. */
++  function reset() {
++    clearInterval(timer)
++    timer = null
++    stopTracks()
++    if (voice.url) URL.revokeObjectURL(voice.url)
++    recorder = null
++    chunks = []
++    Object.assign(voice, {
++      phase: 'idle',
++      elapsed: 0,
++      blob: null,
++      mime: '',
++      url: '',
++    })
++  }
++
++  /** Xin micro rồi bắt đầu ghi; chỉ khi đang chờ (không ghi đè bản ghi đang có). */
++  async function start() {
++    if (voice.phase !== 'idle') return
++    const devices = globalThis.navigator?.mediaDevices
++    const Recorder = globalThis.MediaRecorder
++    if (typeof devices?.getUserMedia !== 'function' || !Recorder) {
++      fail(
++        globalThis.isSecureContext === false
++          ? 'Ghi âm chỉ dùng được khi mở CRM bằng HTTPS.'
++          : 'Trình duyệt này không hỗ trợ ghi âm. Hãy dùng Chrome, Edge, Firefox hoặc Safari bản mới.',
++      )
++      return
++    }
++    const mime = pickRecorderMime((m) => Recorder.isTypeSupported?.(m))
++    if (!mime) {
++      fail(
++        'Trình duyệt này không ghi được định dạng âm thanh mà máy chủ nhận (WebM, Ogg, MP4).',
++      )
++      return
++    }
++    const mine = ++token
++    voice.phase = 'starting'
++    let media
++    try {
++      media = await devices.getUserMedia({ audio: true })
++    } catch (error) {
++      if (mine !== token) return // đã hủy trong lúc chờ
++      voice.phase = 'idle'
++      fail(micErrorText(error))
++      return
++    }
++    if (mine !== token) {
++      // đã hủy (hoặc tab đóng) trong lúc chờ cấp quyền: tắt micro ngay
++      for (const track of media.getTracks()) track.stop()
++      return
++    }
++    stream = media
++    let rec
++    try {
++      rec = new Recorder(media, { mimeType: mime })
++    } catch {
++      reset()
++      fail('Trình duyệt không bắt đầu ghi âm được.')
++      return
++    }
++    recorder = rec
++    chunks = []
++    rec.ondataavailable = (event) => {
++      if (rec === recorder && event.data?.size) chunks.push(event.data)
++    }
++    rec.onstop = () => {
++      if (rec !== recorder) return // đã hủy: bỏ dữ liệu
++      clearInterval(timer)
++      timer = null
++      stopTracks()
++      const type = voiceExtension(rec.mimeType) ? rec.mimeType : mime
++      const blob = new Blob(chunks, { type: voiceBaseMime(type) })
++      chunks = []
++      recorder = null
++      if (!blob.size) {
++        reset()
++        fail('Bản ghi âm trống. Hãy ghi lại.')
++        return
++      }
++      voice.blob = blob
++      voice.mime = voiceBaseMime(type)
++      voice.url = URL.createObjectURL(blob)
++      voice.phase = 'recorded'
++    }
++    max = voiceMaxSeconds(getMaxSeconds?.())
++    try {
++      rec.start(1000)
++    } catch {
++      reset()
++      fail('Trình duyệt không bắt đầu ghi âm được.')
++      return
++    }
++    startedAt = Date.now()
++    voice.elapsed = 0
++    voice.phase = 'recording'
++    timer = setInterval(() => {
++      measure()
++      if (voice.elapsed >= max) stop() // tự dừng ở thời lượng tối đa
++    }, 250)
++  }
++
++  /** Dừng ghi (giữ bản ghi để nghe lại / gửi); micro tắt ngay. */
++  function stop() {
++    if (voice.phase !== 'recording' || !recorder) return
++    clearInterval(timer)
++    timer = null
++    measure()
++    voice.phase = 'stopping'
++    try {
++      if (recorder.state !== 'inactive') recorder.stop()
++      else recorder.onstop?.()
++    } catch {
++      reset()
++      fail('Không dừng được ghi âm.')
++      return
++    }
++    stopTracks()
++  }
++
++  /** Hủy ở bất kỳ bước nào (đang xin micro, đang ghi, đã ghi): bỏ bản ghi, tắt micro. */
++  function cancel() {
++    token++
++    const rec = recorder
++    recorder = null // onstop của bản đang ghi sẽ bỏ dữ liệu
++    if (rec && rec.state !== 'inactive') {
++      try {
++        rec.stop()
++      } catch {
++        // đã dừng
++      }
++    }
++    reset()
++  }
++
++  onScopeDispose(cancel)
++
++  return { voice, start, stop, cancel }
++}
++
++/**
++ * Danh sách khách để chuyển tiếp một tin (ADR 0027 đợt 2): `open()` gọi `forward_targets` một lần với ô tìm rỗng; gõ vào ô
++ * tìm thì ngừng 300 ms mới gọi lại. Kết quả đến muộn của lần gọi cũ bị bỏ. `state`: { loading, items (forwardTargetList),
++ * error }. Máy chủ lọc (Lead khác có Messenger, người dùng được sửa) và cho biết gửi được hay lý do.
++ */
++export function useForwardTargets(getParams) {
++  const query = ref('')
++  const state = reactive({ loading: false, items: [], error: '' })
++  let timer = null
++  let seq = 0
++  let lastQ = null // từ khóa của lần gọi gần nhất; null khi bảng đang đóng
++
++  function load() {
++    clearTimeout(timer)
++    const q = forwardQuery(query.value)
++    const id = ++seq
++    lastQ = q
++    state.loading = true
++    state.error = ''
++    call('omni_crm.api.messenger_tab.forward_targets', { ...getParams(), q })
++      .then((res) => {
++        if (id === seq) state.items = forwardTargetList(res)
++      })
++      .catch((error) => {
++        if (id !== seq) return
++        state.items = []
++        state.error =
++          error?.messages?.[0] ||
++          error?.message ||
++          'Không tải được danh sách khách Messenger'
++      })
++      .finally(() => {
++        if (id === seq) state.loading = false
++      })
++  }
++
++  watch(query, (value) => {
++    if (lastQ === null) return
++    clearTimeout(timer)
++    if (forwardQuery(value) !== lastQ)
++      timer = setTimeout(load, FORWARD_SEARCH_DEBOUNCE_MS)
++  })
++
++  function open() {
++    query.value = ''
++    state.items = []
++    load()
++  }
++
++  function close() {
++    clearTimeout(timer)
++    seq++
++    lastQ = null
++    state.loading = false
++  }
++
++  onScopeDispose(close)
++
++  return { query, state, open, close, load }
 +}
 diff --git a/frontend/src/composables/zalo.js b/frontend/src/composables/zalo.js
 new file mode 100644
@@ -2949,14 +3571,14 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/messengerThread.js b/frontend/src/utils/messengerThread.js
 new file mode 100644
-index 0000000..702edd8
+index 0000000..6b7e715
 --- /dev/null
 +++ b/frontend/src/utils/messengerThread.js
-@@ -0,0 +1,683 @@
+@@ -0,0 +1,845 @@
 +// Hàm thuần cho tab "Messenger" (omni_crm, ADR 0023): đính kèm (ảnh / video / âm thanh / tệp đã lưu trong CRM), kiểm tệp
 +// sale chọn để gửi, liên kết hộp thư Meta Business Suite, mẫu tin nhắn (ADR 0026), tương tác (ADR 0027: emoji, sticker,
-+// cảm xúc, trả lời một tin, ẩn tin trong CRM). Gom bong bóng, nhãn, giờ và luật URL dùng lại `zaloThread.js` (không sửa
-+// tệp đó). Không phụ thuộc Vue/DOM.
++// cảm xúc, trả lời một tin, ẩn tin trong CRM; đợt 2: ghi âm, chuyển tiếp). Gom bong bóng, nhãn, giờ và luật URL dùng lại
++// `zaloThread.js` (không sửa tệp đó). Không phụ thuộc Vue/DOM.
 +import {
 +  INLINE_IMAGE_TYPES,
 +  attachmentLabel,
@@ -3619,9 +4241,10 @@ index 0000000..702edd8
 +}
 +
 +/**
-+ * Thao tác được phép trên một tin: { react, reply, hide, unhide, any }. Máy chủ quyết định (`can_react`, `can_hide`, `mid`,
-+ * `compose.can_react`, `compose.can_send`) và kiểm lại khi gọi. Trả lời cần mã tin Meta; mã "sandbox:" chỉ dùng được khi
-+ * site đang sandbox (như máy chủ). Tin thiếu loại / tên: không thao tác nào.
++ * Thao tác được phép trên một tin: { react, reply, hide, unhide, forward, any }. Máy chủ quyết định (`can_react`, `can_hide`,
++ * `can_forward`, `mid`, `compose.can_react`, `compose.can_send`) và kiểm lại khi gọi. Trả lời cần mã tin Meta; mã "sandbox:"
++ * chỉ dùng được khi site đang sandbox (như máy chủ). Chuyển tiếp (ADR 0027 đợt 2) chỉ theo `msg.can_forward` (tin Page đã
++ * gửi, đang hiện, có nội dung), không phụ thuộc khung 24 giờ của khách đang xem. Tin thiếu loại / tên: không thao tác nào.
 + */
 +export function messageActions(msg, compose) {
 +  const ok = Boolean(msg && MESSAGE_DOCTYPES.includes(msg.doctype) && msg.name)
@@ -3634,7 +4257,168 @@ index 0000000..702edd8
 +    (!mid.startsWith('sandbox:') || Boolean(compose?.sandbox))
 +  const hide = ok && Boolean(msg.can_hide) && !msg.hidden
 +  const unhide = ok && Boolean(msg.can_hide) && Boolean(msg.hidden)
-+  return { react, reply, hide, unhide, any: react || reply || hide || unhide }
++  const forward = ok && Boolean(msg.can_forward) && !msg.hidden
++  return {
++    react,
++    reply,
++    hide,
++    unhide,
++    forward,
++    any: react || reply || hide || unhide || forward,
++  }
++}
++
++// --- Ghi âm (ADR 0027 đợt 2): trình duyệt ghi, tải lên CRM tên `ghi-am-…`, máy chủ đổi sang MP3 rồi gửi kiểu audio ---
++
++/** Kiểu ghi âm thử theo thứ tự cho MediaRecorder (Chrome / Edge / Firefox ghi WebM hoặc Ogg Opus, Safari ghi MP4). */
++export const VOICE_MIMES = [
++  'audio/webm;codecs=opus',
++  'audio/webm',
++  'audio/ogg;codecs=opus',
++  'audio/mp4',
++]
++
++/** Tiền tố tên tệp ghi âm: máy chủ chỉ xóa bản gốc sau khi đổi sang MP3 khi tên có tiền tố này (`media_out.VOICE_PREFIX`). */
++export const VOICE_PREFIX = 'ghi-am-'
++
++/** Thời lượng ghi tối đa mặc định (giây), như `media_out.VOICE_MAX_SECONDS`; máy chủ gửi kèm `compose.voice_max_seconds`. */
++export const VOICE_MAX_SECONDS = 300
++
++const VOICE_EXT = {
++  'audio/webm': '.webm',
++  'audio/ogg': '.ogg',
++  'audio/mp4': '.m4a',
++}
++
++/**
++ * Kiểu ghi âm đầu tiên trong `VOICE_MIMES` mà trình duyệt nhận (`isSupported` thường là `MediaRecorder.isTypeSupported`),
++ * hoặc '' nếu không có kiểu nào (không ghi âm được). Hàm kiểm ném lỗi thì coi như không nhận kiểu đó.
++ */
++export function pickRecorderMime(isSupported) {
++  if (typeof isSupported !== 'function') return ''
++  for (const mime of VOICE_MIMES) {
++    try {
++      if (isSupported(mime)) return mime
++    } catch {
++      // trình duyệt lạ: thử kiểu kế tiếp
++    }
++  }
++  return ''
++}
++
++/** Kiểu gốc của mime ghi âm, bỏ tham số (vd. "audio/webm;codecs=opus" -> "audio/webm"); chữ thường. */
++export function voiceBaseMime(mime) {
++  return String(mime ?? '')
++    .split(';')[0]
++    .trim()
++    .toLowerCase()
++}
++
++/** Đuôi tệp theo mime ghi âm: .webm, .ogg, .m4a; mime khác thì ''. */
++export function voiceExtension(mime) {
++  return VOICE_EXT[voiceBaseMime(mime)] || ''
++}
++
++/**
++ * Tên tệp ghi âm tải lên CRM: "ghi-am-YYYYMMDD-HHMMSS.<đuôi>" theo giờ máy người dùng, đuôi khớp mime (.webm, .ogg, .m4a).
++ * '' nếu mime không thuộc ba kiểu trên hoặc ngày không hợp lệ (không tải lên).
++ */
++export function voiceFileName(date, mime) {
++  const ext = voiceExtension(mime)
++  if (!ext || !(date instanceof Date) || Number.isNaN(date.getTime())) return ''
++  const pad = (n) => String(n).padStart(2, '0')
++  const day = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
++  const time = `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
++  return `${VOICE_PREFIX}${day}-${time}${ext}`
++}
++
++/** Thời lượng "mm:ss" (làm tròn xuống giây); âm, rỗng hoặc không phải số thì "00:00". */
++export function formatDuration(seconds) {
++  const n = Number(seconds)
++  const total = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
++  const pad = (v) => String(v).padStart(2, '0')
++  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`
++}
++
++/** Thời lượng ghi tối đa (giây) theo `compose.voice_max_seconds`; thiếu hoặc không hợp lệ thì 300. */
++export function voiceMaxSeconds(value) {
++  const n = Math.floor(Number(value))
++  return Number.isFinite(n) && n > 0 ? n : VOICE_MAX_SECONDS
++}
++
++/**
++ * Câu báo khi không bật được micro (chưa dịch), theo `name` của lỗi getUserMedia (hoặc chuỗi tên lỗi): bị chặn quyền, không có
++ * micro, micro đang bận; lỗi khác dùng câu chung.
++ */
++export function micErrorText(error) {
++  const name = String(
++    typeof error === 'string' ? error : (error?.name ?? ''),
++  ).trim()
++  if (
++    ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(name)
++  )
++    return 'Trình duyệt chưa cho phép dùng micro. Bấm biểu tượng ổ khóa cạnh địa chỉ trang, cho phép micro rồi thử lại.'
++  if (
++    ['NotFoundError', 'DevicesNotFoundError', 'OverconstrainedError'].includes(
++      name,
++    )
++  )
++    return 'Không tìm thấy micro trên máy này.'
++  if (['NotReadableError', 'TrackStartError', 'AbortError'].includes(name))
++    return 'Micro đang bận hoặc không dùng được (có thể ứng dụng khác đang dùng). Thử lại sau.'
++  return 'Không bật được micro để ghi âm.'
++}
++
++// --- Chuyển tiếp (ADR 0027 đợt 2): chỉ tin Page đã gửi, tới khách Messenger của Lead khác ---
++
++/** Ngừng gõ chừng này mili giây thì mới tìm khách để chuyển tiếp. */
++export const FORWARD_SEARCH_DEBOUNCE_MS = 300
++
++/** Từ khóa tìm khách như máy chủ chuẩn hóa `forward_targets` (gộp khoảng trắng, tối đa 80 ký tự). */
++export function forwardQuery(value) {
++  return [
++    ...String(value ?? '')
++      .split(/\s+/)
++      .filter(Boolean)
++      .join(' '),
++  ]
++    .slice(0, 80)
++    .join('')
++}
++
++/**
++ * Một khách trong danh sách chuyển tiếp (`forward_targets` -> items[i]): { lead, name, canSend, status }, hoặc null nếu thiếu
++ * mã Lead. `status` (chưa dịch): "Gửi được", hoặc lý do của máy chủ (vd. ngoài 24 giờ), thiếu lý do thì "Chưa gửi được".
++ */
++export function forwardTargetView(item) {
++  if (!item || typeof item !== 'object') return null
++  const lead = String(item.lead ?? '').trim()
++  if (!lead) return null
++  const canSend = Boolean(item.can_send)
++  const reason = String(item.reason ?? '').trim()
++  return {
++    lead,
++    name:
++      String(item.lead_name ?? '')
++        .trim()
++        .slice(0, 140) || lead,
++    canSend,
++    status: canSend ? 'Gửi được' : reason || 'Chưa gửi được',
++  }
++}
++
++/** Danh sách khách chuyển tiếp từ kết quả `forward_targets` ({ items }): giữ thứ tự máy chủ, bỏ mục rác và Lead trùng, tối đa 20. */
++export function forwardTargetList(res) {
++  const out = []
++  const seen = new Set()
++  for (const item of Array.isArray(res?.items) ? res.items : []) {
++    const view = forwardTargetView(item)
++    if (!view || seen.has(view.lead)) continue
++    seen.add(view.lead)
++    out.push(view)
++    if (out.length >= 20) break
++  }
++  return out
 +}
 diff --git a/frontend/src/utils/zaloThread.js b/frontend/src/utils/zaloThread.js
 new file mode 100644
@@ -4145,14 +4929,15 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/messengerThread.test.js b/frontend/tests/unit/messengerThread.test.js
 new file mode 100644
-index 0000000..c19d7b8
+index 0000000..7394981
 --- /dev/null
 +++ b/frontend/tests/unit/messengerThread.test.js
-@@ -0,0 +1,1130 @@
+@@ -0,0 +1,1418 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  DEFAULT_MEDIA_ACCEPT,
 +  EMOJI_GROUPS,
++  FORWARD_SEARCH_DEBOUNCE_MS,
 +  HEART,
 +  MESSAGE_DOCTYPES,
 +  META_INBOX_URL,
@@ -4160,6 +4945,9 @@ index 0000000..c19d7b8
 +  REACTION_EMOJIS,
 +  STICKER_HOSTS,
 +  TEMPLATE_SEARCH_AFTER,
++  VOICE_MAX_SECONDS,
++  VOICE_MIMES,
++  VOICE_PREFIX,
 +  acceptList,
 +  applyTemplate,
 +  canSubmitMessenger,
@@ -4167,7 +4955,11 @@ index 0000000..c19d7b8
 +  emojiGlyph,
 +  filterTemplates,
 +  foldText,
++  formatDuration,
 +  formatSize,
++  forwardQuery,
++  forwardTargetList,
++  forwardTargetView,
 +  insertAtCursor,
 +  isMessengerUpdate,
 +  isStickerUrl,
@@ -4178,10 +4970,12 @@ index 0000000..c19d7b8
 +  messageActions,
 +  messengerAttachmentViews,
 +  metaInboxUrl,
++  micErrorText,
 +  needsTemplateSearch,
 +  openMetaInbox,
 +  overLimit,
 +  parseUploadResponse,
++  pickRecorderMime,
 +  quoteLabel,
 +  reactionChips,
 +  reactionChoices,
@@ -4193,6 +4987,10 @@ index 0000000..c19d7b8
 +  stickerQuery,
 +  stickerView,
 +  templateList,
++  voiceBaseMime,
++  voiceExtension,
++  voiceFileName,
++  voiceMaxSeconds,
 +} from '@/utils/messengerThread'
 +
 +const MB = 1024 * 1024
@@ -5188,6 +5986,7 @@ index 0000000..c19d7b8
 +    reply: false,
 +    hide: false,
 +    unhide: false,
++    forward: false,
 +    any: false,
 +  }
 +  it('đủ quyền: cảm xúc, trả lời; ẩn theo can_hide của máy chủ', () => {
@@ -5196,6 +5995,7 @@ index 0000000..c19d7b8
 +      reply: true,
 +      hide: false,
 +      unhide: false,
++      forward: false,
 +      any: true,
 +    })
 +    expect(messageActions(m({ doctype: OUT, can_hide: true }), C)).toEqual({
@@ -5203,6 +6003,7 @@ index 0000000..c19d7b8
 +      reply: true,
 +      hide: true,
 +      unhide: false,
++      forward: false,
 +      any: true,
 +    })
 +  })
@@ -5232,6 +6033,277 @@ index 0000000..c19d7b8
 +    ).toEqual(none)
 +    expect(messageActions({ doctype: IN, can_hide: true }, C)).toEqual(none)
 +    expect(messageActions(null, C)).toEqual(none)
++  })
++  it('chuyển tiếp (đợt 2): theo msg.can_forward, không phụ thuộc khung soạn; tin ẩn hoặc lạ thì không', () => {
++    const sent = m({
++      doctype: OUT,
++      name: 'OUT-1',
++      can_react: false,
++      mid: '',
++      can_forward: true,
++    })
++    expect(messageActions(sent, C)).toEqual({
++      ...none,
++      forward: true,
++      any: true,
++    })
++    expect(messageActions(sent, null)).toMatchObject({
++      forward: true,
++      any: true,
++    }) // ngoài 24 giờ với khách này vẫn chuyển tiếp được cho khách khác
++    expect(messageActions({ ...sent, can_forward: false }, C)).toEqual(none)
++    expect(messageActions({ ...sent, hidden: true }, C).forward).toBe(false)
++    expect(
++      messageActions({ ...sent, doctype: 'Communication' }, C).forward,
++    ).toBe(false)
++    expect(messageActions({ ...sent, name: '' }, C).forward).toBe(false)
++  })
++})
++
++describe('ghi âm (ADR 0027 đợt 2)', () => {
++  it('VOICE_MIMES: WebM Opus trước, MP4 (Safari) cuối; tiền tố tên tệp như máy chủ', () => {
++    expect(VOICE_MIMES).toEqual([
++      'audio/webm;codecs=opus',
++      'audio/webm',
++      'audio/ogg;codecs=opus',
++      'audio/mp4',
++    ])
++    expect(VOICE_PREFIX).toBe('ghi-am-')
++    expect(VOICE_MAX_SECONDS).toBe(300)
++  })
++  it('pickRecorderMime: kiểu đầu tiên trình duyệt nhận, theo thứ tự', () => {
++    expect(pickRecorderMime(() => true)).toBe('audio/webm;codecs=opus')
++    expect(pickRecorderMime((m) => m.startsWith('audio/ogg'))).toBe(
++      'audio/ogg;codecs=opus',
++    )
++    expect(pickRecorderMime((m) => m === 'audio/mp4')).toBe('audio/mp4') // Safari
++    expect(pickRecorderMime((m) => m === 'audio/webm')).toBe('audio/webm')
++    const seen = []
++    pickRecorderMime((m) => {
++      seen.push(m)
++      return m === 'audio/webm'
++    })
++    expect(seen).toEqual(['audio/webm;codecs=opus', 'audio/webm']) // dừng ở kiểu đầu tiên được nhận
++  })
++  it('pickRecorderMime: không kiểu nào, hàm kiểm lỗi hoặc thiếu: rỗng', () => {
++    expect(pickRecorderMime(() => false)).toBe('')
++    expect(pickRecorderMime((m) => m === 'audio/wav')).toBe('')
++    expect(
++      pickRecorderMime((m) => {
++        if (m.startsWith('audio/webm')) throw new Error('lạ')
++        return m === 'audio/mp4'
++      }),
++    ).toBe('audio/mp4')
++    expect(pickRecorderMime(undefined)).toBe('')
++    expect(pickRecorderMime('audio/webm')).toBe('')
++  })
++  it('voiceBaseMime / voiceExtension: đuôi khớp mime', () => {
++    expect(voiceBaseMime('audio/webm;codecs=opus')).toBe('audio/webm')
++    expect(voiceBaseMime(' Audio/OGG ; codecs=opus')).toBe('audio/ogg')
++    expect(voiceBaseMime(undefined)).toBe('')
++    expect(voiceExtension('audio/webm;codecs=opus')).toBe('.webm')
++    expect(voiceExtension('audio/webm')).toBe('.webm')
++    expect(voiceExtension('audio/ogg;codecs=opus')).toBe('.ogg')
++    expect(voiceExtension('audio/mp4')).toBe('.m4a')
++    expect(voiceExtension('audio/mpeg')).toBe('')
++    expect(voiceExtension('video/webm')).toBe('')
++    expect(voiceExtension('')).toBe('')
++  })
++  it('voiceFileName: ghi-am-YYYYMMDD-HHMMSS.<đuôi> theo giờ máy', () => {
++    const d = new Date(2026, 10, 3, 9, 5, 7) // 03/11/2026 09:05:07 giờ máy
++    expect(voiceFileName(d, 'audio/webm;codecs=opus')).toBe(
++      'ghi-am-20261103-090507.webm',
++    )
++    expect(voiceFileName(d, 'audio/ogg;codecs=opus')).toBe(
++      'ghi-am-20261103-090507.ogg',
++    )
++    expect(voiceFileName(d, 'audio/mp4')).toBe('ghi-am-20261103-090507.m4a')
++    expect(
++      voiceFileName(new Date(2026, 11, 31, 23, 59, 59), 'audio/webm'),
++    ).toBe('ghi-am-20261231-235959.webm')
++  })
++  it('voiceFileName: mime lạ hoặc ngày hỏng: rỗng (không tải lên)', () => {
++    const d = new Date(2026, 10, 3, 9, 5, 7)
++    expect(voiceFileName(d, 'audio/wav')).toBe('')
++    expect(voiceFileName(d, '')).toBe('')
++    expect(voiceFileName(new Date('x'), 'audio/webm')).toBe('')
++    expect(voiceFileName('2026-11-03', 'audio/webm')).toBe('')
++    expect(voiceFileName(undefined, 'audio/webm')).toBe('')
++  })
++  it('formatDuration: mm:ss, làm tròn xuống, giá trị hỏng thì 00:00', () => {
++    expect(formatDuration(0)).toBe('00:00')
++    expect(formatDuration(5.9)).toBe('00:05')
++    expect(formatDuration(65)).toBe('01:05')
++    expect(formatDuration(300)).toBe('05:00')
++    expect(formatDuration(3725)).toBe('62:05')
++    expect(formatDuration('12')).toBe('00:12')
++    expect(formatDuration(-3)).toBe('00:00')
++    expect(formatDuration(NaN)).toBe('00:00')
++    expect(formatDuration(Infinity)).toBe('00:00')
++    expect(formatDuration(undefined)).toBe('00:00')
++  })
++  it('voiceMaxSeconds: theo compose.voice_max_seconds, thiếu hoặc hỏng thì 300', () => {
++    expect(voiceMaxSeconds(120)).toBe(120)
++    expect(voiceMaxSeconds('90')).toBe(90)
++    expect(voiceMaxSeconds(59.7)).toBe(59)
++    expect(voiceMaxSeconds(0)).toBe(300)
++    expect(voiceMaxSeconds(-5)).toBe(300)
++    expect(voiceMaxSeconds(undefined)).toBe(300)
++    expect(voiceMaxSeconds('abc')).toBe(300)
++  })
++  it('micErrorText: câu tiếng Việt theo loại lỗi micro', () => {
++    const denied = micErrorText({ name: 'NotAllowedError' })
++    expect(denied).toContain('chưa cho phép dùng micro')
++    expect(micErrorText('SecurityError')).toBe(denied)
++    expect(micErrorText({ name: 'PermissionDeniedError' })).toBe(denied)
++    expect(micErrorText({ name: 'NotFoundError' })).toBe(
++      'Không tìm thấy micro trên máy này.',
++    )
++    expect(micErrorText({ name: 'OverconstrainedError' })).toBe(
++      'Không tìm thấy micro trên máy này.',
++    )
++    expect(micErrorText({ name: 'NotReadableError' })).toContain(
++      'Micro đang bận',
++    )
++    expect(micErrorText(new Error('x'))).toBe('Không bật được micro để ghi âm.')
++    expect(micErrorText(null)).toBe('Không bật được micro để ghi âm.')
++  })
++  it('bản MP3 máy chủ đổi xong (/private/files/ghi-am-….mp3, type audio) có trình phát', () => {
++    expect(
++      messengerAttachmentViews([
++        {
++          url: '/private/files/ghi-am-20261113-101500.mp3',
++          name: 'ghi-am-20261113-101500.mp3',
++          type: 'audio',
++        },
++        {
++          url: '/private/files/ghi-am-20261113-101501a1b2c3.mp3',
++          type: 'audio',
++        },
++      ]),
++    ).toEqual([
++      {
++        index: 0,
++        kind: 'audio',
++        url: '/private/files/ghi-am-20261113-101500.mp3',
++        src: '/private/files/ghi-am-20261113-101500.mp3',
++        text: 'ghi-am-20261113-101500.mp3',
++      },
++      {
++        index: 1,
++        kind: 'audio',
++        url: '/private/files/ghi-am-20261113-101501a1b2c3.mp3',
++        src: '/private/files/ghi-am-20261113-101501a1b2c3.mp3',
++        text: 'ghi-am-20261113-101501a1b2c3.mp3',
++      },
++    ])
++    expect(mediaKind('', 'audio/mpeg')).toBe('audio')
++  })
++})
++
++describe('chuyển tiếp (ADR 0027 đợt 2)', () => {
++  it('FORWARD_SEARCH_DEBOUNCE_MS: 300', () => {
++    expect(FORWARD_SEARCH_DEBOUNCE_MS).toBe(300)
++  })
++  it('forwardQuery: gộp khoảng trắng, tối đa 80 ký tự như máy chủ', () => {
++    expect(forwardQuery('  Nguyễn   Văn\tA ')).toBe('Nguyễn Văn A')
++    expect(forwardQuery('')).toBe('')
++    expect(forwardQuery(null)).toBe('')
++    expect(forwardQuery('x'.repeat(100))).toHaveLength(80)
++  })
++  it('forwardTargetView: gửi được hoặc lý do của máy chủ', () => {
++    expect(
++      forwardTargetView({
++        lead: 'CRM-LEAD-0001',
++        lead_name: 'Chị Lan',
++        can_send: true,
++        reason: '',
++      }),
++    ).toEqual({
++      lead: 'CRM-LEAD-0001',
++      name: 'Chị Lan',
++      canSend: true,
++      status: 'Gửi được',
++    })
++    expect(
++      forwardTargetView({
++        lead: 'CRM-LEAD-0002',
++        lead_name: 'Anh Minh',
++        can_send: false,
++        reason: 'Đã quá 24 giờ kể từ tin cuối của khách',
++      }),
++    ).toEqual({
++      lead: 'CRM-LEAD-0002',
++      name: 'Anh Minh',
++      canSend: false,
++      status: 'Đã quá 24 giờ kể từ tin cuối của khách',
++    })
++  })
++  it('forwardTargetView: thiếu tên thì mã Lead; thiếu lý do thì câu chung; thiếu Lead hoặc rác thì null', () => {
++    expect(forwardTargetView({ lead: ' L-1 ', can_send: 1 })).toEqual({
++      lead: 'L-1',
++      name: 'L-1',
++      canSend: true,
++      status: 'Gửi được',
++    })
++    expect(forwardTargetView({ lead: 'L-2', lead_name: '  ' })).toMatchObject({
++      name: 'L-2',
++      canSend: false,
++      status: 'Chưa gửi được',
++    })
++    expect(forwardTargetView({ lead: '', lead_name: 'x' })).toBeNull()
++    expect(forwardTargetView(null)).toBeNull()
++    expect(forwardTargetView('L-1')).toBeNull()
++  })
++  it('forwardTargetList: giữ thứ tự, bỏ rác và Lead trùng, tối đa 20', () => {
++    const res = {
++      items: [
++        { lead: 'L-1', lead_name: 'A', can_send: true },
++        null,
++        { lead: 'L-1', lead_name: 'A trùng', can_send: false },
++        { lead_name: 'không mã' },
++        {
++          lead: 'L-2',
++          lead_name: 'B',
++          can_send: false,
++          reason: 'Ngoài 24 giờ',
++        },
++      ],
++    }
++    expect(
++      forwardTargetList(res).map((t) => [t.lead, t.name, t.status]),
++    ).toEqual([
++      ['L-1', 'A', 'Gửi được'],
++      ['L-2', 'B', 'Ngoài 24 giờ'],
++    ])
++    const many = {
++      items: Array.from({ length: 25 }, (_, i) => ({ lead: `L-${i}` })),
++    }
++    expect(forwardTargetList(many)).toHaveLength(20)
++    expect(forwardTargetList({})).toEqual([])
++    expect(forwardTargetList(null)).toEqual([])
++    expect(forwardTargetList({ items: 'x' })).toEqual([])
++  })
++  it('kết quả forward / send_voice dùng chung sendOutcome: Blocked thì báo lý do', () => {
++    expect(
++      sendOutcome({
++        status: 'Queued',
++        reason: '',
++        target: 'L-2',
++        outbounds: ['OUT-1', 'OUT-2'],
++      }),
++    ).toMatchObject({ ok: true, error: '' })
++    expect(
++      sendOutcome({
++        status: 'Blocked',
++        reason: 'Đã quá 24 giờ',
++        target: 'L-2',
++        outbounds: ['OUT-3'],
++      }),
++    ).toMatchObject({ ok: false, error: 'Đã quá 24 giờ' })
++    expect(sendOutcome({ status: 'Blocked', outbound: 'OUT-4' }).error).toBe(
++      'Tin bị chặn, chưa gửi',
++    )
 +  })
 +})
 +
