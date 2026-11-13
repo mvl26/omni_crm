@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-13 10:00:00.000000",
- "modified": "2026-11-13 11:00:00.000000",
+ "modified": "2026-11-13 12:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -192,5 +192,7 @@
  "autoname": "hash",
  "naming_rule": "Random",
  "title_field": "title",
- "track_changes": 1
+ "track_changes": 1,
+ "show_title_field_in_link": 1,
+ "search_fields": "title,utm_content"
 }

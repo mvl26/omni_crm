@@ -26,6 +26,7 @@ from omni_crm.channels.meta_leads.client import MetaClient
 from omni_crm.channels.meta_leads.errors import TRANSIENT, MetaError
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.identity.normalize import normalize_email, normalize_phone
+from omni_crm.marketing import attribution as mk_attribution
 from omni_crm.pipeline.retry import TransientError
 from omni_crm.prospect import contacts as prospect_contacts
 from omni_crm.prospect.normalize import InvalidTaxId, normalize_tax_id
@@ -246,6 +247,7 @@ def _attribution_values(form: dict, campaign: str | None, row: Any, created: boo
 		)
 		for key in ("source", "medium", "campaign", "content", "term"):
 			values[f"omni_utm_{key}"] = _data(utm.get(f"utm_{key}"))
+		values.update(mk_attribution.lead_values(campaign, utm))  # V3-10: bài đăng nguồn + giai đoạn phễu
 	elif campaign and row.get("omni_campaign") and campaign != row.get("omni_campaign"):
 		returned_from = row.get("omni_campaign")
 	if campaign:
@@ -496,6 +498,11 @@ def _apply(res: Any, msg: Any) -> None:
 	record_consent(form, mapped.get("phone"), mapped.get("email"))
 	if returned_from:
 		_comment(lead, _("Quay lại qua chiến dịch {0} (lần đầu qua {1})").format(campaign, returned_from))
+	line = mk_attribution.activity_line(
+		form, campaign, res.created_lead
+	)  # V3-10: nguồn chiến dịch / bài đăng
+	if line:
+		_comment(lead, line)
 	has_contact = bool(normalize_phone(mapped.get("phone")) or normalize_email(mapped.get("email")))
 	if not has_contact and res.created_lead:
 		_comment(lead, _("Thiếu thông tin liên hệ: biểu mẫu không có SĐT hay email hợp lệ"))

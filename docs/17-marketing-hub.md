@@ -63,3 +63,20 @@ Trang đích luôn chuẩn hóa thành thư mục có `/` cuối, vì nginx bỏ
   nguồn; `kb_feedback(run, Đúng|Cần sửa|Sai)` lưu vào Bot Run.
 - API mới: `ai_budget`, `planner_send`, `planner_state`, `planner_create`, `score_item`, `kb_overview`, `kb_reindex`,
   `kb_ask`, `kb_feedback`.
+
+## Lead và chiến dịch (Prompt 5)
+
+- Landing page: `omni_utm.js` (đã có từ V2-05) lưu UTM lần truy cập đầu vào sessionStorage và gửi kèm form.
+  `form_lead.resolve_campaign` tìm chiến dịch theo `utm_campaign`; `marketing/attribution.py` tìm bài theo
+  (chiến dịch, `utm_content`) và điền `omni_content_item`, `omni_funnel_stage`. Mã không khớp: Lead vẫn tạo, giữ UTM gốc.
+- Nguồn đầu tiên giữ nguyên (`omni_campaign` = "Chiến dịch nguồn"); lần sau cập nhật `omni_last_campaign` và ghi
+  dòng nhật ký "Khách điền thêm form … - Chiến dịch … - bài …". Lead mới: "Lead tạo từ form landing page /spd/ - …".
+- Lead Ads: chiến dịch lấy theo mã chiến dịch Meta hoặc `Omni Lead Form.campaign` (tương đương `leadads_form_ids`
+  trong đề bài, không thêm trường mới).
+- Bình luận / tin nhắn từ bài đăng: CHƯA làm. Cần webhook `feed` (bình luận) của Meta và quyền
+  `pages_manage_engagement` / `pages_read_user_content` mà token Trang chưa có, đồng thời phải sửa luồng intake đang
+  có thay đổi dở trên máy chủ. Sẽ làm khi có quyền Meta và intake ổn định.
+- Giao diện: patch `v3.marketing_lead_ui` thêm khối "Marketing" (chiến dịch, bài đăng, UTM nguồn/kênh, giai đoạn phễu)
+  ngay sau khối "Bot AI" ở cột phải trang Lead, và thêm "Chiến dịch nguồn" vào bộ lọc nhanh. Cột danh sách Lead do
+  `CRMLead.default_list_data()` của app crm quyết định (không sửa app crm): người dùng thêm cột "Chiến dịch nguồn" bằng
+  nút Cột của danh sách.
