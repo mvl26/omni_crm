@@ -195,6 +195,9 @@ scheduler_events = {
 		"20 2 * * *": [
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
+		# V3-10 Marketing Hub (ADR 0028): CRM tự giữ lịch, mỗi phút đăng bài đến giờ. Khóa riêng "*/1" để không chung
+		# danh sách "* * * * *" (dễ đụng thay đổi của luồng khác khi gộp).
+		"*/1 * * * *": ["omni_crm.marketing.publisher.dispatch.dispatch_due"],
 	},
 	"hourly": [
 		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi

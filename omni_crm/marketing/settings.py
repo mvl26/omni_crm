@@ -51,7 +51,14 @@ def dry_run() -> bool:
 	from omni_crm import flags
 
 	try:
-		return bool(cint(get("dry_run"))) or flags.sandbox()
+		rows = frappe.db.sql(
+			"select value from `tabSingles` where doctype=%s and field='dry_run'", (DOCTYPE,)
+		)
+		if not rows or any(
+			cint(r[0]) for r in rows
+		):  # chưa lưu, hoặc (dữ liệu lỗi) có dòng trùng nào bật -> thử
+			return True
+		return flags.sandbox()
 	except Exception:
 		return True
 

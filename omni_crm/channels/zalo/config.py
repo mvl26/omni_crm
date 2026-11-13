@@ -20,7 +20,12 @@ DEFAULTS: dict = {
 		"file": "/v2.0/oa/upload/file",
 	},
 	"upload_timeout": 30,  # giây: tải tệp tới 5 MB lâu hơn gửi tin chữ
-	"oa_info_path": "/v2.0/oa/getoa",  # V3-10 VERIFY: "Lấy thông tin Official Account" (chưa đọc được tài liệu chính thức)
+	"oa_info_path": "/v2.0/oa/getoa",
+	# V3-10 Marketing Hub, bài viết OA. VERIFY: theo SDK cộng đồng (tài liệu chính thức là SPA, chưa đọc được):
+	# create trả `token`; verify(token) trả `article_id` khi xử lý xong; getslice liệt kê bài gần nhất.
+	"article_create_path": "/v2.0/article/create",
+	"article_verify_path": "/v2.0/article/verify",
+	"article_list_path": "/v2.0/article/getslice",  # V3-10 VERIFY: "Lấy thông tin Official Account" (chưa đọc được tài liệu chính thức)
 	"oauth_permission_path": "/v4/oa/permission",
 	"oauth_token_path": "/v4/oa/access_token",
 	"max_text_length": 2000,  # độ dài tối đa một tin văn bản tư vấn (chưa xác nhận)

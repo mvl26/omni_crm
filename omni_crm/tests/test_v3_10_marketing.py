@@ -24,10 +24,10 @@ PAGE_TOKEN = "tm310-page-token-khong-that-" + "q" * 20 + "WXYZ"
 
 
 def set_setting(field: str, value) -> None:
+	"""tabSingles không có khóa duy nhất (doctype, field): xóa rồi ghi, không dùng ON DUPLICATE KEY."""
+	frappe.db.sql("delete from tabSingles where doctype=%s and field=%s", (SETTINGS, field))
 	frappe.db.sql(
-		"""insert into tabSingles (doctype, field, value) values (%s, %s, %s)
-		on duplicate key update value = %s""",
-		(SETTINGS, field, value, value),
+		"insert into tabSingles (doctype, field, value) values (%s, %s, %s)", (SETTINGS, field, value)
 	)
 	frappe.db.value_cache.pop(SETTINGS, None)
 
