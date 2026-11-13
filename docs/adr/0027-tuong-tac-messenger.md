@@ -1,7 +1,7 @@
 # 0027 · Tương tác Messenger: emoji, sticker, cảm xúc, trả lời tin cụ thể, ẩn tin (đợt 1); ghi âm, chuyển tiếp (đợt 2)
 
 - Ngày: 2026-11-13
-- Trạng thái: Đã chấp nhận (người phụ trách duyệt 13/11/2026: sticker từ kho của Meta, ghi âm đổi sang MP3 trên máy chủ, người gửi + quản lý được ẩn tin, chia hai đợt). Đợt 1 làm ở nhánh `feat/messenger-tuong-tac`; đợt 2 chưa làm.
+- Trạng thái: Đã chấp nhận (người phụ trách duyệt 13/11/2026: sticker từ kho của Meta, ghi âm đổi sang MP3 trên máy chủ, người gửi + quản lý được ẩn tin, chia hai đợt). Đợt 1 làm ở nhánh `feat/messenger-tuong-tac`; đợt 2 ở nhánh `feat/messenger-ghi-am-chuyen-tiep` (13/11/2026, người phụ trách yêu cầu làm tiếp và triển khai cả hai đợt cùng lúc).
 - Prompt: không có prompt kit; yêu cầu trực tiếp 13/11/2026 ("chưa có nút ghi âm gửi voice, chưa có nút gửi tệp GIF, chưa có nút gửi icon"; "chưa thả react được, chưa có reply, chưa chuyển tiếp, chưa thu hồi 1 phía và 2 phía")
 - Dựa trên: ADR 0022 (kênh Messenger qua file intake), 0023 (tab Messenger, gửi tệp), 0026 (mẫu tin nhắn)
 
@@ -28,10 +28,11 @@
 6. **Trường mới** (cần migrate): Omni Inbound Message và Omni Outbound Message thêm `reply_to_mid`, `reaction_customer`, `reaction_customer_at`, `reaction_page`, `reaction_page_by`, `hidden_at`, `hidden_by`; Omni Outbound Message thêm `sticker_id`, `sticker_url`. `OutboundRequest.extras` mang `quote_mid`, `sticker_id`, `sticker_url`.
 7. **Sticker khách gửi**: miyano-intake giữ `sticker_id` trong đính kèm; sticker không có `url` được ghi ngay (không treo hàng tải); tab hiện ảnh nếu đã tải, không thì "[Sticker]".
 
-### Đợt 2 (chưa làm)
+### Đợt 2 (nhánh `feat/messenger-ghi-am-chuyen-tiep`)
 
-8. **Ghi âm**: ghi trên trình duyệt (MediaRecorder), tải lên CRM như tệp của Lead, máy chủ đổi sang MP3 bằng `ffmpeg` rồi gửi đính kèm `audio`; cần `ffmpeg` trên yhct và thử thật với Meta.
-9. **Chuyển tiếp**: làm phía CRM: gửi lại nội dung/tệp của một tin cho khách Messenger khác (Lead khác), theo luật 24 giờ và mọi guard của khách nhận; ghi nguồn chuyển tiếp.
+8. **Ghi âm**: trình duyệt ghi bằng MediaRecorder (WebM/Opus, Ogg hoặc MP4/AAC tùy trình duyệt), tải lên CRM như tệp của Lead với tên `ghi-am-…`; API `send_voice` đổi sang MP3 mono 64 kbps bằng `ffmpeg` (tối đa 300 giây, đầu vào ≤ 15 MB, hết giờ 90 giây), lưu MP3 thành File riêng tư mới của Lead, xóa bản ghi gốc `ghi-am-…` (tệp khác giữ nguyên), rồi gửi đính kèm `audio` qua đường gửi tệp (công tắc `messenger_media_send_enabled`, mọi guard). `ffmpeg` chạy không qua shell, chỉ đọc tệp cục bộ (`-protocol_whitelist file`) và chỉ các định dạng âm thanh/hộp chứa (`-format_whitelist`), lỗi ghi vào Error Log. Đường dẫn: site_config `omni_ffmpeg_path` hoặc `ffmpeg` trong PATH; thiếu thì nút ghi âm khóa kèm lý do. Khách nhận một tệp âm thanh phát được (Meta có hiện như tin thoại hay không: **[Chưa xác nhận]**).
+9. **Chuyển tiếp**: `forward_targets` (Lead khác có Messenger mà người dùng được sửa, kèm gửi được hay lý do) và `forward` (một tin, một khách nhận): gửi lại chữ, tệp (chép sang File của Lead nhận), sticker như tin mới của sale qua mọi guard của Lead nhận; ghi `forwarded_from = "<DocType>:<tên>"` trên Omni Outbound Message, tab hiện nhãn "Đã chuyển tiếp". **Chỉ chuyển tiếp tin do Page gửi** (tin sale/bot đã gửi, tin nhân viên trả lời trên Meta): tin của khách không chuyển cho khách khác để bảo vệ dữ liệu cá nhân (quyết định mặc định khi làm; đổi được nếu người phụ trách muốn).
+10. **Sửa lỗi có sẵn từ ADR 0023**: `Omni Outbound Message.attachment_kind` chỉ có `image/gif/file` (theo Zalo V3-09) nên tin Messenger gửi tệp MP3/MP4 qua 📎 bị từ chối khi xếp hàng; thêm `video`, `audio`.
 
 ## Hệ quả
 
