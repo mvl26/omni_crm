@@ -43,3 +43,9 @@ class OmniContentTarget(Document):
 	def on_trash(self) -> None:
 		if self.status in (rules.T_PROCESSING, rules.T_SUCCESS):
 			frappe.throw(_("Không xóa nền tảng đã/đang đăng"))
+
+
+def on_doctype_update() -> None:
+	"""Chỉ mục cho bộ đăng bài mỗi phút (Prompt 2): lấy dòng theo (status, scheduled_at) và (status, next_retry_at)."""
+	frappe.db.add_index("Omni Content Target", ["status", "scheduled_at"])
+	frappe.db.add_index("Omni Content Target", ["status", "next_retry_at"])
