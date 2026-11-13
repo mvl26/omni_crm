@@ -173,9 +173,9 @@ def approve_campaign(name: str) -> list[dict[str, Any]]:
 
 
 def route(item: str) -> dict[str, Any]:
+	"""Đưa một bài qua quy tắc duyệt (Prompt 1); lỗi một bài không làm hỏng cả lô, chỉ ghi lý do."""
 	doc = frappe.get_doc(ITEM, item)
 	out = {"item": item, "title": doc.title, "score": doc.quality_score, "status": doc.status, "message": ""}
-	"""Đưa một bài qua quy tắc duyệt (Prompt 1); lỗi một bài không làm hỏng cả lô, chỉ ghi lý do."""
 	steps: list = []
 	if mk_settings.require_approval():
 		if doc.status == rules.I_DRAFT:
