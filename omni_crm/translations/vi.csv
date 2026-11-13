@@ -1,0 +1,1353 @@
+Omni Inbound Message,Tin nhắn đến (Omni)
+Omni Outbound Message,Tin nhắn đi (Omni)
+Omni Bot Run,Lượt chạy bot (Omni)
+Omni Eval Run,Lượt đánh giá bot (Omni)
+Omni Eval Case,Ca đánh giá bot (Omni)
+Omni Agent Map,Ánh xạ nhân viên (Omni)
+Omni Question Group,Nhóm câu hỏi (Omni)
+Omni Settings,Cài đặt Omni
+Omni Bot Draft,Nháp của bot (Omni)
+Omni Knowledge Item,Mục tri thức (Omni)
+Omni Duplicate Candidate,Nghi trùng khách (Omni)
+Omni Call,Cuộc gọi (Omni)
+Omni Identity,Định danh khách (Omni)
+Omni Score Rule,Quy tắc chấm điểm Lead (Omni)
+Omni Channel,Kênh (Omni)
+CRM Call Log,Nhật ký cuộc gọi CRM
+Manual,Thủ công
+Ignored,Đã bỏ qua
+Analyze,Phân tích
+Summarize,Tóm tắt
+Judge,Đánh giá
+Invalid Output,Kết quả sai định dạng
+Skipped Budget,Bỏ qua (hết hạn mức)
+Skipped Switch,Bỏ qua (công tắc tắt)
+Shadow,Chạy ngầm
+Handoff,Chuyển người
+Sent As Is,Gửi nguyên văn
+Sent Edited,Gửi sau khi sửa
+Discarded,Đã bỏ
+Shadow Compared,Đã so sánh (chạy ngầm)
+Real,Thật
+Synthetic,Tự tạo
+Merged,Đã gộp
+Dismissed,Đã bác
+Inbound,Gọi đến
+Outbound,Gọi đi
+Answered,Đã nghe máy
+Missed,Gọi nhỡ
+Busy,Máy bận
+Voicemail,Hộp thư thoại
+Telephony,Tổng đài
+Fake,Giả lập
+Token webhook,Mã webhook
+OA ID,ID OA
+App secret,Khóa bí mật ứng dụng
+Access token,Mã truy cập
+Refresh token,Mã làm mới
+OAuth state,Trạng thái OAuth
+API key SID,SID khóa API
+API key secret,Bí mật khóa API
+API secret is required,Cần nhập API secret
+Account ID,ID tài khoản
+Add Assignee,Thêm người được giao
+Add Row,Thêm dòng
+Add one to get started.,Hãy thêm một mục để bắt đầu.
+Admin,Quản trị
+Are you sure you want to login to your Frappe Cloud dashboard?,Bạn có chắc muốn đăng nhập vào bảng điều khiển Frappe Cloud không?
+Are you sure you want to remove this tab and all its content?,Bạn có chắc muốn xóa tab này và toàn bộ nội dung của nó không?
+Assignee Rules,Quy tắc giao việc
+Assignees,Người được giao
+Assignment Schedule,Lịch giao việc
+Attach file…,Đính kèm tệp…
+Auto Create Customer,Tự tạo khách hàng
+Auto-generated from the portal view — do not edit directly unless you know what you're doing! ,Được tạo tự động từ giao diện cổng thông tin — không sửa trực tiếp nếu chưa hiểu rõ! 
+Automatically sets Communication Status to “Open” for the lead or deal when a new communication is created. Applies only when SLA is enabled,Tự đặt Trạng thái trao đổi là “Mở” cho Lead hoặc Deal khi có trao đổi mới. Chỉ áp dụng khi bật SLA
+Automatically sets Communication Status to “Replied” for the lead or deal when a response is received. Applies only when SLA is enabled,Tự đặt Trạng thái trao đổi là “Đã phản hồi” cho Lead hoặc Deal khi nhận được phản hồi. Chỉ áp dụng khi bật SLA
+Change language of the application.,Đổi ngôn ngữ của ứng dụng.
+Change timezone of the application.,Đổi múi giờ của ứng dụng.
+Change your account password for security.,Đổi mật khẩu tài khoản để bảo mật.
+Choose how long this SLA policy will be active.,Chọn thời gian hiệu lực của chính sách SLA này.
+Choose the days of the week when this rule should be active.,Chọn các ngày trong tuần mà quy tắc này có hiệu lực.
+Company name is required,Cần nhập tên công ty
+"Configure default settings for your CRM system, including default currency, date formats, and other system-wide preferences to ensure consistency across your system.","Cấu hình các thiết lập mặc định của CRM như tiền tệ mặc định, định dạng ngày và các tùy chọn chung khác để toàn hệ thống nhất quán."
+"Configure how your dashboard calculates, formats, and displays key metrics, including forecasting, deal values, and currency settings","Cấu hình cách bảng điều khiển tính toán, định dạng và hiển thị các chỉ số chính, gồm dự báo, giá trị Deal và tiền tệ"
+Connect ERPNext to Frappe CRM,Kết nối ERPNext với Frappe CRM
+"Controls how numbers are displayed (e.g., commas, decimal separators)","Quy định cách hiển thị số (ví dụ dấu phẩy, dấu phân cách thập phân)"
+Create customer in ERPNext when the deal status is changed,Tạo khách hàng trong ERPNext khi trạng thái Deal thay đổi
+Create quotation button on deal page and auto customer creation on deal status change will be disabled. Are you sure?,Nút tạo báo giá trên trang Deal và việc tự tạo khách hàng khi đổi trạng thái Deal sẽ bị tắt. Bạn có chắc không?
+Current Password,Mật khẩu hiện tại
+Dashboard Currency,Tiền tệ bảng điều khiển
+Dashboard settings updated successfully,Đã cập nhật cài đặt bảng điều khiển
+Deal status is required,Cần chọn trạng thái Deal
+"Defines the default currency for all records, can be overridden at the field level","Đặt tiền tệ mặc định cho mọi bản ghi, có thể ghi đè ở từng trường"
+Delete All,Xóa tất cả
+Desk,Desk
+Disable ERPNext Integration,Tắt tích hợp ERPNext
+Display format for dates across the system,Định dạng hiển thị ngày trong toàn hệ thống
+Drag a section or a field here to get started,Kéo một phần hoặc một trường vào đây để bắt đầu
+Duplicate Assignment Rule,Nhân bản quy tắc giao việc
+Duplicate SLA Policy,Nhân bản chính sách SLA
+ERPNext is not installed on this site either install it or enter the URL of your ERPNext site to connect,Site này chưa cài ERPNext. Hãy cài ERPNext hoặc nhập URL site ERPNext để kết nối
+Email Sent At,Email gửi lúc
+Email Templates,Mẫu email
+Enable the integration to create quotations and auto create customers in ERPNext.,Bật tích hợp để tạo báo giá và tự tạo khách hàng trong ERPNext.
+Failed to load fields layout,Không tải được bố cục các trường
+Failed to save settings,Không lưu được cài đặt
+Incorrect current password. Please try again.,Mật khẩu hiện tại không đúng. Vui lòng thử lại.
+Invalid GeoJSON,GeoJSON không hợp lệ
+Invalid Site URL,URL site không hợp lệ
+Last Modified,Sửa lần cuối
+Last user assigned by this rule,Người dùng được quy tắc này giao gần nhất
+Learn about conditions,Tìm hiểu về điều kiện
+Login to Frappe Cloud?,Đăng nhập Frappe Cloud?
+Manage ERPNext integration settings,Quản lý cài đặt tích hợp ERPNext
+Move Last Column to Next Section,Chuyển cột cuối sang phần kế tiếp
+Move Last Column to Next Tab,Chuyển cột cuối sang tab kế tiếp
+Move Last Column to Previous Section,Chuyển cột cuối sang phần trước
+Move Last Column to Previous Tab,Chuyển cột cuối sang tab trước
+New Assignment Rule Name,Tên quy tắc giao việc mới
+New SLA Policy,Chính sách SLA mới
+New SLA Policy Name,Tên chính sách SLA mới
+New password cannot be the same as current password,Mật khẩu mới không được trùng mật khẩu hiện tại
+New password cannot be the same as current password. Please choose a different password.,Mật khẩu mới không được trùng mật khẩu hiện tại. Vui lòng chọn mật khẩu khác.
+No companies found in the given site,Không tìm thấy công ty nào trong site đã nhập
+No {0} Found,Không tìm thấy {0}
+Not permitted to modify fields layout,Không có quyền sửa bố cục các trường
+Number of decimal places for non-currency numeric fields,Số chữ số thập phân cho các trường số không phải tiền tệ
+Number of decimal places used for all currency values,Số chữ số thập phân cho mọi giá trị tiền tệ
+Old Condition,Điều kiện cũ
+Old Conditions,Các điều kiện cũ
+Others,Khác
+Password Updated Successfully,Đã cập nhật mật khẩu
+Password is too weak. {0},Mật khẩu quá yếu. {0}
+Password must be at least 8 characters,Mật khẩu phải có ít nhất 8 ký tự
+"Password must contain lowercase, uppercase, number, and symbol","Mật khẩu phải có chữ thường, chữ hoa, chữ số và ký hiệu"
+Passwords match,Mật khẩu khớp nhau
+Preferences,Tùy chọn
+Questions,Câu hỏi
+Refresh Apps,Làm mới ứng dụng
+Refresh Companies,Làm mới danh sách công ty
+Remove Last Column,Xóa cột cuối
+Remove Last Column (move fields to previous),Xóa cột cuối (chuyển các trường sang cột trước)
+SLA set as default cannot be disabled,SLA đã đặt làm mặc định không thể tắt
+Select the deal status to trigger the auto customer creation in ERPNext,Chọn trạng thái Deal để kích hoạt việc tự tạo khách hàng trong ERPNext
+Select whether to display time with or without seconds,Chọn hiển thị giờ có hoặc không có giây
+Select your ERPNext company to connect with,Chọn công ty ERPNext cần kết nối
+Set Location,Đặt vị trí
+Set as default SLA,Đặt làm SLA mặc định
+Set location…,Đặt vị trí…
+Settings saved,Đã lưu cài đặt
+Settings updated successfully,Đã cập nhật cài đặt
+Site URL,URL site
+Site URL is required,Cần nhập URL site
+Site connection validated,Đã xác thực kết nối site
+Subject is required,Cần nhập tiêu đề
+System Defaults,Mặc định hệ thống
+This column contains fields. Are you sure you want to remove it?,Cột này đang chứa các trường. Bạn có chắc muốn xóa không?
+This section contains fields. Are you sure you want to remove it?,Phần này đang chứa các trường. Bạn có chắc muốn xóa không?
+Timezone,Múi giờ
+Title is required,Cần nhập tiêu đề
+To User,Người nhận
+Too many failed attempts. Please try again after some time.,Thất bại quá nhiều lần. Vui lòng thử lại sau.
+Update Configuration,Cập nhật cấu hình
+Uploading {0}%,Đang tải lên {0}%
+User Configuration,Cấu hình người dùng
+Verify Connection,Kiểm tra kết nối
+View Location,Xem vị trí
+You don't have permission to delete this attachment,Bạn không có quyền xóa tệp đính kèm này
+You must be logged in to change your password,Bạn phải đăng nhập để đổi mật khẩu
+Your old conditions will be overwritten. Are you sure you want to save?,Các điều kiện cũ sẽ bị ghi đè. Bạn có chắc muốn lưu không?
+minutes,phút
+weeks,tuần
+An error occurred,Đã xảy ra lỗi
+"⚠️ No class found for doctype: {0}, it is mandatory to have a class for the parent doctype. it can be empty, but it should be present.","⚠️ Không tìm thấy class cho doctype: {0}, bắt buộc phải có một class cho doctype cha. Nó có thể trống, nhưng nó phải tồn tại."
+Failed to load file-based form controller: {0},Không tải được bộ điều khiển biểu mẫu dạng tệp: {0}
+Failed to load form controller: {0},Không thể tải bộ điều khiển biểu mẫu: {0}
+⚠️ No data found for parent field: {0},⚠️ Không tìm thấy dữ liệu cho trường cha: {0}
+⚠️ No row found for idx: {0} in parent field: {1},⚠️ Không tìm thấy hàng cho idx: {0} trong trường cha: {1}
+Document updated successfully,Tài liệu được cập nhật thành công
+Mandatory field error: {0},Lỗi trường bắt buộc: {0}
+An error occurred while updating the document,Đã xảy ra lỗi khi cập nhật tài liệu
+Mandatory fields required: {0},Các trường bắt buộc: {0}
+Initiated,Đã khởi tạo
+Declined,Đã từ chối
+Canceled,Đã hủy
+Ringing,Đang đổ chuông
+Missed Call,Cuộc gọi nhỡ
+in {0} m,trong {0} phút
+in {0} h,trong {0} giờ
+tomorrow,ngày mai
+in {0} d,trong {0} ngày
+in {0} w,trong {0} tuần
+in {0} M,trong {0} Phút
+in {0} y,trong {0} năm
+in 1 minute,trong 1 phút
+in {0} minutes,trong {0} phút
+in 1 hour,trong 1 giờ
+in {0} hours,trong {0} giờ
+in {0} days,trong {0} ngày
+in {0} weeks,trong {0} tuần
+in {0} months,trong {0} tháng
+in 1 year,trong 1 năm
+in {0} years,trong {0} năm
+Invalid Website URL,URL Website không hợp lệ
+Copied to Clipboard,Đã sao chép vào Bộ nhớ tạm
+Only image files are allowed,Chỉ cho phép tệp hình ảnh
+Confirm {0},Xác nhận {0}
+"⚠️ Avoid using ""trigger"" as a field name — it conflicts with the built-in trigger() method.","⚠️ Tránh sử dụng ""trigger"" làm tên trường — nó xung đột với phương thức trigger() tích hợp sẵn."
+"⚠️ Method ""{0}"" not found in class.","⚠️ Phương thức ""{0}"" không tìm thấy trong class."
+Clear Demo Data,Xóa dữ liệu demo
+Are you sure you want to clear demo data? This action cannot be undone.,Bạn có chắc chắn muốn xóa dữ liệu demo? Hành động này không thể được hoàn tác.
+Invalid Email or Password,Email hoặc mật khẩu không hợp lệ
+Remove Image,Xóa Hình ảnh
+Organizations,Tổ chức
+Delete Organization,Xóa Tổ chức
+Are you sure you want to delete this organization?,Bạn có chắc chắn muốn xóa tổ chức này?
+No Website Found,Không tìm thấy website nào
+Organization,Tổ chức
+Mobile No.,Số di động
+Deal Owner,Người phụ trách Deal
+Make Call,Thực hiện cuộc gọi
+Contact image updated,Đã cập nhật hình liên hệ
+Add Mobile Number...,Thêm Số Điện Thoại...
+Add Organization...,Thêm Tổ Chức...
+Contact Updated,Đã cập nhật Liên hệ
+Convert to Deal,Chuyển thành Deal
+Set First Name,Đặt Họ Tên
+Make a Call,Gọi điện
+Please set a mobile number to make calls,Vui lòng đặt số di động để gọi điện
+Send an Email,Gửi một Email
+Please set an email address to send emails,Vui lòng đặt địa chỉ email để gửi thư
+Go to Website,Đi đến Website
+Please set a website to visit,Vui lòng đặt website để truy cập
+Attach a File,Đính Kèm Một Tệp
+Calls,Cuộc gọi
+Tasks,Công việc
+Notes,Ghi chú
+Error updating field,Lỗi cập nhật trường
+No Title,Không có tiêu đề
+New Note,Ghi chú mới
+New Task,Công việc mới
+No Contacts Added,Chưa có Liên hệ nào
+Document not found,Không tìm thấy tài liệu
+Error occurred,Đã xảy ra lỗi
+Set as Primary Contact,Đặt làm Liên hệ Chính
+Contact Already Added,Liên hệ đã được thêm
+Contact Added,Đã thêm Liên hệ
+Contact Removed,Đã xóa Liên hệ
+Primary Contact Set,Đã đặt Liên hệ Chính
+Invalid page or not permitted to access,Trang không hợp lệ hoặc không được phép truy cập
+"Welcome {0}, lets add your first lead","Chào mừng {0}, hãy thêm lead đầu tiên của bạn"
+Start with sample 10 leads,Bắt đầu với 10 leads mẫu
+Add Sample Data,Thêm Dữ Liệu Mẫu
+"Sync your Contacts, Email and Calendars","Đồng bộ Danh bạ, Email và Lịch của bạn"
+Connect your Email,Kết nối Email của bạn
+Or create leads manually,Hoặc tạo leads thủ công
+Open Website,Mở Website
+Convert,Chuyển đổi
+Document Not Found,Không tìm thấy tài liệu
+Error Occurred,Đã xảy ra Lỗi
+Reset to Default,Đặt lại về Mặc định
+Select Range,Chọn Phạm vi
+Last 60 Days,60 ngày qua
+Custom Range,Phạm vi tùy chỉnh
+CRM Dashboard,Bảng Điều Khiển CRM
+mentioned you in {0},đã nhắc đến bạn trong {0}
+No New Notifications,Không có thông báo mới nào
+Organization Logo,Logo Tổ chức
+Set an Organization,Đặt một Tổ chức
+View Contact,Xem Liên hệ
+No Details Added,Không có chi tiết nào được thêm
+Customer Created Successfully,Khách hàng được tạo thành công
+No Primary Contact Set,Chưa đặt liên hệ chính
+No Mobile Number Set,Chưa đặt số di động
+Notes View,Chế độ xem Ghi chú
+Access Denied,Truy Cập Bị Từ Chối
+You do not have enough permissions to access Frappe CRM. Please contact your administrator if you believe this is an error.,Bạn không có đủ quyền để truy cập Frappe CRM. Vui lòng liên hệ với quản trị viên của bạn nếu bạn tin rằng đây là lỗi.
+Login with Different Account,Đăng nhập bằng Tài khoản khác
+Contact Image Updated,Đã cập nhật hình Liên hệ
+Delete Contact,Xóa Liên hệ
+Are you sure you want to delete this contact?,Bạn có chắc chắn muốn xóa liên hệ này?
+Untitled,Không có tiêu đề
+Assign To Me,Giao Cho Tôi
+Add Tab,Thêm Tab
+field,trường
+fields,trường
+Add Field,Thêm Trường
+Add Section,Thêm Phần
+New Tab,Tab mới
+Remove Tab,Xóa Tab
+Uncollapsible,Không thể thu gọn
+Show Label,Hiển thị Nhãn
+Hide Label,Ẩn nhãn
+Show Border,Hiển thị Đường viền
+Remove and move columns to {0} section,Xóa và chuyển các cột sang phần {0}
+next,tiếp theo
+previous,trước
+Move to Previous Tab,Chuyển đến Tab trước
+Move to Next Tab,Chuyển đến Tab tiếp theo
+Insert Emoji,Chèn Emoji
+This section is not editable,Phần này không thể chỉnh sửa
+New Section,Phần mới
+Save Changes,Lưu Thay đổi
+Customize Quick Filters,Tùy chỉnh bộ lọc nhanh
+More Options,Thêm tùy chọn
+Export all {0} record(s),Xuất tất cả {0} bản ghi
+Standard Views,Các Chế độ xem Tiêu chuẩn
+Saved Views,Các Chế độ xem Đã lưu
+Public Views,Các Chế độ xem Công khai
+Pinned Views,Các Chế độ xem Đã ghim
+Create View,Tạo Chế độ xem
+Quick filters updated successfully,Bộ lọc nhanh đã được cập nhật thành công
+Set As Default,Đặt làm Mặc định
+Unpin View,Bỏ ghim Chế độ xem
+Pin View,Ghim Chế độ xem
+Make Private,Đặt riêng tư
+Make Public,Công khai
+Delete View,Xóa Chế độ xem
+"Are you sure you want to delete ""{0}"" view?","Bạn có chắc muốn xóa chế độ xem ""{0}"" không?"
+ (New), (Mới)
+Clear All Filters,Xóa Tất Cả Bộ Lọc
+Where,Ở đâu
+And,Và
+Empty - Choose a field to filter by,Trống - Chọn một trường để lọc theo
+Not equals,Không bằng
+Not like,Không giống
+Not in,Không nằm trong
+Greater than,Lớn hơn
+Less than,Nhỏ hơn
+Greater than or equal to,Lớn hơn hoặc bằng
+Less than or equal to,Nhỏ hơn hoặc bằng
+01/01/2022 to 01/31/2022,01/01/2022 đến 01/31/2022
+Select a Value,Chọn một Giá trị
+Select an Option,Chọn một Tùy chọn
+Set As Primary,Đặt làm Chính
+Sort,Sắp xếp
+Empty - Choose a field to sort by,Trống - Chọn một trường để sắp xếp theo
+Add Sort,Thêm Sắp Xếp
+Clear Sort,Xóa Sắp Xếp
+Delete or unlink linked documents,Xóa hoặc bỏ liên kết tài liệu được liên kết
+Delete or unlink these linked documents before deleting this document,Xóa hoặc bỏ liên kết các tài liệu được liên kết này trước khi xóa tài liệu này
+Are you sure you want to delete {0} - {1}?,Bạn có chắc muốn xóa {0} - {1} không?
+Delete {0} Item(s),Xóa {0} mục
+Unlink All,Hủy liên kết tất cả
+Unlink {0} Item(s),Hủy liên kết {0} Mục
+Delete Linked Item,Xóa mục được liên kết
+Are you sure you want to delete {0} linked item(s)?,Bạn có chắc chắn muốn xóa {0} mục được liên kết?
+Unlink Linked Item,Hủy liên kết Mục được Liên kết
+Are you sure you want to unlink {0} linked item(s)?,Bạn có chắc chắn muốn hủy liên kết {0} mục được liên kết?
+"Width can be in number, pixel or rem (eg. 3, 30px, 10rem)","Chiều rộng có thể là số, pixel hoặc rem (ví dụ: 3, 30px, 10rem)"
+Permissions update,Cập nhật phân quyền
+We are changing how permissions work in Frappe CRM,Chúng tôi đang thay đổi cách phân quyền hoạt động trong Frappe CRM
+"Since you removed {0} from the assignee, the {0} has been changed to the next available assignee {1}.","Vì bạn đã xóa {0} khỏi người được phân công, {0} đã được thay đổi thành người được phân công khả dụng tiếp theo {1}."
+"Since you removed {0} from the assignee, the {0} has also been removed.","Vì bạn đã xóa {0} khỏi người được phân công, {0} cũng đã bị xóa."
+"Since you added a new assignee, the {0} has been set to {1}.","Vì bạn đã thêm người được giao mới, {0} đã được đặt thành {1}."
+Group By: ,Nhóm theo: 
+Are you sure you want to delete {0} items?,Bạn có chắc muốn xóa {0} mục không?
+Delete {0} items,Xóa {0} mục
+Unlink & Delete {0} items,Hủy liên kết & Xóa {0} mục
+"This will delete selected items and items linked to it, are you sure?","Điều này sẽ xóa các mục đã chọn và các mục được liên kết với nó, bạn có chắc chắn không?"
+"This will delete selected items and unlink linked items to it, are you sure?","Điều này sẽ xóa các mục đã chọn và hủy liên kết các mục được liên kết với nó, bạn có chắc chắn không?"
+Unlink & Delete,Hủy liên kết & Xóa
+Are you sure you want to delete {0} linked doc(s)?,Bạn có chắc muốn xóa {0} tài liệu liên kết không?
+Unlink,Hủy liên kết
+Are you sure you want to unlink {0} linked doc(s)?,Bạn có chắc muốn hủy liên kết {0} tài liệu không?
+No {0} available,Không có {0} khả dụng
+Are you sure you want to convert {0} lead(s) to deal(s)?,Bạn có chắc muốn chuyển {0} Lead thành Deal không?
+Converted Successfully,Chuyển đổi thành công
+Clear Assignment,Bỏ giao việc
+Are you sure you want to clear assignment for {0} item(s)?,Bạn có chắc muốn bỏ giao việc cho {0} mục không?
+Assignment Cleared Successfully,Xóa Phân Công Thành Công
+In less than a minute,Trong chưa đầy một phút
+"Hi John, 
+
+Can you please provide more details on this...","Chào anh John, 
+
+Anh vui lòng cho biết thêm chi tiết về việc này..."
+"@John, can you please check this?","@John, bạn có thể kiểm tra cái này không?"
+Sending email...,Đang gửi email...
+Email sent,Email đã được gửi
+Failed to send email!,Không gửi được email!
+Sending comment...,Đang gửi bình luận...
+Comment sent,Đã gửi bình luận
+Failed to send comment!,Không thể gửi bình luận!
+FROM,TỪ
+TO,ĐẾN
+{0} is an invalid email address,{0} là địa chỉ email không hợp lệ
+SUBJECT,CHỦ ĐỀ
+Insert Email Template,Chèn Mẫu Email
+Email From Lead,Email từ Lead
+Empty,Trống
+It appears that there are currently no {0} available. You can create more {0} by using the Create button.,Có vẻ như hiện tại không có {0} nào. Bạn có thể tạo thêm {0} bằng cách sử dụng nút Tạo.
+Brand Settings,Cài Đặt Thương Hiệu
+"Configure your Brand Name, Logo, and Favicon","Cấu hình Tên Thương hiệu, Logo và Favicon của bạn"
+Brand Name,Tên nhãn hiệu
+Set the name of your brand. Appears in the left sidebar.,Đặt tên thương hiệu của bạn. Xuất hiện trong thanh bên trái.
+Enter Brand Name,Nhập Tên Thương hiệu
+Appears in the left sidebar. Recommended size is 32x32 px in PNG or SVG,Xuất hiện trong thanh bên trái. Kích thước khuyến nghị là 32x32 px bằng PNG hoặc SVG
+Appears next to the title in your browser tab. Recommended size is 32x32 px in PNG or ICO,Xuất hiện bên cạnh tiêu đề trong tab trình duyệt của bạn. Kích thước khuyến nghị là 32x32 px bằng PNG hoặc ICO
+Home Actions,Hành động trang chủ
+Configure actions that appear on the home dropdown,Định cấu hình các hành động xuất hiện trên dropdown trang chủ
+Edit Email,Chỉnh sửa email
+here,tại đây
+Update Account,Cập nhật Tài khoản
+"To know more about setting up email accounts, click","Để biết thêm về thiết lập tài khoản email, nhấp vào"
+No changes made,Không có thay đổi nào được thực hiện
+Email Account updated successfully,Tài khoản Email được cập nhật thành công
+"Failed to update Email Account, Invalid credentials","Không thể cập nhật Tài khoản Email, Thông tin xác thực không hợp lệ"
+Default Sending & Inbox,Gửi & Hộp thư đến mặc định
+Setup Email,Thiết lập Email
+Choose the Email Service Provider you want to configure.,Chọn Nhà Cung Cấp Dịch Vụ Email bạn muốn định cấu hình.
+Email Account created successfully,Tài khoản Email được tạo thành công
+"Failed to create Email Account, Invalid credentials","Không thể tạo Tài khoản Email, Thông tin xác thực không hợp lệ"
+General Settings,Cài đặt chung
+Configure general settings for your application,Cấu hình cài đặt chung cho ứng dụng của bạn
+Update timestamp on new communication,Cập nhật dấu thời gian trên giao tiếp mới
+Update the modified timestamp on new email communication & comments for leads & deals,Cập nhật dấu thời gian sửa đổi trên giao tiếp email mới & bình luận cho leads & deals
+Mark lead/deal as replied on response,Đánh dấu lead/deal đã phản hồi khi có phản hồi
+Reopen lead/deal on new communication,Mở lại lead/deal khi có giao tiếp mới
+Setting enabled successfully,Cài đặt đã được kích hoạt thành công
+Setting disabled successfully,Cài đặt đã được vô hiệu hóa thành công
+Email Accounts,Tài khoản email
+Manage your email accounts to send and receive emails directly from CRM. You can add multiple accounts and set one as default for incoming and outgoing emails.,Quản lý tài khoản email của bạn để gửi và nhận email trực tiếp từ CRM. Bạn có thể thêm nhiều tài khoản và đặt một tài khoản làm mặc định cho email đến và đi.
+Add Account,Thêm Tài Khoản
+Account Name,Tên Tài khoản
+Support / Sales,Hỗ trợ / Bán hàng
+"If enabled, emails will be pulled from this account.","Nếu được bật, email sẽ được kéo từ tài khoản này."
+"If enabled, outgoing emails can be sent from this account.","Nếu được bật, email gửi đi có thể được gửi từ tài khoản này."
+"If enabled, all replies to your company (eg: replies@yourcompany.com) will come to this account. Note: Only one account can be default incoming.","Nếu được bật, tất cả thư trả lời cho công ty của bạn (ví dụ: Reply@yourcompany.com) sẽ được gửi đến tài khoản này. Lưu ý: Chỉ có một tài khoản có thể được gửi đến mặc định."
+"If enabled, all outgoing emails will be sent from this account. Note: Only one account can be default outgoing.","Nếu được bật, tất cả email gửi đi sẽ được gửi từ tài khoản này. Lưu ý: Chỉ có một tài khoản có thể là mặc định gửi đi."
+Create Lead from Incoming Emails,Tạo Lead từ Email đến
+"If enabled, a lead will be automatically created when an incoming email is received from an unknown contact.","Nếu được bật, một lead sẽ được tự động tạo khi nhận được email từ một liên hệ không xác định."
+Frappe Mail Site,Trang Frappe Mail
+Setting up GMail requires you to enable two factor authentication and app specific passwords. Read more,Thiết lập GMail yêu cầu bạn phải bật xác thực hai yếu tố và mật khẩu dành riêng cho ứng dụng. Đọc thêm
+Setting up Outlook requires you to enable two factor authentication and app specific passwords. Read more,Thiết lập Outlook yêu cầu bạn phải bật xác thực hai yếu tố và mật khẩu dành riêng cho ứng dụng. Đọc thêm
+Setting up Sendgrid requires you to enable two factor authentication and app specific passwords. Read more,Thiết lập Sendgrid yêu cầu bạn phải bật xác thực hai yếu tố và mật khẩu dành riêng cho ứng dụng. Đọc thêm
+Setting up Sparkpost requires you to enable two factor authentication and app specific passwords. Read more,Thiết lập Sparkpost yêu cầu bạn phải bật xác thực hai yếu tố và mật khẩu dành riêng cho ứng dụng. Đọc thêm
+Setting up Yahoo requires you to enable two factor authentication and app specific passwords. Read more,Thiết lập Yahoo yêu cầu bạn phải bật xác thực hai yếu tố và mật khẩu dành riêng cho ứng dụng. Đọc thêm
+Setting up Yandex requires you to enable two factor authentication and app specific passwords. Read more,Thiết lập Yandex yêu cầu bạn phải bật xác thực hai yếu tố và mật khẩu dành riêng cho ứng dụng. Đọc thêm
+Setting up Frappe Mail requires you to have an API key and API Secret of your email account. Read more,Thiết lập Frappe Mail yêu cầu bạn phải có API key và API Secret của tài khoản email của mình. Đọc thêm
+Account name is required,Yêu cầu tên tài khoản
+Email ID is required,ID Email là bắt buộc
+Invalid email ID,ID email không hợp lệ
+Password is required,Yêu cầu mật khẩu
+API key is required,Yêu cầu API key
+Choose how you want to use the application by setting your preferences.,Chọn cách bạn muốn sử dụng ứng dụng bằng cách đặt tùy chọn của bạn.
+Appearance,Giao Diện
+"Switch between light, dark, or system theme","Chuyển đổi giữa chủ đề sáng, tối hoặc hệ thống"
+Language & Time,Ngôn ngữ & Thời gian
+Preferences Updated Successfully,Tùy chọn đã được Cập nhật Thành công
+ERPNext Settings,Cài đặt ERPNext
+Disable,Vô hiệu
+Select Company,Chọn Công ty
+Deal Status,Trạng thái Deal
+Won,Đã thắng
+Send Invites To,Gửi Lời mời Đến
+Invite users to access CRM. Specify their roles to control access and permissions,Mời người dùng truy cập CRM. Chỉ định vai trò của họ để kiểm soát quyền truy cập và quyền hạn
+Send Invites,Gửi Lời mời
+Invite By Email,Mời qua Email
+You can invite multiple users by comma separating their email addresses,Bạn có thể mời nhiều người dùng bằng cách phân tách địa chỉ email của họ bằng dấu phẩy
+Invite As,Mời với vai trò
+Pending Invites,Lời mời Đang chờ
+Delete Invitation,Xóa lời mời
+User with email {0} already exists,Đã có người dùng với email {0}
+User with email {0} already invited,Đã mời người dùng với email {0}
+Manager,Quản lý
+Invitations sent successfully,Đã gửi lời mời thành công
+Enable Forecasting,Bật Dự báo
+"Makes ""Expected Closure Date"" and ""Expected Deal Value"" mandatory for deal value forecasting","Khiến ""Ngày đóng dự kiến"" và ""Giá trị Deal dự kiến"" trở thành bắt buộc để dự báo giá trị deal"
+Auto Update Expected Deal Value,Tự Động Cập Nhật Giá Trị Deal Dự Kiến
+"Automatically update ""Expected Deal Value"" based on the total value of associated products in a deal","Tự động cập nhật ""Giá Trị Deal Dự Kiến"" dựa trên tổng giá trị của các sản phẩm liên quan trong một deal"
+"Dashboard number cards & charts will show currency in the selected format. Once set, cannot be edited.","Các thẻ số và biểu đồ trên Dashboard sẽ hiển thị tiền tệ theo định dạng đã chọn. Sau khi đặt, không thể chỉnh sửa."
+Exchange Rate Provider,Nhà cung cấp Tỷ giá
+Configure the Exchange Rate Provider for your CRM,Cấu hình Nhà cung cấp Tỷ giá cho CRM của bạn
+Select Provider,Chọn Nhà cung cấp
+Access Key,Khóa Truy cập
+Access Key for {0}. Required for fetching exchange rates.,Khóa truy cập cho {0}. Cần để lấy tỷ giá.
+You can get your Access Key from ,Bạn có thể lấy Khóa Truy cập của mình từ 
+Enter Access Key,Nhập Khóa truy cập
+Please select a currency before saving.,Vui lòng chọn một loại tiền tệ trước khi lưu.
+Please enter the {0} Access Key.,Vui lòng nhập khóa truy cập {0}.
+Set Currency,Đặt Tiền tệ
+Are you sure you want to set the currency as {0}? This cannot be changed later.,Bạn có chắc chắn muốn đặt đơn vị tiền tệ là {0}? Điều này không thể thay đổi sau.
+Currency set as {0} successfully,Tiền tệ được đặt là {0} thành công
+System Configuration,Cấu hình Hệ thống
+User Management,Quản lý Người dùng
+Invite User,Mời Người dùng
+Sales Hierarchy,Phân cấp bán hàng
+Accounts,Tài khoản
+Automation & Rules,Tự Động Hóa & Quy Tắc
+SLA Policies,Các Chính sách SLA
+Lead Syncing,Đồng bộ Lead
+"Manage CRM users by adding or inviting them, and assign roles to control their access and permissions","Quản lý người dùng CRM bằng cách thêm hoặc mời họ, và chỉ định vai trò để kiểm soát quyền truy cập và quyền hạn của họ"
+Add Existing User,Thêm Người Dùng Hiện Có
+Invite New User,Mời Người dùng Mới
+Search User,Tìm kiếm Người dùng
+Cannot change role of user with Admin access,Không thể thay đổi vai trò của người dùng có quyền Admin
+{0} has been granted {1} access,{0} đã được cấp quyền {1}
+User {0} has been removed,Người dùng {0} đã bị xóa
+Manage your service level agreement policies,Quản lý các chính sách thỏa thuận mức dịch vụ của bạn
+Policy Name,Tên Chính sách
+Apply On,Áp dụng trên
+SLA Policy Duplicated,Chính sách SLA đã được Sao chép
+SLA Policy Deleted,Chính sách SLA đã được Xóa
+"Something went wrong, try again later","Đã xảy ra lỗi, vui lòng thử lại sau"
+SLA Policy Status Updated,Trạng thái Chính sách SLA đã được Cập nhật
+Rolling Responses,Phản hồi Cuộn
+Restart the SLA each time the customer replies (status changes to Open) and fulfill it when marked as Replied,Khởi động lại SLA mỗi khi khách hàng phản hồi (trạng thái thay đổi thành Mở) và hoàn thành khi được đánh dấu là Đã phản hồi
+Assignment conditions,Điều kiện phân công
+Choose which leads/deals are affected by this policy.,Chọn leads/deals nào bị ảnh hưởng bởi chính sách này.
+"I understand, Add Conditions","Tôi hiểu, thêm Điều kiện"
+Valid From,Có hiệu lực từ
+Response & Follow Up,Phản hồi & Theo dõi
+Add time targets around support milestones like first response,Thêm mục tiêu thời gian cho các cột mốc hỗ trợ như phản hồi đầu tiên
+"Assignment conditions are invalid or corrupt, recreate the conditions.","Điều kiện phân công không hợp lệ hoặc bị hỏng, hãy tạo lại điều kiện."
+Unsaved Changes,Thay đổi chưa lưu
+Are you sure you want to go back? Unsaved changes will be lost.,Bạn chắc chắn muốn quay lại? Các thay đổi chưa lưu sẽ bị mất.
+"Invalid fields, check if all are filled in and values are correct.","Trường dữ liệu không hợp lệ, vui lòng kiểm tra lại xem tất cả đã được điền đủ và đúng giá trị chưa."
+Confirm Overwrite,Xác nhận ghi đè
+SLA Policy Created,Chính sách SLA đã được Tạo
+Some error occurred while creating SLA Policy,Đã xảy ra lỗi khi tạo Chính sách SLA
+Some error occurred while updating SLA policy,Đã xảy ra lỗi khi cập nhật chính sách SLA
+Some error occurred while renaming SLA policy,Đã xảy ra lỗi khi đổi tên chính sách SLA
+SLA Policy Updated,Chính sách SLA đã được Cập nhật
+Work Schedule & Holidays,Lịch làm việc & Ngày lễ
+"Set working days, hours, and holidays by selecting a predefined schedule or creating a new one","Đặt ngày làm việc, giờ làm việc và ngày lễ bằng cách chọn lịch trình được xác định trước hoặc tạo một lịch trình mới"
+Select Holiday List,Chọn Danh sách Ngày lễ
+No holiday list found,Không tìm thấy danh sách ngày lễ nào
+Create New Holiday List,Tạo Danh sách Ngày lễ mới
+No Workdays in the List,Không có ngày làm việc nào trong danh sách
+End Time,Giờ kết thúc
+No Priorities in the list,Không có ưu tiên nào trong danh sách
+First Response Time,Thời gian phản hồi đầu tiên
+Default Priority,Ưu tiên mặc định
+All available priorities have already been added,Tất cả các mức ưu tiên khả dụng đã được thêm
+Edit Response & Resolution,Chỉnh sửa Phản hồi & Giải quyết
+Select Priority,Chọn Mức ưu tiên
+Set Default Priority,Đặt Mức ưu tiên Mặc định
+Confirm Delete,Xác nhận xóa
+Please select a Priority,Vui lòng chọn một Mức ưu tiên
+Response Time is required,Thời gian phản hồi là bắt buộc
+SLA Policy Name is required,Tên Chính sách SLA là bắt buộc
+At least one priority is required,Yêu cầu ít nhất một mức ưu tiên
+Priority {0}: Priority Name is required,Mức ưu tiên {0}: Tên ưu tiên là bắt buộc
+Priority {0}: Response Time is required,Mức ưu tiên {0}: Thời gian phản hồi là bắt buộc
+Priorities must be unique,Các mức ưu tiên phải là duy nhất
+Start Date cannot be after end date,Ngày bắt đầu không thể sau ngày kết thúc
+End Date cannot be before start date,Ngày kết thúc không thể trước ngày bắt đầu
+Valid conditions are required,Các điều kiện hợp lệ là bắt buộc
+"At least one valid Workday with Workday, Start Time, and End Time is required","Yêu cầu ít nhất một Ngày Làm Việc hợp lệ với Ngày Làm Việc, Giờ Bắt Đầu và Giờ Kết Thúc"
+Duplicate Workday found: {0}. Each Workday should be unique.,Ngày làm việc trùng lặp: {0}. Mỗi ngày làm việc phải là duy nhất.
+{0} (Invalid time format),{0} (Định dạng thời gian không hợp lệ)
+End Time must be after Start Time for: {0},Giờ kết thúc phải sau Giờ bắt đầu cho: {0}
+Add a Custom Condition,Thêm Một Điều Kiện Tùy Chỉnh
+Add Condition,Thêm Điều Kiện
+Add Condition Group,Thêm Nhóm Điều Kiện
+Edit Workday,Chỉnh sửa Ngày làm việc
+Select Workday,Chọn Ngày làm việc
+Workday,Ngày làm việc
+This field is required,Trường này là bắt buộc
+Start Time is required,Thời gian bắt đầu là bắt buộc
+End Time is required,Giờ kết thúc là bắt buộc
+End Time must be after Start Time,Giờ kết thúc phải sau Giờ bắt đầu
+Please fix the errors in the form,Vui lòng sửa các lỗi trong biểu mẫu
+Failed to save workday: {0},Không thể lưu ngày làm việc: {0}
+Manage your email signature,Quản lý chữ ký email của bạn
+Switch between outgoing email accounts when sending emails,Chuyển đổi giữa các tài khoản email gửi đi khi gửi email
+Add Email,Thêm Email
+Email settings updated successfully,Cài đặt Email đã được cập nhật thành công
+Manage your profile & login information.,Quản lý hồ sơ & thông tin đăng nhập của bạn.
+Account Info & Security,Thông Tin & Bảo Mật Tài Khoản
+Emails & Signature,Email & Chữ ký
+Manage your account emails and email signature for communication.,Quản lý email tài khoản và chữ ký email của bạn để giao tiếp.
+Configure,Định Cấu Hình
+Remove Photo,Xóa Ảnh
+Change Photo,Đổi Ảnh
+Upload Photo,Tải lên Ảnh
+Profile Updated Successfully,Hồ sơ đã được Cập nhật Thành công
+Assignment Rule Deleted,Đã Xóa Quy Tắc Phân Công
+Assignment Rule Duplicated,Đã Sao Chép Quy Tắc Phân Công
+Cannot enable rule without adding users in it,Không thể kích hoạt quy tắc mà không thêm người dùng vào đó
+Assignment Rule {0} Updated,Quy Tắc Phân Công {0} Đã Cập Nhật
+Choose how {0} are assigned among salespeople.,Chọn cách {0} được phân công giữa các nhân viên bán hàng.
+{0} routing,Phân phối {0}
+Choose how {0} are assigned among the selected assignees.,Chọn cách giao {0} cho các người được giao đã chọn.
+Select the assignees for {0}.,Chọn những người được phân công cho {0}.
+leads,Lead
+Add a Condition,Thêm Một Điều Kiện
+Auto-assign leads/deals to the right sales user based on predefined conditions,Tự động gán leads/deals cho người dùng bán hàng phù hợp dựa trên các điều kiện được xác định trước
+No Results Found,Không tìm thấy kết quả nào
+Invite Agent,Mời Agent
+"You will be redirected to invite user page, unsaved changes will be lost.","Bạn sẽ được chuyển hướng đến trang mời người dùng, các thay đổi chưa lưu sẽ bị mất."
+Go to Invite Page,Đi đến Trang mời
+New Assignment Rule,Quy tắc phân công mới
+Assignment Condition,Điều Kiện Phân Công
+Choose which {0} are affected by this assignment rule.,Chọn {0} nào chịu tác động của quy tắc giao việc này.
+Conditions for this rule were created from,Các điều kiện cho quy tắc này được tạo từ
+desk,bàn làm việc
+"which are not compatible with this UI, you will need to recreate the conditions here if you want to manage and add new conditions from this UI.","không tương thích với UI này, bạn sẽ cần tạo lại các điều kiện ở đây nếu bạn muốn quản lý và thêm điều kiện mới từ UI này."
+Unassignment Condition,Điều kiện Hủy phân công
+Choose which {0} are affected by this un-assignment rule.,Chọn {0} nào bị ảnh hưởng bởi quy tắc hủy phân công này.
+Name is required,Tên là bắt buộc
+Description is required,Mô tả là bắt buộc
+Assign Condition is required,Yêu cầu Điều Kiện Phân Công
+Assign Conditions are invalid,Các Điều Kiện Phân Công Không Hợp Lệ
+Unassign Conditions are invalid,Các Điều kiện Hủy phân công không hợp lệ
+Users are required,Người dùng là bắt buộc
+Assignment Days are required,Yêu cầu Ngày Phân Công
+Missing mandatory fields: {0},Thiếu các trường bắt buộc: {0}
+Invalid fields: {0},Các trường không hợp lệ: {0}
+Your old condition will be overwritten. Are you sure you want to save?,Điều kiện cũ của bạn sẽ bị ghi đè. Bạn có chắc chắn muốn lưu không?
+Assignment Rule Created,Đã Tạo Quy Tắc Phân Công
+Some error occurred while updating assignment rule,Đã xảy ra lỗi khi cập nhật quy tắc phân công
+Some error occurred while renaming assignment rule,Đã xảy ra lỗi khi đổi tên quy tắc phân công
+Assignment Rule Updated,Đã Cập Nhật Quy Tắc Phân Công
+Search users,Tìm người dùng
+No users found,Không tìm thấy người dùng
+disabled,đã tắt
+Add direct reports,Thêm cấp dưới trực tiếp
+Add ({0}),Thêm ({0})
+Move to top level,Chuyển lên cấp cao nhất
+Removed from hierarchy.,Đã xóa khỏi phân cấp.
+Could not remove.,Không xóa được.
+A {0} cannot report to a {1},{0} không thể báo cáo cho {1}
+Cannot move a manager under one of their own reports,Không thể chuyển quản lý xuống dưới một cấp dưới của chính họ
+Move under {0},Chuyển xuống dưới {0}
+View documentation,Xem tài liệu hướng dẫn
+Restrict visibility of Leads and Deals based on a reporting tree.,Giới hạn quyền xem Lead và Deal theo cây báo cáo.
+Add User,Thêm người dùng
+Enable Sales Hierarchy,Bật phân cấp bán hàng
+Restrict visibility using a reporting tree,Giới hạn quyền xem theo cây báo cáo
+No matching users,Không có người dùng phù hợp
+No users in hierarchy,Chưa có người dùng trong phân cấp
+No users match the current filter.,Không có người dùng nào khớp bộ lọc hiện tại.
+Add Users,Thêm người dùng
+Remove {0} from the hierarchy. What should happen to their direct reports?,Xóa {0} khỏi phân cấp. Cấp dưới trực tiếp của họ sẽ được xử lý thế nào?
+Are you sure you want to remove {0} from the hierarchy?,Bạn có chắc muốn xóa {0} khỏi phân cấp không?
+Unlink & Delete {0} Users,Hủy liên kết và xóa {0} người dùng
+Delete Only User,Chỉ xóa người dùng
+Failed to update setting,Không cập nhật được cài đặt
+Disable Sales Hierarchy,Tắt phân cấp bán hàng
+Lead and deal visibility will no longer be restricted by the reporting tree. Are you sure?,Quyền xem Lead và Deal sẽ không còn bị giới hạn bởi cây báo cáo. Bạn có chắc không?
+Sales Hierarchy disabled,Đã tắt phân cấp bán hàng
+Sales Hierarchy enabled,Đã bật phân cấp bán hàng
+Updated reports to,Đã cập nhật người được báo cáo
+Could not update report to,Không cập nhật được người được báo cáo
+User added to hierarchy,Đã thêm người dùng vào phân cấp
+{0} users added to hierarchy,Đã thêm {0} người dùng vào phân cấp
+Some users could not be added,Một số người dùng không thêm được
+Discard Changes,Hủy thay đổi
+Account SID,SID Tài Khoản
+Twilio App Name,Tên Ứng dụng Twilio
+Select a Twilio App for your CRM,Chọn một Ứng dụng Twilio cho CRM của bạn
+Record Calls,Ghi cuộc gọi
+Enable call recording for incoming and outgoing calls,Bật ghi âm cuộc gọi cho các cuộc gọi đến và đi
+Twilio Integration Disabled,Tích hợp Twilio đã Bị vô hiệu hóa
+Enable Twilio integration to make and receive calls directly from your CRM,Bật tích hợp Twilio để thực hiện và nhận cuộc gọi trực tiếp từ CRM của bạn
+Exotel Settings,Cài đặt Exotel
+API Token,Mã thông báo API
+Exotel Integration Disabled,Tích hợp Exotel đã bị tắt
+Enable Exotel integration to make and receive calls directly from your CRM,Bật tích hợp Exotel để thực hiện và nhận cuộc gọi trực tiếp từ CRM của bạn
+Telephony Settings,Cài đặt Điện thoại
+Configure Telephony Settings for your CRM,Định cấu hình Cài Đặt Điện Thoại cho CRM của bạn
+Default Medium,Phương tiện mặc định
+Default Calling Medium for Logged In User,Phương tiện gọi mặc định cho Người dùng đã đăng nhập
+Select Medium,Chọn Phương tiện
+Set the Twilio number to be used for outgoing calls.,Đặt số Twilio để sử dụng cho các cuộc gọi đi.
+Enter Twilio Number,Nhập Số Twilio
+Exotel Number,Số Exotel
+Set the Exotel number to be used for outgoing calls.,Đặt số Exotel để sử dụng cho các cuộc gọi đi.
+Enter Exotel Number,Nhập Số Exotel
+Personal Mobile No.,Số Di động Cá nhân
+Enter your personal mobile number used by Exotel to make calls,Nhập số điện thoại di động cá nhân của bạn được Exotel sử dụng để thực hiện cuộc gọi
+Enter Personal Mobile No.,Nhập Số Điện thoại di động cá nhân
+Configure your Twilio Telephony Integration Settings here,Cấu hình Cài đặt Tích hợp Điện thoại Twilio của bạn tại đây
+Configure your Exotel Telephony Integration Settings here,Cấu hình Cài đặt Tích hợp Điện thoại Exotel của bạn tại đây
+Document created successfully,Tài liệu được tạo thành công
+"Add, edit, and manage email templates for various CRM communications","Thêm, chỉnh sửa và quản lý các mẫu email cho các giao tiếp CRM khác nhau"
+Search Template,Tìm kiếm Mẫu
+Template Name,Tên mẫu
+For,Đối với
+Template enabled successfully,Mẫu đã được Kích hoạt thành công
+Template disabled successfully,Mẫu đã được Vô hiệu hóa thành công
+Failed to update template,Không thể cập nhật mẫu
+Template Deleted Successfully,Mẫu đã được Xóa Thành công
+Failed to delete template,Không thể xóa mẫu
+Payment Reminder,Lời nhắc Thanh toán
+Content is required,Nội dung là bắt buộc
+Template updated successfully,Mẫu đã được Cập nhật thành công
+Template renamed successfully,Mẫu đã được Đổi tên thành công
+Failed to rename template,Không thể đổi tên mẫu
+Duplicate Template,Sao chép Mẫu
+New Template,Mẫu mới
+Template created successfully,Mẫu đã được Tạo thành công
+Failed to create template,Không thể tạo mẫu
+New Lead Sync Source,Nguồn đồng bộ Lead mới
+Sync Now,Đồng bộ ngay
+Source Type,Loại nguồn
+Select Source Type,Chọn Loại Nguồn
+Enter Source Name,Nhập Tên Nguồn
+Background Sync Frequency,Tần Suất Đồng Bộ Nền
+Enter Access Token,Nhập Access Token
+Last Synced At,Đồng bộ lần cuối lúc
+Not Synced,Chưa đồng bộ
+Failure Logs,Nhật ký lỗi
+Error updating Lead Sync Source,Lỗi cập nhật Nguồn đồng bộ Lead
+Lead Sync Source created successfully,Nguồn đồng bộ Lead đã được tạo thành công
+Error creating Lead Sync Source,Lỗi tạo Nguồn đồng bộ Lead
+Syncing started in background,Đồng bộ đã bắt đầu ở nền
+Error syncing leads,Lỗi đồng bộ leads
+Back to All Logs, Quay Lại Tất Cả Nhật Ký
+Retry Sync,Thử đồng bộ lại
+Log ID,ID nhật ký
+Lead Data,Dữ liệu Lead
+No Failure Logs Found,Không tìm thấy nhật ký lỗi nào
+Any failed lead syncs will show up here,Bất kỳ đồng bộ lead nào thất bại sẽ hiển thị ở đây
+Sync Successful!,Đồng bộ Thành công!
+Error Syncing Lead,Lỗi đồng bộ Lead
+Lead Sources,Nguồn Lead
+"Add, edit, and manage sources for automatic lead syncing to your CRM","Thêm, chỉnh sửa và quản lý các nguồn để đồng bộ lead tự động vào CRM của bạn"
+Source enabled successfully,Nguồn đã được kích hoạt thành công
+Source disabled successfully,Nguồn đã được vô hiệu hóa thành công
+Failed to update source,Không thể cập nhật nguồn
+Lead sync source deleted successfully,Nguồn đồng bộ Lead đã được xóa thành công
+Failed to delete lead sync source,Không thể xóa nguồn đồng bộ lead
+You will need a Meta developer account and an access token to sync leads from Facebook. Read more,Bạn sẽ cần tài khoản nhà phát triển Meta và mã thông báo truy cập để đồng bộ leads từ Facebook. Đọc thêm
+Add a name for your source,Thêm tên cho nguồn của bạn
+Enter your Facebook Access Token,Nhập Facebook Access Token của bạn
+Add Chart,Thêm Biểu Đồ
+Number Chart,Biểu đồ Số
+Axis Chart,Biểu Đồ Trục
+Donut Chart,Biểu đồ donut
+Total Leads,Tổng số Leads
+Ongoing Deals,Deals Đang diễn ra
+Avg Ongoing Deal Value,Giá Trị Deal Đang Diễn Ra Trung Bình
+Won Deals,Deals đã Thắng
+Avg Won Deal Value,Giá Trị Deal Thắng Trung Bình
+Avg Deal Value,Giá Trị Deal Trung Bình
+Avg Time to Close a Lead,Thời Gian Trung Bình Để Đóng Lead
+Avg Time to Close a Deal,Thời Gian Trung Bình Để Đóng Deal
+Sales Trend,Xu hướng Bán hàng
+Forecasted Revenue,Doanh thu dự báo
+Funnel Conversion,Chuyển đổi phễu
+Deals by Ongoing & Won Stage,Deals theo Giai đoạn Đang diễn ra & Đã thắng
+Lost Deal Reasons,Lý do Deal thất bại
+Deals by Territory,Deals theo Khu vực
+Deals by Salesperson,Deals theo Nhân viên kinh doanh
+Deals by Stage,Deals theo Giai đoạn
+Leads by Source,Leads theo Nguồn
+Deals by Source,Deals theo Nguồn
+Enter {0},Nhập {0}
+No results found,Không tìm thấy kết quả nào
+Operator,Người vận hành
+Open Nested Conditions,Mở Điều kiện Lồng nhau
+Nested Conditions,Điều kiện lồng nhau
+Turn into a Group,Chuyển thành Nhóm
+Ungroup Conditions,Tách Nhóm Điều kiện
+Remove Group,Xóa Nhóm
+Deleting note...,Đang xóa ghi chú...
+Note deleted,Đã xóa ghi chú
+Failed to delete note,Không thể xóa ghi chú
+New Comment,Bình luận mới
+Upload Attachment,Tải lên Tệp đính kèm
+Send Template,Gửi Mẫu
+New Message,Tin nhắn mới
+Log a Call,Ghi nhật ký cuộc gọi
+WhatsApp Message,Tin nhắn WhatsApp
+added a,đã thêm
+Failed to update comment,Không cập nhật được bình luận
+Failed to delete comment,Không xóa được bình luận
+Delete Attachment,Xóa tệp đính kèm
+public,công khai
+private,riêng tư
+Make attachment {0},Tạo tệp đính kèm {0}
+Are you sure you want to make this attachment {0}?,Bạn có chắc muốn chuyển tệp đính kèm này sang chế độ {0} không?
+Are you sure you want to delete this attachment?,Bạn có chắc chắn muốn xóa tệp đính kèm này?
+Change Status,Thay Đổi Trạng Thái
+Delete Task,Xóa Công việc
+Are you sure you want to delete this task?,Bạn có chắc chắn muốn xóa công việc này?
+Normal,Bình thường
+Playback Speed,Tốc độ Phát lại
+Failed to add reaction to the message,Không thể thêm phản ứng vào tin nhắn
+changes from,thay đổi từ
+to,đến
+Failed to send WhatsApp template,Không thể gửi mẫu WhatsApp
+Edit Fields Layout,Chỉnh sửa Bố cục Trường
+Type your message here...,Nhập tin nhắn của bạn ở đây...
+Failed to send WhatsApp message,Không thể gửi tin nhắn WhatsApp
+Upload Document,Tải lên Tài liệu
+Upload Video,Tải lên Video
+has reached out,đã liên hệ
+has made a call,đã thực hiện cuộc gọi
+Inbound Call,Cuộc gọi đến
+Outbound Call,Cuộc gọi đi
+Hide Recording,Ẩn ghi âm
+Listen,Nghe
+Update {0} Records,Cập nhật {0} Bản ghi
+Edit View,Chỉnh sửa Chế độ xem
+Duplicate View,Sao chép Chế độ xem
+View Name,Tên Chế độ xem
+My Open Deals,Deals đang mở của tôi
+Call Details,Chi tiết cuộc gọi
+Edit Note,Sửa Ghi chú
+Add Note,Thêm Ghi Chú
+Edit Task,Chỉnh sửa Công việc
+Add Task,Thêm Công Việc
+Edit Call Log,Chỉnh sửa Nhật ký cuộc gọi
+Create Lead,Tạo Lead
+Error creating lead: {0},Lỗi tạo lead: {0}
+GitHub Repository,Kho lưu trữ GitHub
+Documentation,Tài liệu
+Report an Issue,Báo cáo sự cố
+Contact Support,Liên hệ Hỗ trợ
+Invalid Email Address,Địa chỉ Email không hợp lệ
+Mobile No. should be a number,Số di động phải là một số
+Add existing system users to this CRM. Assign them a role to grant access with their current credentials.,Thêm người dùng hệ thống hiện có vào CRM này. Gán cho họ một vai trò để cấp quyền truy cập với thông tin xác thực hiện tại của họ.
+Users Added Successfully,Người dùng đã được Thêm Thành công
+Failed to Add Users,Không thể thêm Người dùng
+Create Deal,Tạo Deal
+Choose Existing Organization,Chọn Tổ Chức Hiện Có
+Choose Existing Contact,Chọn Liên Hệ Hiện Có
+Annual Revenue should be a number,Doanh thu hàng năm phải là một số
+Invalid email address,Địa chỉ email không hợp lệ
+Status is required,Trạng thái là bắt buộc
+Edit Field Layout,Chỉnh sửa Bố cục Trường
+Toggle on for Preview,Bật để Xem trước
+Edit Data Fields Layout,Chỉnh sửa Bố cục Trường dữ liệu
+Password updated successfully,Mật khẩu đã được cập nhật thành công
+Failed to update password,Không cập nhật được mật khẩu
+WhatsApp Templates,Mẫu WhatsApp
+Create New Template,Tạo mẫu mới
+No Templates Found,Không tìm thấy mẫu nào
+Edit deal's mandatory fields layout,Sửa bố cục các trường bắt buộc của Deal
+Choose Existing,Chọn Hiện Có
+New organization will be created based on the data in details section,Tổ chức mới sẽ được tạo dựa trên dữ liệu trong phần chi tiết
+New contact will be created based on the person's details,Liên hệ mới sẽ được tạo dựa trên chi tiết của người đó
+Please select an existing contact,Vui lòng chọn một liên hệ hiện có
+Please select an existing organization,Vui lòng chọn một tổ chức hiện có
+Error converting to deal: {0},Lỗi chuyển đổi thành deal: {0}
+Edit Quick Entry Layout,Chỉnh sửa Bố cục Nhập nhanh
+First Name is mandatory,Họ tên là bắt buộc
+Lost Reason,Lý do bị mất
+Please provide a reason for marking this {0} as lost,Vui lòng nhập lý do đánh dấu {0} này là đã mất
+Lost Notes,Ghi chú thất bại
+Lost Reason is required,Lý do thất bại là bắt buộc
+"Lost Notes are required when Lost Reason is ""Other""","Ghi chú thất bại là bắt buộc khi Lý do thất bại là ""Khác"""
+New Organization,Tổ chức mới
+Subject: {0},Chủ đề: {0}
+Remove All,Xóa tất cả
+Back to File Upload, Quay Lại Tải Lên Tệp
+Set all as public,Đặt tất cả là công khai
+Set all as private,Đặt tất cả là riêng tư
+Please enter a valid URL,Vui lòng nhập URL hợp lệ
+Drag & Drop files here or upload from,Kéo & thả tập tin vào đây hoặc tải lên từ
+Device,Thiết bị
+"File ""{0}"" was skipped because size exceeds {1} MB","Đã bỏ qua tệp ""{0}"" vì dung lượng vượt quá {1} MB"
+"File ""{0}"" was skipped because only {1} uploads are allowed","Tệp ""{0}"" bị bỏ qua vì chỉ cho phép {1} tải lên"
+"File ""{0}"" was skipped because only {1} uploads are allowed for DocType ""{2}""","Tệp ""{0}"" bị bỏ qua vì chỉ cho phép {1} tải lên cho DocType ""{2}"""
+Kanban settings,Cài đặt kanban
+Kanban Settings,Cài đặt Kanban
+Column Field,Trường Cột
+Fields Order,Thứ tự trường
+Reload Columns,Tải lại Cột
+Initiating call...,Đang khởi tạo cuộc gọi...
+Ringing...,Đang đổ chuông...
+Calling...,Đang gọi...
+Incoming call...,Cuộc gọi đến...
+Add a Note,Thêm ghi chú
+Hang Up,Kết thúc cuộc gọi
+Accept,Chấp Nhận
+Reject,Từ chối
+Accept Call,Chấp Nhận Cuộc Gọi
+Reject Call,Từ chối Cuộc gọi
+Minimize,Thu nhỏ
+Take a note...,Ghi chú...
+Add a Task,Thêm Một Công Việc
+Schedule a task...,Lên lịch một công việc...
+Add description...,Thêm mô tả...
+01/04/2024 11:30 PM,01/04/2024 11:30 CH
+Call using {0},Gọi bằng {0}
+Calling Medium,Phương Tiện Gọi
+Make {0} as default calling medium,Đặt {0} làm phương tiện gọi mặc định
+You can change the default calling medium from the settings,Bạn có thể thay đổi phương tiện gọi mặc định từ cài đặt
+Default calling medium set successfully to {0},Đã đặt phương tiện gọi mặc định thành công thành {0}
+Edit Grid Fields Layout,Chỉnh sửa Bố cục Trường Lưới
+At least one field is required,Yêu cầu ít nhất một trường
+Type an email address to invite,Nhập địa chỉ email để mời
+email already exists,email đã tồn tại
+"Invalid format. Try: 1 hour 30 minutes, 2 hours, 45 seconds, 1:30:45, 90s","Định dạng không hợp lệ. Thử: 1 giờ 30 phút, 2 giờ, 45 giây, 1:30:45, 90s"
+"Invalid format. Try: 1h 30m 45s, 1:30:45, 90s","Định dạng không hợp lệ. Thử: 1h 30m 45s, 1:30:45, 90s"
+Edit Grid Row Fields Layout,Chỉnh sửa Bố cục Trường Hàng Lưới
+Hide Password,Ẩn mật khẩu
+Show Password,Hiển thị Mật khẩu
+No.,Không.
+Edit Grid Fields,Chỉnh sửa Trường Lưới
+Edit Row,Chỉnh sửa Hàng
+Editing Row {0},Đang chỉnh sửa Hàng {0}
+Setup your password,Thiết lập mật khẩu của bạn
+Create your first lead,Tạo Lead đầu tiên của bạn
+Invite your team,Mời nhóm của bạn
+Convert lead to deal,Chuyển đổi Lead thành Deal
+Create your first task,Tạo công việc đầu tiên của bạn
+Create your first note,Tạo ghi chú đầu tiên của bạn
+Add your first comment,Thêm bình luận đầu tiên của bạn
+Send email,Gửi email
+Change deal status,Thay đổi trạng thái deal
+Setting Up,Thiết lập
+Custom Branding,Thương hiệu tùy chỉnh
+Invite Users,Mời Người dùng
+Masters,Danh mục
+Call Log,Nhật ký cuộc gọi
+Capturing Leads,Đang Thu Thập Leads
+Saved View,Chế độ xem Đã lưu
+Public View,Chế độ xem Công khai
+Pinned View,Chế độ xem Đã ghim
+Other Features,Tính năng Khác
+Email Communication,Giao tiếp qua Email
+Service Level Agreement,Thỏa thuận cấp độ dịch vụ
+Custom Fields,Trường tùy chỉnh
+Custom Actions,Hành động tùy chỉnh
+Custom Statuses,Trạng thái tùy chỉnh
+Custom List Actions,Hành động danh sách tùy chỉnh
+Quick Entry Layout,Bố cục Nhập nhanh
+Integration,Tích hợp
+Frappe CRM mobile,Frappe CRM di động
+Mobile App Installation,Cài đặt Ứng dụng di động
+You do not have permission to access Frappe CRM,Bạn không có quyền truy cập Frappe CRM
+This method is only meant for developer mode,Phương pháp này chỉ dành cho chế độ nhà phát triển
+{0} assigned a {1} {2} to you,{0} đã giao {1} {2} cho bạn
+assigned a {0} {1} to you,đã giao {0} {1} cho bạn
+Your assignment on task {0} has been removed by {1},Bài tập của bạn trên công việc {0} đã bị xóa bởi {1}
+assigned a new task {0} to you,đã giao một công việc mới {0} cho bạn
+Password cannot be reset by Demo User {},Mật khẩu không thể đặt lại bởi Người dùng Demo {}
+Invalid field,Trường không hợp lệ
+Invalid chart name,Tên biểu đồ không hợp lệ
+Total leads,Tổng số leads
+Total number of leads,Tổng số leads
+Ongoing deals,Deals đang diễn ra
+Total number of non won/lost deals,Tổng số deals không thắng/thua
+Avg. ongoing deal value,Giá trị deal đang diễn ra TB
+Average deal value of non won/lost deals,Giá trị deal trung bình của các deal không thắng/thua
+Won deals,Deals đã thắng
+Total number of won deals based on its closure date,Tổng số deals đã thắng dựa trên ngày đóng của nó
+Avg. won deal value,Giá trị deal thắng TB
+Average deal value of won deals,Giá trị deal trung bình của các deal đã thắng
+Avg. deal value,Giá trị deal TB
+Average deal value of ongoing & won deals,Giá trị deal trung bình của các deal đang diễn ra & đã thắng
+Avg. time to close a lead,Thời gian đóng lead TB
+Average time taken from lead creation to deal closure,Thời gian trung bình từ khi tạo lead đến khi đóng deal
+Avg. time to close a deal,Thời gian đóng deal TB
+Average time taken from deal creation to deal closure,Thời gian trung bình từ khi tạo deal đến khi đóng deal
+Sales trend,Xu hướng bán hàng
+"Daily performance of leads, deals, and wins","Hiệu suất hàng ngày của Lead, Deal và thắng lợi"
+Forecasted revenue,Doanh thu dự báo
+Projected vs actual revenue based on deal probability,Doanh thu dự kiến so với thực tế dựa trên xác suất deal
+Revenue,Doanh thu
+Funnel conversion,Chuyển đổi phễu
+Lead to deal conversion pipeline,Pipeline chuyển đổi Lead sang Deal
+Stage,Giai đoạn
+Deals by ongoing & won stage,Deals theo giai đoạn đang diễn ra & đã thắng
+Deals by stage,Deals theo giai đoạn
+Current pipeline distribution,Phân bổ pipeline hiện tại
+Lost deal reasons,Lý do deal thất bại
+Common reasons for losing deals,Những lý do phổ biến để mất deals
+Leads by source,Leads theo nguồn
+Lead generation channel analysis,Phân tích kênh tạo Lead
+Deals by source,Deals theo nguồn
+Deal generation channel analysis,Phân tích kênh tạo Deal
+Deals by territory,Deals theo khu vực
+Geographic distribution of deals and revenue,Phân bổ địa lý của các deal và doanh thu
+Territory,Khu vực
+Number of deals,Số lượng Deals
+Deal value,Giá trị Deal
+Deals by salesperson,Deals theo nhân viên kinh doanh
+Number of deals and total value per salesperson,Số lượng Deals và tổng giá trị theo nhân viên kinh doanh
+Salesperson,Nhân viên kinh doanh
+Access Key is required for Service Provider: {0},Khóa Truy cập là bắt buộc cho Nhà cung cấp Dịch vụ: {0}
+"Ask your manager to set up the Exchange Rate Provider, as default provider does not support currency conversion for {0} to {1}.","Yêu cầu quản lý của bạn thiết lập Nhà Cung Cấp Tỷ Giá, vì nhà cung cấp mặc định không hỗ trợ chuyển đổi tiền tệ cho {0} thành {1}."
+"Setup the Exchange Rate Provider other than 'Frankfurter' in settings, as default provider does not support currency conversion for {0} to {1}.","Thiết lập Nhà cung cấp Tỷ giá khác 'Frankfurter' trong cài đặt, vì nhà cung cấp mặc định không hỗ trợ chuyển đổi tiền tệ cho {0} thành {1}."
+Failed to fetch exchange rate from {0} to {1} on {2}. Please check your internet connection or try again later.,Không thể lấy tỷ giá từ {0} sang {1} vào {2}. Vui lòng kiểm tra kết nối internet hoặc thử lại sau.
+Invalid or expired key,Khóa không hợp lệ hoặc đã hết hạn
+You are not allowed to invite System Managers,Bạn không được phép mời Người quản lý hệ thống
+You are not allowed to invite Sales Managers,Bạn không được phép mời Giám đốc bán hàng
+Cannot invite for this role,Không thể mời cho vai trò này
+Only System Managers can assign the System Manager role,Chỉ Người quản lý hệ thống mới có thể gán vai trò Người quản lý hệ thống
+Only System Managers can assign the Sales Manager role,Chỉ Người quản lý hệ thống mới có thể gán vai trò Giám đốc bán hàng
+Cannot assign this role,Không thể gán vai trò này
+Only System Managers can modify other System Managers,Chỉ Người quản lý hệ thống mới có thể sửa đổi Người quản lý hệ thống khác
+Remove this user from the sales hierarchy before changing their role to Sales User,Hãy xóa người dùng này khỏi phân cấp bán hàng trước khi đổi vai trò thành Sales User
+You cannot remove yourself.,Bạn không thể tự xóa mình.
+User {0} cannot be removed as it has a Role Profile assigned to it.,Người dùng {0} không thể bị xóa vì nó có Hồ sơ Vai trò được gán.
+User {0} has been removed from CRM roles.,Người dùng {0} đã bị xóa khỏi các vai trò CRM.
+Only sales users can access WhatsApp features.,Chỉ người dùng bán hàng mới có thể truy cập tính năng WhatsApp.
+Reference document {0} {1} does not exist.,Tài liệu tham chiếu {0} {1} không tồn tại.
+Not permitted to access reference document {0} {1}.,Không được phép truy cập tài liệu tham chiếu {0} {1}.
+received a whatsapp message in {0},đã nhận tin nhắn whatsapp trong {0}
+Referenced WhatsApp message does not exist.,Tin nhắn WhatsApp được tham chiếu không tồn tại.
+Not permitted to access the referenced WhatsApp message.,Không được phép truy cập tin nhắn WhatsApp được tham chiếu.
+Doctype is required,Loại tài liệu là bắt buộc
+Items are required,Các mục là bắt buộc
+Items must be a list,Các mục phải là một danh sách
+You are not permitted to access CRM resources.,Bạn không được phép truy cập tài nguyên CRM.
+created this deal,đã tạo deal này
+converted the lead to this deal,đã chuyển đổi lead thành deal này
+created this lead,đã tạo lead này
+You are not permitted to access this resource.,Bạn không được phép truy cập tài nguyên này.
+User {0} is already mapped to hierarchy node {1}.,Người dùng {0} đã được gán vào nút phân cấp {1}.
+CRM Sales Hierarchy,Phân cấp bán hàng CRM
+Old Parent,Cha cũ
+Reports To,Báo cáo cho
+CRM Service Level Agreement,Thỏa Thuận Mức Dịch Vụ CRM
+SLA Name,Tên SLA
+"Simple Python Expression, Example: doc.status == 'Open' and doc.lead_source == 'Ads'","Biểu thức Python đơn giản, Ví dụ: doc.status == 'Open' and doc.lead_source == 'Ads'"
+Priorities,Ưu tiên
+Working Hours,Giờ làm việc
+Holiday List,Danh sách ngày nghỉ
+Default Service Level Agreement already exists for {0},Thỏa thuận Mức Dịch vụ Mặc định đã tồn tại cho {0}
+The Condition '{0}' is invalid: {1},Điều kiện '{0}' không hợp lệ: {1}
+ERPNext CRM Settings,Cài đặt ERPNext CRM
+ERPNext Site API's,API Site ERPNext
+ERPNext Site URL,URL Site ERPNext
+Company in ERPNext site,Công ty trong trang ERPNext
+Is ERPNext installed on a different site?,ERPNext có được cài đặt trên một site khác không?
+Create customer on status change,Tạo khách hàng khi thay đổi trạng thái
+ERPNext is not integrated with the CRM,ERPNext không được tích hợp với CRM
+ERPNext is not installed in the current site,ERPNext không được cài đặt trong site hiện tại
+Organization or a primary Contact is required to create a customer,Cần có Tổ chức hoặc Liên hệ chính để tạo khách hàng
+CRM Global Settings,Cài Đặt Toàn Cục CRM
+Quick Filters,Bộ lọc nhanh
+Probability,Xác suất
+Annual Revenue,Doanh thu hàng năm
+Next Step,Bước tiếp theo
+Primary email,Email chính
+Primary mobile no,Số di động chính
+Response By,Phản hồi bởi
+SLA Status,Trạng thái SLA
+First Response Due,Hạn phản hồi đầu tiên
+Rolling Response Due,Hạn Phản hồi Cuộn
+Fulfilled,Đã thực hiện
+SLA Creation,Tạo SLA
+Response Details,Chi tiết phản hồi
+First Responded On,Phản hồi lần đầu vào
+Communication Status,Trạng Thái Giao Tiếp
+No. of Employees,Số nhân viên
+Job Title,Chức danh
+Primary phone,Điện thoại chính
+Status Change Log,Nhật ký Thay đổi Trạng thái
+Lead Name,Tên Lead
+Lead Details,Chi tiết Lead
+Organization Details,Chi tiết Tổ chức
+Organization Name,Tên tổ chức
+Industry,Ngành nghề
+Person,Người
+First name,Họ tên
+Last name,Họ
+Products,Sản phẩm
+Net Total,Tổng ròng
+Total after discount,Tổng sau chiết khấu
+Deal Value,Giá trị Deal
+Exchange Rate,Tỷ giá hối đoái
+The rate used to convert the deal’s currency to your crm's base currency (set in CRM Settings). It is set once when the currency is first added and doesn't change automatically.,Tỷ giá được sử dụng để chuyển đổi tiền tệ của deal sang tiền tệ cơ sở của CRM (đặt trong Cài đặt CRM). Nó được đặt một lần khi tiền tệ được thêm lần đầu và không thay đổi tự động.
+Expected Deal Value,Giá trị Deal dự kiến
+Expected Closure Date,Ngày đóng dự kiến
+Closed Date,Ngày Đóng
+Last Response Time,Thời gian phản hồi cuối
+Last Responded On,Phản hồi lần cuối vào
+Lost Details,Chi tiết thất bại
+Expected deal value is required.,Giá trị deal dự kiến là bắt buộc.
+Expected closure date is required.,Ngày đóng dự kiến là bắt buộc.
+Please specify a reason for losing the deal.,Vui lòng chỉ định lý do mất deal.
+Please specify the reason for losing the deal.,Vui lòng chỉ định lý do mất deal.
+Not allowed to add contact to Deal,Không được phép thêm liên hệ vào Deal
+Not allowed to remove contact from Deal,Không được phép xóa liên hệ khỏi Deal
+Not allowed to set primary contact for Deal,Không được phép đặt liên hệ chính cho Deal
+CRM Holiday,Ngày Lễ CRM
+Weekly Off,Nghỉ hàng tuần
+CRM Organization,Tổ Chức CRM
+The rate used to convert the organization’s currency to your crm's base currency (set in CRM Settings). It is set once when the currency is first added and doesn't change automatically.,Tỷ giá được sử dụng để chuyển đổi tiền tệ của tổ chức sang tiền tệ cơ sở của CRM (đặt trong Cài đặt CRM). Nó được đặt một lần khi tiền tệ được thêm lần đầu và không thay đổi tự động.
+CRM Territory,Lãnh Thổ CRM
+Territory Name,Tên khu vực
+Territory Manager,Quản lý khu vực
+Parent CRM Territory,CRM Khu vực Cha
+CRM Lead Source,Nguồn Lead CRM
+CRM Lead Status,Trạng Thái Lead CRM
+black,màu đen
+amber,màu hổ phách
+teal,màu xanh ngọc
+violet,màu tím
+Ongoing,Đang diễn ra
+Lost,Đã mất
+You need to be in developer mode to edit a Standard Form Script,Bạn cần ở chế độ nhà phát triển để chỉnh sửa Form Script Tiêu chuẩn
+CRM Form Script,Form Script CRM
+CRM Service Level Priority,Mức Ưu Tiên Dịch Vụ CRM
+First Response TIme,Thời gian phản hồi đầu tiên
+CRM Contacts,Danh Bạ CRM
+CRM Notification,Thông Báo CRM
+Notification Type Doctype,Loại Doctype Thông báo
+Notification Type Doc,Loại Tài liệu Thông báo
+Notification Text,Văn bản Thông báo
+CRM Lost Reason,Lý Do Mất Lead CRM
+CRM Communication Status,Trạng Thái Giao Tiếp CRM
+CRM View Settings,Cài Đặt Xem CRM
+Rows,Hàng
+Order By,Sắp xếp theo
+Pinned,Đã ghim
+Route Name,Tên Tuyến đường
+Load Default Columns,Tải cột mặc định
+group_by,nhóm_theo
+Group By Field,Trường nhóm theo
+Kanban Columns,Cột Kanban
+Kanban Fields,Trường Kanban
+Please select weekly off day,Vui lòng chọn ngày nghỉ hàng tuần
+To Date cannot be before From Date,Ngày kết thúc không thể trước Ngày bắt đầu
+The holiday on {0} is not between From Date and To Date,Ngày nghỉ vào {0} không nằm giữa Từ ngày và Đến ngày
+CRM Holiday List,Danh Sách Ngày Lễ CRM
+Holiday List Name,Tên Danh sách ngày nghỉ
+Total Holidays,Tổng ngày lễ
+Add Weekly Holidays,Thêm Ngày nghỉ hàng tuần
+Add to Holidays,Thêm vào ngày lễ
+Holidays,Ngày lễ
+Clear Table,Xóa Bảng
+Layout,Bố cục
+CRM Telephony Phone,Điện Thoại CRM
+CRM Industry,Ngành nghề CRM
+CRM Invitation,Lời Mời CRM
+CRM Fields Layout,Bố Cục Trường CRM
+Side Panel,Bảng bên
+Data Fields,Trường dữ liệu
+Grid Row,Hàng lưới
+Required Fields,Trường Bắt buộc
+CRM Twilio Settings,Cài Đặt CRM Twilio
+Twilio Apps,Ứng dụng Twilio
+Twilio API credential creation error.,Lỗi tạo thông tin xác thực API Twilio.
+Unable to connect to Twilio account to fetch applications.,Không thể kết nối với tài khoản Twilio để lấy ứng dụng.
+CRM Telephony Agent,Điện Thoại Viên CRM
+Phone Numbers,Số Điện thoại
+Computer,Máy tính
+CRM Product,Sản Phẩm CRM
+Product Code,Mã Sản phẩm
+Product Name,Tên Sản phẩm
+Standard Selling Rate,Giá bán tiêu chuẩn
+CRM Products,Các Sản Phẩm CRM
+Discount %,Giảm giá %
+Discount Amount,Số tiền Giảm giá
+Rate,Đơn giá
+Net Amount,Số tiền ròng
+Amount after discount,Số tiền sau chiết khấu
+Product,Sản phẩm
+Quantity,Số lượng
+CRM Service Day,Ngày Dịch Vụ CRM
+CRM Task,Công Việc CRM
+Backlog,Tồn Đọng
+Todo,Việc cần làm
+CRM Status Change Log,Nhật Ký Thay Đổi Trạng Thái CRM
+Last Status Change Log,Nhật ký thay đổi trạng thái cuối
+From Type,Từ Loại
+To Type,Loại Đến
+From Number,Từ Số
+No Answer,Không trả lời
+Incoming,Đang đến
+Outgoing,Đi
+To Number,Số Đến
+Recording URL,URL ghi âm
+Call Received By,Cuộc gọi nhận bởi
+Caller,Người Gọi
+Telephony Medium,Phương tiện Điện thoại
+A valid call log is required.,Yêu cầu một nhật ký cuộc gọi hợp lệ.
+You are not permitted to update this call log.,Bạn không được phép cập nhật nhật ký cuộc gọi này.
+You are not permitted to create leads.,Bạn không được phép tạo leads.
+Invalid lead details supplied.,Chi tiết lead được cung cấp không hợp lệ.
+Lead from call {0},Lead từ cuộc gọi {0}
+CRM Deal Status,Trạng Thái Deal CRM
+Series,Dãy
+Lead Owner,Người phụ trách Lead
+Converted,Đã chuyển đổi
+Facebook Lead ID,ID Lead Facebook
+Facebook Form ID,ID Biểu mẫu Facebook
+A Lead requires either a person's name or an organization's name,Một Cơ hội yêu cầu tên của một người hoặc tên của một tổ chức
+Lead Owner cannot be same as the Lead Email Address,Người phụ trách Lead không thể giống với Địa chỉ Email Lead
+Please specify a reason for losing the lead.,Vui lòng chỉ định lý do mất lead.
+Please specify the reason for losing the lead.,Vui lòng chỉ định lý do mất lead.
+Contact already exists with {0},Liên hệ đã tồn tại với {0}
+Contact Already Exists,Liên hệ đã tồn tại
+Not allowed to convert Lead to Deal,Không được phép chuyển đổi Lead thành Deal
+"Please enter valid exotel Account SID, API key & API token: {response.reason}","Vui lòng nhập Account SID, API key và API token của Exotel hợp lệ: {response.reason}"
+Invalid credentials,Thông tin xác thực không hợp lệ
+CRM Exotel Settings,Cài Đặt CRM Exotel
+Record Outgoing Calls,Ghi Cuộc gọi Đi
+CRM Rolling Response Time,Thời Gian Phản Hồi Cuộn CRM
+Response Time,Thời gian Phản hồi
+Responded On,Đã phản hồi vào
+FCRM Settings,Cài đặt FCRM
+Restore Defaults,Khôi phục Mặc định
+Branding,Thương Hiệu
+Logo,Biểu tượng
+An image with 1:1 & 2:1 ratio is preferred,Một hình ảnh có tỷ lệ 1:1 & 2:1 được ưa thích
+Dropdown items,Mục danh sách thả xuống
+"It will make deal's ""Expected Closure Date"" & ""Expected Deal Value"" mandatory to get accurate forecasting insights","Điều này sẽ khiến ""Ngày đóng dự kiến"" & ""Giá trị Deal dự kiến"" của deal trở thành bắt buộc để có được thông tin chi tiết dự báo chính xác"
+Enable Sales Hierarchy Permissions,Bật phân quyền theo phân cấp bán hàng
+Restrict Lead and Deal visibility based on the Sales Hierarchy tree. Managers can see all records owned by or assigned to their reports.,Giới hạn quyền xem Lead và Deal theo cây phân cấp bán hàng. Quản lý xem được mọi bản ghi do cấp dưới sở hữu hoặc được giao.
+Service Provider,Nhà cung cấp Dịch vụ
+Auto update Expected Deal Value,Tự Động Cập Nhật Giá Trị Deal Dự Kiến
+Update the modified timestamp on new email communication & comment for leads & deals,Cập nhật dấu thời gian sửa đổi trên giao tiếp email mới & bình luận cho leads & deals
+Restore Demo Data,Khôi phục Dữ liệu Demo
+Cannot delete standard items {0},Không thể xóa các mục tiêu chuẩn {0}
+CRM Dropdown Item,Mục Dropdown CRM
+Add svg code or use feather icons e.g 'settings',Thêm mã svg hoặc sử dụng biểu tượng feather ví dụ 'settings'
+Open in new window,Mở trong cửa sổ mới
+Facebook Lead Form,Biểu mẫu Lead Facebook
+Form Name,Tên biểu mẫu
+Mandatory field(s) {0} must be mapped,Trường bắt buộc {0} phải được ánh xạ
+Can't retry sync for this without source!,Không thể thử đồng bộ lại cho việc này nếu không có nguồn!
+Not implemented yet!,Chưa được triển khai!
+Failed Lead Sync Log,Nhật ký Đồng bộ Lead Thất bại
+Facebook Lead Form Question,Câu hỏi Biểu mẫu Lead Facebook
+Mapped to CRM Field,Ánh xạ đến Trường CRM
+Facebook Page,Trang Facebook
+A lead sync source is already enabled for this Facebook Lead Form!,Một nguồn đồng bộ lead đã được bật cho Biểu Mẫu Lead Facebook này!
+Please select a lead gen form before syncing!,Vui lòng chọn biểu mẫu tạo lead trước khi đồng bộ!
+Lead Sync Source,Nguồn đồng bộ Lead
+Enabled?,Đã bật?
+Every 5 Minutes,Mỗi 5 phút
+Every 10 Minutes,Mỗi 10 phút
+Every 15 Minutes,Mỗi 15 phút
+Access token is required,Yêu cầu mã thông báo truy cập
+Invalid access token provided for Facebook.,Access token được cung cấp cho Facebook không hợp lệ.
+Please check your access token,Vui lòng kiểm tra mã thông báo truy cập của bạn
+Unknown telephony medium: {0},Phương tiện điện thoại không xác định: {0}
+Call log not found,Không tìm thấy nhật ký cuộc gọi
+Recording URL not found,Không tìm thấy URL Ghi âm
+Please setup Exotel intergration,Vui lòng thiết lập tích hợp Exotel
+Integration Not Enabled,Tích hợp chưa được bật
+You do not have Exotel Number set in your Telephony Agent,Bạn chưa đặt Số Exotel trong Điện thoại Viên của mình
+Exotel Number Missing,Số Exotel bị thiếu
+Exotel Number {0} is not valid,Số Exotel {0} không hợp lệ
+Invalid Exotel Number,Số Exotel không hợp lệ
+You do not have mobile number set in your Telephony Agent,Bạn chưa đặt số di động trong Điện thoại Viên của mình
+Mobile Number Missing,Số di động bị thiếu
+Exotel Exception,Ngoại lệ Exotel
+Unauthorized request,Yêu cầu không được ủy quyền
+Please enable twilio settings before making a call.,Vui lòng bật cài đặt Twilio trước khi thực hiện cuộc gọi.
+"Agent is unavailable to take the call, please call after some time.","Điện thoại viên không khả dụng để nhận cuộc gọi, vui lòng gọi lại sau."
+Twilio configuration is missing,Cấu hình Twilio bị thiếu
+Invalid Twilio account,Tài khoản Twilio không hợp lệ
+Invalid Twilio application,Ứng dụng Twilio không hợp lệ
+Failed to capture Twilio recording,Không thể ghi âm Twilio
+Failed to update Twilio call status,Không thể cập nhật trạng thái cuộc gọi Twilio
+(No Title),(Không Có Tiêu Đề)
+08:00 AM,08:00 SA
+08:00 pm,08:00 CH
+1 hr,1 giờ
+<b>SHORTCUTS</b>,<b>Lối Tắt</b>
+"<span class=""h5""><b>PORTAL</b></span>","<span class=""h5""><b>CỔNG THÔNG TIN</b></span>"
+Add Attendee,Thêm Người Tham Dự
+Add Description,Thêm Mô Tả
+Add Description.,Thêm Mô Tả.
+Add Lead or Deal,Thêm Lead Hoặc Deal
+Add Location,Thêm Địa Điểm
+Add Notification,Thêm Thông Báo
+All Day Event Notifications,Thông Báo Sự Kiện Cả Ngày
+Are you sure you want to delete this event?,Bạn có chắc chắn muốn xóa sự kiện này?
+Are you sure you want to discard unsaved changes to this event?,Bạn có chắc chắn muốn hủy các thay đổi chưa lưu cho sự kiện này?
+Are you sure you want to reset 'Create Quotation from CRM Deal' Form Script?,Bạn có chắc chắn muốn đặt lại 'Tạo Báo Giá từ CRM Deal' Form Script?
+Attendees,Người tham dự
+Attending status updated,Trạng thái tham dự đã được cập nhật
+CRM Portal Page,Trang Cổng Thông Tin CRM
+Calendar Settings,Cài Đặt Lịch
+Call with John Doe,Gọi với Nguyễn Văn A
+Close Panel,Đóng Panel
+Communication Statuses,Các Trạng Thái Giao Tiếp
+Configure your Calendar Settings like Default View and Event Notifications here,Cấu hình Cài đặt Lịch của bạn như Chế độ xem Mặc định và Thông báo Sự kiện tại đây
+Create Event,Tạo Sự kiện
+Create an Event,Tạo một Sự kiện
+Date & Time,Ngày & Giờ
+Deal Statuses,Trạng thái Deal
+Default Calendar View,Chế độ xem Lịch mặc định
+Default Event Notifications,Thông báo sự kiện mặc định
+"Default statuses, custom fields and layouts restored successfully.","Đã khôi phục trạng thái mặc định, trường tùy chỉnh và bố cục thành công."
+Delete & Restore,Xóa & Khôi phục
+Delete Event,Xóa Sự kiện
+Demo data restored successfully.,Dữ liệu demo đã được khôi phục thành công.
+Discard Unsaved Changes?,Hủy bỏ thay đổi chưa lưu?
+Document does not exist,Tài liệu không tồn tại
+Duplicate Event,Sao chép Sự kiện
+Duplicate an Event,Sao chép một Sự kiện
+Edit Event,Chỉnh sửa Sự kiện
+Edit an Event,Chỉnh sửa một Sự kiện
+Editing Event,Đang chỉnh sửa Sự kiện
+Email Already Exists,Email đã tồn tại
+Email already exists,Email đã tồn tại
+End Time Should Be After Start Time,Giờ kết thúc phải sau Giờ bắt đầu
+Event Details,Chi tiết sự kiện
+Event ID is required,ID Sự kiện là bắt buộc
+Event Title,Tiêu đề Sự kiện
+Event created successfully,Sự kiện được tạo thành công
+Event deleted successfully,Sự kiện được xóa thành công
+Failed to update attending status,Không thể cập nhật trạng thái tham dự
+"For all-day events, <b>set a time</b> to send reminders before the event starts","Đối với sự kiện cả ngày, <b>đặt thời gian</b> để gửi lời nhắc trước khi sự kiện bắt đầu"
+Form Script updated successfully,Đã cập nhật Script biểu mẫu thành công
+Going?,Tham dự?
+"Hi John, \
+\
+Can you please provide more details on this...","Xin chào John, \
+\
+Bạn có thể cung cấp thêm chi tiết về việc này..."
+Industries,Ngành nghề
+Invalid Start Or End Time,Giờ bắt đầu hoặc kết thúc không hợp lệ
+Lead Statuses,Trạng thái Lead
+Lead sync initiated.,Đã khởi tạo đồng bộ Lead.
+"May 1, 2025","1 tháng 5, 2025"
+No Events Scheduled,Không có sự kiện nào được lên lịch
+No Users Found,Không tìm thấy người dùng nào
+No events coming up. Create a new one to keep things on track.,Không có sự kiện nào sắp tới. Tạo một sự kiện mới để giữ mọi thứ đúng tiến độ.
+Open in Portal,Mở trong Cổng thông tin
+Organizer,Người tổ chức
+Owner: {0},Chủ sở hữu: {0}
+Private or Public,Riêng tư hoặc Công khai
+"Reminders will be sent <b>before the event starts</b>, based on the configured time","Lời nhắc sẽ được gửi <b>trước khi sự kiện bắt đầu</b>, dựa trên thời gian đã định cấu hình"
+Reset ERPNext Form Script,Đặt lại ERPNext Form Script
+Schedule an Event,Lên lịch một Sự kiện
+See All Participants,Xem Tất cả Người tham dự
+Select Type,Chọn Loại
+Select View,Chọn Xem
+Select the default view for your calendar. This will be the initial view when you open the calendar,Chọn chế độ xem mặc định cho lịch của bạn. Đây sẽ là chế độ xem ban đầu khi bạn mở lịch
+Show Less,Hiển thị Ít hơn
+"Standard Form Scripts can not be modified, duplicate the Form Script instead.","Các Form Script Tiêu chuẩn không thể được sửa đổi, hãy sao chép Form Script thay thế."
+Start & End Time Are Required,Thời gian Bắt đầu & Kết thúc là Bắt buộc
+"Sync Successful, CRM Lead: {0}!","Đồng bộ Thành công, CRM Lead: {0}!"
+Territories,Khu vực
+There can only be one default priority in Priorities table,Chỉ có thể có một mức ưu tiên mặc định trong bảng Ưu tiên
+"This will restore (if not exist) all the default statuses, custom fields and layouts. Delete & Restore will delete default layouts and then restore them.","Điều này sẽ khôi phục (nếu không tồn tại) tất cả các trạng thái mặc định, trường tùy chỉnh và bố cục. Xóa & Khôi phục sẽ xóa bố cục mặc định và sau đó khôi phục chúng."
+This will restore the demo data. Are you sure you want to continue?,Điều này sẽ khôi phục dữ liệu demo. Bạn có chắc chắn muốn tiếp tục không?
+Time before the event when a reminder notification will be sent by default. This will be applied to all events unless a custom notification is set for a specific event.,Thời gian trước sự kiện khi thông báo nhắc nhở sẽ được gửi theo mặc định. Điều này sẽ được áp dụng cho tất cả các sự kiện trừ khi một thông báo tùy chỉnh được đặt cho một sự kiện cụ thể.
+Type an email address to add attendee,Nhập địa chỉ email để thêm người tham dự
+You do not have permission to access this document,Bạn không có quyền truy cập tài liệu này
+at,tại
+before at,trước lúc
+day,ngày
+day before,ngày trước
+days,ngày
+days before,ngày trước
+hour,giờ
+hour before,giờ trước
+hours,giờ
+hours before,giờ trước
+minute,phút
+minute before,phút trước
+minutes before,phút trước
+old_value,giá trị cũ
+week,tuần
+week before,tuần trước
+weeks before,tuần trước
+{0} attendees,{0} người tham dự
+{0} awaiting,{0} đang chờ
+{0} hrs,{0} giờ
+{0} is an Invalid Value,{0} là Giá trị Không hợp lệ
+{0} is an Invalid value,{0} là giá trị không hợp lệ
+{0} maybe,{0} có thể
+{0} mins,{0} phút
+{0} no,{0} không
+{0} yes,{0} có
+Webhook Verify Token,Mã xác minh webhook
+FCRM Note,Ghi chú CRM
