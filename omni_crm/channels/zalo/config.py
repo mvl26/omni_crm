@@ -20,6 +20,7 @@ DEFAULTS: dict = {
 		"file": "/v2.0/oa/upload/file",
 	},
 	"upload_timeout": 30,  # giây: tải tệp tới 5 MB lâu hơn gửi tin chữ
+	"oa_info_path": "/v2.0/oa/getoa",  # V3-10 VERIFY: "Lấy thông tin Official Account" (chưa đọc được tài liệu chính thức)
 	"oauth_permission_path": "/v4/oa/permission",
 	"oauth_token_path": "/v4/oa/access_token",
 	"max_text_length": 2000,  # độ dài tối đa một tin văn bản tư vấn (chưa xác nhận)

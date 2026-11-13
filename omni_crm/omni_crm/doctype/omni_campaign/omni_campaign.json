@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-02 14:00:00.000000",
- "modified": "2026-11-02 14:00:00.000000",
+ "modified": "2026-11-13 10:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -29,7 +29,13 @@
   "owner_team",
   "sec_money",
   "budget",
-  "spend"
+  "spend",
+  "sec_marketing",
+  "objective",
+  "audience",
+  "col_marketing",
+  "key_message",
+  "landing_page"
  ],
  "fields": [
   {
@@ -53,7 +59,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Trạng thái",
-   "options": "Nháp\nĐang chạy\nTạm dừng\nKết thúc",
+   "options": "Nháp\nĐang chạy\nTạm dừng\nKết thúc\nĐã hủy\nCó lỗi",
    "default": "Đang chạy",
    "in_list_view": 1,
    "in_standard_filter": 1
@@ -78,7 +84,8 @@
    "fieldtype": "Data",
    "label": "utm_campaign",
    "search_index": 1,
-   "description": "Để khớp lead từ website."
+   "description": "Để khớp lead từ website. Trống thì tự sinh từ tên chiến dịch + mmyy khi tạo bài đăng; sửa được khi chiến dịch chưa chạy.",
+   "unique": 1
   },
   {
    "fieldname": "col_dates",
@@ -115,6 +122,36 @@
    "fieldtype": "Currency",
    "label": "Chi phí thực tế (nhập tay)",
    "non_negative": 1
+  },
+  {
+   "fieldname": "sec_marketing",
+   "fieldtype": "Section Break",
+   "label": "Marketing Hub"
+  },
+  {
+   "fieldname": "objective",
+   "fieldtype": "Small Text",
+   "label": "Mục tiêu"
+  },
+  {
+   "fieldname": "audience",
+   "fieldtype": "Small Text",
+   "label": "Khách hàng mục tiêu"
+  },
+  {
+   "fieldname": "col_marketing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "key_message",
+   "fieldtype": "Small Text",
+   "label": "Thông điệp chính"
+  },
+  {
+   "fieldname": "landing_page",
+   "fieldtype": "Data",
+   "label": "Trang đích",
+   "description": "Đường dẫn trên địa chỉ gốc, ví dụ /spd/. Trống: theo Thiết lập Marketing."
   }
  ],
  "permissions": [
@@ -130,6 +167,19 @@
   {
    "role": "Sales User",
    "read": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "report": 1
   }
  ]
 }

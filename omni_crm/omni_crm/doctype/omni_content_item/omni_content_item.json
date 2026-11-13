@@ -1,0 +1,193 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 10:00:00.000000",
+ "modified": "2026-11-13 10:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Content Item",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "title",
+  "campaign",
+  "status",
+  "col1",
+  "pillar",
+  "funnel_stage",
+  "quality_score",
+  "quality_note",
+  "sec_content",
+  "caption",
+  "media",
+  "media_items",
+  "sec_link",
+  "landing_page",
+  "utm_content",
+  "col2",
+  "approved_by",
+  "approved_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Tiêu đề",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "label": "Chiến dịch",
+   "options": "Omni Campaign",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Nháp\nChờ duyệt\nĐã lên lịch\nĐang xử lý\nĐã đăng\nĐăng một phần\nThất bại\nĐã hủy",
+   "default": "Nháp",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pillar",
+   "fieldtype": "Link",
+   "label": "Trụ cột nội dung",
+   "options": "Omni Content Pillar",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "funnel_stage",
+   "fieldtype": "Select",
+   "label": "Giai đoạn phễu",
+   "options": "\nNhận biết\nCân nhắc\nChuyển đổi",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "quality_score",
+   "fieldtype": "Int",
+   "label": "Điểm chất lượng",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "quality_note",
+   "fieldtype": "Small Text",
+   "label": "Lý do chấm điểm"
+  },
+  {
+   "fieldname": "sec_content",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "caption",
+   "fieldtype": "Text",
+   "label": "Caption"
+  },
+  {
+   "fieldname": "media",
+   "fieldtype": "Attach Image",
+   "label": "Ảnh chính"
+  },
+  {
+   "fieldname": "media_items",
+   "fieldtype": "Table",
+   "label": "Ảnh thêm",
+   "options": "Omni Content Media"
+  },
+  {
+   "fieldname": "sec_link",
+   "fieldtype": "Section Break",
+   "label": "Link đích & mã theo dõi"
+  },
+  {
+   "fieldname": "landing_page",
+   "fieldtype": "Data",
+   "label": "Trang đích",
+   "description": "Trống: lấy theo chiến dịch, rồi theo Thiết lập."
+  },
+  {
+   "fieldname": "utm_content",
+   "fieldtype": "Data",
+   "label": "Mã bài (utm_content)",
+   "read_only": 1,
+   "search_index": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Người duyệt",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "Duyệt lúc",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "title_field": "title",
+ "track_changes": 1
+}

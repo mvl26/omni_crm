@@ -10,3 +10,4 @@ omni_crm.patches.v2.add_b2b_sales_stages
 omni_crm.patches.backfill_contact_match_keys
 omni_crm.patches.v2.add_dashboard_indexes
 omni_crm.patches.v3.backfill_zalo_message_kind
+omni_crm.patches.v3.marketing_hub_setup

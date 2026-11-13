@@ -24,6 +24,15 @@ ROOT = pathlib.Path(omni_crm.__file__).parent
 # Danh sách hàm whitelisted đã duyệt (V2-02). Thêm hàm mới = test đỏ để người duyệt xem có phải đường gửi hàng loạt /
 # trả dữ liệu khách không kiểm quyền không.
 EXPECTED_WHITELISTED = {
+	"marketing/api.py": {  # V3-10: Marketing Hub, mỗi lời gọi MỘT bài / MỘT kênh
+		"hub_state",
+		"get_social_channels",
+		"check_channel",
+		"list_approvers",
+		"submit_item",
+		"approve_item",
+		"cancel_item",
+	},
 	"api/admin.py": {
 		"reprocess",
 		"monitor_snapshot",

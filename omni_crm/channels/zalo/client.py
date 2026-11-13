@@ -263,6 +263,10 @@ class ZaloClient:
 			profile["email"] = str(shared["email"])
 		return profile
 
+	def get_oa_info(self) -> dict:
+		"""Thông tin OA (V3-10, nút Kiểm tra quyền): {oa_id, name, ...}. Chỉ đọc. VERIFY: GET /v2.0/oa/getoa."""
+		return self._request("GET", config.get("oa_info_path"))
+
 	def get_cs_quota(self) -> list[dict]:
 		"""Quỹ tin tư vấn của OA theo Zalo (POST /v3.0/oa/quota/message): [{quota_type, total, remain, valid_through}]."""
 		data = self._request(
