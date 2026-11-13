@@ -80,3 +80,20 @@ Trang đích luôn chuẩn hóa thành thư mục có `/` cuối, vì nginx bỏ
   ngay sau khối "Bot AI" ở cột phải trang Lead, và thêm "Chiến dịch nguồn" vào bộ lọc nhanh. Cột danh sách Lead do
   `CRMLead.default_list_data()` của app crm quyết định (không sửa app crm): người dùng thêm cột "Chiến dịch nguồn" bằng
   nút Cột của danh sách.
+
+## Số liệu và Báo cáo (Prompt 6)
+
+- Cron `23 * * * *` -> `insights.sync_due`: chạy khi hub bật và đủ `insights_sync_hours` giờ từ lần trước (0 = tắt).
+  Target "Đăng thành công" trong 30 ngày, bỏ bài chế độ thử (`dryrun-…`). Lỗi một bài ghi Error Log, không dừng job.
+- Facebook: cảm xúc / bình luận / chia sẻ (quyền pages_read_engagement, token Trang hiện có); tiếp cận / hiển thị /
+  lượt bấm cần `read_insights` (token chưa có) nên để trống. Tên metric đánh dấu `# VERIFY`. Zalo OA: chưa có API số
+  liệu bài viết được xác nhận, để trống.
+- Cột chỉ số là Int (mặc định 0): `insights_fields` ghi chỉ số nào có thật; báo cáo chỉ cộng chỉ số có trong đó, còn
+  lại trả None để giao diện hiện "—".
+- `marketing_report(filters)` / `export_report(filters)` (Excel 4 trang). Lọc theo chiến dịch, nền tảng, từ/đến ngày
+  (giờ đăng dự kiến); Lead đếm theo `omni_campaign` và ngày tạo Lead, khớp danh sách Lead lọc cùng điều kiện.
+
+## API trang Marketing (Prompt 3)
+
+`list_campaigns(status)`, `campaign_detail(name)`, `item_detail(name)`, `approve_campaign(name)` (POST, từng bài qua
+quy tắc duyệt, trả kết quả từng bài), `get_calendar(month, year, campaign, platform)`.

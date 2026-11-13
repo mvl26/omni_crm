@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-13 10:00:00.000000",
- "modified": "2026-11-13 10:30:00.000000",
+ "modified": "2026-11-13 12:30:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -39,7 +39,8 @@
   "comments",
   "shares",
   "clicks",
-  "insights_synced_at"
+  "insights_synced_at",
+  "insights_fields"
  ],
  "fields": [
   {
@@ -239,6 +240,13 @@
    "label": "Đồng bộ số liệu lúc",
    "read_only": 1,
    "no_copy": 1
+  },
+  {
+   "fieldname": "insights_fields",
+   "fieldtype": "Data",
+   "label": "Chỉ số đã có",
+   "read_only": 1,
+   "description": "Các chỉ số lấy được ở lần đồng bộ gần nhất (chỉ số Int mặc định 0, cột này phân biệt 0 thật với chưa có)"
   }
  ],
  "permissions": [

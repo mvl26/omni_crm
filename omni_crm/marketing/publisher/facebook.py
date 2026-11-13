@@ -24,6 +24,7 @@ from omni_crm.marketing.publisher.base import Adapter, PublishResult
 from omni_crm.marketing.publisher.content import Payload
 from omni_crm.marketing.publisher.errors import (
 	ProviderError,
+	PublishError,
 	PublishValidationError,
 	TerminalError,
 )
@@ -148,6 +149,41 @@ class FacebookAdapter(Adapter):
 				return PublishResult(str(post.get("id") or ""), str(post.get("permalink_url") or ""))
 		return None
 
+	def fetch_insights(self, channel: str, external_post_id: str) -> dict[str, int | None]:
+		"""Số liệu một bài Trang. Tương tác (cảm xúc, bình luận, chia sẻ) đọc bằng quyền pages_read_engagement;
+		tiếp cận / hiển thị / lượt bấm cần read_insights, thiếu quyền thì để None (giao diện hiện "—").
+		"""
+		_page_id, token = self._page(channel)
+		out: dict[str, int | None] = dict.fromkeys(INSIGHT_KEYS)
+		# VERIFY: trường summary của reactions/comments và shares.count trên Graph API bản đang dùng
+		body = self._call(
+			"GET",
+			external_post_id,
+			token,
+			params={
+				"fields": "shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
+			},
+		)
+		out["likes"] = _total(body.get("reactions"))
+		out["comments"] = _total(body.get("comments"))
+		out["shares"] = int((body.get("shares") or {}).get("count") or 0)
+		try:
+			# VERIFY: tên metric post_impressions / post_impressions_unique / post_clicks (Meta đổi tên metric định kỳ)
+			ins = self._call(
+				"GET",
+				f"{external_post_id}/insights",
+				token,
+				params={"metric": "post_impressions,post_impressions_unique,post_clicks"},
+			)
+		except PublishError:
+			return out  # thiếu read_insights: giữ số tương tác, phần còn lại để trống
+		for row in ins.get("data") or []:
+			key = INSIGHT_METRICS.get(row.get("name"))
+			values = row.get("values") or []
+			if key and values:
+				out[key] = int(values[0].get("value") or 0)
+		return out
+
 	def fetch_permalink(self, payload: Payload, external_post_id: str) -> str:
 		_page_id, token = self._page(payload.channel)
 		try:
@@ -155,3 +191,18 @@ class FacebookAdapter(Adapter):
 		except Exception:
 			return ""
 		return str(body.get("permalink_url") or "")
+
+
+INSIGHT_KEYS = ("reach", "impressions", "likes", "comments", "shares", "clicks")
+INSIGHT_METRICS = {
+	"post_impressions_unique": "reach",
+	"post_impressions": "impressions",
+	"post_clicks": "clicks",
+}
+
+
+def _total(block: Any) -> int | None:
+	if not isinstance(block, dict):
+		return None
+	summary = block.get("summary") or {}
+	return int(summary.get("total_count") or 0) if "total_count" in summary else None

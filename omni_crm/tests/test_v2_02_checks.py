@@ -41,6 +41,13 @@ EXPECTED_WHITELISTED = {
 		"kb_reindex",
 		"kb_ask",
 		"kb_feedback",
+		"marketing_report",  # Prompt 6: chỉ đọc
+		"export_report",
+		"list_campaigns",  # Prompt 3: chỉ đọc, trừ approve_campaign đi qua approval từng bài
+		"campaign_detail",
+		"item_detail",
+		"approve_campaign",
+		"get_calendar",
 	},
 	"api/admin.py": {
 		"reprocess",

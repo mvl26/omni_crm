@@ -252,3 +252,75 @@ def kb_feedback(run: str, verdict: str, note: str = "") -> dict[str, Any]:
 		update_modified=False,
 	)
 	return {"ok": True}
+
+
+# --- Báo cáo (Prompt 6) ---------------------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def marketing_report(filters: Any = None) -> dict[str, Any]:
+	"""Trang Báo cáo marketing: thẻ số, theo trụ cột, theo phễu, từng bài, lỗi đăng tải."""
+	_require_editor()
+	from omni_crm.marketing import report
+
+	return report.build(filters)
+
+
+@frappe.whitelist()
+def export_report(filters: Any = None) -> None:
+	"""Nút "Xuất Excel": tải tệp .xlsx cùng bộ lọc với trang báo cáo."""
+	_require_editor()
+	from omni_crm.marketing import report
+
+	data = report.build(filters)
+	frappe.local.response.filename = f"bao-cao-marketing-{frappe.utils.nowdate()}.xlsx"
+	frappe.local.response.filecontent = report.to_xlsx(data)
+	frappe.local.response.type = "binary"
+
+
+# --- Chiến dịch, bài, lịch (Prompt 3) -------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def list_campaigns(status: str | None = None) -> list[dict[str, Any]]:
+	"""Trang Chiến dịch: chiến dịch có bài đăng (hoặc tạo từ Marketing Hub), kèm đếm bài theo trạng thái."""
+	_require_editor()
+	from omni_crm.marketing import views
+
+	return views.campaigns(status)
+
+
+@frappe.whitelist()
+def campaign_detail(name: str) -> dict[str, Any]:
+	"""Chiến dịch và các bài (điểm, nền tảng, trạng thái)."""
+	_require_editor()
+	from omni_crm.marketing import views
+
+	return views.campaign_detail(name)
+
+
+@frappe.whitelist()
+def item_detail(name: str) -> dict[str, Any]:
+	"""Trang bài đăng: nội dung, nền tảng (trạng thái, link theo dõi, link bài), nhật ký đăng."""
+	_require_editor()
+	from omni_crm.marketing import views
+
+	return views.item_detail(name)
+
+
+@frappe.whitelist(methods=["POST"])
+def approve_campaign(name: str) -> list[dict[str, Any]]:
+	"""Nút "Duyệt và lên lịch" của cả chiến dịch: gửi duyệt / duyệt từng bài đủ điều kiện, trả kết quả từng bài."""
+	_require_editor()
+	from omni_crm.marketing import views
+
+	return views.approve_campaign(name)
+
+
+@frappe.whitelist()
+def get_calendar(month: int, year: int, campaign: str | None = None, platform: str | None = None) -> list:
+	"""Lịch đăng content theo tháng: một mục mỗi nền tảng đăng (giờ, nền tảng, trạng thái, bài, chiến dịch)."""
+	_require_editor()
+	from omni_crm.marketing import views
+
+	return views.calendar(int(month), int(year), campaign, platform)

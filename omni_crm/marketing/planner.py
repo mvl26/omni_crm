@@ -19,7 +19,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, getdate, now_datetime
 
-from omni_crm.marketing import ai, approval, kb, prompts, roles, rules, scoring
+from omni_crm.marketing import ai, kb, prompts, roles, rules, scoring, views
 from omni_crm.marketing import channels as mk_channels
 from omni_crm.marketing import settings as mk_settings
 
@@ -449,33 +449,9 @@ def _create(sid: str, data: dict) -> dict:
 				"scheduled_at": _parse_dt(post["scheduled_at"]),
 			}
 		).insert()
-		results.append(_route(item.name))
+		results.append(views.route(item.name))
 	if any(r["status"] == rules.I_SCHEDULED for r in results):
 		frappe.db.set_value("Omni Campaign", campaign.name, "status", "Đang chạy")
 	data.update(status=ST_CREATED, campaign=campaign.name, results=results)
 	save(sid, data)
 	return public_state(data)
-
-
-def _route(item: str) -> dict:
-	"""Đưa một bài mới tạo qua quy tắc duyệt; lỗi duyệt không làm hỏng cả chiến dịch, chỉ ghi lý do."""
-	doc = frappe.get_doc("Omni Content Item", item)
-	out = {"item": item, "title": doc.title, "score": doc.quality_score, "status": doc.status, "message": ""}
-	steps: list = []
-	if mk_settings.require_approval():
-		steps.append(approval.submit)
-		if roles.is_manager():
-			steps.append(approval.approve)
-	else:
-		steps.append(approval.approve)
-	for step in steps:
-		frappe.db.savepoint("oc_route")
-		try:
-			out["status"] = step(item)
-		except frappe.ValidationError as e:
-			frappe.db.rollback(save_point="oc_route")
-			frappe.clear_last_message()
-			out["message"] = str(e)
-			break
-	out["status"] = frappe.db.get_value("Omni Content Item", item, "status")
-	return out
