@@ -24,7 +24,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import ai_client, guards, handoff, knowledge
+from omni_crm.bot import ai_client, guards, handoff, kb_docs, knowledge
 from omni_crm.bot.context import build_conversation, escape_tags, mask_pii, normalize_text
 from omni_crm.bot.prompts.loader import load_prompt, render
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
@@ -467,7 +467,10 @@ def make_draft(
 	if not business_hours.is_business_time(at or now_datetime()):
 		info.append("info:ngoai_gio")
 	info.extend(notes or [])
-	if not items:
+	prompt = load_prompt("reply")
+	use_docs = kb_docs.enabled(prompt.version)  # ADR 0030: thêm đoạn tài liệu của Kho tri thức
+	passages = kb_docs.passages_for(customer_text) if use_docs else []
+	if not items and not (use_docs and kb_docs.indexed_count()):
 		name = _insert_draft(
 			{
 				**base,
@@ -479,22 +482,29 @@ def make_draft(
 		_after_insert(name, base, "Handoff")
 		frappe.db.commit()
 		return name
-	prompt = load_prompt("reply")
+	if not items and not passages:  # chỉ có tài liệu mà không đoạn nào liên quan: không gọi AI
+		name = _insert_draft(
+			{
+				**base,
+				"action": "Handoff",
+				"guard_flags": "\n".join(["kb_khong_co_doan_lien_quan", *info]),
+				"handoff_reason": _("Kho tri thức chưa có thông tin cho câu hỏi này"),
+			}
+		)
+		_after_insert(name, base, "Handoff")
+		frappe.db.commit()
+		return name
 	mask = not cint(frappe.conf.get(UNMASK_CONF))
 	hours = hours_context(at)
 	system = render(prompt, kenh=channel_type or "kênh nhắn tin", **hours)
+	content = build_user_message(lead, channel_type, until, include_summary=include_summary, mask=mask)
+	if use_docs:
+		content = f"{kb_docs.render(passages)}\n{content}"
 	raw = ai_client.call_tool(
 		"Reply",
 		settings.get("reply_model") or "claude-sonnet-5-5",
 		system,
-		[
-			{
-				"role": "user",
-				"content": build_user_message(
-					lead, channel_type, until, include_summary=include_summary, mask=mask
-				),
-			}
-		],
+		[{"role": "user", "content": content}],
 		TOOL,
 		lead=lead,
 		identity=identity,
@@ -517,7 +527,7 @@ def make_draft(
 		decision = evaluate(
 			raw,
 			{
-				"items": items,
+				"items": items + kb_docs.as_items(passages),
 				"group_row": group_rows,
 				"customer_text": customer_text,
 				"intent": intent,
