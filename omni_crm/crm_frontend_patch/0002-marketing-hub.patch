@@ -1,0 +1,725 @@
+diff --git a/frontend/src/components/Settings/Marketing/ContentVoiceSettings.vue b/frontend/src/components/Settings/Marketing/ContentVoiceSettings.vue
+new file mode 100644
+index 0000000..2cdf87e
+--- /dev/null
++++ b/frontend/src/components/Settings/Marketing/ContentVoiceSettings.vue
+@@ -0,0 +1,244 @@
++<template>
++  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
++    <div class="flex justify-between px-2">
++      <div class="flex flex-col gap-1 w-9/12">
++        <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
++          Nội dung &amp; giọng văn
++        </h2>
++        <p class="text-p-base text-ink-gray-6">
++          Trụ cột nội dung để phân loại bài, và giọng văn AI dùng khi viết bài.
++        </p>
++      </div>
++      <div class="flex items-center w-3/12 justify-end">
++        <Button
++          v-if="canEditMarketingSettings"
++          label="Mới"
++          icon-left="plus"
++          variant="solid"
++          @click="openNew"
++        />
++      </div>
++    </div>
++
++    <div class="flex-1 flex flex-col gap-6 overflow-y-auto">
++      <div class="flex flex-col">
++        <div class="flex items-center py-2 px-2 text-sm text-ink-gray-5">
++          <div class="w-4/12">Trụ cột</div>
++          <div class="w-6/12">Mô tả</div>
++          <div class="w-2/12 text-right">Đang dùng</div>
++        </div>
++        <div class="h-px border-t mx-2 border-outline-gray-modals" />
++        <div
++          v-if="!pillars.loading && !pillars.data?.length"
++          class="px-2 py-6 text-p-base text-ink-gray-5"
++        >
++          Chưa có trụ cột nội dung. Bấm "+ Mới" để thêm.
++        </div>
++        <template v-for="(p, i) in pillars.data || []" :key="p.name">
++          <div v-if="i" class="h-px border-t mx-2 border-outline-gray-modals" />
++          <div
++            class="flex items-center py-3 px-2 rounded hover:bg-surface-menu-bar cursor-pointer"
++            @click="openEdit(p)"
++          >
++            <div
++              class="w-4/12 text-p-base font-medium text-ink-gray-7 truncate pr-3"
++            >
++              {{ p.pillar_name }}
++            </div>
++            <div class="w-6/12 text-p-sm text-ink-gray-6 truncate pr-3">
++              {{ p.description || '—' }}
++            </div>
++            <div class="w-2/12 flex justify-end" @click.stop>
++              <Switch
++                :model-value="Boolean(p.is_active)"
++                size="sm"
++                :disabled="!canEditMarketingSettings"
++                @update:model-value="(v) => toggle(p, v)"
++              />
++            </div>
++          </div>
++        </template>
++      </div>
++
++      <div class="flex flex-col gap-2 px-2">
++        <div class="flex items-center justify-between">
++          <div class="flex flex-col">
++            <div class="text-p-base font-medium text-ink-gray-7">
++              Giọng văn thương hiệu
++            </div>
++            <div class="text-p-sm text-ink-gray-5">
++              Ví dụ: xưng "Miyano", gọi "anh/chị", lịch sự, ngắn gọn; không bịa
++              giá, số liệu, cam kết.
++            </div>
++          </div>
++          <Button
++            v-if="voiceDirty && canEditMarketingSettings"
++            label="Lưu"
++            variant="solid"
++            :loading="settings.setValue.loading"
++            @click="saveVoice"
++          />
++        </div>
++        <Textarea
++          v-model="voice"
++          :rows="6"
++          :disabled="!canEditMarketingSettings"
++        />
++      </div>
++    </div>
++
++    <Dialog
++      v-model="dialog.show"
++      :options="{ title: dialog.name ? 'Sửa trụ cột' : 'Trụ cột mới' }"
++    >
++      <template #body-content>
++        <div class="flex flex-col gap-3">
++          <FormControl
++            v-model="dialog.pillar_name"
++            label="Tên trụ cột"
++            :disabled="Boolean(dialog.name)"
++          />
++          <FormControl
++            v-model="dialog.description"
++            type="textarea"
++            label="Mô tả"
++          />
++        </div>
++      </template>
++      <template #actions>
++        <Button
++          variant="solid"
++          class="w-full"
++          label="Lưu"
++          :loading="busy"
++          @click="savePillar"
++        />
++      </template>
++    </Dialog>
++  </div>
++</template>
++
++<script setup>
++import { canEditMarketingSettings } from '@/composables/marketingHub'
++import {
++  Button,
++  Dialog,
++  FormControl,
++  Switch,
++  Textarea,
++  call,
++  createDocumentResource,
++  createListResource,
++  toast,
++} from 'frappe-ui'
++import { computed, reactive, ref, watch } from 'vue'
++
++const pillars = createListResource({
++  doctype: 'Omni Content Pillar',
++  fields: ['name', 'pillar_name', 'description', 'is_active'],
++  orderBy: 'pillar_name asc',
++  pageLength: 200,
++  auto: true,
++})
++
++const settings = createDocumentResource({
++  doctype: 'Omni Marketing Settings',
++  name: 'Omni Marketing Settings',
++  auto: true,
++})
++const voice = ref('')
++const savedVoice = ref('')
++watch(
++  () => settings.doc,
++  (d) => {
++    if (!d) return
++    voice.value = d.brand_voice || ''
++    savedVoice.value = voice.value
++  },
++  { immediate: true },
++)
++const voiceDirty = computed(() => voice.value !== savedVoice.value)
++
++function err(e) {
++  return e?.messages?.[0] || e?.message || 'Có lỗi'
++}
++
++function saveVoice() {
++  settings.setValue.submit(
++    { brand_voice: voice.value },
++    {
++      onSuccess: () => toast.success('Đã lưu giọng văn'),
++      onError: (e) => toast.error(err(e)),
++    },
++  )
++}
++
++const dialog = reactive({
++  show: false,
++  name: '',
++  pillar_name: '',
++  description: '',
++})
++const busy = ref(false)
++
++function openNew() {
++  Object.assign(dialog, {
++    show: true,
++    name: '',
++    pillar_name: '',
++    description: '',
++  })
++}
++function openEdit(p) {
++  if (!canEditMarketingSettings.value) return
++  Object.assign(dialog, {
++    show: true,
++    name: p.name,
++    pillar_name: p.pillar_name,
++    description: p.description || '',
++  })
++}
++
++async function savePillar() {
++  busy.value = true
++  try {
++    if (dialog.name) {
++      await call('frappe.client.set_value', {
++        doctype: 'Omni Content Pillar',
++        name: dialog.name,
++        fieldname: { description: dialog.description },
++      })
++    } else {
++      await call('frappe.client.insert', {
++        doc: {
++          doctype: 'Omni Content Pillar',
++          pillar_name: dialog.pillar_name,
++          description: dialog.description,
++          is_active: 1,
++        },
++      })
++    }
++    dialog.show = false
++    pillars.reload()
++    toast.success('Đã lưu trụ cột')
++  } catch (e) {
++    toast.error(err(e))
++  } finally {
++    busy.value = false
++  }
++}
++
++async function toggle(p, value) {
++  try {
++    await call('frappe.client.set_value', {
++      doctype: 'Omni Content Pillar',
++      name: p.name,
++      fieldname: 'is_active',
++      value: value ? 1 : 0,
++    })
++    pillars.reload()
++  } catch (e) {
++    toast.error(err(e))
++  }
++}
++</script>
+diff --git a/frontend/src/components/Settings/Marketing/MarketingAISettings.vue b/frontend/src/components/Settings/Marketing/MarketingAISettings.vue
+new file mode 100644
+index 0000000..0863c7f
+--- /dev/null
++++ b/frontend/src/components/Settings/Marketing/MarketingAISettings.vue
+@@ -0,0 +1,221 @@
++<template>
++  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
++    <div class="flex justify-between px-2">
++      <div class="flex flex-col gap-1 w-9/12">
++        <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
++          AI &amp; kiểm duyệt
++          <Badge
++            v-if="dirty"
++            label="Chưa lưu"
++            variant="subtle"
++            theme="orange"
++          />
++        </h2>
++        <p class="text-p-base text-ink-gray-6">
++          Ngưỡng chất lượng, quy tắc duyệt bài và chế độ thử của Marketing Hub.
++        </p>
++      </div>
++      <div class="flex items-center w-3/12 justify-end">
++        <Button
++          v-if="dirty && canEditMarketingSettings"
++          label="Lưu"
++          variant="solid"
++          :loading="doc.setValue.loading"
++          @click="save"
++        />
++      </div>
++    </div>
++
++    <div v-if="form" class="flex-1 flex flex-col overflow-y-auto">
++      <Row
++        title="Chế độ thử"
++        desc="Bật: không gọi API Facebook, Zalo, TikTok; bài đến giờ chỉ ghi nhật ký. Chỉ tắt khi đã kiểm quyền và đăng thử."
++      >
++        <Switch v-model="form.dry_run" :disabled="!canEditMarketingSettings" />
++      </Row>
++      <Sep />
++      <Row
++        title="Bắt buộc duyệt"
++        desc="Bật: chỉ Marketing Manager được duyệt và lên lịch. Tắt: người soạn tự lên lịch (vẫn cần đạt ngưỡng điểm)."
++      >
++        <Switch
++          v-model="form.require_approval"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Ngưỡng điểm chất lượng"
++        :desc="`Bài dưới ${form.quality_threshold} điểm hiện đỏ và không lên lịch được.`"
++      >
++        <div class="flex items-center gap-3 w-56">
++          <input
++            v-model.number="form.quality_threshold"
++            type="range"
++            min="0"
++            max="100"
++            step="5"
++            class="flex-1 accent-gray-900"
++            :disabled="!canEditMarketingSettings"
++          />
++          <span class="w-8 text-right text-p-base font-medium">{{
++            form.quality_threshold
++          }}</span>
++        </div>
++      </Row>
++      <Sep />
++      <Row
++        title="Người duyệt mặc định"
++        desc="Người có vai trò Marketing Manager."
++      >
++        <FormControl
++          v-model="form.default_approver"
++          type="select"
++          class="w-56"
++          :options="[{ label: '—', value: '' }, ...(approvers.data || [])]"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Cửa sổ đăng muộn (phút)"
++        desc="Hệ thống trễ quá số phút này so với giờ hẹn thì không đăng nữa, báo Thất bại."
++      >
++        <FormControl
++          v-model.number="form.late_window_minutes"
++          type="number"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Hạn mức chi phí AI mỗi tháng"
++        desc="Vượt hạn mức thì dừng gọi AI cho Marketing Hub."
++      >
++        <FormControl
++          v-model.number="form.monthly_ai_budget"
++          type="number"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Mô hình AI chính"
++        desc="Trống: dùng mô hình của bot (Omni Settings)."
++      >
++        <FormControl
++          v-model="form.ai_model"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row title="Mô hình AI dự phòng" desc="Dùng khi mô hình chính lỗi.">
++        <FormControl
++          v-model="form.ai_fallback_model"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Trang đích mặc định"
++        desc="Đường dẫn trên địa chỉ gốc, ví dụ /spd/."
++      >
++        <FormControl
++          v-model="form.default_landing_page"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import { canEditMarketingSettings } from '@/composables/marketingHub'
++import {
++  Badge,
++  Button,
++  FormControl,
++  Switch,
++  createDocumentResource,
++  createResource,
++  toast,
++} from 'frappe-ui'
++import { computed, h, ref, watch } from 'vue'
++
++const FIELDS = [
++  'dry_run',
++  'require_approval',
++  'quality_threshold',
++  'default_approver',
++  'late_window_minutes',
++  'monthly_ai_budget',
++  'ai_model',
++  'ai_fallback_model',
++  'default_landing_page',
++]
++const CHECKS = ['dry_run', 'require_approval']
++
++const Row = (props, { slots }) =>
++  h('div', { class: 'flex items-center justify-between gap-8 py-3 px-2' }, [
++    h('div', { class: 'flex flex-col' }, [
++      h(
++        'div',
++        { class: 'text-p-base font-medium text-ink-gray-7' },
++        props.title,
++      ),
++      h('div', { class: 'text-p-sm text-ink-gray-5' }, props.desc),
++    ]),
++    h('div', { class: 'shrink-0' }, slots.default?.()),
++  ])
++Row.props = ['title', 'desc']
++const Sep = () =>
++  h('div', { class: 'h-px border-t mx-2 border-outline-gray-modals' })
++
++const form = ref(null)
++const original = ref('')
++
++const doc = createDocumentResource({
++  doctype: 'Omni Marketing Settings',
++  name: 'Omni Marketing Settings',
++  auto: true,
++})
++const approvers = createResource({
++  url: 'omni_crm.marketing.api.list_approvers',
++  auto: true,
++})
++
++function fromDoc(d) {
++  const out = {}
++  for (const f of FIELDS)
++    out[f] = CHECKS.includes(f) ? Boolean(d?.[f]) : (d?.[f] ?? '')
++  return out
++}
++
++watch(
++  () => doc.doc,
++  (d) => {
++    if (!d) return
++    form.value = fromDoc(d)
++    original.value = JSON.stringify(form.value)
++  },
++  { immediate: true },
++)
++
++const dirty = computed(
++  () => form.value && JSON.stringify(form.value) !== original.value,
++)
++
++function save() {
++  const values = { ...form.value }
++  for (const f of CHECKS) values[f] = values[f] ? 1 : 0
++  doc.setValue.submit(values, {
++    onSuccess: () => toast.success('Đã lưu thiết lập'),
++    onError: (e) => toast.error(e?.messages?.[0] || 'Không lưu được'),
++  })
++}
++</script>
+diff --git a/frontend/src/components/Settings/Marketing/SocialChannelsSettings.vue b/frontend/src/components/Settings/Marketing/SocialChannelsSettings.vue
+new file mode 100644
+index 0000000..cddc5ff
+--- /dev/null
++++ b/frontend/src/components/Settings/Marketing/SocialChannelsSettings.vue
+@@ -0,0 +1,158 @@
++<template>
++  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
++    <div class="flex justify-between px-2">
++      <div class="flex flex-col gap-1 w-9/12">
++        <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
++          Mạng xã hội
++        </h2>
++        <p class="text-p-base text-ink-gray-6">
++          Tài khoản dùng để đăng bài theo lịch. Dùng chung kênh Facebook và Zalo
++          OA đã kết nối của CRM, không có mã truy cập riêng.
++        </p>
++      </div>
++      <div class="flex items-center w-3/12 justify-end">
++        <Button
++          :label="'Tải lại'"
++          icon-left="refresh-cw"
++          :loading="accounts.loading"
++          @click="accounts.reload()"
++        />
++      </div>
++    </div>
++
++    <div
++      v-if="accounts.loading && !accounts.data"
++      class="flex mt-28 justify-between w-full h-full"
++    >
++      <Button :loading="true" variant="ghost" class="w-full" size="2xl" />
++    </div>
++    <div v-else-if="accounts.error" class="px-2 text-p-base text-ink-red-4">
++      {{ errorText(accounts.error) }}
++    </div>
++
++    <div v-else class="flex-1 flex flex-col overflow-y-auto">
++      <template
++        v-for="(acc, i) in accounts.data || []"
++        :key="acc.platform + acc.name"
++      >
++        <div v-if="i" class="h-px border-t mx-2 border-outline-gray-modals" />
++        <div class="flex flex-col gap-2 py-3 px-2">
++          <div class="flex items-center justify-between gap-6">
++            <div class="flex flex-col min-w-0">
++              <div class="flex items-center gap-2">
++                <span class="text-p-base font-medium text-ink-gray-7 truncate">
++                  {{ acc.platform }} · {{ acc.account_name }}
++                </span>
++                <Badge
++                  :label="acc.status"
++                  :theme="STATUS_THEME[acc.status] || 'gray'"
++                  variant="subtle"
++                  size="sm"
++                />
++              </div>
++              <div class="text-p-sm text-ink-gray-5">{{ acc.description }}</div>
++            </div>
++            <div class="flex items-center gap-2 shrink-0">
++              <Button
++                v-if="acc.name && canEditMarketingSettings"
++                label="Kiểm tra quyền"
++                :loading="checking === acc.name"
++                @click="runCheck(acc)"
++              />
++              <Button
++                v-if="acc.name && canEditMarketingSettings"
++                label="Định Cấu Hình"
++                @click="openChannel(acc)"
++              />
++              <Button v-if="!acc.name" label="Chưa kết nối" :disabled="true" />
++            </div>
++          </div>
++          <div
++            v-if="acc.name"
++            class="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1 text-p-sm text-ink-gray-6 pl-0.5"
++          >
++            <span class="text-ink-gray-5">
++              {{
++                acc.platform === 'Zalo OA'
++                  ? 'OA ID đang dùng'
++                  : 'Page ID đang dùng'
++              }}
++            </span>
++            <span class="font-mono">{{ acc.external_id || '—' }}</span>
++            <span class="text-ink-gray-5">Mã truy cập</span>
++            <span class="font-mono">{{ acc.token_tail || 'chưa có' }}</span>
++            <template v-if="acc.token_expires_at">
++              <span class="text-ink-gray-5">Hết hạn</span>
++              <span>{{
++                formatCheckedAt(acc.token_expires_at) || acc.token_expires_at
++              }}</span>
++            </template>
++            <template v-if="acc.last_check?.granted?.length">
++              <span class="text-ink-gray-5">Quyền đã có</span>
++              <span>{{ acc.last_check.granted.join(', ') }}</span>
++            </template>
++            <template v-if="acc.last_check?.missing?.length">
++              <span class="text-ink-gray-5">Thiếu quyền</span>
++              <span class="text-ink-red-4">{{
++                acc.last_check.missing.join(', ')
++              }}</span>
++            </template>
++            <template v-if="acc.last_check?.message">
++              <span class="text-ink-gray-5">Kết quả kiểm</span>
++              <span>{{ acc.last_check.message }}</span>
++            </template>
++            <template v-if="acc.last_checked_at">
++              <span class="text-ink-gray-5">Kiểm lúc</span>
++              <span>{{ formatCheckedAt(acc.last_checked_at) }}</span>
++            </template>
++          </div>
++        </div>
++      </template>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import {
++  STATUS_THEME,
++  canEditMarketingSettings,
++  formatCheckedAt,
++} from '@/composables/marketingHub'
++import { Badge, Button, call, createResource, toast } from 'frappe-ui'
++import { ref } from 'vue'
++
++const checking = ref('')
++
++const accounts = createResource({
++  url: 'omni_crm.marketing.api.get_social_channels',
++  auto: true,
++})
++
++function errorText(err) {
++  return err?.messages?.[0] || err?.message || 'Không tải được danh sách kênh'
++}
++
++async function runCheck(acc) {
++  checking.value = acc.name
++  try {
++    const res = await call('omni_crm.marketing.api.check_channel', {
++      name: acc.name,
++    })
++    const fn = res.status === 'Đã kết nối' ? toast.success : toast.warning
++    fn(res.message || res.status)
++    await accounts.reload()
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    checking.value = ''
++  }
++}
++
++function openChannel(acc) {
++  window.open(
++    `/app/omni-channel/${encodeURIComponent(acc.name)}`,
++    '_blank',
++    'noopener',
++  )
++}
++</script>
+diff --git a/frontend/src/components/Settings/Settings.vue b/frontend/src/components/Settings/Settings.vue
+index 3efc194..ac1fc77 100644
+--- a/frontend/src/components/Settings/Settings.vue
++++ b/frontend/src/components/Settings/Settings.vue
+@@ -84,6 +84,13 @@ import { ref, markRaw, computed, watch, h } from 'vue'
+ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
+ import ShieldCheck from '~icons/lucide/shield-check'
+ import SlaConfig from './Sla/SlaConfig.vue'
++import Share2Icon from '~icons/lucide/share-2'
++import BotIcon from '~icons/lucide/bot'
++import PenLineIcon from '~icons/lucide/pen-line'
++import SocialChannelsSettings from './Marketing/SocialChannelsSettings.vue'
++import MarketingAISettings from './Marketing/MarketingAISettings.vue'
++import ContentVoiceSettings from './Marketing/ContentVoiceSettings.vue'
++import { canViewMarketing } from '@/composables/marketingHub'
+ 
+ const { isManager, getUser } = usersStore()
+ 
+@@ -230,7 +237,29 @@ const tabs = computed(() => {
+           component: markRaw(LeadSyncSourcePage),
+           condition: () => isManager(),
+         },
++        {
++          label: 'Mạng xã hội',
++          icon: Share2Icon,
++          component: markRaw(SocialChannelsSettings),
++          condition: () => canViewMarketing.value,
++        },
++      ],
++    },
++    {
++      label: 'Marketing',
++      items: [
++        {
++          label: 'AI & kiểm duyệt',
++          icon: BotIcon,
++          component: markRaw(MarketingAISettings),
++        },
++        {
++          label: 'Nội dung & giọng văn',
++          icon: PenLineIcon,
++          component: markRaw(ContentVoiceSettings),
++        },
+       ],
++      condition: () => canViewMarketing.value,
+     },
+   ]
+ 
+diff --git a/frontend/src/composables/marketingHub.js b/frontend/src/composables/marketingHub.js
+new file mode 100644
+index 0000000..b458f99
+--- /dev/null
++++ b/frontend/src/composables/marketingHub.js
+@@ -0,0 +1,30 @@
++// Marketing Hub (omni_crm, ADR 0028): trạng thái hub và quyền người dùng; không có omni_crm thì mọi thứ ẩn.
++import { createResource } from 'frappe-ui'
++import { computed } from 'vue'
++
++export const marketingHub = createResource({
++  url: 'omni_crm.marketing.api.hub_state',
++  cache: 'omni_marketing_hub_state',
++  auto: true,
++  onError: () => {},
++})
++
++export const canViewMarketing = computed(() =>
++  Boolean(marketingHub.data?.can_view),
++)
++export const canEditMarketingSettings = computed(() =>
++  Boolean(marketingHub.data?.can_edit_settings),
++)
++
++export const STATUS_THEME = {
++  'Đã kết nối': 'green',
++  'Cần kết nối lại': 'orange',
++  'Chưa kết nối': 'gray',
++}
++
++export function formatCheckedAt(value) {
++  if (!value) return ''
++  const d = new Date(String(value).replace(' ', 'T'))
++  if (isNaN(d)) return String(value)
++  return d.toLocaleString('vi-VN', { hour12: false })
++}

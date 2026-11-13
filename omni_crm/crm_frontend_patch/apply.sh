@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Áp (hoặc kiểm, hoặc gỡ) patch giao diện tab Zalo lên app `crm` (V3-01, ADR 0016).
+# Áp (hoặc kiểm, hoặc gỡ) các patch giao diện của omni_crm lên app `crm` (V3-01 ADR 0016; V3-10 ADR 0028).
 #
 #   apply.sh [--check] [--revert] [CRM_DIR]
 #
@@ -9,7 +9,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PATCH="$HERE/0001-zalo-tab.patch"
+# Các patch áp theo thứ tự tên (0001 tab Zalo..., 0002 Marketing Hub - ADR 0028); gỡ theo thứ tự ngược lại.
+mapfile -t PATCHES < <(ls "$HERE"/[0-9][0-9][0-9][0-9]-*.patch | sort)
 read -r WANT_TAG WANT_SHA < "$HERE/CRM_VERSION"
 MODE=apply
 CRM_DIR=""
@@ -34,34 +35,48 @@ if [ "$HEAD_SHA" != "$WANT_SHA" ]; then
   exit 3
 fi
 
-if git apply --reverse --check "$PATCH" >/dev/null 2>&1; then
-  if [ "$MODE" = revert ]; then
-    git apply --reverse "$PATCH"
-    echo "Đã gỡ patch tab Zalo khỏi mã nguồn crm. Chạy build.sh để dựng lại giao diện."
-  else
-    echo "Patch tab Zalo đã được áp từ trước: không làm gì."
-  fi
-  exit 0
-fi
+applied() { git apply --reverse --check "$1" >/dev/null 2>&1; }
+
 if [ "$MODE" = revert ]; then
-  echo "Patch chưa được áp (hoặc mã đã bị sửa khác đi): không có gì để gỡ." >&2
+  for (( i=${#PATCHES[@]}-1; i>=0; i-- )); do
+    P="${PATCHES[$i]}"; N="$(basename "$P")"
+    if applied "$P"; then
+      git apply --reverse "$P"
+      echo "Đã gỡ $N khỏi mã nguồn crm."
+    else
+      echo "$N chưa được áp (hoặc mã đã bị sửa khác đi): bỏ qua." >&2
+    fi
+  done
+  echo "Chạy build.sh để dựng lại giao diện."
   exit 0
 fi
 
-# Các tệp patch chạm vào không được có thay đổi chưa commit của người khác.
-DIRTY="$(git apply --numstat "$PATCH" | awk '{print $3}' | xargs -r git status --porcelain --untracked-files=all -- || true)"
-if [ -n "$DIRTY" ]; then
-  echo "TỪ CHỐI: các tệp patch chạm tới đang có thay đổi chưa commit:" >&2
-  echo "$DIRTY" >&2
-  exit 4
-fi
-if ! git apply --check "$PATCH"; then
-  echo "TỪ CHỐI: patch không khớp mã crm hiện tại (dù cùng commit). Không sửa gì." >&2
-  exit 5
-fi
+TODO=()
+for P in "${PATCHES[@]}"; do
+  N="$(basename "$P")"
+  if applied "$P"; then
+    echo "$N đã được áp từ trước: không làm gì."
+    continue
+  fi
+  # Các tệp patch chạm vào không được có thay đổi chưa commit của người khác.
+  DIRTY="$(git apply --numstat "$P" | awk '{print $3}' | xargs -r git status --porcelain --untracked-files=all -- || true)"
+  if [ -n "$DIRTY" ]; then
+    echo "TỪ CHỐI ($N): các tệp patch chạm tới đang có thay đổi chưa commit:" >&2
+    echo "$DIRTY" >&2
+    exit 4
+  fi
+  if ! git apply --check "$P"; then
+    echo "TỪ CHỐI ($N): patch không khớp mã crm hiện tại (dù cùng commit). Không sửa gì." >&2
+    exit 5
+  fi
+  TODO+=("$P")
+done
 if [ "$MODE" = check ]; then
-  echo "Kiểm xong: patch áp được sạch lên $WANT_TAG. (chưa sửa gì)"
+  echo "Kiểm xong: ${#TODO[@]} patch áp được sạch lên $WANT_TAG. (chưa sửa gì)"
   exit 0
 fi
-git apply "$PATCH"
-echo "Đã áp patch tab Zalo lên crm $WANT_TAG. Bước tiếp: build.sh"
+for P in "${TODO[@]}"; do
+  git apply "$P"
+  echo "Đã áp $(basename "$P") lên crm $WANT_TAG."
+done
+echo "Bước tiếp: build.sh"
