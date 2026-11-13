@@ -1,5 +1,5 @@
 diff --git a/frontend/src/components/Activities/Activities.vue b/frontend/src/components/Activities/Activities.vue
-index e262752..d05e798 100644
+index e262752..f412fd4 100644
 --- a/frontend/src/components/Activities/Activities.vue
 +++ b/frontend/src/components/Activities/Activities.vue
 @@ -10,7 +10,27 @@
@@ -41,6 +41,25 @@ index e262752..d05e798 100644
  import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
  import EmptyState from '@/components/ListViews/EmptyState.vue'
  import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
+@@ -486,6 +509,8 @@ import { timeAgo, formatDate, startCase } from '@/utils'
+ import { globalStore } from '@/stores/global'
+ import { usersStore } from '@/stores/users'
+ import { whatsappEnabled } from '@/composables/whatsapp'
++import { useDocRooms } from '@/composables/messenger'
++import { pageRooms } from '@/utils/messengerThread'
+ import { useDocument } from '@/data/document'
+ import { useTelemetry } from 'frappe-ui/frappe'
+ import { Button, Tooltip, createResource, toast } from 'frappe-ui'
+@@ -523,6 +548,9 @@ const { document: _document } = useDocument(props.doctype, props.docname)
+ 
+ const doc = computed(() => _document.doc || {})
+ 
++// omni_crm: vào phòng realtime `doc:` của trang (Deal: cả Lead của Deal) để email, hoạt động, tab Zalo tự cập nhật.
++useDocRooms($socket, () => pageRooms(props.doctype, props.docname, doc.value))
++
+ const reload_email = ref(false)
+ const modalRef = ref(null)
+ const showFilesUploader = ref(false)
 diff --git a/frontend/src/components/Activities/ActivityHeader.vue b/frontend/src/components/Activities/ActivityHeader.vue
 index bc2f6dc..2c99202 100644
 --- a/frontend/src/components/Activities/ActivityHeader.vue
@@ -429,10 +448,10 @@ index 0fa6fcb..bb95934 100644
  </script>
 diff --git a/frontend/src/components/Activities/MessengerTab.vue b/frontend/src/components/Activities/MessengerTab.vue
 new file mode 100644
-index 0000000..055c7e1
+index 0000000..da143d5
 --- /dev/null
 +++ b/frontend/src/components/Activities/MessengerTab.vue
-@@ -0,0 +1,1701 @@
+@@ -0,0 +1,1706 @@
 +<template>
 +  <div class="flex h-full min-h-0 flex-col overflow-hidden">
 +    <!-- Thẻ tóm tắt của bot (cùng khối `bot` như tab Zalo): chữ xuống dòng theo nội dung; quá dài thì cuộn trong thẻ -->
@@ -1448,13 +1467,13 @@ index 0000000..055c7e1
 +} from 'frappe-ui'
 +import { globalStore } from '@/stores/global'
 +import {
++  useDocRooms,
 +  useForwardTargets,
 +  useMessengerStickers,
 +  useMessengerTemplates,
 +  useVoiceRecorder,
 +} from '@/composables/messenger'
 +import {
-+  POLL_MS,
 +  ZALO_EVENT,
 +  botCard,
 +  bubbleSide,
@@ -1465,10 +1484,12 @@ index 0000000..055c7e1
 +} from '@/utils/zaloThread'
 +import {
 +  EMOJI_GROUPS,
++  MESSENGER_POLL_MS,
 +  acceptList,
 +  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
++  docRooms,
 +  formatDuration,
 +  formatSize,
 +  insertAtCursor,
@@ -2094,6 +2115,9 @@ index 0000000..055c7e1
 +}
 +
 +// Realtime: payload chỉ có {lead, channels}, không có nội dung tin; nhận tín hiệu rồi tải lại qua API có kiểm quyền.
++// Máy chủ gửi tín hiệu vào phòng `doc:CRM Lead/<lead>`: vào phòng đó khi đã biết Lead (đổi Lead thì đổi phòng, gỡ tab
++// thì rời, kết nối lại thì vào lại), để mọi người đang mở tab đều nhận, kể cả Lead chưa có người phụ trách.
++useDocRooms($socket, () => docRooms('CRM Lead', conversation.data?.lead))
 +let timer = null
 +let poll = null
 +function onUpdate(payload) {
@@ -2111,7 +2135,7 @@ index 0000000..055c7e1
 +  // Dự phòng khi mất kết nối realtime; tab trình duyệt ẩn thì không thăm dò, hiện lại thì tải ngay.
 +  poll = setInterval(() => {
 +    if (!document.hidden) reload()
-+  }, POLL_MS)
++  }, MESSENGER_POLL_MS)
 +  document.addEventListener('visibilitychange', onVisible)
 +})
 +
@@ -2927,14 +2951,15 @@ index 0000000..7b6f7fc
 +}
 diff --git a/frontend/src/composables/messenger.js b/frontend/src/composables/messenger.js
 new file mode 100644
-index 0000000..2b223ac
+index 0000000..3ca17d5
 --- /dev/null
 +++ b/frontend/src/composables/messenger.js
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,445 @@
 +import { call, createResource } from 'frappe-ui'
-+import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
++import { computed, onScopeDispose, reactive, ref, toRaw, watch } from 'vue'
 +import {
 +  FORWARD_SEARCH_DEBOUNCE_MS,
++  createRoomCounter,
 +  filterTemplates,
 +  forwardQuery,
 +  forwardTargetList,
@@ -2944,6 +2969,7 @@ index 0000000..2b223ac
 +  stickerList,
 +  stickerPackList,
 +  stickerQuery,
++  syncRooms,
 +  templateList,
 +  voiceBaseMime,
 +  voiceExtension,
@@ -2965,6 +2991,50 @@ index 0000000..2b223ac
 +    messengerEnabled.value = false
 +  },
 +})
++
++// Realtime (sửa lỗi "tin mới chỉ hiện sau F5"): vào phòng `doc:` của Frappe. Một sổ đếm cho mỗi socket, dùng chung giữa
++// khung hoạt động và tab Messenger. Kết nối lại là phiên mới phía máy chủ, mất hết phòng: vào lại mọi phòng đang cần.
++const roomCounters = new WeakMap()
++
++function roomCounter(socket) {
++  const key = toRaw(socket) // $socket lấy qua pinia là proxy reactive: khóa theo socket gốc
++  if (!roomCounters.has(key)) {
++    const counter = createRoomCounter()
++    socket.on?.('connect', () => {
++      for (const [doctype, name] of counter.active()) {
++        socket.emit('doc_subscribe', doctype, name)
++      }
++    })
++    roomCounters.set(key, counter)
++  }
++  return roomCounters.get(key)
++}
++
++/**
++ * Vào phòng realtime `doc:<doctype>/<tên>` khi component đang hiện: `getRooms` trả mảng `[doctype, tên]` (`docRooms`,
++ * `pageRooms`). Danh sách đổi thì rời phòng cũ, vào phòng mới; gỡ component thì rời mọi phòng chính nó đã vào (phòng
++ * component khác còn cần thì giữ). Máy chủ kiểm quyền đọc (`frappe.realtime.can_subscribe_doc`), không có quyền thì
++ * không vào. Không có socket: bỏ qua, tab vẫn có thăm dò dự phòng.
++ */
++export function useDocRooms(socket, getRooms) {
++  if (typeof socket?.emit !== 'function') return
++  const counter = roomCounter(socket)
++  // Chưa kết nối / đang kết nối lại: không gửi (tránh gửi đôi khi vừa kết nối); sự kiện `connect` vào mọi phòng đang cần.
++  const emit = (event, doctype, name) => {
++    if (socket.connected) socket.emit(event, doctype, name)
++  }
++  let held = []
++  watch(
++    getRooms,
++    (next) => {
++      held = syncRooms(counter, held, next, emit)
++    },
++    { immediate: true },
++  )
++  onScopeDispose(() => {
++    held = syncRooms(counter, held, [], emit)
++  })
++}
 +
 +/**
 + * Mẫu tin nhắn của tab Messenger (ADR 0026): một resource cho mỗi tab (tab được tạo lại theo Lead/Deal), chỉ tải khi
@@ -3571,10 +3641,10 @@ index 0000000..6383c9d
 +}
 diff --git a/frontend/src/utils/messengerThread.js b/frontend/src/utils/messengerThread.js
 new file mode 100644
-index 0000000..6b7e715
+index 0000000..999b6d1
 --- /dev/null
 +++ b/frontend/src/utils/messengerThread.js
-@@ -0,0 +1,845 @@
+@@ -0,0 +1,963 @@
 +// Hàm thuần cho tab "Messenger" (omni_crm, ADR 0023): đính kèm (ảnh / video / âm thanh / tệp đã lưu trong CRM), kiểm tệp
 +// sale chọn để gửi, liên kết hộp thư Meta Business Suite, mẫu tin nhắn (ADR 0026), tương tác (ADR 0027: emoji, sticker,
 +// cảm xúc, trả lời một tin, ẩn tin trong CRM; đợt 2: ghi âm, chuyển tiếp). Gom bong bóng, nhãn, giờ và luật URL dùng lại
@@ -3741,6 +3811,124 @@ index 0000000..6b7e715
 +    !channels.length ||
 +    channels.includes(MESSENGER_CHANNEL)
 +  )
++}
++
++/** Thăm dò dự phòng của tab Messenger khi realtime hỏng (tab Zalo giữ `POLL_MS` của zaloThread.js). */
++export const MESSENGER_POLL_MS = 30000
++
++// Máy chủ gửi `omni_inbox_update` và `refetch_resource` (email, hoạt động) vào phòng `doc:<doctype>/<tên>` (ngoài phòng
++// của người phụ trách, người được giao). Giao diện CRM v1.73 không tự vào phòng `doc:` nào, nên người khác (hoặc Lead
++// chưa có người phụ trách) chỉ thấy tin mới sau lần thăm dò hay F5. Các hàm dưới lo sổ sách; nối với socket (theo dõi,
++// gỡ component, kết nối lại) ở `useDocRooms` (composables/messenger.js).
++
++function roomPart(value) {
++  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
++  return typeof value === 'string' && value.trim() ? value : ''
++}
++
++/** Khóa so sánh của một phòng `[doctype, tên]`. */
++export function roomKey(room) {
++  return JSON.stringify([roomPart(room?.[0]), roomPart(room?.[1])])
++}
++
++/** Danh sách phòng `[doctype, tên]` sạch: bỏ phòng thiếu doctype hoặc tên, bỏ trùng, giữ thứ tự. */
++export function uniqueRooms(rooms) {
++  const out = []
++  const seen = new Set()
++  for (const room of Array.isArray(rooms) ? rooms : []) {
++    const clean = [roomPart(room?.[0]), roomPart(room?.[1])]
++    const key = roomKey(clean)
++    if (!clean[0] || !clean[1] || seen.has(key)) continue
++    seen.add(key)
++    out.push(clean)
++  }
++  return out
++}
++
++/** Các phòng `doc:` cần vào: tài liệu đang mở và Lead của nó (nếu có). Mảng `[doctype, tên]`, bỏ giá trị rỗng và trùng. */
++export function docRooms(doctype, docname, lead) {
++  return uniqueRooms([
++    [doctype, docname],
++    ['CRM Lead', lead],
++  ])
++}
++
++/**
++ * Phòng của khung hoạt động trên trang Lead / Deal: chính tài liệu đó; với Deal thêm Lead của Deal (`doc.lead`, chỉ khi
++ * `doc` đúng là Deal đang mở). Doctype khác: không vào phòng nào.
++ */
++export function pageRooms(doctype, docname, doc) {
++  if (doctype !== 'CRM Lead' && doctype !== 'CRM Deal') return []
++  const name = roomPart(doc?.name)
++  const ownDeal = doctype === 'CRM Deal' && name && name === roomPart(docname)
++  return docRooms(doctype, docname, ownDeal ? doc.lead : '')
++}
++
++/**
++ * Phòng phải vào (`join`) và phải rời (`leave`) khi danh sách đổi từ `before` sang `after`; `rooms` là `after` đã làm
++ * sạch (`uniqueRooms`), giữ lại làm `before` cho lần sau.
++ */
++export function roomChanges(before, after) {
++  const prev = uniqueRooms(before)
++  const rooms = uniqueRooms(after)
++  const had = new Set(prev.map(roomKey))
++  const has = new Set(rooms.map(roomKey))
++  return {
++    join: rooms.filter((room) => !had.has(roomKey(room))),
++    leave: prev.filter((room) => !has.has(roomKey(room))),
++    rooms,
++  }
++}
++
++/**
++ * Đếm số chỗ đang cần mỗi phòng: khung hoạt động và tab Messenger có thể cùng cần phòng của một Lead, mà socket.io không
++ * đếm (một `doc_unsubscribe` là rời phòng cho cả trang). `acquire` trả true khi phòng vừa được cần lần đầu (phải gửi
++ * `doc_subscribe`), `release` trả true khi không còn ai cần (phải gửi `doc_unsubscribe`), `active` là các phòng phải vào
++ * lại sau khi kết nối lại.
++ */
++export function createRoomCounter() {
++  const counts = new Map()
++  return {
++    acquire(room) {
++      const clean = [roomPart(room?.[0]), roomPart(room?.[1])]
++      if (!clean[0] || !clean[1]) return false
++      const key = roomKey(clean)
++      const entry = counts.get(key)
++      if (entry) {
++        entry.count += 1
++        return false
++      }
++      counts.set(key, { room: clean, count: 1 })
++      return true
++    },
++    release(room) {
++      const key = roomKey(room)
++      const entry = counts.get(key)
++      if (!entry) return false
++      entry.count -= 1
++      if (entry.count > 0) return false
++      counts.delete(key)
++      return true
++    },
++    active() {
++      return [...counts.values()].map(({ room }) => [room[0], room[1]])
++    },
++  }
++}
++
++/**
++ * Đổi các phòng một component đang giữ từ `held` sang `next` qua sổ đếm chung `counter`: rời trước, vào sau; chỉ gọi
++ * `emit('doc_unsubscribe' | 'doc_subscribe', doctype, tên)` khi sổ đếm đổi trạng thái. Trả danh sách phòng đang giữ mới.
++ */
++export function syncRooms(counter, held, next, emit) {
++  const { join, leave, rooms } = roomChanges(held, next)
++  for (const [doctype, name] of leave) {
++    if (counter.release([doctype, name])) emit('doc_unsubscribe', doctype, name)
++  }
++  for (const [doctype, name] of join) {
++    if (counter.acquire([doctype, name])) emit('doc_subscribe', doctype, name)
++  }
++  return rooms
 +}
 +
 +// --- Hộp thư Meta Business Suite (thay nút "Mở chat Zalo OA") ---
@@ -4929,10 +5117,10 @@ index 0000000..3e67f48
 +})
 diff --git a/frontend/tests/unit/messengerThread.test.js b/frontend/tests/unit/messengerThread.test.js
 new file mode 100644
-index 0000000..7394981
+index 0000000..017d940
 --- /dev/null
 +++ b/frontend/tests/unit/messengerThread.test.js
-@@ -0,0 +1,1418 @@
+@@ -0,0 +1,1594 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  DEFAULT_MEDIA_ACCEPT,
@@ -4942,6 +5130,7 @@ index 0000000..7394981
 +  MESSAGE_DOCTYPES,
 +  META_INBOX_URL,
 +  MESSENGER_CHANNEL,
++  MESSENGER_POLL_MS,
 +  REACTION_EMOJIS,
 +  STICKER_HOSTS,
 +  TEMPLATE_SEARCH_AFTER,
@@ -4952,6 +5141,8 @@ index 0000000..7394981
 +  applyTemplate,
 +  canSubmitMessenger,
 +  checkMessengerFile,
++  createRoomCounter,
++  docRooms,
 +  emojiGlyph,
 +  filterTemplates,
 +  foldText,
@@ -4974,6 +5165,7 @@ index 0000000..7394981
 +  needsTemplateSearch,
 +  openMetaInbox,
 +  overLimit,
++  pageRooms,
 +  parseUploadResponse,
 +  pickRecorderMime,
 +  quoteLabel,
@@ -4981,12 +5173,16 @@ index 0000000..7394981
 +  reactionChoices,
 +  replyPayload,
 +  replyTarget,
++  roomChanges,
++  roomKey,
 +  sendOutcome,
 +  stickerList,
 +  stickerPackList,
 +  stickerQuery,
 +  stickerView,
++  syncRooms,
 +  templateList,
++  uniqueRooms,
 +  voiceBaseMime,
 +  voiceExtension,
 +  voiceFileName,
@@ -5202,6 +5398,174 @@ index 0000000..7394981
 +    expect(isMessengerUpdate({ lead: 'L2' }, 'L1')).toBe(false)
 +    expect(isMessengerUpdate({ lead: 'L1' }, null)).toBe(false)
 +    expect(isMessengerUpdate(null, 'L1')).toBe(false)
++  })
++})
++
++describe('phòng realtime doc: (sửa lỗi tin mới chỉ hiện sau F5)', () => {
++  const LEAD = ['CRM Lead', 'CRM-LEAD-0001']
++  const DEAL = ['CRM Deal', 'CRM-DEAL-0001']
++
++  it('thăm dò dự phòng 30 giây', () => {
++    expect(MESSENGER_POLL_MS).toBe(30000)
++  })
++
++  it('docRooms: tài liệu đang mở và Lead của nó, bỏ rỗng và trùng', () => {
++    expect(docRooms('CRM Lead', 'CRM-LEAD-0001')).toEqual([LEAD])
++    expect(docRooms('CRM Deal', 'CRM-DEAL-0001', 'CRM-LEAD-0001')).toEqual([
++      DEAL,
++      LEAD,
++    ])
++    expect(docRooms('CRM Lead', 'CRM-LEAD-0001', 'CRM-LEAD-0001')).toEqual([
++      LEAD,
++    ])
++    expect(docRooms('CRM Lead', 'L2', 'L1')).toEqual([
++      ['CRM Lead', 'L2'],
++      ['CRM Lead', 'L1'],
++    ])
++    // Tab Messenger chỉ cần phòng Lead: chưa biết Lead thì không vào phòng nào
++    expect(docRooms('CRM Lead', undefined)).toEqual([])
++    expect(docRooms('CRM Lead', null)).toEqual([])
++    expect(docRooms('CRM Lead', '')).toEqual([])
++    expect(docRooms('CRM Lead', '   ')).toEqual([])
++    expect(docRooms('', 'X', '')).toEqual([])
++    expect(docRooms(null, null, null)).toEqual([])
++    expect(docRooms('CRM Deal', 'D1', {})).toEqual([['CRM Deal', 'D1']])
++    expect(docRooms('CRM Deal', 7)).toEqual([['CRM Deal', '7']])
++  })
++
++  it('pageRooms: trang Lead chỉ phòng Lead; trang Deal thêm Lead của chính Deal đó', () => {
++    expect(pageRooms('CRM Lead', 'CRM-LEAD-0001', {})).toEqual([LEAD])
++    expect(
++      pageRooms('CRM Lead', 'CRM-LEAD-0001', {
++        name: 'CRM-LEAD-0001',
++        lead: 'L9',
++      }),
++    ).toEqual([LEAD])
++    expect(
++      pageRooms('CRM Deal', 'CRM-DEAL-0001', {
++        name: 'CRM-DEAL-0001',
++        lead: 'CRM-LEAD-0001',
++      }),
++    ).toEqual([DEAL, LEAD])
++    // Deal chưa tải xong, không có Lead, hoặc doc còn là Deal cũ: chỉ phòng Deal
++    expect(pageRooms('CRM Deal', 'CRM-DEAL-0001', {})).toEqual([DEAL])
++    expect(pageRooms('CRM Deal', 'CRM-DEAL-0001', null)).toEqual([DEAL])
++    expect(
++      pageRooms('CRM Deal', 'CRM-DEAL-0001', {
++        name: 'CRM-DEAL-0001',
++        lead: '',
++      }),
++    ).toEqual([DEAL])
++    expect(
++      pageRooms('CRM Deal', 'CRM-DEAL-0001', {
++        name: 'CRM-DEAL-0002',
++        lead: 'CRM-LEAD-0002',
++      }),
++    ).toEqual([DEAL])
++    // Doctype khác hoặc chưa có tên: không vào phòng nào
++    expect(pageRooms('Contact', 'C1', { name: 'C1', lead: 'L1' })).toEqual([])
++    expect(pageRooms('CRM Lead', '', {})).toEqual([])
++  })
++
++  it('uniqueRooms / roomKey', () => {
++    expect(
++      uniqueRooms([LEAD, ['CRM Lead', 'CRM-LEAD-0001'], DEAL, ['', 'x'], null]),
++    ).toEqual([LEAD, DEAL])
++    expect(uniqueRooms(null)).toEqual([])
++    expect(uniqueRooms('CRM Lead')).toEqual([])
++    expect(roomKey(['CRM Lead', 'A/B'])).not.toBe(roomKey(['CRM Lead/A', 'B']))
++    expect(roomKey(['CRM Lead', 'A'])).toBe(roomKey(['CRM Lead', 'A']))
++  })
++
++  it('roomChanges: rời phòng cũ, vào phòng mới, không làm gì khi không đổi', () => {
++    const L2 = ['CRM Lead', 'CRM-LEAD-0002']
++    expect(roomChanges([], [DEAL, LEAD])).toEqual({
++      join: [DEAL, LEAD],
++      leave: [],
++      rooms: [DEAL, LEAD],
++    })
++    expect(roomChanges([DEAL, LEAD], [DEAL, L2])).toEqual({
++      join: [L2],
++      leave: [LEAD],
++      rooms: [DEAL, L2],
++    })
++    expect(roomChanges([LEAD], [['CRM Lead', 'CRM-LEAD-0001']])).toEqual({
++      join: [],
++      leave: [],
++      rooms: [LEAD],
++    })
++    expect(roomChanges([DEAL, LEAD], [])).toEqual({
++      join: [],
++      leave: [DEAL, LEAD],
++      rooms: [],
++    })
++    expect(roomChanges(undefined, [LEAD, LEAD])).toEqual({
++      join: [LEAD],
++      leave: [],
++      rooms: [LEAD],
++    })
++  })
++
++  it('createRoomCounter: chỉ báo vào ở lần cần đầu, báo rời khi không còn ai cần', () => {
++    const counter = createRoomCounter()
++    expect(counter.acquire(LEAD)).toBe(true)
++    expect(counter.acquire(['CRM Lead', 'CRM-LEAD-0001'])).toBe(false)
++    expect(counter.acquire(DEAL)).toBe(true)
++    expect(counter.active()).toEqual([LEAD, DEAL])
++    expect(counter.release(LEAD)).toBe(false)
++    expect(counter.release(LEAD)).toBe(true)
++    expect(counter.release(LEAD)).toBe(false) // đã rời: không gửi doc_unsubscribe lần nữa
++    expect(counter.active()).toEqual([DEAL])
++    expect(counter.acquire(LEAD)).toBe(true)
++    expect(counter.acquire(['CRM Lead', ''])).toBe(false)
++    expect(counter.acquire(null)).toBe(false)
++    expect(counter.release(['Contact', 'C1'])).toBe(false)
++    expect(counter.active()).toEqual([DEAL, LEAD])
++  })
++
++  it('syncRooms: khung hoạt động và tab Messenger dùng chung phòng Lead; gỡ tab không rời phòng của trang', () => {
++    const counter = createRoomCounter()
++    const sent = []
++    const emit = (...args) => sent.push(args)
++
++    // Trang Deal: khung hoạt động vào phòng Deal và Lead của Deal
++    let page = syncRooms(counter, [], [DEAL, LEAD], emit)
++    expect(sent).toEqual([
++      ['doc_subscribe', ...DEAL],
++      ['doc_subscribe', ...LEAD],
++    ])
++    // Tab Messenger mở, chưa biết Lead, rồi biết Lead: phòng đã có, không gửi thêm
++    let tab = syncRooms(counter, [], [], emit)
++    tab = syncRooms(counter, tab, [LEAD], emit)
++    expect(sent).toHaveLength(2)
++    // Đóng tab Messenger: trang vẫn cần phòng Lead, không rời
++    tab = syncRooms(counter, tab, [], emit)
++    expect(tab).toEqual([])
++    expect(sent).toHaveLength(2)
++    // Rời trang: rời cả hai phòng, mỗi phòng đúng một lần
++    page = syncRooms(counter, page, [], emit)
++    expect(page).toEqual([])
++    expect(sent.slice(2)).toEqual([
++      ['doc_unsubscribe', ...DEAL],
++      ['doc_unsubscribe', ...LEAD],
++    ])
++    expect(counter.active()).toEqual([])
++  })
++
++  it('syncRooms: đổi Lead thì rời phòng cũ trước rồi vào phòng mới', () => {
++    const counter = createRoomCounter()
++    const sent = []
++    const emit = (...args) => sent.push(args)
++    const L2 = ['CRM Lead', 'CRM-LEAD-0002']
++    let held = syncRooms(counter, [], [LEAD], emit)
++    held = syncRooms(counter, held, [L2], emit)
++    expect(held).toEqual([L2])
++    expect(sent).toEqual([
++      ['doc_subscribe', ...LEAD],
++      ['doc_unsubscribe', ...LEAD],
++      ['doc_subscribe', ...L2],
++    ])
++    expect(counter.active()).toEqual([L2])
 +  })
 +})
 +
