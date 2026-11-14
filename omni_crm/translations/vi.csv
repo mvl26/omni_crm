@@ -1351,3 +1351,33 @@ weeks before,tuần trước
 {0} yes,{0} có
 Webhook Verify Token,Mã xác minh webhook
 FCRM Note,Ghi chú CRM
+Connect Facebook Page,Kết nối Page Facebook
+Connected to {0} · Webhook fields: {1},Đã kết nối {0} · Trường webhook: {1}
+The Facebook login was cancelled. No Page was connected.,Đăng nhập Facebook đã bị hủy. Chưa kết nối Page nào.
+Loading your Facebook Pages...,Đang tải danh sách Page Facebook...
+Facebook returned no Pages. Click Connect Facebook Page again and select your Page.,Facebook không trả về Page nào. Bấm Kết nối Page Facebook lần nữa và chọn Page.
+Select the Facebook Page to connect,Chọn Page Facebook cần kết nối
+"Miyano CRM subscribes this Page to webhooks, so messages that customers send to the Page appear in the Messenger tab of their Lead.","Miyano CRM đăng ký webhook cho Page này, để tin khách nhắn vào Page hiện ở tab Messenger của Lead."
+Subscribe Page,Đăng ký webhook cho Page
+Subscribing the Page to webhooks...,Đang đăng ký webhook cho Page...
+Webhook fields,Trường webhook
+Webhook fields not subscribed,Trường webhook chưa đăng ký được
+Facebook Page connected,Đã kết nối Page Facebook
+Facebook Page connection,Kết nối Page Facebook
+Facebook Login configuration ID,Mã cấu hình Facebook Login
+"Configuration ID from Facebook Login for Business in the Meta app (permissions pages_show_list, pages_manage_metadata, pages_messaging). Used by the Connect Facebook Page button (ADR 0028).","Mã cấu hình (Configuration ID) trong Facebook Login for Business của ứng dụng Meta (quyền pages_show_list, pages_manage_metadata, pages_messaging). Nút Kết nối Page Facebook dùng mã này (ADR 0028)."
+Connected Page,Page đã kết nối
+Connected at,Kết nối lúc
+Connected by,Người kết nối
+Only an Omni Admin can connect a Facebook Page,Chỉ Omni Admin được kết nối Page Facebook
+"Sandbox mode is on in Omni Settings, so Miyano CRM does not call Meta",Chế độ thử (sandbox) đang bật trong Omni Settings nên CRM không gọi Meta
+This channel is not a Meta Messenger channel,Kênh này không phải kênh Meta Messenger
+Fill in {0} on this channel first,Điền {0} trên kênh này trước
+The Facebook login has expired. Click Connect Facebook Page again.,Phiên đăng nhập Facebook đã hết hạn. Bấm Kết nối Page Facebook lần nữa.
+The Facebook login is invalid or has expired. Click Connect Facebook Page again.,Phiên đăng nhập Facebook không hợp lệ hoặc đã hết hạn. Bấm Kết nối Page Facebook lần nữa.
+The Facebook login is invalid or has expired.,Phiên đăng nhập Facebook không hợp lệ hoặc đã hết hạn.
+Could not reach Meta ({0}),Không kết nối được tới Meta ({0})
+Meta did not accept the login (error {0}). Click Connect Facebook Page again.,Meta không nhận lượt đăng nhập (mã lỗi {0}). Bấm Kết nối Page Facebook lần nữa.
+Invalid Page ID,Page ID không hợp lệ
+"This channel is linked to Page {0}. Select that Page, or change Meta: Page ID first.","Kênh này đang gắn với Page {0}. Chọn đúng Page đó, hoặc sửa ô Meta: Page ID trước."
+Facebook did not give access to this Page. Select the Page in the Facebook dialog and try again.,Facebook chưa cấp quyền với Page này. Chọn Page trong hộp thoại Facebook rồi thử lại.

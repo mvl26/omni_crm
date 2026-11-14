@@ -46,6 +46,13 @@
   "meta_verify_token",
   "meta_page_access_token",
   "meta_app_id",
+  "sec_meta_connect",
+  "meta_login_config_id",
+  "meta_page_name",
+  "col_meta_connect",
+  "meta_connected_at",
+  "meta_connected_by",
+  "meta_subscribed_fields",
   "sec_meta_token",
   "meta_token_checked_at",
   "meta_token_valid",
@@ -349,6 +356,47 @@
    "fieldtype": "Data",
    "label": "Meta: App ID",
    "description": "Mã ứng dụng Meta (không bí mật). Cùng App Secret tạo app access token để kiểm hạn token Page hằng ngày (F2). Để trống = không kiểm."
+  },
+  {
+   "fieldname": "sec_meta_connect",
+   "fieldtype": "Section Break",
+   "label": "Facebook Page connection",
+   "depends_on": "eval:doc.channel_type=='Meta Messenger'"
+  },
+  {
+   "fieldname": "meta_login_config_id",
+   "fieldtype": "Data",
+   "label": "Facebook Login configuration ID",
+   "description": "Configuration ID from Facebook Login for Business in the Meta app (permissions pages_show_list, pages_manage_metadata, pages_messaging). Used by the Connect Facebook Page button (ADR 0028)."
+  },
+  {
+   "fieldname": "meta_page_name",
+   "fieldtype": "Data",
+   "label": "Connected Page",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_meta_connect",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "meta_connected_at",
+   "fieldtype": "Datetime",
+   "label": "Connected at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_connected_by",
+   "fieldtype": "Link",
+   "label": "Connected by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_subscribed_fields",
+   "fieldtype": "Small Text",
+   "label": "Webhook fields",
+   "read_only": 1
   },
   {
    "fieldname": "sec_meta_token",

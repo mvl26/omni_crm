@@ -98,6 +98,8 @@ EXPECTED_WHITELISTED = {
 		"forward_targets",  # ADR 0027 đợt 2: chỉ đọc, Lead Messenger người dùng được sửa
 		"forward",  # ADR 0027 đợt 2: 1 tin Page đã gửi tới MỘT Lead khác/lần, qua mọi guard của Lead nhận
 	},  # ADR 0023: tab Messenger, 1 Lead/1 khách mỗi lần gửi
+	# ADR 0028: nút Connect Facebook Page, chỉ Omni Admin; không gửi tin, không trả dữ liệu khách hay token
+	"api/meta_connect.py": {"start", "callback", "pages", "subscribe"},
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {
 		"state",
