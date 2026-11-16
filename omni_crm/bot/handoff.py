@@ -150,7 +150,10 @@ def _short_name(lead: str) -> str:
 
 
 def _inbox_link(lead: str) -> str:
-	return f"/app/omni-inbox?lead={lead}"
+	"""Trang Lead trong app CRM (tab Zalo), nơi sale xem và duyệt nháp."""
+	from omni_crm.crm_bridge import notify
+
+	return notify.crm_lead_link(lead)
 
 
 # --- Tạm dừng / tiếp tục --------------------------------------------------------------------------------------
@@ -262,7 +265,7 @@ def _notify_system(lead: str, users: list[str], label: str, channel_type: str | 
 	link = _inbox_link(lead)
 	body = (
 		f"{escape_html(label)} · {escape_html(channel_type or '')} · {escape_html(_short_name(lead))}. "
-		f'<a href="{escape_html(link)}">{escape_html(_("Mở Hộp thư"))}</a>'
+		f'<a href="{escape_html(link)}">{escape_html(_("Mở trong CRM"))}</a>'
 	)
 	names = []
 	for user in users:
@@ -282,6 +285,9 @@ def _notify_system(lead: str, users: list[str], label: str, channel_type: str | 
 			frappe.publish_realtime(REALTIME_EVENT, {"lead": lead}, user=user, after_commit=True)
 		except Exception:
 			frappe.log_error(title="Omni: không báo được chuyển người", message=f"lead={lead}")
+	from omni_crm.crm_bridge import notify
+
+	notify.crm_notify(lead, users, f"{subject} · {label}")  # chuông của app CRM
 	return names
 
 
@@ -303,7 +309,7 @@ def _queue_email(lead: str, users: list[str], label: str, channel_type: str | No
 		f"<p>{escape_html(_('Khách'))}: {escape_html(_short_name(lead))}<br>"
 		f"{escape_html(_('Kênh'))}: {escape_html(channel_type or '')}<br>"
 		f"{escape_html(_('Lý do'))}: {escape_html(label)}</p>"
-		f'<p><a href="{escape_html(get_url(_inbox_link(lead)))}">{escape_html(_("Mở Hộp thư"))}</a></p>'
+		f'<p><a href="{escape_html(get_url(_inbox_link(lead)))}">{escape_html(_("Mở trong CRM"))}</a></p>'
 	)
 	sent = 0
 	for user in users:

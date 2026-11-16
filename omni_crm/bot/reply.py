@@ -388,9 +388,12 @@ def notify_pending_draft(lead: str, action: str) -> int:
 	subject = (
 		_("Bot chuyển người, mời xem: {0}") if action == "Handoff" else _("Có nháp bot chờ duyệt: {0}")
 	).format(name)[:NOTIFY_SUBJECT_MAX]
-	link = f"/app/omni-inbox?lead={lead}"
+	from omni_crm.crm_bridge import notify
+
+	link = notify.crm_lead_link(lead)
+	users = scoring._recipients(lead)
 	done = 0
-	for user in scoring._recipients(lead):
+	for user in users:
 		try:
 			frappe.get_doc(
 				{
@@ -399,7 +402,7 @@ def notify_pending_draft(lead: str, action: str) -> int:
 					"for_user": user,
 					"subject": subject,
 					"email_content": f"{frappe.utils.escape_html(subject)}. "
-					f'<a href="{frappe.utils.escape_html(link)}">{frappe.utils.escape_html(_("Mở Hộp thư"))}</a>',
+					f'<a href="{frappe.utils.escape_html(link)}">{frappe.utils.escape_html(_("Mở trong CRM"))}</a>',
 					"document_type": "CRM Lead",
 					"document_name": lead,
 				}
@@ -407,6 +410,7 @@ def notify_pending_draft(lead: str, action: str) -> int:
 			done += 1
 		except Exception:
 			frappe.log_error(title="Omni: không báo được nháp bot", message=f"lead={lead}")
+	notify.crm_notify(lead, users, subject)  # chuông của app CRM (sale làm việc ở /crm)
 	timeline.notify(lead, [])
 	return done
 
