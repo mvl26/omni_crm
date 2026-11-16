@@ -159,6 +159,10 @@ class TestSwitch(ReplyKbTestCase):
 		self.assertTrue(kb_docs.enabled("v3"))
 		self.assertTrue(kb_docs.enabled("v12"))
 
+	def test_reply_has_room_for_text_before_tool(self):
+		self.run_reply("Châm cứu có cần đặt lịch không?", reply_ok())
+		self.assertGreaterEqual(self.reply_calls()[-1]["max_tokens"], 2000)
+
 	def test_mode_off_does_nothing(self):
 		set_settings(bot_reply_mode="Off")
 		batch = self.say("Châm cứu có cần đặt lịch không?")

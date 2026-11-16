@@ -56,6 +56,9 @@ REPLAY_PREFIX = "replay::"
 KB_LOG_KEY = "omni:reply:kb_too_large_logged"
 KB_LOG_TTL = 3600
 TEXT_MAX = 1200
+# Trần token đầu ra của lượt Reply. Mô hình không ép được tool (tool_choice "auto", vd claude-sonnet-5-5) viết chữ
+# trước khi gọi tool; 800 làm cắt cụt tool_use (thiếu trường bắt buộc / reply_text rỗng) trên miyano 2026-11-16.
+REPLY_MAX_TOKENS = 2000
 REASON_MAX = 300
 
 TOOL: dict[str, Any] = {
@@ -511,7 +514,7 @@ def make_draft(
 		batch_id=batch_id,
 		cache_blocks=[knowledge.render_kb()],
 		prompt_version=prompt.version,
-		max_tokens=800,
+		max_tokens=REPLY_MAX_TOKENS,
 	)  # KHÔNG truyền synthetic: hội thoại khách luôn qua cổng Q11
 	if raw is None:
 		if mode == "Draft" and wants_human:  # khách đòi gặp người thì vẫn phải qua chuyển người dù AI lỗi

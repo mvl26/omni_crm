@@ -74,6 +74,7 @@ class FakeAIClient:
 				"messages": messages,
 				"tool": tool,
 				"cache_blocks": cache_blocks,
+				"max_tokens": max_tokens,
 				"timeout": timeout,
 			}
 		)
