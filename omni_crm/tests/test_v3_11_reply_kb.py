@@ -1,4 +1,3 @@
-# ruff: noqa: RUF001
 """V3-11 (ADR 0030): bot trả lời tin nhắn (Zalo OA) dùng thêm đoạn tài liệu của Kho tri thức.
 
 Mọi lời gọi AI qua FakeAIClient; không có lời gọi mạng, không tạo tin gửi khách.
@@ -88,7 +87,9 @@ class TestReplyWithDocuments(ReplyKbTestCase):
 		)
 		(d,) = self.drafts(batch_id=batch)
 		self.assertEqual(d.action, "Handoff")
-		self.assertIsNone(d.draft_text)
+		# số AI tự đưa ra không bao giờ vào nháp; câu có hỏi giá nên nháp chỉ có mẫu tin cố định (ADR 0031)
+		self.assertNotIn("200.000", d.draft_text or "")
+		self.assertIn("info:mau_tin:price", d.guard_flags)
 
 	def test_documents_only_kb_is_not_empty(self):
 		self.no_items()

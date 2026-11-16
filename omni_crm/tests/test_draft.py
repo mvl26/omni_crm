@@ -12,7 +12,7 @@ from frappe.utils import add_to_date, now_datetime
 
 from omni_crm import flags
 from omni_crm.api import drafts, inbox
-from omni_crm.bot import reply
+from omni_crm.bot import reply, templates
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline import outbound
 from omni_crm.tests.test_ai_client import set_settings
@@ -54,6 +54,11 @@ class DraftTestCase(ReplyTestCase):
 		return self.drafts(batch_id=batch)[0].name
 
 	def handoff_draft(self) -> str:
+		"""Nháp chuyển người KHÔNG có mẫu tin (mẫu tắt): không có nội dung để gửi. Nháp có mẫu: test_v3_12."""
+		with mock.patch.dict(frappe.local.conf, {templates.CONF_ENABLED: 0}):
+			return self._handoff_draft()
+
+	def _handoff_draft(self) -> str:
 		return self.make_draft(
 			"Cho hỏi giá",
 			reply_ok(
