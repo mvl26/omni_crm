@@ -145,7 +145,7 @@ class TestDraftCreation(DraftTestCase):
 		)
 		self.assertEqual([x.for_user for x in logs], [SALE1])
 		blob = f"{logs[0].subject} {logs[0].email_content}"
-		self.assertIn("omni-inbox", blob)
+		self.assertIn(f"/crm/leads/{self.lead1}", blob)  # liên kết mở app CRM, không mở Desk
 		self.assertNotIn("SECRETTEXT", blob)
 		self.assertNotIn(TEXT, blob)
 		self.assertTrue(name)
