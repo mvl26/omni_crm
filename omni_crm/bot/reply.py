@@ -24,7 +24,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import ai_client, guards, handoff, kb_docs, knowledge
+from omni_crm.bot import ai_client, guards, handoff, kb_docs, knowledge, templates
 from omni_crm.bot.context import build_conversation, escape_tags, mask_pii, normalize_text
 from omni_crm.bot.prompts.loader import load_prompt, render
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
@@ -540,6 +540,19 @@ def make_draft(
 				"allowed_phrases": [hours["gio_lam_viec_ke_tiep"]],
 			},
 		)
+		suspicious = any(f.startswith("nghi_chen_lenh") for f in decision["flags"])
+		if (
+			decision["action"] == "Handoff" and not suspicious
+		):  # ADR 0031: hỏi giá/đặt demo -> mẫu tin để sale điền rồi gửi
+			tpl = templates.pick(decision["group"], intent, customer_text)
+			if tpl:
+				decision["text"] = tpl.text
+				# Nhóm AI chọn đã là nhóm luôn chuyển người thì giữ; nếu không (vd "Thông tin dịch vụ" bị chốt chặn giá) thì
+				# đổi sang nhóm của mẫu, thiếu nhóm đó thì bỏ nhóm, để nháp sale điền không tính vào tỉ lệ mở Auto của nhóm
+				current = group_rows.get(decision["group"])
+				if not (current and cint(current.always_handoff)):
+					decision["group"] = tpl.group if tpl.group in group_rows else None
+				info.append(f"info:mau_tin:{tpl.key}")
 		row = group_rows.get(decision["group"])
 		if base["mode"] == "Draft" and decision["action"] == "Reply" and row and cint(row.shadow_only):
 			base = {**base, "mode": "Shadow"}  # nhóm chỉ chạy ngầm (V2-06): nháp trả lời không hiện cho sale
