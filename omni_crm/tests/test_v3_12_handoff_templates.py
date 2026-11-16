@@ -50,7 +50,10 @@ class TemplateTestCase(DraftTestCase):
 class TestPick(TemplateTestCase):
 	def test_price_and_demo(self):
 		self.assertEqual(templates.pick(None, None, "Cho xin báo giá găng tay").key, "price")
-		self.assertEqual(templates.pick(None, "Hỏi phí", "phần mềm thế nào").key, "price")
+		self.assertEqual(templates.pick(None, "Hỏi phí", "phí dịch vụ thế nào").key, "price")
+		self.assertIsNone(
+			templates.pick(None, "Hỏi phí", "SPD là gì")
+		)  # chỉ ý định cũ, lượt này không hỏi giá
 		self.assertEqual(templates.pick(templates.GROUP_PRICE, None, "ok").key, "price")
 		self.assertEqual(templates.pick(None, None, "Demo supply core có mất phí k").key, "demo")
 		self.assertEqual(templates.pick(templates.GROUP_DEMO, None, "đặt lịch giúp em").key, "demo")
