@@ -43,3 +43,16 @@ gửi nháp Handoff, và Hộp thư chỉ cho bấm "Bỏ".
 - Muốn sửa nội dung mẫu phải sửa site_config, chưa có màn hình cấu hình.
 - Nháp mẫu luôn tính là "Sent Edited". Chúng thuộc nhóm luôn chuyển người nên không ảnh hưởng điều kiện mở Auto.
 - Messenger/email: nháp mẫu hiện để sale chép, không gửi từ Hộp thư (như nháp thường).
+
+## Bổ sung 2026-11-16: ý định "Hỏi phí" chỉ chặn khi lượt hiện tại nhắc giá/phí
+
+Thử trên miyano:
+- Khách từng hỏi phí demo. Bước phân tích gán ý định "Hỏi giá" cho **cả hội thoại**.
+- Sau đó mọi câu kiến thức ("SPD là gì") đều bị chốt chặn F6 đổi thành chuyển người, kèm mẫu báo giá.
+
+Người dùng chốt: chỉ chuyển người vì giá khi tin hiện tại có nhắc giá hoặc phí. Cách làm:
+- `guards.intent_forces_handoff(intent, lời_khách)` bỏ qua ý định Hỏi phí khi lời khách của lượt có chữ, nhưng không có
+  chủ đề `hoi_gia`. Không có lời khách thì vẫn chặn.
+- Áp ở cả chốt chặn của nháp, ở `auto_send.check_reply` (lấy lời khách của lượt) và ở việc chọn mẫu.
+- Yêu cầu đề xuất và Khiếu nại vẫn chặn theo ý định của cả hội thoại.
+- Chốt chặn số tiền ngoài Kho tri thức giữ nguyên. Kho không có giá nào, nên bot không thể tự nói giá.

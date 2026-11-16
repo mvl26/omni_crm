@@ -31,7 +31,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, escape_html, get_datetime, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import handoff, intents, reply
+from omni_crm.bot import guards, handoff, reply
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.ingest.events import OutboundRequest
@@ -551,6 +551,15 @@ def _common_checks(row: Any, now: datetime, group_row: Any | None = None) -> str
 	return None
 
 
+def _batch_text(batch_id: str | None) -> str:
+	"""Lời khách của lượt (để biết lượt này có nhắc giá/phí không)."""
+	return "\n".join(
+		m.text
+		for m in (reply._batch_messages(batch_id) if batch_id else [])
+		if m.event_type == "message" and (m.text or "").strip()
+	)
+
+
 def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = None) -> tuple[bool, str]:
 	"""Nháp có được tự gửi không: (True, "") hoặc (False, mã lý do). Chỉ đọc; gọi dưới khóa dòng nhóm rồi nháp,
 	`group_row` là dòng nhóm đã đọc CÓ KHÓA."""
@@ -576,7 +585,8 @@ def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = N
 	if (
 		not analysis
 		or analysis.get("intent") == COMPLAINT_INTENT
-		or intents.always_handoff(analysis.get("intent"))  # F6: Hỏi phí/Yêu cầu đề xuất không bao giờ tự gửi
+		# F6: Hỏi phí (khi lượt này nhắc giá/phí)/Yêu cầu đề xuất không bao giờ tự gửi
+		or guards.intent_forces_handoff(analysis.get("intent"), _batch_text(row.batch_id))
 		or analysis.get("wants_human")
 	):
 		return False, "phan_tich"

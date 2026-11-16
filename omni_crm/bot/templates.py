@@ -88,7 +88,11 @@ def pick(group: str | None, intent: str | None, customer_text: str | None) -> Te
 		return None
 	if group == GROUP_DEMO or _wants_demo(customer_text):
 		key = "demo"
-	elif group == GROUP_PRICE or "hoi_gia" in topics or intents.normalize(intent) == intents.FEE:
+	elif (
+		group == GROUP_PRICE
+		or "hoi_gia" in topics
+		or (intents.normalize(intent) == intents.FEE and guards.intent_forces_handoff(intent, customer_text))
+	):
 		key = "price"
 	else:
 		return None
