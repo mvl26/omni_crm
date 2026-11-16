@@ -78,3 +78,32 @@ def render(passages: list[dict[str, Any]]) -> str:
 def as_items(passages: list[dict[str, Any]]) -> list[dict[str, str]]:
 	"""Đoạn tài liệu ở dạng mục kho tri thức ({id, group, question, answer}) để `evaluate` kiểm mã và nội dung."""
 	return [{"id": p["id"], "group": "", "question": p["source"], "answer": p["text"]} for p in passages]
+
+
+def sources(ids: list[str]) -> list[dict[str, str]]:
+	"""Đoạn tài liệu theo mã (cho nháp hiển thị "nguồn"): [{id, group (danh mục), question (tên tài liệu), answer}].
+
+	Không lọc theo trạng thái tài liệu: nháp cũ vẫn xem được nguồn đã dùng lúc soạn. Mã không phải đoạn thì bỏ qua.
+	"""
+	from omni_crm.marketing import kb
+
+	ids = [i for i in ids if i and DOC_ID.match(i)]
+	if not ids:
+		return []
+	rows = frappe.db.sql(
+		f"""select c.name, c.content, c.category, d.title from `tab{kb.CHUNK}` c
+		left join `tab{kb.DOCUMENT}` d on d.name = c.document where c.name in %s""",
+		(tuple(ids),),
+		as_dict=True,
+	)
+	by_id = {r.name: r for r in rows}
+	return [
+		{
+			"id": i,
+			"group": by_id[i].category or "",
+			"question": by_id[i].title or "",
+			"answer": by_id[i].content or "",
+		}
+		for i in ids
+		if i in by_id
+	]

@@ -229,6 +229,8 @@ def get_conversation(doctype: str, name: str) -> dict:
 		"bot": _bot(lead, data["lead"]),
 		"truncated": bool(data.get("truncated")),
 		"compose": _compose(data, can_write),
+		# Nháp bot chờ duyệt (chế độ Draft), để sale duyệt ngay trong app CRM; gửi/bỏ/chấm qua omni_crm.api.drafts
+		"drafts": data.get("drafts") or [],
 	}
 
 

@@ -16,7 +16,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import knowledge, reply, templates
+from omni_crm.bot import kb_docs, knowledge, reply, templates
 
 DRAFT = "Omni Bot Draft"
 IDENTITY = "Omni Identity"
@@ -32,6 +32,13 @@ MIN_EDIT_RATIO = (
 
 def _kb_ids(raw: str | None) -> list[str]:
 	return [k for k in (x.strip() for x in (raw or "").split(",")) if k]
+
+
+def _sources(ids: list[str]) -> list[dict[str, str]]:
+	"""Nguồn của nháp: mục hỏi/đáp (KB-…) và đoạn tài liệu Kho tri thức (ADR 0030), theo thứ tự mã trong nháp."""
+	found = {k["id"]: k for k in knowledge.kb_items(ids, active_only=False)}
+	found.update({k["id"]: k for k in kb_docs.sources(ids)})
+	return [found[i] for i in ids if i in found]
 
 
 def _get(draft: str, lock: bool = False) -> Any:
@@ -99,7 +106,7 @@ def thread_drafts(lead: str) -> list[dict]:
 				"handoff_reason": r.handoff_reason if r.action == "Handoff" else None,
 				"kb": [
 					{"id": k["id"], "question": k["question"], "group": k["group"]}
-					for k in knowledge.kb_items(_kb_ids(r.kb_items), active_only=False)
+					for k in _sources(_kb_ids(r.kb_items))
 				],
 				"created": r.creation,
 				"can_send": can_write and (reply_ok or template) and channel_type == "Zalo OA",
@@ -171,7 +178,7 @@ def get_draft_kb_item(draft: str, item: str) -> dict:
 	inbox.check_lead_access(row.lead)
 	if item not in _kb_ids(row.kb_items):
 		frappe.throw(_("Mục này không thuộc nháp"), frappe.ValidationError)
-	found = knowledge.kb_items([item], active_only=False)
+	found = _sources([item])
 	if not found:
 		frappe.throw(_("Không tìm thấy mục kho tri thức"), frappe.DoesNotExistError)
 	k = found[0]
