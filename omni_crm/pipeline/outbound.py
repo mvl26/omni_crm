@@ -106,8 +106,8 @@ def _check_bot_draft(req: OutboundRequest) -> None:
 
 	- `source="Bot"`: chỉ đi qua `bot.auto_send` (D3-05): cần nháp hợp lệ và `auto_send.assert_can_queue` kiểm lại MỌI điều
 	  kiện (khóa hạ tầng, nhóm bật, nháp Draft/Reply/Pending, khung miễn phí, giờ bot...). Mọi tin Bot khác bị từ chối.
-	- Tin có `bot_draft` mà không phải Bot: chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (Handoff
-	  không gửi được).
+	- Tin có `bot_draft` mà không phải Bot: chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách. Handoff
+	  chỉ gửi được khi nháp có mẫu tin (ADR 0031) và tin đã điền hết chỗ trống `[...]`.
 	"""
 	if req.source == "Bot":
 		from omni_crm.bot import auto_send  # import trễ: auto_send import module này
@@ -122,12 +122,19 @@ def _check_bot_draft(req: OutboundRequest) -> None:
 	if not req.bot_draft:
 		return
 	row = frappe.db.get_value(
-		"Omni Bot Draft", req.bot_draft, ["mode", "action", "decision", "identity"], as_dict=True
+		"Omni Bot Draft",
+		req.bot_draft,
+		["mode", "action", "decision", "identity", "draft_text"],
+		as_dict=True,
 	)
+	from omni_crm.bot import templates
+
+	template_ok = bool(row) and templates.is_template_draft(row) and not templates.unfilled(req.text)
 	if (
 		req.source != "Sale"
 		or not row
-		or (row.mode, row.action, row.decision) != ("Draft", "Reply", "Pending")
+		or (row.mode, row.decision) != ("Draft", "Pending")
+		or not (row.action == "Reply" or template_ok)
 		or row.identity != req.identity
 	):
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
