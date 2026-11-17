@@ -1,7 +1,7 @@
 """Nạp dữ liệu khởi tạo kho kịch bản (`nodes.json` + `nodes_*.json`) vào Omni Script Node.
 
-Chạy tay: `bench --site <site> execute omni_crm.script.seed.load.load`; cũng được gọi sau `bench migrate`.
-Ô chưa có thì tạo. Ô đã có: chỉ cập nhật khi chưa ai sửa trên site (thời điểm sửa = thời điểm tạo) hoặc `overwrite=True`.
+Chỉ chạy tay: `bench --site <site> execute omni_crm.script.seed.load.load` (KHÔNG tự chạy khi migrate).
+Ô chưa có thì tạo. Ô đã có: giữ nguyên chữ và trạng thái, chỉ ghi đè khi `overwrite=True`.
 """
 
 from __future__ import annotations
@@ -55,27 +55,16 @@ def _load_one(row: dict, overwrite: bool) -> str:
 	if not frappe.db.exists(NODE, code):
 		doc = frappe.get_doc({"doctype": NODE, "code": code, **_clean(values), "buttons": buttons})
 		doc.insert(ignore_permissions=True)
-		_mark_untouched(code)
 		return "created"
+	if not overwrite:
+		return "skipped"  # ô đã có trên site: không bao giờ đổi chữ/trạng thái khi nạp lại
 	doc = frappe.get_doc(NODE, code)
-	if not overwrite and str(doc.modified) != str(doc.creation):
-		return "skipped"  # đã sửa trên site (Truyền thông sửa chữ): giữ nguyên
-	current = [{"label": b.label, "target": b.target} for b in doc.buttons or []]
-	if all((doc.get(f) or "") == v for f, v in values.items()) and current == buttons:
-		return "skipped"
 	doc.update(_clean(values))
 	doc.set("buttons", buttons)
 	doc.save(ignore_permissions=True)
-	_mark_untouched(code)
 	return "updated"
 
 
 def _clean(values: dict) -> dict:
 	"""Bỏ giá trị rỗng của trường Select có mặc định (channel, status) để DocType tự đặt mặc định."""
 	return {k: v for k, v in values.items() if v or k not in ("channel", "status")}
-
-
-def _mark_untouched(code: str) -> None:
-	"""Đặt `modified = creation` để lần nạp sau biết ô chưa được sửa tay trên site."""
-	creation = frappe.db.get_value(NODE, code, "creation")
-	frappe.db.set_value(NODE, code, "modified", creation, update_modified=False)

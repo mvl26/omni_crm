@@ -6,8 +6,6 @@ Bộ phân loại, bộ máy Reply và `tasks` đều giả; không gọi AI/HTT
 from __future__ import annotations
 
 import json
-import sys
-import types
 from unittest import mock
 
 import frappe
@@ -17,7 +15,9 @@ from omni_crm.bot import reply
 from omni_crm.channels.zalo import phone_request
 from omni_crm.pipeline import outbound
 from omni_crm.script import engine, router, send, state
+from omni_crm.script import tasks as script_tasks
 from omni_crm.script.flows import collect, menu
+from omni_crm.script.flows import handoff as k3_handoff
 from omni_crm.script.seed import load as seed_load
 from omni_crm.tests.test_k2_core import NODE, OUT, PFX, K2Case, make_node
 
@@ -56,9 +56,14 @@ class FlowCase(K2Case):
 		)
 		self.addCleanup(self._restore_handoff)
 		self.tasks: list[dict] = []
-		fake = types.ModuleType("omni_crm.script.tasks")
-		fake.create_task = self._create_task
-		p = mock.patch.dict(sys.modules, {"omni_crm.script.tasks": fake})
+		for target, fake in (
+			(script_tasks, ("create_task", self._create_task)),
+			(k3_handoff, ("start", self._start)),
+		):
+			p = mock.patch.object(target, fake[0], side_effect=fake[1])
+			p.start()
+			self.addCleanup(p.stop)
+		p = mock.patch("omni_crm.bot.handoff.bot_active_now", return_value=True)
 		p.start()
 		self.addCleanup(p.stop)
 		self.greeted()
@@ -75,6 +80,9 @@ class FlowCase(K2Case):
 			engine._actions["handoff"] = self._old_handoff
 		else:
 			engine._actions.pop("handoff", None)
+
+	def _start(self, ctx, service=None, reason="", task_only=False):
+		self.handoffs.append(("start", reason))
 
 	def _create_task(self, lead, service, title, description, due=None, priority="Medium"):
 		self.tasks.append(
@@ -165,16 +173,22 @@ class TestSeedLoad(K2Case):
 		with mock.patch.object(seed_load, "read_nodes", return_value=[row]):
 			self.assertEqual(seed_load.load()["created"], 1)
 			self.assertEqual(seed_load.load(), {"created": 0, "updated": 0, "skipped": 1, "failed": 0})
-			with mock.patch.object(seed_load, "read_nodes", return_value=[{**row, "text": "Câu seed mới"}]):
-				self.assertEqual(seed_load.load()["updated"], 1)  # chưa ai sửa trên site: theo seed
-			doc = frappe.get_doc(NODE, f"{PFX}SEED")
-			doc.text = "Truyền thông đã sửa"
-			doc.save(ignore_permissions=True)
-			frappe.db.set_value(NODE, doc.name, "modified", frappe.utils.add_to_date(doc.creation, hours=1))
-			self.assertEqual(seed_load.load()["skipped"], 1)
-			self.assertEqual(frappe.db.get_value(NODE, f"{PFX}SEED", "text"), "Truyền thông đã sửa")
-			self.assertEqual(seed_load.load(overwrite=True)["updated"], 1)
-			self.assertEqual(frappe.db.get_value(NODE, f"{PFX}SEED", "text"), "Câu gốc")
+			changed = {**row, "text": "Câu seed mới", "status": "Tắt"}
+			with mock.patch.object(seed_load, "read_nodes", return_value=[changed]):
+				self.assertEqual(
+					seed_load.load()["skipped"], 1
+				)  # ô đã có: không đổi chữ, không đổi trạng thái
+				got = frappe.db.get_value(NODE, f"{PFX}SEED", ["text", "status"])
+				self.assertEqual(got, ("Câu gốc", "Đang dùng"))
+				self.assertEqual(seed_load.load(overwrite=True)["updated"], 1)
+				self.assertEqual(frappe.db.get_value(NODE, f"{PFX}SEED", "status"), "Tắt")
+
+	def test_not_called_on_migrate(self):
+		import inspect
+
+		from omni_crm import install
+
+		self.assertNotIn("seed", inspect.getsource(install.after_migrate))
 
 	def test_seed_files_include_extra(self):
 		names = [p.name for p in seed_load.seed_files()]
@@ -317,7 +331,13 @@ class TestMenu(FlowCase):
 	def test_kb_answer_auto_send_for_test_identity(self):
 		self.set_service("SPD")
 		self.kb_auto(1)
-		res = {"name": "D1", "action": "Reply", "text": "Dạ, triển khai theo 3 bước ạ.", "group": None}
+		res = {
+			"name": "D1",
+			"action": "Reply",
+			"text": "Dạ, triển khai theo 3 bước ạ.",
+			"group": None,
+			"flags": "info:a",
+		}
 		with mock.patch.object(menu, "kb_draft", return_value=res):
 			self.say("triển khai mất bao lâu?", "KB_HOI")
 		self.assertEqual(self.sent(), ["KB_ANSWER", "HOITIEP_SPD"])
@@ -362,24 +382,86 @@ class TestMenu(FlowCase):
 		self.assertEqual((self.sent(), len(self.handoffs)), ([], 1))
 		self.reset()
 		self.say("đừng nhắn nữa", "HUY_DANGKY")
-		self.assertEqual(self.sent(), ["C4_HUYDANGKY"])
+		self.assertEqual(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"), 1)
 
 	def test_k3_handoff_module_hooks(self):
-		starts = []
-		fake = types.ModuleType("omni_crm.script.flows.handoff")
-		fake.REASON_COMPLAINT, fake.REASON_MISUNDERSTOOD = "complaint", "misunderstood"
-		fake.is_stop_phrase = lambda text: text == "hủy đăng ký"
-		fake.start = lambda ctx, service=None, reason="", task_only=False: starts.append((service, reason))
-		with mock.patch.dict(sys.modules, {"omni_crm.script.flows.handoff": fake}):
-			self.set_service("SPD")
-			self.say("làm ăn chán quá", "PHAN_NAN")
-			for text in ("a", "b", "c"):
-				self.say(text)
-			self.assertEqual(starts, [("SPD", "complaint"), ("SPD", "misunderstood")])
-			calls = self.classify.call_count
-			self.turn("hủy đăng ký")  # câu dừng nhắn: không qua AI
-			self.assertEqual(self.sent()[-1], "C4_HUYDANGKY")
-			self.assertEqual(self.classify.call_count, calls)
+		self.set_service("SPD")
+		self.say("làm ăn chán quá", "PHAN_NAN")
+		for text in ("a", "b", "c"):
+			self.say(text)
+		self.assertEqual(
+			self.handoffs,
+			[("start", k3_handoff.REASON_COMPLAINT), ("start", k3_handoff.REASON_MISUNDERSTOOD)],
+		)
+		calls = self.classify.call_count
+		self.turn("hủy đăng ký")  # câu dừng nhắn rõ ràng: không qua AI, K3 dừng hẳn
+		self.assertEqual(self.classify.call_count, calls)
+		self.assertEqual(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"), 1)
+
+	def test_khong_can_is_polite_decline_never_stop(self):
+		self.assertFalse(k3_handoff.is_stop_phrase("không cần"))
+		self.assertTrue(k3_handoff.is_stop_phrase("đừng nhắn nữa"))
+		state.set_node(self.ident1, "HOITIEP_SPD", "2")
+		frappe.db.commit()
+		self.say("không cần", "HUY_DANGKY")
+		self.assertEqual(self.sent(), ["KHONG_CAMON"])
+		self.reset()
+		state.update_state(self.ident1, flow=k3_handoff.FLOW_PHONE, handoff={"task": None})
+		frappe.db.commit()
+		self.turn("không")  # không cho số: giữ việc chuyển người, gửi câu kết
+		self.assertEqual(self.sent(), ["GAP_NV_CAUKET"])
+		self.assertIsNone(self.sstate().get("flow"))
+		self.assertFalse(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"))
+
+	def test_spam_silent_flag_no_do_not_contact(self):
+		before = frappe.db.count("Comment", {"reference_name": self.lead1})
+		self.assertTrue(self.say("mua follow giá rẻ http://x.example", "SPAM"))
+		self.assertEqual(self.sent(), [])
+		row = frappe.db.get_value("CRM Lead", self.lead1, ["omni_do_not_contact", "status"], as_dict=True)
+		self.assertFalse(row.omni_do_not_contact)
+		self.assertNotEqual(row.status, "Junk")
+		self.assertEqual(frappe.db.count("Comment", {"reference_name": self.lead1}), before + 1)
+		self.say("SPD là gì?", "MENU_SPD")  # lượt sau bot vẫn trả lời bình thường
+		self.assertEqual(self.sent(), ["MENU_SPD"])
+
+	def test_then_to_unsendable_node_falls_back(self):
+		make_node(f"{PFX}A", text="Câu A", action=f"then:{PFX}OFF")
+		make_node(f"{PFX}OFF", text="Câu tắt", status="Tắt")
+		self.tap(f"{PFX}A")
+		self.assertEqual(self.sent(), [f"{PFX}A"])
+		self.assertEqual(self.handoffs, [("task", f"{PFX}OFF")])
+
+	def test_typed_button_label_and_resend_limit(self):
+		self.tap("MENU_SPD")
+		self.turn("nhan tai lieu")  # gõ đúng chữ trên nút (không dấu) = bấm nút
+		self.assertEqual(self.sent(), ["MENU_SPD", "TAILIEU_SPD"])
+		self.classify.assert_not_called()
+		self.turn("bảng so sánh chi phí")  # 3.1: tài liệu chọn bằng nút hoặc gõ
+		self.assertEqual(self.sent()[-1], "HOI_EMAIL_TAILIEU")
+		self.assertEqual(self.sstate()["tai_lieu"], "bảng so sánh chi phí")
+		self.reset()
+		self.tap("MENU_SPD")
+		for _i in range(3):  # khách gõ mãi cùng một ý: cùng một ô không gửi lại vô hạn
+			self.say("SPD là sao nhỉ", "MENU_SPD")
+		self.assertEqual(self.sent().count("MENU_SPD"), 2)
+		self.assertGreaterEqual(len(self.handoffs), 1)
+
+	def test_kb_auto_send_refused_on_guard_flag(self):
+		self.kb_auto(1)
+		res = {
+			"name": "D1",
+			"action": "Reply",
+			"text": "Dạ có ạ.",
+			"group": None,
+			"flags": "nghi_gia\ninfo:x",
+		}
+		with (
+			mock.patch.object(menu, "kb_draft", return_value=res),
+			mock.patch.object(menu, "_to_sale_draft", return_value=False),
+		):
+			self.say("triển khai mất bao lâu?", "KB_HOI")
+		self.assertNotIn("KB_ANSWER", self.sent())
+		self.assertEqual(self.sent(), ["KB_CHUYENVIEN"])
 
 	def test_no_thanks_typed_is_not_unsubscribe(self):
 		state.set_node(self.ident1, "TL_HOITHEM", "3")
@@ -412,11 +494,7 @@ class TestMenu(FlowCase):
 			self.assertEqual(reply._reply_batch(self.last_batch), "script")
 		self.assertEqual(self.sent(), ["MENU_SPD"])
 
-	def test_repeat_tap_and_multi_tap(self):
-		self.tap("MENU_SPD")
-		self.tap("MENU_SPD")  # bấm lặp trong 30 giây
-		self.assertEqual(self.sent(), ["MENU_SPD"])
-		self.reset()
+	def test_multi_tap_only_last(self):
 		self.turn("#MENU_VATTU", "#MENU_PHANMEM", "#MENU_SPD")  # nhiều nút trong một lượt: chỉ nút cuối
 		self.assertEqual(self.sent(), ["MENU_SPD"])
 

@@ -41,6 +41,12 @@ SUFFIX = {
 DEFAULT_PRIVACY_URL = "miyano.com.vn/chinh-sach-bao-mat"  # URL nguyên văn kịch bản 3.4
 OPTIONAL_VARS = {"ten"}  # biến được phép trống khi gửi
 QUOTE_NO_SERVICE = "BAOGIA_HOISANPHAM"
+FORCED_ASK = ("NL_DOIEMAIL", "NL_BG_DOIEMAIL")  # "Đổi email khác": luôn hỏi (= collect.FORCED_NODES)
+MAX_NAME = 20
+MAX_RESEND = (
+	2  # tin gõ: cùng một ô không gửi quá 2 lần liên tiếp (chống lặp vô hạn), lần sau chuyển nhân viên
+)
+FELL_BACK_KEY = "_fell_back"
 MAX_DEPTH = 8  # chặn vòng lặp then/goto
 REST_KEY, DEPTH_KEY = "_rest", "_depth"  # ô nhớ tạm trên ctx.state trong lúc chạy chuỗi action
 _VAR = re.compile(r"\{(\w+)\}")
@@ -73,23 +79,34 @@ def variables(ctx: RouteContext, extra: dict | None = None) -> dict:
 	email = lead.get("email") or ""
 	phone = validate.phone_local(lead.get("mobile_no") or lead.get("phone") or "")
 	missing = [w for w, v in ((_("email"), email), (_("số điện thoại"), phone)) if not v]
+	# lời khách gõ không bao giờ được chèn lại vào tin bot: tài liệu khách tự ghi -> cụm trung tính
+	doc_name = st.get("tai_lieu") or ""
+	if doc_name and st.get("tai_lieu_typed"):
+		doc_name = _("tài liệu anh/chị yêu cầu")
 	out = {
-		"ten": st.get("ten") or "",
+		"ten": safe_name(st.get("ten")),
 		"dich_vu": service_label(current_service(ctx)),
 		"ngay_lam_viec_tiep_theo": next_day,
 		"thoi_diem": next_day if timeutil.cutoff_1630(now) else _("trong hôm nay"),
 		"email": email,
 		"sdt": phone,
-		"tai_lieu": st.get("tai_lieu") or "",
+		"tai_lieu": doc_name,
 		"tai_lieu_bao_gia": _("báo giá")
 		if (st.get("branch") or st.get("last_branch")) == "3b"
-		else (st.get("tai_lieu") or _("tài liệu")),
+		else (doc_name or _("tài liệu")),
 		"thong_tin_con_thieu": _(" và ").join(missing),
 		"chinh_sach_bao_mat": (switch.setting("script_privacy_url") or "").strip() or DEFAULT_PRIVACY_URL,
 		"kenh_chat": _channel_type(ctx.channel),
 	}
 	out.update(extra or {})
 	return out
+
+
+def safe_name(value: str | None) -> str:
+	"""`{ten}` an toàn để chèn vào câu: chỉ chữ cái (và khoảng trắng), tối đa 20 ký tự; khác thì để trống."""
+	name = " ".join(str(value or "").split())
+	ok = bool(name) and len(name) <= MAX_NAME and all(ch.isalpha() or ch == " " for ch in name)
+	return name if ok else ""
 
 
 def script_state(ctx: RouteContext) -> dict:
@@ -184,6 +201,7 @@ def run_button(ctx: RouteContext, code: str) -> bool:
 
 def fallback(ctx: RouteContext, code: str | None = None, arg: str = "") -> bool:
 	"""Không bao giờ im lặng: gọi lệnh `handoff` nếu đã đăng ký, không thì gửi lại `MENU_CHINH`."""
+	ctx.state[FELL_BACK_KEY] = True
 	fn = _actions.get("handoff")
 	if fn is not None:
 		node = store.get_node(resolve(ctx, code)) if code else None
@@ -212,32 +230,49 @@ def _run(ctx: RouteContext, code: str | None, extra: dict | None, depth: int) ->
 		return False
 	cmds = split_actions(node["action"])
 	has_text = bool(node["text"].strip())
-	if has_text and _collect_known(ctx, cmds):  # 3.1: thông tin đã có thì không hỏi lại
+	if (
+		has_text and code not in FORCED_ASK and _collect_known(ctx, cmds)
+	):  # 3.1: thông tin đã có thì không hỏi lại
 		skipped = [("collect_skipped", a) if n == "collect" else (n, a) for n, a in cmds]
 		return run_actions(ctx, skipped, node, depth)
 	if has_text:
 		values = variables(ctx, extra)
 		if missing_vars(node["text"], values):
 			return False
+		repeat = _repeat_count(ctx, code)
+		if repeat >= MAX_RESEND:
+			return False
 		if not send.send_node(ctx.identity, code, values):
 			return False
-		router._mark(
-			ctx.batch_id
-		)  # đã có tin gửi khách: luồng Reply cũ không được trả lời thêm dù handler lỗi sau đó
+		router._mark(ctx.batch_id)  # đã có tin gửi khách: luồng Reply cũ không được trả lời thêm
 		state.set_node(ctx.identity, code, node["step"] or None)
+		state.update_state(ctx.identity, resend=repeat or None)
 	elif not cmds:
 		return False
 	did = run_actions(ctx, cmds, node, depth)
 	return has_text or did
 
 
+def _repeat_count(ctx: RouteContext, code: str) -> int:
+	"""Số lần liên tiếp ô `code` sắp được gửi lại trong các lượt khách gõ (bấm nút thì không tính)."""
+	if ctx.payload_code:
+		return 0
+	st = state.get(ctx.identity)
+	if st.get("script_node") != code:
+		return 0
+	return int(st["script_state"].get("resend") or 0) + 1
+
+
 def _collect_known(ctx: RouteContext, cmds: list[tuple[str, str]]) -> bool:
+	names = [name for name, _arg in cmds]
 	fields = [arg for name, arg in cmds if name == "collect"]
 	if not fields:
 		return False
 	from omni_crm.script.flows import collect
 
-	return all(collect.known(ctx, f) for f in fields)
+	# `branch:` đứng trước `collect` sẽ xoá câu trả lời cũ: chỉ coi là đã biết khi thông tin nằm trên Lead
+	lead_only = "branch" in names[: names.index("collect")]
+	return all(collect.known(ctx, f, lead_only=lead_only) for f in fields)
 
 
 def _warn_once(name: str) -> None:
@@ -296,8 +331,12 @@ def _answer(ctx: RouteContext, arg: str, node: dict) -> None:
 
 def _then(ctx: RouteContext, arg: str, node: dict) -> None:
 	rest, depth = ctx.state.get(REST_KEY), int(ctx.state.get(DEPTH_KEY) or 0)
-	_run(ctx, arg, None, depth + 1)
+	ok = _run(ctx, arg, None, depth + 1)
 	ctx.state[REST_KEY], ctx.state[DEPTH_KEY] = rest, depth
+	if not ok and not ctx.state.get(FELL_BACK_KEY):
+		fallback(
+			ctx, arg, "task"
+		)  # ô kế không gửi được (Tắt, Cần duyệt, thiếu biến): không để khách chờ trong im lặng
 
 
 def _goto(ctx: RouteContext, arg: str, node: dict) -> bool:

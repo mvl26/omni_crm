@@ -54,6 +54,16 @@ DISCOUNT = re.compile(
 _NAME_SPLIT = re.compile(r"\s*[,;\n]\s*|\s+[-–]\s+")  # noqa: RUF001 (gạch ngang dài khách hay gõ)
 
 
+FORCE_MARK = "!"
+FORCED_NODES = ("NL_DOIEMAIL", "NL_BG_DOIEMAIL")  # "Đổi email khác": luôn hỏi email mới dù Lead đã có
+OWN_TASK_KINDS = ("docs", "quote", "resend_docs", "resend_quote")
+LEAVE_CODES = (
+	"GAP_NHANVIEN",
+	"CAN_NGUOI",
+	"HUY_DANGKY",
+	"XOA_DULIEU",
+	"PHAN_NAN",
+)  # ý rõ ràng: rời câu đang hỏi
 MIRROR_KEYS = (
 	"items",
 	"quantity",
@@ -77,11 +87,16 @@ def reset_answers(identity: str, **values) -> None:
 # --- Tra cứu ---------------------------------------------------------------------------------------------------
 
 
-def known(ctx: RouteContext, field: str) -> bool:
-	"""Thông tin `field` đã có (trên Lead hoặc đã trả lời trong nhánh đang thu) nên không hỏi lại (3.1)."""
+def known(ctx: RouteContext, field: str, lead_only: bool = False) -> bool:
+	"""Thông tin `field` đã có (trên Lead hoặc đã trả lời trong nhánh đang thu) nên không hỏi lại (3.1).
+
+	`field` kết thúc bằng `!` (vd `email!`) = luôn hỏi. `lead_only`: không tính câu trả lời tạm của nhánh.
+	"""
 	field = (field or "").strip().lower()
+	if field.endswith(FORCE_MARK):
+		return False
 	st = engine.script_state(ctx)
-	answers = store.as_dict(st.get("answers"))
+	answers = {} if lead_only else store.as_dict(st.get("answers"))
 	if field in answers or f"{field}_raw" in answers or f"{field}_declined" in answers:
 		return True
 	lead = _lead(ctx.lead)
@@ -109,12 +124,18 @@ def start(ctx: RouteContext, field: str, node: dict, rest: list) -> bool:
 	state.update_state(
 		ctx.identity,
 		flow=FLOW,
-		field=(field or "").strip().lower(),
+		field=(field or "").strip().lower().rstrip(FORCE_MARK),
+		force=1 if forced(field, node) else None,
 		node=node.get("code"),
 		pending=engine.join_actions(rest),
 		wrong=0,
 	)
 	return True
+
+
+def forced(field: str, node: dict | None) -> bool:
+	"""Câu hỏi phải hỏi dù thông tin đã có: `collect:email!` hoặc ô "Đổi email khác"."""
+	return (field or "").strip().endswith(FORCE_MARK) or (node or {}).get("code") in FORCED_NODES
 
 
 def after_skip(ctx: RouteContext, field: str, node: dict, rest: list) -> bool | None:
@@ -125,7 +146,7 @@ def after_skip(ctx: RouteContext, field: str, node: dict, rest: list) -> bool | 
 	return True
 
 
-def save_answer(ctx: RouteContext, field: str, value: str) -> None:
+def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) -> None:
 	"""Lưu câu trả lời (nút bấm hoặc khách gõ) vào `script_state.answers`; khách đã trả lời nên thôi chờ câu đó."""
 	field = field.strip().lower()
 	st = engine.script_state(ctx)
@@ -136,10 +157,11 @@ def save_answer(ctx: RouteContext, field: str, value: str) -> None:
 		values[field] = answers[field]
 	if field == "tai_lieu":
 		values["tai_lieu"] = answers[field]
+		values["tai_lieu_typed"] = 1 if typed else None  # khách tự gõ: không chèn nguyên văn vào tin bot
 	if field == "name_org":
 		values.update(_name_org(ctx, answers[field]))
 	if st.get("flow") == FLOW and st.get("field") == field:
-		values.update(flow=None, field=None, node=None, pending=None, wrong=None)
+		values.update(flow=None, field=None, node=None, pending=None, wrong=None, force=None)
 	state.update_state(ctx.identity, **values)
 
 
@@ -182,6 +204,9 @@ def on_text(ctx: RouteContext) -> bool:
 	if not field or (not text and not ctx.attachments):
 		return False
 	node = store.get_node(st.get("node")) or {}
+	declining = field in CONTACT_FIELDS and len(text) <= DECLINE_MAX_LEN and bool(DECLINE.search(text))
+	if text and not declining and _leave_for_intent(ctx, text):
+		return False
 	before = _bot_mark(ctx)
 	if field in CONTACT_FIELDS:
 		if not _contact(ctx, st, field, node, text):
@@ -194,7 +219,7 @@ def on_text(ctx: RouteContext) -> bool:
 		value = text or _("(khách gửi tệp)")
 		if ctx.attachments:
 			remember_files(ctx)
-		save_answer(ctx, field, value)
+		save_answer(ctx, field, value, typed=True)
 		_advance(ctx, st, node)
 	state.reset_reask(ctx.identity)
 	if _bot_mark(ctx) == before and not engine.script_state(ctx).get("flow"):
@@ -202,10 +227,27 @@ def on_text(ctx: RouteContext) -> bool:
 	return True
 
 
+def _leave_for_intent(ctx: RouteContext, text: str) -> bool:
+	"""Khách đang được hỏi mà nói rõ ý khác (gặp người, phàn nàn, dừng nhắn…): rời câu hỏi, định tuyến ý đó."""
+	try:
+		from omni_crm.script import classify
+
+		hit = classify.classify_by_rules(text)
+	except Exception:
+		return False
+	if not hit or hit[0] not in LEAVE_CODES:
+		return False
+	from omni_crm.script.flows import menu
+
+	_clear_flow(ctx)
+	ctx.state[menu.CLASSIFIED_KEY] = (hit[0], float(hit[1] or 1.0))
+	return True
+
+
 def _contact(ctx: RouteContext, st: dict, field: str, node: dict, text: str) -> bool:
 	email, phone = validate.find_email(text), validate.find_phone(text)
 	if email or phone:
-		_save_contact(ctx, email, phone)
+		_save_contact(ctx, email, phone, force=bool(st.get("force")))
 	if {"email": email, "phone": phone}[field]:
 		_advance(ctx, st, node)
 		return True
@@ -250,8 +292,10 @@ def _set_answer(ctx: RouteContext, key: str, value) -> None:
 	state.update_state(ctx.identity, answers=answers)
 
 
-def _save_contact(ctx: RouteContext, email: str | None, phone: str | None) -> None:
-	"""Ghi email/SĐT hợp lệ vào Lead (không ghi đè); lần đầu khách để lại liên hệ thì gửi câu chính sách bảo mật."""
+def _save_contact(ctx: RouteContext, email: str | None, phone: str | None, force: bool = False) -> None:
+	"""Ghi email/SĐT hợp lệ vào Lead (không ghi đè, trừ "Đổi email khác"); lần đầu thì gửi câu chính sách bảo mật."""
+	if ctx.lead and force and email:
+		_replace_email(ctx, email)
 	if ctx.lead:
 		with flags.omni_bot():
 			lead_bridge.fill_blank_contact(ctx.lead, phone, email)
@@ -264,8 +308,27 @@ def _save_contact(ctx: RouteContext, email: str | None, phone: str | None) -> No
 		validate.mask_email(email) if email else "-",
 		validate.mask_phone(phone) if phone else "-",
 	)
-	if ctx.lead and not _lead(ctx.lead).get("omni_data_consent_at"):
-		engine.run_node(ctx, NODE_PRIVACY)  # action `consent` ghi omni_data_consent_at
+	note_consent(ctx)
+
+
+def note_consent(ctx: RouteContext) -> bool:
+	"""Lần đầu khách để lại email/SĐT: gửi câu chính sách bảo mật (3.4), action `consent` ghi `omni_data_consent_at`."""
+	if not ctx.lead or _lead(ctx.lead).get("omni_data_consent_at"):
+		return False
+	return engine.run_node(ctx, NODE_PRIVACY)
+
+
+def _replace_email(ctx: RouteContext, email: str) -> None:
+	"""Khách đổi email: ghi email mới (đã kiểm định dạng) lên Lead, giữ email cũ trong câu trả lời cho nhân viên."""
+	old = frappe.db.get_value(LEAD, ctx.lead, "email") or ""
+	if old.strip().lower() == email.strip().lower():
+		return
+	row = frappe.db.get_value(LEAD, ctx.lead, ["mobile_no", "phone"], as_dict=True) or {}
+	_phone_norm, email_norm = lead_bridge.normalized_fields(row.get("mobile_no"), row.get("phone"), email)
+	with flags.omni_bot():
+		frappe.db.set_value(LEAD, ctx.lead, {"email": email, "omni_email_norm": email_norm})
+	if old:
+		_set_answer(ctx, "email_old", old)
 
 
 def _declined(ctx: RouteContext, st: dict, field: str, node: dict) -> None:
@@ -286,7 +349,7 @@ def _declined(ctx: RouteContext, st: dict, field: str, node: dict) -> None:
 
 
 def _clear_flow(ctx: RouteContext) -> None:
-	state.update_state(ctx.identity, flow=None, field=None, node=None, pending=None, wrong=None)
+	state.update_state(ctx.identity, flow=None, field=None, node=None, pending=None, wrong=None, force=None)
 
 
 def _advance(ctx: RouteContext, st: dict, node: dict) -> None:
@@ -325,7 +388,7 @@ def finish(ctx: RouteContext) -> bool:
 	if branch not in BRANCHES:
 		return False
 	ctx.state[TASK_FLAG] = False
-	if branch == "3b" and _lead(ctx.lead).get("email") and _quote_flow(ctx):
+	if branch == "3b" and _quote_flow(ctx):
 		return True
 	late = timeutil.cutoff_1630(now_datetime())
 	if not engine.run_node(ctx, CONFIRM_NODES[branch][1 if late else 0]):
@@ -363,7 +426,7 @@ def task_action(ctx: RouteContext, arg: str, node: dict) -> None:
 	st = engine.script_state(ctx)
 	branch = st.get("branch")
 	kind = (arg or "").strip().lower() or TASK_KINDS.get(branch, "")
-	if kind not in TASK_KINDS.values():
+	if kind not in OWN_TASK_KINDS:
 		other = engine._actions.get(
 			"task"
 		)  # loại khác (purchasing, urgent…) thuộc phần việc khác nếu đã đăng ký
@@ -421,6 +484,7 @@ ANSWER_LABELS = {
 	"spd_value": "Giá trị vật tư mỗi tháng",
 	"adjust": "Khách muốn điều chỉnh",
 	"order_info": "Số đơn / nội dung cần hỗ trợ",
+	"email_old": "Email cũ (khách vừa đổi)",
 	"email_raw": "Email khách gõ (sai định dạng, cần kiểm tra)",
 	"phone_raw": "SĐT khách gõ (sai định dạng, cần kiểm tra)",
 	"email_declined": "Khách không để lại email",

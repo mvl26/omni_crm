@@ -17,6 +17,7 @@ from omni_crm.script.router import RouteContext
 LEAD = "CRM Lead"
 NODE_PROMISE_IN_HOURS = "BG_XACNHAN_TRONGGIO"
 NODE_PROMISE_AFTER_HOURS = "BG_XACNHAN_NGOAIGIO"
+NODE_PROMISE_NO_EMAIL = "XACNHAN_KHONG_EMAIL"
 J_CONSULT = "Đang tư vấn"
 EARLY_JOURNEYS = (None, "", "Mới", J_CONSULT)  # chỉ ghi "Đang tư vấn" khi Lead chưa đi xa hơn
 STEP = "3"
@@ -44,6 +45,16 @@ def _answers(identity: str) -> list[str]:
 	]
 
 
+def _collected(ctx: RouteContext) -> str:
+	"""Mọi thông tin K4 đã thu (câu trả lời, tên/đơn vị, email, SĐT, tệp); K4 chưa có thì chỉ các câu trả lời."""
+	try:
+		from omni_crm.script.flows import collect
+
+		return collect.build_description(ctx, "quote")
+	except Exception:
+		return "\n".join(_answers(ctx.identity))
+
+
 def fallback_to_staff(ctx: RouteContext, service: str | None, why: str = "") -> str | None:
 	"""Nhân viên báo giá thay bot: gửi câu hẹn (3.5) và tạo việc; trả tên CRM Task (một lần cho mỗi lượt tin)."""
 	if state.get(ctx.identity)["script_state"].get("quote_task_batch") == ctx.batch_id:
@@ -51,13 +62,18 @@ def fallback_to_staff(ctx: RouteContext, service: str | None, why: str = "") -> 
 	svc = pricing.normalize_service(service) or postdemo.service_of(ctx.lead)
 	code = NODE_PROMISE_AFTER_HOURS if timeutil.cutoff_1630(now_datetime()) else NODE_PROMISE_IN_HOURS
 	email = (frappe.db.get_value(LEAD, ctx.lead, "email") if ctx.lead else "") or ""
-	if send.send_node(ctx.identity, code, postdemo.flow_vars(ctx, {"email": email})):
+	sent = bool(email) and bool(send.send_node(ctx.identity, code, postdemo.flow_vars(ctx, {"email": email})))
+	if sent:
 		state.set_node(ctx.identity, code, STEP)
+	else:  # không có email / ô hẹn không gửi được: câu hẹn không nêu email, khách vẫn phải nhận được tin
+		sent = bool(send.send_node(ctx.identity, NODE_PROMISE_NO_EMAIL, engine.variables(ctx)))
 	if ctx.lead and frappe.db.get_value(LEAD, ctx.lead, "omni_journey_status") in EARLY_JOURNEYS:
 		state.set_journey(ctx.lead, J_CONSULT)
-	lines = [_("Bot chưa tự báo giá, nhân viên báo giá cho khách."), why, *_answers(ctx.identity)]
+	lines = [_("Bot chưa tự báo giá, nhân viên báo giá cho khách."), why, _collected(ctx)]
 	task = postdemo.create_task(ctx.lead, svc, _("Báo giá cho khách"), "\n".join(x for x in lines if x))
 	state.update_state(ctx.identity, quote_task_batch=ctx.batch_id)
+	if not sent:
+		engine.fallback(ctx, code, "task")
 	return task
 
 
