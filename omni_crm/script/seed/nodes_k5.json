@@ -1,0 +1,15 @@
+[
+  {
+    "code": "DEMO_XACNHAN_KHONGEMAIL",
+    "title": "Demo – xác nhận lịch (chưa có email)",
+    "step": "4",
+    "service": "",
+    "channel": "Tất cả",
+    "status": "Cần duyệt",
+    "text": "Dạ, Miyano xác nhận lịch demo {dich_vu}: {thu_ngay}, {gio_bat_dau}–{gio_ket_thuc}, hình thức {hinh_thuc}. Nhân viên Miyano sẽ liên hệ anh/chị để gửi lời mời và đường link tham gia trước buổi demo. Miyano sẽ nhắc anh/chị trước buổi demo ạ.",
+    "buttons": [],
+    "action": "",
+    "source_ref": "4.4",
+    "notes": "K5: biến thể của DEMO_XACNHAN_THUCONG khi Lead chưa có email (không có biến {email}) – câu do agent soạn. flows/demo.py gửi trực tiếp nên không có action."
+  }
+]

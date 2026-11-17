@@ -14,7 +14,9 @@ from unittest import mock
 import frappe
 from frappe.utils import get_datetime
 
+import omni_crm.script.flows as flows_pkg
 from omni_crm.script import engine, router, scheduler, state
+from omni_crm.script import tasks as real_tasks
 from omni_crm.script.flows import demo
 from omni_crm.script.router import RouteContext
 from omni_crm.tests.test_inbox import SALE1
@@ -36,7 +38,7 @@ class DemoCase(K5Case):
 		self.set_switch(enabled=0, tests=self.ident1)  # ô "Cần duyệt" chỉ gửi cho danh sách thử
 		self.handoff = types.ModuleType("omni_crm.script.flows.handoff")
 		self.handoff.start = mock.Mock()
-		self.start(mock.patch.dict(sys.modules, {"omni_crm.script.flows.handoff": self.handoff}))
+		self.fake_module(flows_pkg, "handoff", self.handoff)
 		self.user = self.start(mock.patch.object(demo, "demo_user", return_value=SALE1))
 		self.addCleanup(self._demo_cleanup)
 
@@ -118,6 +120,13 @@ class TestSlots(DemoCase):
 		self.assertFalse(demo.is_free(datetime(2026, 11, 23, 9, 0), SALE1, THU_10, CFG))  # ngày lễ
 		self.assertFalse(demo.is_free(at(FRI, 19), SALE1, THU_10, CFG))  # ngoài giờ
 		self.assertFalse(demo.is_free(datetime(2026, 11, 19, 9, 0), SALE1, THU_10, CFG))  # đã qua
+		self.assertFalse(demo.is_free(datetime(2026, 11, 19, 11, 0), SALE1, THU_10, CFG))  # còn dưới 2 giờ
+		self.assertFalse(demo.is_free(datetime(2027, 1, 12, 9, 0), SALE1, THU_10, CFG))  # xa hơn 45 ngày
+		self.assertFalse(demo.is_free(at(FRI, 11, 45), SALE1, THU_10, CFG))  # chạm giờ nghỉ trưa
+		self.assertFalse(demo.is_free(at(FRI, 13), SALE1, THU_10, CFG))
+		with_saturday = ({**CFG[0], 5: CFG[0][0]}, frozenset())
+		self.assertFalse(demo.is_free(datetime(2026, 11, 21, 9, 0), SALE1, THU_10, with_saturday))
+		self.assertNotIn(21, [s.day for s in demo.free_slots(THU_10, SALE1, with_saturday)])
 		self.assertEqual(demo.next_free(at(FRI, 9), SALE1, THU_10, CFG), at(FRI, 10))
 		self.assertEqual(demo.next_free(datetime(2026, 11, 21, 9, 0), SALE1, THU_10, CFG), at(TUE, 8))
 
@@ -197,11 +206,38 @@ class TestBooking(DemoCase):
 		self.assertEqual(len(pending), 3)
 		self.assertEqual(get_datetime(pending["demo_remind_1h"].due_at), at(WED, 13))
 
+	def test_release_closes_invite_task_and_keeps_staff_events(self):
+		self.tasks.create_task = real_tasks.create_task  # CRM Task thật để kiểm việc được đóng
+		self.tasks.append_note = real_tasks.append_note
+		staff_event = frappe.get_doc(
+			{
+				"doctype": EVENT,
+				"subject": "TK5 nhân viên tự hẹn",
+				"event_type": "Private",
+				"starts_on": at(WED, 10),
+				"reference_doctype": LEAD,
+				"reference_docname": self.lead1,
+			}
+		).insert(ignore_permissions=True)
+		out = demo.book(self.ident1, self.lead1, at(TUE, 9), "Online qua Teams", 2, "SUPPLYCORE", now=THU_10)
+		self.assertEqual(frappe.db.get_value("CRM Task", out["task"], "status"), "Todo")
+		demo.release(self.ident1, self.lead1, "Khách hủy lịch demo", journey="Đang tư vấn")
+		task = frappe.db.get_value("CRM Task", out["task"], ["status", "description"], as_dict=True)
+		self.assertEqual(task.status, "Canceled")
+		self.assertIn("không còn hiệu lực", task.description)
+		self.assertEqual(frappe.db.get_value(EVENT, out["event"], "status"), "Cancelled")
+		self.assertEqual(
+			frappe.db.get_value(EVENT, staff_event.name, "status"), "Open"
+		)  # không đụng Event nhân viên
+		self.assertEqual(self.journey(), "Đang tư vấn")
+		self.alerts.assert_called()  # báo người demo + Omni Admin
+		self.assertIn(SALE1, self.alerts.call_args.args[0].users)
+
 	def test_no_demo_person_still_books_and_reports_in_task(self):
 		self.user.return_value = None
 		out = demo.book(self.ident1, self.lead1, at(TUE, 9), "Online qua Teams", None, "SPD", now=THU_10)
 		self.assertIsNone(out["user"])
-		self.assertTrue(frappe.db.exists(EVENT, out["event"]))
+		self.assertEqual(frappe.db.get_value(EVENT, out["event"], "event_type"), "Private")
 		self.assertEqual(len(self.pending()), 3)
 		self.assertIn("Chưa cấu hình người demo", self.tasks.created[0]["description"])
 
@@ -304,10 +340,53 @@ class TestFlow(DemoCase):
 		self.assertEqual(self.pending(), {})
 		self.assertEqual(frappe.db.count(EVENT, {"reference_docname": self.lead1, "status": "Open"}), 0)
 		self.assertIsNone(frappe.db.get_value(LEAD, self.lead1, "omni_demo_at"))
+		self.assertEqual(self.journey(), "Đang tư vấn")  # rời "Đã hẹn demo" ngay khi khách hủy
 		demo.handle(self.ctx("DEMO_HUY_BAN"))
 		self.assertEqual(self.nodes_sent()[-2:], ["DEMO_HUY", "DEMO_HUY_CAMON"])
 		self.assertEqual(self.journey(), "Chăm sóc lại")
 		self.assertIn("Bận đột xuất", frappe.db.get_value(LEAD, self.lead1, "omni_demo_note"))
+
+	def test_stale_slot_button_reproposes_instead_of_guessing(self):
+		demo.handle(self.ctx("DEMO_HT_ONLINE"))
+		state.update_state(
+			self.ident1, demo_slots_msg="tin-cu-khac"
+		)  # nút bấm không thuộc tin đang lưu khung
+		demo.handle(self.ctx("DEMO_KHUNG_1"))
+		self.assertEqual(self.nodes_sent(), ["DEMO_KHUNGGIO", "DEMO_KHUNGGIO"])
+		self.assertNotIn("demo_at", self.st())
+		demo.handle(self.ctx("DEMO_KHUNG_1"))  # nút của tin mới nhất: nhận
+		self.assertEqual(self.nodes_sent()[-1], "DEMO_SONGUOI")
+
+	def test_confirmation_without_email_uses_variant(self):
+		frappe.db.set_value(LEAD, self.lead1, "email", None)
+		demo.handle(self.ctx("DEMO_HT_ONLINE"))
+		demo.handle(self.ctx("DEMO_KHUNG_1"))
+		demo.on_text(self.ctx(text="2"))
+		demo.on_text(self.ctx(text="không tiện"))  # hỏi lại email một lần
+		demo.on_text(self.ctx(text="để sau"))  # vẫn chốt và xác nhận bằng câu không có {email}
+		self.assertTrue(frappe.db.get_value(LEAD, self.lead1, "omni_demo_at"))
+		self.assertEqual(self.nodes_sent()[-1], "DEMO_XACNHAN_KHONGEMAIL")
+
+	def test_confirmation_not_sent_is_reported_to_staff(self):
+		demo.handle(self.ctx("DEMO_HT_ONLINE"))
+		demo.handle(self.ctx("DEMO_KHUNG_1"))
+		real_send = demo._send
+		with mock.patch.object(
+			demo,
+			"_send",
+			side_effect=lambda c, code, extra=None: None if "XACNHAN" in code else real_send(c, code, extra),
+		):
+			demo.on_text(self.ctx(text="2"))
+		self.assertTrue(frappe.db.get_value(LEAD, self.lead1, "omni_demo_at"))
+		self.assertEqual(len(self.tasks.notes), 1)
+		self.assertIn("CHƯA gửi được câu xác nhận", self.tasks.notes[0][1])
+
+	def test_too_soon_typed_time_goes_to_staff(self):
+		soon = demo._now() + timedelta(hours=1)
+		demo.handle(self.ctx("DEMO_GIOKHAC"))
+		demo.on_text(self.ctx(text=f"{soon.strftime('%d/%m/%Y')} lúc {soon.hour}:{soon.minute:02d}"))
+		self.handoff.start.assert_called_once()
+		self.assertIsNone(frappe.db.get_value(LEAD, self.lead1, "omni_demo_at"))
 
 	def test_vattu_has_no_demo(self):
 		frappe.db.set_value(LEAD, self.lead1, "omni_services", "VATTU")

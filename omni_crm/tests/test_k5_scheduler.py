@@ -14,7 +14,9 @@ from unittest import mock
 import frappe
 from frappe.utils import add_to_date, get_datetime, now_datetime
 
-from omni_crm.script import scheduler, send, timeutil
+import omni_crm.script as script_pkg
+import omni_crm.script.flows as flows_pkg
+from omni_crm.script import scheduler, send, state, timeutil
 from omni_crm.tests.test_k2_core import K2Case
 
 SCHED = "Omni Scheduled Message"
@@ -53,14 +55,17 @@ SEED_CODES = (
 	"DEMO_HUY_BAN",
 	"DEMO_HUY_CAMON",
 	"MENU_VATTU",
+	"DEMO_XACNHAN_KHONGEMAIL",
 )
+SEED_FILES = ("nodes.json", "nodes_k5.json")
 
 
 def seed_nodes(codes=SEED_CODES) -> list[str]:
 	"""Tạo các ô kịch bản thật từ seed nếu site test chưa có; trả danh sách mã vừa tạo (để dọn)."""
-	path = frappe.get_app_path("omni_crm", "script", "seed", "nodes.json")
-	with open(path, encoding="utf-8") as f:
-		seed = {n["code"]: n for n in json.load(f)}
+	seed = {}
+	for filename in SEED_FILES:
+		with open(frappe.get_app_path("omni_crm", "script", "seed", filename), encoding="utf-8") as f:
+			seed.update({n["code"]: n for n in json.load(f)})
 	made = []
 	for code in codes:
 		if frappe.db.exists(NODE, code):
@@ -79,7 +84,11 @@ class FakeTasks(types.ModuleType):
 	def __init__(self):
 		super().__init__("omni_crm.script.tasks")
 		self.created: list[dict] = []
+		self.notes: list[tuple] = []
 		self.recipients: dict = {}
+
+	def append_note(self, task, text):
+		self.notes.append((task, text))
 
 	def create_task(self, lead, service, title, description, due=None, priority="Medium"):
 		self.created.append({"lead": lead, "service": service, "title": title, "description": description})
@@ -103,10 +112,16 @@ class K5Case(K2Case):
 		)
 		self.set_switch(enabled=1)
 		self.tasks = FakeTasks()
-		self.start(mock.patch.dict(sys.modules, {"omni_crm.script.tasks": self.tasks}))
+		self.fake_module(script_pkg, "tasks", self.tasks)
+		self.alerts = self.start(mock.patch("omni_crm.monitoring.alerts.deliver_now", return_value=True))
 		self.start(mock.patch.object(timeutil, "load_config", return_value=CFG))
 		self.start(mock.patch("frappe.enqueue"))
 		frappe.db.commit()
+
+	def fake_module(self, package, name: str, module):
+		"""Thay module con (cả trong sys.modules lẫn thuộc tính của gói, vì `from gói import x` đọc thuộc tính trước)."""
+		self.start(mock.patch.dict(sys.modules, {f"{package.__name__}.{name}": module}))
+		self.start(mock.patch.object(package, name, module, create=True))
 
 	def start(self, patcher):
 		value = patcher.start()
@@ -118,6 +133,7 @@ class K5Case(K2Case):
 		leads = [self.lead1, self.lead2]
 		frappe.db.delete(SCHED, {"lead": ["in", leads]})
 		frappe.db.delete("Event", {"reference_doctype": LEAD, "reference_docname": ["in", leads]})
+		frappe.db.delete("CRM Task", {"reference_doctype": LEAD, "reference_docname": ["in", leads]})
 		for code in self._k5_nodes:
 			frappe.delete_doc(NODE, code, force=True, ignore_permissions=True)
 		for f, v in self._k5_settings.items():
@@ -246,6 +262,7 @@ class TestRunDue(K5Case):
 		self.assertEqual(outs[0].script_node, "NL_TAILIEU")
 		self.assertEqual(outs[0].source, "Bot")
 		self.assertIn("td106mai@example.com", outs[0].text)
+		self.assertIn("anh/chị Mai ạ", outs[0].text)  # {ten} chỉ là tên gọi (từ cuối của "TD106 Mai")
 		self.assertNotIn("{", outs[0].text)
 		self.assertEqual(len(json.loads(outs[0].buttons)), 3)
 		self.assertEqual(frappe.db.get_value(IDENT, self.ident1, "script_node"), "NL_TAILIEU")
@@ -321,10 +338,14 @@ class TestRunDue(K5Case):
 		frappe.db.set_value(IDENT, self.ident1, "last_inbound_at", THU_18 - timedelta(hours=2))
 		payload = {"key": "d", "demo_at": demo_at.isoformat(sep=" ")}
 		hour = self.add("demo_remind_1h", due=THU_18, payload=payload)
-		day = self.add("demo_remind_1d", due=THU_18, payload=payload)
+		other = self.add(
+			"followup_quote", due=THU_18, payload={"key": "q"}
+		)  # loại khác vẫn phải chờ khung giờ
+		frappe.db.set_value(SCHED, other, "creation", THU_18, update_modified=False)
+		frappe.db.commit()
 		scheduler.run_due()
 		self.assertEqual(self.row(hour).status, "Sent")
-		self.assertEqual(self.row(day).status, "Pending")
+		self.assertEqual(self.row(other).status, "Pending")
 		self.assertEqual(sender.call_count, 1)
 		self.assertEqual(sender.call_args.args[1], "DEMO_NHAC_1GIO")
 		self.assertEqual(sender.call_args.kwargs["purpose"], "followup")
@@ -400,9 +421,9 @@ class TestPostdemoHooks(K5Case):
 
 	def fake_postdemo(self, allowed=True):
 		mod = types.ModuleType("omni_crm.script.flows.postdemo")
-		mod.send_lost_3m = mock.Mock(return_value=None)
+		mod.send_lost_3m = mock.Mock(return_value="TASK-3M")
 		mod.sales_allowed = mock.Mock(return_value=allowed)
-		self.start(mock.patch.dict(sys.modules, {"omni_crm.script.flows.postdemo": mod}))
+		self.fake_module(flows_pkg, "postdemo", mod)
 		return mod
 
 	def test_lost_3m_goes_to_postdemo(self):
@@ -414,6 +435,21 @@ class TestPostdemoHooks(K5Case):
 		self.assertEqual(self.row(name).status, "Sent")
 		mod.send_lost_3m.assert_called_once_with(self.lead1)
 		sender.assert_not_called()
+
+	def test_lost_3m_without_zalo_identity_and_no_task(self):
+		self.window_open()
+		mod = self.fake_postdemo()
+		name = scheduler.schedule("lost_3m", None, self.lead1, add_to_date(now_datetime(), minutes=-1), None)
+		frappe.db.commit()
+		scheduler.run_due()
+		self.assertEqual(self.row(name).status, "Sent")  # không cần định danh Zalo
+		mod.send_lost_3m.return_value = None  # postdemo không tạo việc (Lead không còn phù hợp)
+		other = scheduler.schedule(
+			"lost_3m", None, self.lead1, add_to_date(now_datetime(), minutes=-1), None, {"key": "lan2"}
+		)
+		frappe.db.commit()
+		scheduler.run_due()
+		self.assertEqual(self.row(other).status, "Skipped")
 
 	def test_sales_guard_blocks_sales_kinds_only(self):
 		self.window_open()
@@ -451,6 +487,123 @@ class TestPostdemoHooks(K5Case):
 		again = self.add("lost_3m", due=due)
 		self.assertEqual(scheduler.cancel_for(self.lead1, ["lost_3m"]), 1)
 		self.assertEqual(self.row(again).status, "Cancelled")
+
+
+class TestReviewFixes(K5Case):
+	"""Các lỗi do lượt rà soát độc lập nêu (mục 3, 4, 5, 6, 9, 10)."""
+
+	def _demo_row(self, kind, demo_at, now):
+		self.now_is(now)
+		frappe.db.set_value(LEAD, self.lead1, {"omni_demo_at": demo_at, "omni_demo_mode": "Online qua Teams"})
+		frappe.db.set_value(IDENT, self.ident1, "last_inbound_at", now - timedelta(hours=1))
+		return self.add(kind, due=now, payload={"key": kind, "demo_at": demo_at.isoformat(sep=" ")})
+
+	def test_stale_demo_reminders_are_cancelled(self):
+		sender = self.start(mock.patch.object(send, "send_node", return_value="OUT-GIA"))
+		late_hour = self._demo_row("demo_remind_1h", datetime(2026, 11, 19, 9, 30), THU_10)  # demo đã bắt đầu
+		late_day = self._demo_row("demo_remind_1d", datetime(2026, 11, 19, 12, 0), THU_10)  # còn 2 giờ
+		scheduler.run_due()
+		self.assertEqual(self.row(late_hour).status, "Cancelled")
+		self.assertEqual(self.row(late_day).status, "Cancelled")
+		sender.assert_not_called()
+
+	def test_row_due_at_window_end_is_sent_when_slightly_late(self):
+		sender = self.start(mock.patch.object(send, "send_node", return_value="OUT-GIA"))
+		due = datetime(2026, 11, 19, 16, 30)
+		for late, expect in ((10, "Sent"), (25, "Pending")):
+			now = due + timedelta(minutes=late)
+			with mock.patch.object(scheduler, "_now", return_value=now):
+				frappe.db.delete(SCHED, {"lead": self.lead1})
+				frappe.db.set_value(IDENT, self.ident1, "last_inbound_at", due - timedelta(hours=1))
+				name = self.add(due=due, payload={"key": str(late)})
+				frappe.db.set_value(SCHED, name, "creation", due, update_modified=False)
+				frappe.db.commit()
+				scheduler.run_due()
+				self.assertEqual(self.row(name).status, expect, late)
+		self.assertEqual(sender.call_count, 1)
+		self.assertEqual(get_datetime(self.row(name).due_at), datetime(2026, 11, 20, 9, 0))
+
+	def test_saturday_is_never_proactive_even_if_configured(self):
+		with_saturday = ({**CFG[0], 5: (time(8, 0), time(12, 0))}, frozenset())
+		self.start(mock.patch.object(timeutil, "load_config", return_value=with_saturday))
+		sender = self.start(mock.patch.object(send, "send_node", return_value="OUT-GIA"))
+		sat = datetime(2026, 11, 21, 10, 0)
+		self.now_is(sat)
+		frappe.db.set_value(IDENT, self.ident1, "last_inbound_at", sat - timedelta(hours=1))
+		name = self.add(due=sat - timedelta(minutes=5))
+		frappe.db.set_value(SCHED, name, "creation", sat, update_modified=False)
+		frappe.db.commit()
+		scheduler.run_due()
+		row = self.row(name)
+		self.assertEqual((row.status, get_datetime(row.due_at)), ("Pending", datetime(2026, 11, 23, 9, 0)))
+		sender.assert_not_called()
+		# thứ Sáu 10:00 + 1 ngày làm việc = thứ Hai (không rơi vào thứ Bảy)
+		self.assertEqual(
+			scheduler.working_days_after(datetime(2026, 11, 20, 10, 0), 1, with_saturday),
+			datetime(2026, 11, 23, 10, 0),
+		)
+
+	def test_chat_not_queued_falls_back_to_staff_task(self):
+		self.window_open()
+		self.start(mock.patch.object(send, "send_node", return_value=None))
+		name = self.add()
+		scheduler.run_due()
+		row = self.row(name)
+		self.assertEqual(row.status, "Sent")
+		self.assertIn("Đã giao nhân viên", row.reason)
+		self.assertEqual(len(self.tasks.created), 1)
+		self.alerts.assert_not_called()
+
+	def test_chat_only_kind_not_queued_is_failed_with_alert(self):
+		self.start(mock.patch.object(send, "send_node", return_value=None))
+		name = self._demo_row("demo_remind_1h", datetime(2026, 11, 19, 11, 0), THU_10)
+		scheduler.run_due()
+		self.assertEqual(self.row(name).status, "Failed")
+		self.assertEqual(self.tasks.created, [])
+		self.alerts.assert_called_once()
+
+	def test_error_after_message_committed_keeps_sent(self):
+		self.window_open()
+		self.start(mock.patch.object(state, "set_node", side_effect=RuntimeError("lỗi sau khi gửi")))
+		name = self.add()
+		scheduler.run_due()
+		self.assertEqual(self.row(name).status, "Sent")
+		self.assertEqual(len(self.outs()), 1)
+
+	def test_processing_error_logs_plain_traceback_and_alerts(self):
+		self.window_open()
+		name = self.add()
+		with (
+			mock.patch.object(scheduler, "_process", side_effect=RuntimeError("hỏng")),
+			mock.patch.object(frappe, "log_error") as log,
+		):
+			scheduler.run_due()
+		self.assertEqual(self.row(name).status, "Failed")
+		self.assertIn("RuntimeError", log.call_args.kwargs["message"])
+		self.assertNotIn("td106mai@example.com", log.call_args.kwargs["message"])
+		self.alerts.assert_called_once()
+
+	def test_reopened_row_compares_reply_against_rearm_time(self):
+		self.window_open()
+		name = self.add()
+		frappe.db.set_value(
+			SCHED, name, "creation", add_to_date(now_datetime(), hours=-5), update_modified=False
+		)
+		scheduler.cancel_for(self.lead1)
+		self.assertEqual(self.add(), name)  # mở lại: tin khách 10 phút trước là TRƯỚC lúc mở lại
+		scheduler.run_due()
+		self.assertEqual(self.row(name).status, "Sent")
+
+	def test_no_channel_does_not_downgrade_advanced_lead(self):
+		self.window_open()
+		self.chat_expired()
+		frappe.db.set_value(
+			LEAD, self.lead1, {"email": None, "mobile_no": None, "omni_journey_status": "Đã demo"}
+		)
+		name = self.add("followup_quote", payload={"key": "q"})
+		scheduler.run_due()
+		self.assertEqual(self.row(name).status, "Skipped")
+		self.assertEqual(self.journey(), "Đã demo")
 
 
 class TestFastTimers(K5Case):
@@ -539,7 +692,7 @@ class TestSilence(K5Case):
 		self.assertEqual((rows[0].kind, rows[0].status, rows[0].node), ("silence_3d", "Sent", "NHAC3N_B12"))
 		self.assertEqual(len(self.tasks.created), 1)  # hết hạn chat sau 3 ngày -> việc gửi email
 		self.assertIn("phần mềm SupplyCore", self.tasks.created[0]["description"])
-		self.assertEqual(self.journey(), "Chăm sóc lại")
+		self.assertNotEqual(self.journey(), "Chăm sóc lại")  # gửi nhắc không đổi hành trình của Lead
 		self.assertEqual(
 			frappe.db.get_value(IDENT, self.ident1, "script_node"), code
 		)  # khách quay lại: tiếp chỗ dở
