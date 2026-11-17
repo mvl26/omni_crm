@@ -27,10 +27,20 @@ class S3Error(Exception):
 	"""Lỗi kho S3, thông điệp an toàn để hiện cho người dùng (không có secret)."""
 
 
-def enabled() -> bool:
-	"""Công tắc `s3_media_enabled` và đủ cấu hình tối thiểu."""
+def configured() -> bool:
+	"""Đã điền endpoint và bucket (chưa cần bật công tắc): đủ để bấm "Kiểm kho ảnh S3"."""
 	s = frappe.get_cached_doc("Omni Settings")
-	return bool(cint(s.get("s3_media_enabled")) and s.get("s3_endpoint_url") and s.get("s3_bucket"))
+	return bool((s.get("s3_endpoint_url") or "").strip() and (s.get("s3_bucket") or "").strip())
+
+
+def enabled() -> bool:
+	"""Công tắc `s3_media_enabled` đang bật và đã điền endpoint, bucket."""
+	return bool(cint(frappe.get_cached_doc("Omni Settings").get("s3_media_enabled"))) and configured()
+
+
+def verify_tls(value) -> bool:
+	"""Kiểm chứng chỉ TLS: mặc định BẬT khi ô chưa từng được lưu (None/""), chỉ tắt khi đã lưu 0."""
+	return True if value in (None, "") else bool(cint(value))
 
 
 def download_url(file_name: str) -> str:
@@ -59,7 +69,7 @@ def _client():
 		aws_access_key_id=(s.s3_access_key or "").strip(),
 		aws_secret_access_key=s.get_password("s3_secret_key", raise_exception=False) or "",
 		region_name=(s.s3_region or DEFAULT_REGION).strip(),
-		verify=bool(cint(s.s3_verify_tls)),
+		verify=verify_tls(s.get("s3_verify_tls")),
 		config=Config(
 			signature_version="s3v4",
 			s3={"addressing_style": "path"},
@@ -208,9 +218,12 @@ def on_file_delete(doc, method=None) -> None:
 
 
 def check_storage() -> dict:
-	"""Ghi, đọc, xóa một object thử; trả {"ok": True} hoặc ném S3Error. Dùng cho nút trên Omni Settings."""
-	if not enabled():
-		raise S3Error(_("Chưa bật hoặc chưa điền endpoint, bucket của kho ảnh S3"))
+	"""Ghi, đọc, xóa một object thử; trả {"ok": True} hoặc ném S3Error. Dùng cho nút trên Omni Settings.
+
+	Chỉ cần đã điền endpoint và bucket (đã Lưu), KHÔNG cần bật công tắc: kiểm trước rồi mới bật.
+	"""
+	if not configured():
+		raise S3Error(_("Chưa điền Endpoint S3 hoặc Bucket (điền rồi bấm Lưu trước khi kiểm)"))
 	key = f"{(_settings().s3_prefix or DEFAULT_PREFIX).strip().lstrip('/')}_kiem-tra/{frappe.generate_hash(length=8)}.txt"
 	body = b"omni_crm s3 check"
 	put_object(key, body, "text/plain")

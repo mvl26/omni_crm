@@ -25,7 +25,9 @@ from omni_crm.tests.test_marketing_hub import (
 	make_campaign,
 	make_post,
 	make_users,
+	restore_settings,
 	set_settings,
+	snapshot_settings,
 )
 
 POST = "Omni Content Post"
@@ -93,7 +95,7 @@ class S3Case(FrappeTestCase):
 		patcher.start()
 		self.addCleanup(patcher.stop)  # chạy SAU _restore (LIFO): dọn dữ liệu vẫn đi vào kho giả
 		_cleanup_files()
-		self._saved = {k: frappe.db.get_single_value("Omni Settings", k) for k in KEYS}
+		self._saved = snapshot_settings(KEYS)
 		self.addCleanup(self._restore)
 		make_users()
 		if not frappe.db.exists("User", NOBODY):
@@ -112,7 +114,7 @@ class S3Case(FrappeTestCase):
 
 	def _restore(self):
 		_cleanup_files()
-		set_settings(**self._saved)
+		restore_settings(self._saved)
 		frappe.db.commit()
 
 	def _post_with_image(self, code="td30-b01"):
@@ -202,6 +204,9 @@ class TestDownloadAndCheck(S3Case):
 			media_api.post_image(plain.name)
 
 	def test_check_storage(self):
+		set_settings(s3_media_enabled=0)  # kiểm TRƯỚC khi bật: chỉ cần endpoint và bucket
+		self.assertTrue(media_api.check_storage()["ok"])
+		set_settings(s3_media_enabled=1)
 		self.assertTrue(media_api.check_storage()["ok"])
 		self.assertEqual(self.s3.objects, {})  # object thử đã xóa
 		self.s3.down = True
@@ -213,13 +218,43 @@ class TestDownloadAndCheck(S3Case):
 		frappe.set_user("Administrator")
 
 
+class TestSettingsDefaults(FrappeTestCase):
+	def test_verify_tls_defaults_on_until_saved_off(self):
+		self.assertEqual(
+			[s3_media.verify_tls(v) for v in (None, "", "0", 0, "1", 1)],
+			[True, True, False, False, True, True],
+		)
+
+	def test_check_needs_endpoint_and_bucket(self):
+		snap = snapshot_settings(KEYS)
+		self.addCleanup(restore_settings, snap)
+		set_settings(s3_media_enabled=1, s3_endpoint_url="", s3_bucket="crm-media")
+		self.assertFalse(s3_media.configured())
+		with self.assertRaises(frappe.ValidationError):
+			media_api.check_storage()
+
+	def test_patch_writes_defaults_only_for_unsaved_fields(self):
+		from omni_crm.patches.v3 import set_marketing_settings_defaults as patch
+
+		snap = snapshot_settings(tuple(patch.DEFAULTS))
+		self.addCleanup(restore_settings, snap)
+		restore_settings({k: None for k in patch.DEFAULTS})  # như site vừa migrate: chưa có dòng nào
+		set_settings(s3_region="ap-southeast-1")  # người dùng đã đặt: giữ nguyên
+		patch.execute()
+		got = snapshot_settings(tuple(patch.DEFAULTS))
+		self.assertEqual(got["s3_verify_tls"], "1")
+		self.assertEqual(got["content_late_window_minutes"], "30")
+		self.assertEqual(got["s3_prefix"], "omni-content-post/")
+		self.assertEqual(got["s3_region"], "ap-southeast-1")
+
+
 @unittest.skipUnless(os.environ.get("OMNI_S3_TEST_ENDPOINT"), "cần máy chủ S3 thử (OMNI_S3_TEST_ENDPOINT)")
 class TestS3Real(FrappeTestCase):
 	"""Chạy với boto3 thật tới một máy chủ S3 (MinIO hoặc giả lập): ghi, đọc, xóa, và một bài có ảnh đi trọn vòng."""
 
 	def setUp(self):
 		_cleanup_files()
-		self._saved = {k: frappe.db.get_single_value("Omni Settings", k) for k in KEYS}
+		self._saved = snapshot_settings(KEYS)
 		self.addCleanup(self._restore)
 		make_campaign()
 		set_settings(
@@ -237,7 +272,7 @@ class TestS3Real(FrappeTestCase):
 
 	def _restore(self):
 		_cleanup_files()
-		set_settings(**self._saved)
+		restore_settings(self._saved)
 		frappe.db.commit()
 
 	def test_round_trip(self):

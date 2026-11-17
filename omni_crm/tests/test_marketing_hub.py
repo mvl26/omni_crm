@@ -197,6 +197,27 @@ def make_channel():
 	).insert(ignore_permissions=True)
 
 
+def snapshot_settings(keys) -> dict:
+	"""{trường: giá trị đang lưu, hoặc None nếu trường CHƯA có dòng trong tabSingles}."""
+	rows = dict(
+		frappe.db.sql(
+			"select field, value from `tabSingles` where doctype='Omni Settings' and field in %(f)s",
+			{"f": tuple(keys)},
+		)
+	)
+	return {k: rows.get(k) for k in keys}
+
+
+def restore_settings(snap: dict) -> None:
+	"""Trả Omni Settings về như trước test: trường chưa từng lưu thì xóa dòng (không ghi rỗng lên site)."""
+	for key, value in snap.items():
+		if value is None:
+			frappe.db.delete("Singles", {"doctype": "Omni Settings", "field": key})
+		else:
+			frappe.db.set_single_value("Omni Settings", key, value)
+	frappe.clear_document_cache("Omni Settings", "Omni Settings")
+
+
 def set_settings(**values):
 	for key, value in values.items():
 		frappe.db.set_single_value("Omni Settings", key, value)
@@ -214,7 +235,7 @@ def make_lead(first_name, **values):
 class MarketingCase(FrappeTestCase):
 	def setUp(self):
 		_delete_all()
-		self._saved = {k: frappe.db.get_single_value("Omni Settings", k) for k in SETTINGS_KEYS}
+		self._saved = snapshot_settings(SETTINGS_KEYS)
 		self.addCleanup(self._restore)
 		make_users()
 		make_campaign()
@@ -222,7 +243,7 @@ class MarketingCase(FrappeTestCase):
 
 	def _restore(self):
 		_delete_all()
-		set_settings(**self._saved)
+		restore_settings(self._saved)
 		frappe.db.commit()
 
 
