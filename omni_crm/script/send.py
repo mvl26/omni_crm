@@ -25,6 +25,7 @@ OUTBOUND = "Omni Outbound Message"
 IDENTITY = "Omni Identity"
 INBOUND = "Omni Inbound Message"
 SENDING_FLAG = "omni_script_sending"  # frappe.flags: định danh đang được send.py xếp tin (auto_send.assert_can_queue đọc)
+SAVEPOINT = "omni_script_queue"
 TEXT_CODE = "_TEXT"  # script_node của tin gửi bằng send_text không kèm mã (câu Kho tri thức)
 JUNK_STATUS = "Junk"  # CRM Lead Status coi là spam (không có trường spam riêng)
 
@@ -114,11 +115,12 @@ def _queue(
 	if node_channel and node_channel not in ("Tất cả", channel_type):
 		return None
 	req = OutboundRequest(channel, identity, text, None, "Bot", purpose=purpose)
+	frappe.db.savepoint(SAVEPOINT)
 	try:
 		with _sending(identity):
 			name = outbound.queue_outbound(req)
 	except frappe.ValidationError as e:  # gồm RoutingError (ngoài khung gửi miễn phí...)
-		frappe.db.rollback()
+		frappe.db.rollback(save_point=SAVEPOINT)  # giữ phần handler đã ghi (state...) chưa commit
 		_log(f"khong_xep_duoc:{type(e).__name__}", identity, code)
 		return None
 	frappe.db.set_value(

@@ -381,3 +381,14 @@ class TestReplyHook(K2Case):
 	def test_real_router_switch_off_old_flow(self):
 		with mock.patch("omni_crm.flags.bot_reply_mode", return_value="Off"):
 			self.assertEqual(reply._reply_batch(self.batch), "off")
+
+
+class TestSendKeepsHandlerWrites(K2Case):
+	def test_routing_error_keeps_uncommitted_state(self):
+		make_node(f"{PFX}HI")
+		self.set_switch(tests=self.ident1)
+		self.set_last_inbound(hours_ago=24 * 8)  # ngoài khung gửi: queue_outbound ném RoutingError
+		state.set_node(self.ident1, "MENU_SPD")
+		self.assertIsNone(self.send(f"{PFX}HI"))
+		self.assertEqual(state.get(self.ident1)["script_node"], "MENU_SPD")
+		self.assertEqual(self.outs(), [])

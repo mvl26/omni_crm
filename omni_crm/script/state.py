@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import frappe
+from frappe import _
 from frappe.utils import cint, now_datetime
 
 from omni_crm.script import store
@@ -132,7 +133,7 @@ def set_journey(lead: str | None, status: str) -> None:
 		# CRM bắt buộc lý do khi chuyển sang trạng thái Lost: dùng "Other" + ghi chú nội bộ
 		doc.lost_reason = LOST_REASON if frappe.db.exists("CRM Lost Reason", LOST_REASON) else None
 		doc.lost_notes = (
-			doc.get("lost_notes") or doc.get("omni_lost_reason_text") or f"Bot kịch bản: {status}"
+			doc.get("lost_notes") or doc.get("omni_lost_reason_text") or _("Bot kịch bản: {0}").format(status)
 		)
 		if not doc.lost_reason:
 			frappe.logger("omni").info("omni script: thiếu CRM Lost Reason %s, bỏ qua status", LOST_REASON)
