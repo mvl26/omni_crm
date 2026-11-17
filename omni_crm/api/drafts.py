@@ -16,7 +16,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import kb_docs, knowledge, reply, templates
+from omni_crm.bot import handoff, kb_docs, knowledge, reply, templates
 
 DRAFT = "Omni Bot Draft"
 IDENTITY = "Omni Identity"
@@ -39,6 +39,19 @@ def _sources(ids: list[str]) -> list[dict[str, str]]:
 	found = {k["id"]: k for k in knowledge.kb_items(ids, active_only=False)}
 	found.update({k["id"]: k for k in kb_docs.sources(ids)})
 	return [found[i] for i in ids if i in found]
+
+
+def _unique_sources(items: list[dict]) -> list[dict[str, str]]:
+	"""Nguồn để hiện: mỗi tài liệu/mục một lần (nhiều đoạn cùng tài liệu chỉ giữ đoạn đầu), giữ thứ tự."""
+	seen: set[str] = set()
+	out = []
+	for k in items:
+		key = k.get("question") or k["id"]
+		if key in seen:
+			continue
+		seen.add(key)
+		out.append({"id": k["id"], "question": k.get("question"), "group": k.get("group")})
+	return out
 
 
 def _get(draft: str, lock: bool = False) -> Any:
@@ -85,6 +98,7 @@ def thread_drafts(lead: str) -> list[dict]:
 			"draft_text",
 			"kb_items",
 			"handoff_reason",
+			"guard_flags",
 			"creation",
 		],
 		order_by="creation asc",
@@ -103,11 +117,10 @@ def thread_drafts(lead: str) -> list[dict]:
 				"question_group": r.question_group,
 				"text": r.draft_text if reply_ok or template else None,
 				"template": template,
-				"handoff_reason": r.handoff_reason if r.action == "Handoff" else None,
-				"kb": [
-					{"id": k["id"], "question": k["question"], "group": k["group"]}
-					for k in _sources(_kb_ids(r.kb_items))
-				],
+				"handoff_reason": handoff.explain_reason(r.handoff_reason, r.guard_flags)
+				if r.action == "Handoff"
+				else None,
+				"kb": _unique_sources(_sources(_kb_ids(r.kb_items))),
 				"created": r.creation,
 				"can_send": can_write and (reply_ok or template) and channel_type == "Zalo OA",
 				"can_decide": can_write,

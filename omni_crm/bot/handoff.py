@@ -144,6 +144,68 @@ def reason_label(guard_flags: str | None, question_group: str | None = None) -> 
 	return _("Bot đề nghị chuyển người")
 
 
+# K1: lý do chuyển người bằng tiếng Việt cho khung nháp (thay mã cờ "Chốt chặn: handoff_topic:..."). Theo tiền tố mã.
+TOPIC_LABELS = {
+	"hoi_gia": "Khách hỏi giá hoặc phí",
+	"hoi_phi": "Khách hỏi giá hoặc phí",
+	"khieu_nai": "Khách phàn nàn, khiếu nại",
+	"phap_ly": "Câu hỏi về pháp lý",
+	"y_khoa": "Câu hỏi chuyên môn y khoa",
+	"dieu_khoan_hop_dong": "Hỏi điều khoản, thương lượng hợp đồng",
+	"gap_nguoi": "Khách muốn gặp nhân viên",
+	"khach_muon_gap_nguoi": "Khách muốn gặp nhân viên",
+	"nhom_luon_chuyen_nguoi": "Nhóm câu hỏi cần nhân viên xử lý",
+	"yeu_cau_de_xuat": "Khách xin đề xuất hoặc hợp đồng mẫu",
+	"dat_hang": "Khách muốn đặt hàng",
+}
+FLAG_LABELS = (
+	("kb_rong", "Kho tri thức chưa có thông tin cho câu hỏi này"),
+	("kb_trong", "Kho tri thức đang trống"),
+	("kb_khong_co_doan_lien_quan", "Kho tri thức chưa có thông tin cho câu hỏi này"),
+	("kb_khong_hop_le", "Bot dẫn nguồn không có trong Kho tri thức"),
+	("tra_loi_rong", "Bot không soạn được câu trả lời"),
+	("ai_khong_tra_ket_qua", "Bot không soạn được câu trả lời (AI lỗi)"),
+	("loi_he_thong", "Bot gặp lỗi khi soạn câu trả lời"),
+	("qua_nhieu_tin", "Khách nhắn nhiều tin liên tiếp"),
+	("qua_dai", "Câu trả lời quá dài"),
+	("so_ngoai_kho", "Câu trả lời có con số không có trong Kho tri thức"),
+	("so_dien_thoai_ngoai_kho", "Câu trả lời có số điện thoại không có trong Kho tri thức"),
+	("email_ngoai_kho", "Câu trả lời có email không có trong Kho tri thức"),
+	("duong_dan_ngoai_kho", "Câu trả lời có đường link không có trong Kho tri thức"),
+	("do_tu_tin", "Bot chưa đủ chắc chắn"),
+	("nghi_chen_lenh", "Tin khách có dấu hiệu điều khiển bot"),
+	("dau_ra_khong_an_toan", "Câu trả lời không an toàn"),
+	("nhom_cau_hoi_khong_ton_tai", "Bot chưa xếp được nhóm câu hỏi"),
+)
+
+
+def flag_label(flag: str) -> str | None:
+	"""Nhãn tiếng Việt của một cờ chốt chặn; None nếu là cờ thông tin (info:...) hoặc không biết."""
+	flag = (flag or "").strip()
+	if not flag or flag.startswith("info:"):
+		return None
+	if flag.startswith("handoff_topic:"):
+		rest = flag.split(":", 1)[1]
+		if rest.startswith("y_dinh_"):
+			rest = rest[len("y_dinh_") :]
+		labels = [TOPIC_LABELS.get(t.strip()) for t in rest.split(",")]
+		return "; ".join(dict.fromkeys(x for x in labels if x)) or "Chủ đề cần nhân viên xử lý"
+	for prefix, label in FLAG_LABELS:
+		if flag.startswith(prefix):
+			return label
+	return None
+
+
+def explain_reason(handoff_reason: str | None, guard_flags: str | None) -> str | None:
+	"""Lý do hiện cho sale: lý do do bot ghi bị thay bằng nhãn tiếng Việt khi nó chỉ là danh sách mã chốt chặn."""
+	reason = (handoff_reason or "").strip()
+	if reason and not reason.startswith("Chốt chặn:") and not reason.startswith(_("Chốt chặn: ")):
+		return reason
+	labels = [flag_label(f) for f in (guard_flags or "").splitlines()]
+	text = "; ".join(_(x) for x in dict.fromkeys(x for x in labels if x))
+	return text or (_("Bot đề nghị chuyển người") if reason or guard_flags else None)
+
+
 def _short_name(lead: str) -> str:
 	name = frappe.db.get_value(LEAD, lead, "lead_name") or lead
 	return " ".join(str(name).split())[:NAME_MAX]
