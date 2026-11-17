@@ -5,7 +5,8 @@ không truyền thì đọc Omni Settings qua `load_config()`. Lõi tính toán 
 
 Quy ước suy ra từ giờ đóng cửa của từng ngày (`close`) để tôn trọng cấu hình (vd thứ Bảy 08:00-12:00):
 - Giờ chốt nhận việc (3.5) = min(16:30, close - 1 giờ); hạn xử lý = close (17:30 ngày thường).
-- Khung gửi chủ động (C.5) = max(09:00, open) → min(16:30, close - 1 giờ), chỉ ngày làm việc.
+- Khung gửi chủ động (C.5) = max(09:00, open) → min(16:30, close - 1 giờ), chỉ ngày làm việc thứ Hai - thứ Sáu
+  (thứ Bảy/Chủ nhật không gửi dù `business_hours` có giờ).
 """
 
 from __future__ import annotations
@@ -52,7 +53,7 @@ def _cutoff_time(day: date, close: time) -> time:
 
 def _proactive_bounds(day: date, cfg: Config) -> tuple[datetime, datetime] | None:
 	window = _window(day, cfg)
-	if not window:
+	if not window or day.weekday() >= 5:  # C.5/4.1: chỉ thứ Hai - thứ Sáu, kể cả khi cấu hình có giờ thứ Bảy
 		return None
 	start = max(PROACTIVE_START, window[0])
 	end = _cutoff_time(day, window[1])

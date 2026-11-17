@@ -40,7 +40,6 @@ DEMO_KINDS = ("demo_remind_1d", "demo_remind_1h", "demo_noshow")
 REPLY_CANCELS = ("followup_docs", "followup_quote", "silence_3d")  # khách nhắn lại thì hủy
 WINDOW_EXEMPT = ("demo_remind_1h",)  # C.5: riêng tin nhắc trước 1 giờ gửi đúng giờ
 CHAT_ONLY = ("demo_remind_1h", "demo_noshow")  # sát giờ: không tạo việc gửi email
-NURTURE_WHEN_DONE = ("silence_3d",)  # gửi xong nhắc im lặng -> "Chăm sóc lại" (C.1)
 NURTURE_WHEN_NO_CHANNEL = ("followup_docs", "followup_quote", "silence_3d", "lost_3m")
 SALES_KINDS = (
 	"followup_docs",
@@ -80,6 +79,10 @@ NOSHOW_AFTER = timedelta(minutes=15)
 NOSHOW_WAIT = timedelta(hours=2)  # chờ nhân viên đánh dấu "Khách vắng" tối đa 2 giờ
 DEMO_MINUTES = 30
 SWEEP_LOOKBACK = timedelta(days=10)
+LATE_GRACE = timedelta(minutes=20)  # dòng đến hạn trong khung, xử lý trễ dưới 20 phút vẫn tính là trong khung
+REMIND_1D_MIN_LEFT = timedelta(hours=3)  # nhắc "trước 1 ngày" chỉ gửi khi còn ít nhất 3 giờ
+KEEP_JOURNEY = ("Đã demo", "Thương lượng")  # không hạ Lead đang ở các bước này về "Chăm sóc lại"
+ALERT_KIND = "tin hẹn giờ kịch bản lỗi"
 BATCH = 200
 MARKER_ACTIONS = {"silence_3d", "demo_remind_1d", "demo_remind_1h", "demo_noshow"}
 _VAR = re.compile(r"\{(\w+)\}")
@@ -193,7 +196,7 @@ def variables_for(identity: str | None, lead: str | None, extra: dict | None = N
 	]
 	channel = send.channel_of(identity) if identity else None
 	values = {
-		"ten": row.get("first_name") or "",
+		"ten": (cstr(row.get("first_name")).split() or [""])[-1],  # chỉ tên gọi (từ cuối), theo VARIABLES.md
 		"dich_vu": SERVICE_LABEL.get(service, ""),
 		"email": row.get("email") or "",
 		"sdt": row.get("mobile_no") or "",
@@ -238,7 +241,7 @@ def working_days_after(at: datetime, days: int, cfg: timeutil.Config | None = No
 		if left <= 0:
 			break
 		day += timedelta(days=1)
-		if timeutil.is_working_day(day, cfg):
+		if day.weekday() < 5 and timeutil.is_working_day(day, cfg):  # 4.1: bỏ thứ Bảy, Chủ nhật, ngày lễ
 			left -= 1
 	return clamp_proactive(datetime.combine(day, at.time()), cfg)
 
@@ -288,7 +291,7 @@ def schedule(
 				"status": "Pending",
 				"due_at": due_at,
 				"node": node,
-				"payload": _dump(payload),
+				"payload": _dump({**payload, "rearmed_at": _now().isoformat(sep=" ", timespec="seconds")}),
 				"reason": None,
 				"sent_at": None,
 			},
@@ -397,6 +400,11 @@ def schedule_silence(identity: str, lead: str | None, now: datetime | None = Non
 	bot_at, in_at = ident.get("script_last_bot_at"), ident.get("last_inbound_at")
 	if not bot_at or (in_at and get_datetime(in_at) >= get_datetime(bot_at)):
 		return None
+	mark = get_datetime(in_at).isoformat(timespec="seconds") if in_at else "none"
+	if frappe.db.exists(
+		SCHED, {"dedupe_key": _dedupe_key("silence_3d", lead or identity, now, {"key": mark})}
+	):
+		return None  # lần im lặng này đã có tin nhắc (đang chờ hoặc đã xử lý)
 	last = frappe.get_all(
 		OUTBOUND,
 		filters={"identity": identity, "script_node": ["is", "set"]},
@@ -421,7 +429,6 @@ def schedule_silence(identity: str, lead: str | None, now: datetime | None = Non
 		due = bot_at + timedelta(minutes=SILENCE_DAYS)
 	else:
 		due = timeutil.next_proactive_slot(bot_at + timedelta(days=SILENCE_DAYS))
-	mark = get_datetime(in_at).isoformat(timespec="seconds") if in_at else "none"
 	return schedule("silence_3d", identity, lead, due, code, {"key": mark})
 
 
@@ -430,20 +437,37 @@ def _actions_of(node: dict) -> list[str]:
 
 
 def _sweep_silence(now: datetime) -> int:
-	"""Tìm khách đang im sau câu hỏi của bot và đặt tin nhắc (không cần móc vào `send.py`)."""
+	"""Tìm khách đã im đủ 3 ngày sau câu hỏi của bot và đặt tin nhắc (không cần móc vào `send.py`)."""
 	everyone = bool(cint(switch.setting("script_bot_enabled")))
-	tests = switch.test_identities()
+	tests = sorted(switch.test_identities())
 	if not everyone and not tests:
 		return 0
-	filters: dict = {"script_last_bot_at": [">=", now - SWEEP_LOOKBACK], "lead": ["is", "set"]}
+	found: dict = {}
+	base: dict = {"lead": ["is", "set"]}
+	normal = {
+		**base,
+		"script_last_bot_at": ["between", [now - SWEEP_LOOKBACK, now - timedelta(days=SILENCE_DAYS)]],
+	}
 	if not everyone:
-		filters["name"] = ["in", list(tests)]
-	rows = frappe.get_all(IDENTITY, filters=filters, fields=["name", "lead"], limit=1000)
+		normal["name"] = ["in", tests]
+	queries = [normal]
+	if tests and cint(switch.setting("script_fast_timers_for_test")):  # danh sách thử: 3 phút thay 3 ngày
+		window = [now - SWEEP_LOOKBACK, now - timedelta(minutes=SILENCE_DAYS)]
+		queries.append({**base, "name": ["in", tests], "script_last_bot_at": ["between", window]})
+	for filters in queries:
+		rows = frappe.get_all(
+			IDENTITY, filters=filters, fields=["name", "lead"], order_by="script_last_bot_at asc", limit=1000
+		)
+		found.update({r.name: r.lead for r in rows})
 	made = 0
-	for r in rows:
-		if schedule_silence(r.name, r.lead, now):
-			made += 1
-	frappe.db.commit()
+	for identity, lead in found.items():
+		try:
+			if schedule_silence(identity, lead, now):
+				made += 1
+			frappe.db.commit()
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(title="Omni: đặt tin nhắc im lặng lỗi", message=frappe.get_traceback())
 	return made
 
 
@@ -458,7 +482,7 @@ def run_due() -> dict:
 		_sweep_silence(now)
 	except Exception:
 		frappe.db.rollback()
-		frappe.log_error(title="Omni: quét khách im lặng lỗi")
+		frappe.log_error(title="Omni: quét khách im lặng lỗi", message=frappe.get_traceback())
 	names = frappe.get_all(
 		SCHED,
 		filters={"status": "Pending", "due_at": ["<=", now]},
@@ -473,8 +497,12 @@ def run_due() -> dict:
 			status, reason, extra = _process(name)
 		except Exception:
 			frappe.db.rollback()
-			frappe.log_error(title="Omni: tin hẹn giờ lỗi", message=f"scheduled={name}")
+			# chỉ traceback thường: không dùng with_context vì biến cục bộ có email/SĐT của khách
+			frappe.log_error(
+				title="Omni: tin hẹn giờ lỗi", message=f"scheduled={name}\n{frappe.get_traceback()}"
+			)
 			status, reason, extra = "Failed", _("Lỗi khi xử lý, xem Error Log"), {}
+			_alert(name, status)
 		_finish(name, status, reason, extra)
 		stats[status] = stats.get(status, 0) + 1
 	return stats
@@ -502,7 +530,10 @@ def _finish(name: str, status: str, reason: str | None, extra: dict | None = Non
 def _process(name: str) -> tuple[str, str | None, dict]:
 	"""Xử lý một dòng đã nhận: kiểm điều kiện dừng, khung giờ, chọn kênh, gửi. Trả (status, reason, giá trị ghi thêm)."""
 	row = frappe.db.get_value(
-		SCHED, name, ["kind", "identity", "lead", "due_at", "node", "payload", "creation"], as_dict=True
+		SCHED,
+		name,
+		["name", "kind", "identity", "lead", "due_at", "node", "payload", "creation"],
+		as_dict=True,
 	)
 	now = _now()
 	lead = lead_row(row.lead)
@@ -516,7 +547,7 @@ def _process(name: str) -> tuple[str, str | None, dict]:
 		return blocked
 	fast = fast_for(row.identity)
 	cfg = timeutil.load_config()
-	if row.kind not in WINDOW_EXEMPT and not fast and not timeutil.in_proactive_window(now, cfg):
+	if row.kind not in WINDOW_EXEMPT and not fast and not _in_window(row.due_at, now, cfg):
 		if row.kind == "demo_noshow":
 			return "Skipped", _("Ngoài khung gửi tin chủ động"), {}
 		return "Pending", None, {"due_at": timeutil.next_proactive_slot(now, cfg)}
@@ -535,15 +566,43 @@ def _process(name: str) -> tuple[str, str | None, dict]:
 	return _deliver(row, lead, payload, choice, now)
 
 
+def _in_window(due_at, now: datetime, cfg: timeutil.Config) -> bool:
+	"""Đang trong khung gửi chủ động, hoặc dòng đến hạn trong khung và chỉ bị xử lý trễ dưới 20 phút (vd 16:30)."""
+	if timeutil.in_proactive_window(now, cfg):
+		return True
+	due = get_datetime(due_at) if due_at else None
+	return bool(due and due <= now < due + LATE_GRACE and timeutil.in_proactive_window(due, cfg))
+
+
+def _alert(name: str, kind: str) -> None:
+	"""Báo Omni Admin một tin hẹn giờ không xử lý được (chống lặp theo loại; không chứa dữ liệu khách)."""
+	try:
+		from omni_crm.monitoring import alerts
+
+		alerts.deliver_now(
+			alerts.Alert(
+				kind=ALERT_KIND,
+				scope=kind,
+				subject=_("Tin hẹn giờ của bot kịch bản không gửi được"),
+				detail=_(
+					"Dòng Omni Scheduled Message {0} ở trạng thái {1}. Xem lý do trên dòng và Error Log."
+				).format(name, kind),
+				email=False,
+			)
+		)
+	except Exception:
+		frappe.log_error(title="Omni: không gửi được cảnh báo tin hẹn giờ", message=f"scheduled={name}")
+
+
 def _blocked(
 	row, lead: dict, ident: dict, payload: dict, now: datetime
 ) -> tuple[str, str | None, dict] | None:
 	"""Điều kiện "không nhắn nếu" (4.1, C.4) kiểm ngay trước khi gửi; None nếu được gửi."""
-	if not row.identity:
+	staff_only = row.kind == "lost_3m"  # hỏi thăm 3 tháng là việc cho nhân viên: không cần định danh Zalo
+	if not row.identity and not staff_only:
 		return "Skipped", _("Không có định danh chat"), {}
-	why = send.blocked_reason(
-		row.identity
-	)  # công tắc, tạm dừng/nhân viên đang trò chuyện, không liên hệ, rác
+	# công tắc, tạm dừng/nhân viên đang trò chuyện, không liên hệ, rác
+	why = send.blocked_reason(row.identity) if row.identity else None
 	if why:
 		return "Skipped", why, {}
 	if cint(lead.get("converted")) or lead.get("status") == "Converted":
@@ -555,7 +614,8 @@ def _blocked(
 		return "Skipped", _("Không được gửi tin chào bán cho Lead này"), {}
 	if kind in REPLY_CANCELS:
 		last_in = ident.get("last_inbound_at")
-		if last_in and get_datetime(last_in) > get_datetime(row.creation):
+		armed = payload.get("rearmed_at") or row.creation  # dòng mở lại: tính từ lúc mở lại
+		if last_in and get_datetime(last_in) > get_datetime(armed):
 			return "Cancelled", _("Khách đã nhắn lại"), {}
 	if kind == "followup_docs" and journey in AFTER_DEMO_BOOKED:
 		return "Cancelled", _("Lead đã sang bước sau"), {}
@@ -582,7 +642,14 @@ def _demo_blocked(
 		return "Cancelled", _("Lịch demo đã đổi hoặc hủy"), {}
 	result = lead.get("omni_demo_result")
 	if kind != "demo_noshow":
-		return ("Cancelled", _("Buổi demo đã có kết quả"), {}) if result else None
+		if result:
+			return "Cancelled", _("Buổi demo đã có kết quả"), {}
+		left = get_datetime(demo_at) - now
+		if kind == "demo_remind_1h" and left <= timedelta(0):
+			return "Cancelled", _("Buổi demo đã bắt đầu"), {}
+		if kind == "demo_remind_1d" and left < REMIND_1D_MIN_LEFT:
+			return "Cancelled", _("Còn dưới 3 giờ là tới buổi demo"), {}
+		return None
 	if result == "Khách vắng":
 		return None
 	if result:
@@ -599,27 +666,47 @@ def _deliver(row, lead: dict, payload: dict, choice: dict, now: datetime) -> tup
 	values = variables_for(row.identity, row.lead, {**payload, **store.as_dict(payload.get("vars"))})
 	if choice["kind"] == "chat":
 		lacking = missing_variables(code, values)
-		if lacking:
-			return "Skipped", _("Thiếu biến: {0}").format(", ".join(lacking)), {}
-		sent = send.send_node(row.identity, code, values, purpose="followup")
-		if not sent:
-			return "Failed", _("Không xếp được tin chat (ô {0})").format(code), {}
-		if kind not in KEEP_STATE:
-			state.set_node(row.identity, code, (store.get_node(code) or {}).get("step") or None)
-		_after_sent(kind, row.lead)
-		return "Sent", _("Chat"), {"node": code, "sent_at": now}
+		sent = None if lacking else send.send_node(row.identity, code, values, purpose="followup")
+		if sent:
+			_after_chat(row, code)
+			return "Sent", _("Chat"), {"node": code, "sent_at": now}
+		why = (
+			_("Thiếu biến: {0}").format(", ".join(lacking))
+			if lacking
+			else _("Không xếp được tin chat (ô {0})").format(code)
+		)
+		# tin chat không đi được: giao nhân viên xử lý thay, không để mốc này mất im lặng
+		task = None if kind in CHAT_ONLY else _email_task(kind, row, service, code, values, now, why)
+		if task:
+			return "Sent", _("{0}. Đã giao nhân viên (việc {1})").format(why, task), {"sent_at": now}
+		_alert(row.name, "Failed")
+		return "Failed", why, {}
 	if choice["kind"] == "email_task" and kind not in CHAT_ONLY:
 		task = _email_task(kind, row, service, code, values, now)
 		if not task:
+			_alert(row.name, "Failed")
 			return "Failed", _("Không tạo được việc gửi email"), {}
-		_after_sent(kind, row.lead)
 		return "Sent", _("Email: nhân viên gửi tay (việc {0})").format(task), {"sent_at": now}
 	if choice["kind"] == "zns" and kind not in CHAT_ONLY:
 		# VERIFY: API ZNS và mẫu tin chưa được xác nhận/đăng ký với Zalo -> không gọi API nào, không tạo gì.
 		return "Skipped", _("ZNS chưa nối (cần xác nhận mẫu và API)"), {}
-	if kind in NURTURE_WHEN_NO_CHANNEL:
+	if kind in NURTURE_WHEN_NO_CHANNEL and lead.get("omni_journey_status") not in (
+		*KEEP_JOURNEY,
+		*CLOSED_JOURNEY,
+	):
 		state.set_journey(row.lead, NURTURE)
 	return "Skipped", _(NO_CHANNEL_REASON), {}
+
+
+def _after_chat(row, code: str) -> None:
+	"""Việc phụ sau khi tin đã xếp và commit: lỗi ở đây chỉ ghi log, dòng vẫn là Sent (không gửi lại, không báo Failed)."""
+	if row.kind in KEEP_STATE:
+		return
+	try:
+		state.set_node(row.identity, code, (store.get_node(code) or {}).get("step") or None)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Omni: tin hẹn giờ đã gửi, ghi trạng thái lỗi", message=frappe.get_traceback())
 
 
 def _sales_allowed(lead: str | None) -> bool:
@@ -637,8 +724,10 @@ def _send_lost_3m(lead: str | None, now: datetime) -> tuple[str, str | None, dic
 		from omni_crm.script.flows import postdemo
 	except ImportError:
 		return "Skipped", _("Chưa có luồng sau demo (postdemo)"), {}
-	postdemo.send_lost_3m(lead)
-	return "Sent", _("Hỏi thăm 3 tháng (postdemo)"), {"sent_at": now}
+	task = postdemo.send_lost_3m(lead)
+	if not task:
+		return "Skipped", _("Không tạo việc hỏi thăm 3 tháng (Lead không còn phù hợp hoặc đã có việc)"), {}
+	return "Sent", _("Hỏi thăm 3 tháng: việc {0}").format(task), {"sent_at": now}
 
 
 def _node_code(row, lead: dict, now: datetime) -> str:
@@ -650,12 +739,9 @@ def _node_code(row, lead: dict, now: datetime) -> str:
 	return code
 
 
-def _after_sent(kind: str, lead: str | None) -> None:
-	if kind in NURTURE_WHEN_DONE:
-		state.set_journey(lead, NURTURE)
-
-
-def _email_task(kind: str, row, service: str, code: str, values: dict, now: datetime) -> str | None:
+def _email_task(
+	kind: str, row, service: str, code: str, values: dict, now: datetime, why: str | None = None
+) -> str | None:
 	"""Tạo việc cho nhân viên gửi email tay (tự gửi email nằm sau `script_email_enabled`, chưa nối)."""
 	try:
 		from omni_crm.script import tasks
@@ -664,7 +750,8 @@ def _email_task(kind: str, row, service: str, code: str, values: dict, now: date
 	template = variant(EMAIL_NODE.get(kind, code), service)
 	body = store.fill((store.get_node(template) or {}).get("text") or "", values)
 	title = _("Gửi email cho khách thay tin bot ({0})").format(kind)
-	description = _("Đã hết hạn nhắn chat. Nội dung gợi ý:") + "\n\n" + body
+	head = why or _("Đã hết hạn nhắn chat.")
+	description = head + " " + _("Nội dung gợi ý:") + "\n\n" + body
 	return tasks.create_task(row.lead, service or "KHAC", title, description, due=timeutil.task_due(now))
 
 

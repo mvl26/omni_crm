@@ -115,9 +115,13 @@ class TestProactive(FrappeTestCase):
 		self.assertFalse(timeutil.in_proactive_window(dt(21, 10), WEEKDAYS))
 		self.assertFalse(timeutil.in_proactive_window(dt(19, 10), WITH_HOLIDAY))
 
-	def test_saturday_window_from_config(self):
-		self.assertTrue(timeutil.in_proactive_window(dt(21, 10), PROD))
+	def test_saturday_never_proactive_even_if_configured(self):
+		# C.5/4.1: bot chỉ tự gửi thứ Hai - thứ Sáu dù `business_hours` có giờ thứ Bảy (giờ làm việc vẫn theo cấu hình)
+		self.assertFalse(timeutil.in_proactive_window(dt(21, 10), PROD))
 		self.assertFalse(timeutil.in_proactive_window(dt(21, 11, 1), PROD))
+		self.assertTrue(timeutil.in_hours(dt(21, 10), PROD))
+		self.assertEqual(timeutil.next_proactive_slot(dt(20, 17), PROD), dt(23, 9))
+		self.assertEqual(timeutil.last_proactive_moment(dt(21, 10), PROD), dt(20, 16, 30))
 
 	def test_next_slot(self):
 		self.assertEqual(timeutil.next_proactive_slot(dt(17, 10), WEEKDAYS), dt(17, 10))

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 
 import frappe
@@ -42,11 +44,31 @@ NODE_ASK_EMAIL = "DEMO_HOI_EMAIL"
 NODE_CONFIRM = (
 	"DEMO_XACNHAN_THUCONG",
 	"DEMO_XACNHAN",
+	"DEMO_XACNHAN_KHONGEMAIL",  # Lead chưa có email (seed/nodes_k5.json)
 )  # chưa nối Microsoft 365: ưu tiên bản "nhân viên gửi lời mời"
 NODE_CANCEL = "DEMO_HUY"
 NODE_CANCEL_THANKS = "DEMO_HUY_CAMON"
 NODE_NO_DEMO = "DEMO_VATTU"  # Vật tư không có demo (2.5)
-STATE_KEYS = ("demo_mode", "demo_slots", "demo_at", "demo_attendees", "demo_wait", "demo_email_asked")
+STATE_KEYS = (
+	"demo_mode",
+	"demo_slots",
+	"demo_slots_msg",
+	"demo_slots_at",
+	"demo_at",
+	"demo_attendees",
+	"demo_wait",
+	"demo_email_asked",
+)
+MIN_AHEAD = timedelta(hours=2)  # không nhận lịch bắt đầu trong vòng 2 giờ tới
+MAX_AHEAD = timedelta(days=45)  # không nhận lịch xa hơn 45 ngày
+SLOTS_TTL = timedelta(hours=24)  # nút khung giờ cũ hơn 24 giờ thì đề xuất lại
+SLOT_NODES = (NODE_SLOTS, NODE_BUSY)
+LOCK_SECONDS = 30
+TASK = "CRM Task"
+TASK_OPEN = ("Backlog", "Todo", "In Progress")
+JOURNEY_BOOKED = "Đã hẹn demo"
+JOURNEY_AFTER_CANCEL = "Đang tư vấn"
+ALERT_KIND = "lịch demo của bot thay đổi"
 
 
 def _now() -> datetime:
@@ -109,9 +131,14 @@ def busy_ranges(user: str | None, start: datetime, end: datetime, lead: str | No
 	return out
 
 
+def _demo_day(day: date, cfg: timeutil.Config) -> bool:
+	"""Ngày hẹn demo được: ngày làm việc thứ Hai - thứ Sáu (4.1/C.5), kể cả khi cấu hình có giờ thứ Bảy."""
+	return day.weekday() < 5 and timeutil.is_working_day(day, cfg)
+
+
 def _grid(day: date, cfg: timeutil.Config) -> list[datetime]:
 	"""Các giờ bắt đầu có thể hẹn trong ngày làm việc `day` (giờ chẵn, trong giờ làm việc, tránh giờ nghỉ trưa)."""
-	if not timeutil.is_working_day(day, cfg):
+	if not _demo_day(day, cfg):
 		return []
 	out = []
 	for hour in range(24):
@@ -123,6 +150,28 @@ def _grid(day: date, cfg: timeutil.Config) -> list[datetime]:
 	return out
 
 
+def in_booking_range(at: datetime, now: datetime | None = None) -> bool:
+	"""Giờ bắt đầu cách hiện tại ít nhất 2 giờ và không quá 45 ngày."""
+	now = now or _now()
+	return now + MIN_AHEAD <= at <= now + MAX_AHEAD
+
+
+@contextmanager
+def slot_lock(user: str | None, at: datetime) -> Iterator[bool]:
+	"""Khóa cache theo (người demo, khung giờ) quanh bước kiểm trống + chốt; trả False nếu người khác đang giữ."""
+	key = frappe.cache().make_key(f"omni:script:demo:{user or '-'}:{_iso(at)}")
+	lock = frappe.cache().lock(key, timeout=LOCK_SECONDS, blocking_timeout=3)
+	got = lock.acquire()
+	try:
+		yield bool(got)
+	finally:
+		if got:
+			try:
+				lock.release()
+			except Exception:  # khóa đã hết hạn trong lúc xử lý
+				pass
+
+
 def is_free(
 	at: datetime,
 	user: str | None,
@@ -132,10 +181,13 @@ def is_free(
 ) -> bool:
 	"""Khung demo bắt đầu lúc `at` hợp lệ: ở tương lai, ngày làm việc, trong giờ làm việc, không trùng lịch bận."""
 	cfg = cfg if cfg is not None else timeutil.load_config()
-	if at <= (now or _now()) or not timeutil.is_working_day(at.date(), cfg):
+	now = now or _now()
+	if not in_booking_range(at, now) or not _demo_day(at.date(), cfg):
 		return False
 	if not (timeutil.in_hours(at, cfg) and timeutil.in_hours(at + DURATION, cfg)):
 		return False
+	if at.time() < LUNCH[1] and (at + DURATION).time() > LUNCH[0]:
+		return False  # chạm giờ nghỉ trưa
 	return not busy_ranges(user, at, at + DURATION, lead)
 
 
@@ -149,7 +201,7 @@ def _working_days(after: date, count: int, cfg: timeutil.Config) -> list[date]:
 		if len(out) >= count:
 			break
 		day += timedelta(days=1)
-		if timeutil.is_working_day(day, cfg):
+		if _demo_day(day, cfg):
 			out.append(day)
 	return out
 
@@ -185,10 +237,10 @@ def next_free(
 	"""Khung trống gần nhất ngay sau `after` (4.4 bước 3: giờ khách chọn bận hoặc rơi vào ngày nghỉ)."""
 	now = now or _now()
 	cfg = cfg if cfg is not None else timeutil.load_config()
-	after = max(after, now)
+	after = max(after, now + MIN_AHEAD - timedelta(seconds=1))
 	days = [after.date(), *_working_days(after.date(), SEARCH_DAYS, cfg)]
 	for day in days:
-		grid = [s for s in _grid(day, cfg) if s > after]
+		grid = [s for s in _grid(day, cfg) if after < s <= now + MAX_AHEAD]
 		if not grid:
 			continue
 		free = _free_in(grid, busy_ranges(user, grid[0], grid[-1] + DURATION, lead))
@@ -293,7 +345,7 @@ def book(
 	"""Chốt lịch demo: tạo Event, ghi Lead (4.8), hành trình "Đã hẹn demo", 3 tin hẹn giờ, việc gửi lời mời. Trả {event, schedules, task, user}."""
 	now = now or _now()
 	service = service or scheduler.current_service(identity, lead)
-	release(identity, lead, _("Đổi lịch demo"))
+	release(identity, lead, _("Đổi lịch demo"), new_start=start)
 	user = demo_user(service)
 	label = scheduler.SERVICE_LABEL.get(service, service or "")
 	lead_name = frappe.db.get_value(LEAD, lead, "lead_name") or lead
@@ -302,7 +354,7 @@ def book(
 			"doctype": EVENT,
 			"subject": _("Demo {0} - {1}").format(label, lead_name).strip(),
 			"event_category": "Meeting",
-			"event_type": "Private" if user else "Public",
+			"event_type": "Private",
 			"starts_on": start,
 			"ends_on": start + DURATION,
 			"status": "Open",
@@ -329,14 +381,16 @@ def book(
 	)
 	state.set_journey(lead, "Đã hẹn demo")
 	scheduler.cancel_for(lead, scheduler.REPLY_CANCELS, _("Khách đã đặt lịch demo"))
-	schedules = _schedule_reminders(identity, lead, start, event.name, now)
 	task = _invite_task(lead, service, start, mode, attendees, user, label, now)
-	state.update_state(identity, demo_event=event.name, demo_at=_iso(start))
+	schedules = _schedule_reminders(identity, lead, start, event.name, task, now)
+	state.update_state(identity, demo_event=event.name, demo_task=task, demo_at=_iso(start))
 	return {"event": event.name, "schedules": schedules, "task": task, "user": user}
 
 
-def _schedule_reminders(identity: str, lead: str, start: datetime, event: str, now: datetime) -> list[str]:
-	payload = {"key": _iso(start), "demo_at": _iso(start), "event": event}
+def _schedule_reminders(
+	identity: str, lead: str, start: datetime, event: str, task: str | None, now: datetime
+) -> list[str]:
+	payload = {"key": _iso(start), "demo_at": _iso(start), "event": event, "task": task}
 	if scheduler.fast_for(identity):  # danh sách thử: ngày/giờ rút thành phút
 		plan = {
 			"demo_remind_1d": now + timedelta(minutes=1),
@@ -393,24 +447,93 @@ def _invite_task(
 	)
 
 
-def release(identity: str | None, lead: str | None, reason: str | None = None) -> bool:
-	"""Gỡ lịch demo đang có của Lead: Event -> Cancelled, hủy 3 tin hẹn giờ, xóa `omni_demo_at`. True nếu có lịch để gỡ."""
+def _bot_bookings(identity: str | None, lead: str) -> tuple[set, set]:
+	"""(Event, CRM Task) do bot tạo cho lịch demo của Lead: ghi trong `script_state` và payload các tin hẹn giờ demo."""
+	events, tasks_ = set(), set()
+	st = _st(identity) if identity else {}
+	sources = [{"event": st.get("demo_event"), "task": st.get("demo_task")}]
+	rows = frappe.get_all(
+		scheduler.SCHED, filters={"lead": lead, "kind": ["in", list(scheduler.DEMO_KINDS)]}, pluck="payload"
+	)
+	sources += [store.as_dict(p) for p in rows]
+	for src in sources:
+		if src.get("event"):
+			events.add(src["event"])
+		if src.get("task"):
+			tasks_.add(src["task"])
+	return events, tasks_
+
+
+def release(
+	identity: str | None,
+	lead: str | None,
+	reason: str | None = None,
+	journey: str | None = None,
+	new_start: datetime | None = None,
+) -> bool:
+	"""Gỡ lịch demo do bot đặt: Event của bot -> Cancelled, hủy tin hẹn giờ, đóng việc gửi lời mời + báo người demo, xóa `omni_demo_at`.
+
+	`journey` (khi khách hủy) đưa Lead rời "Đã hẹn demo". Không đụng Event do nhân viên tự tạo. True nếu có lịch để gỡ.
+	"""
 	if not lead:
 		return False
-	had = bool(frappe.db.get_value(LEAD, lead, "omni_demo_at"))
-	events = frappe.get_all(
-		EVENT,
-		filters={"reference_doctype": LEAD, "reference_docname": lead, "status": "Open"},
-		pluck="name",
+	reason = reason or _("Hủy lịch demo")
+	old_at = frappe.db.get_value(LEAD, lead, "omni_demo_at")
+	events, task_names = _bot_bookings(identity, lead)
+	open_events = (
+		frappe.get_all(EVENT, filters={"name": ["in", list(events)], "status": "Open"}, pluck="name")
+		if events
+		else []
 	)
-	for name in events:
+	for name in open_events:
 		frappe.db.set_value(EVENT, name, "status", "Cancelled")
-	scheduler.cancel_for(lead, scheduler.DEMO_KINDS, reason or _("Hủy lịch demo"))
-	if had:
+	scheduler.cancel_for(lead, scheduler.DEMO_KINDS, reason)
+	if old_at or open_events:
+		_close_invite_tasks(lead, task_names, old_at, reason, new_start)
+	if old_at:
 		frappe.db.set_value(LEAD, lead, "omni_demo_at", None, update_modified=False)
+	if journey and frappe.db.get_value(LEAD, lead, "omni_journey_status") == JOURNEY_BOOKED:
+		state.set_journey(lead, journey)
 	if identity:
-		state.update_state(identity, demo_event=None, demo_at=None)
-	return had or bool(events)
+		state.update_state(identity, demo_event=None, demo_task=None, demo_at=None)
+	return bool(old_at or open_events)
+
+
+def _close_invite_tasks(lead: str, names: set, old_at, reason: str, new_start: datetime | None) -> None:
+	"""Đóng việc "gửi lời mời demo" còn mở của lịch cũ (ghi chú lý do) và báo người được giao + Omni Admin."""
+	old = slot_label(get_datetime(old_at)) if old_at else "-"
+	note = _("{0}: lịch demo {1} không còn hiệu lực.").format(reason, old)
+	if new_start:
+		note += " " + _("Lịch mới: {0} (xem việc mới).").format(slot_label(new_start))
+	users = set()
+	try:
+		from omni_crm.script import tasks
+	except ImportError:
+		tasks = None
+	for name in sorted(names):
+		row = frappe.db.get_value(TASK, name, ["status", "assigned_to"], as_dict=True)
+		if not row or row.status not in TASK_OPEN:
+			continue
+		if tasks:
+			tasks.append_note(name, note)
+		frappe.db.set_value(TASK, name, "status", "Canceled")
+		if row.assigned_to:
+			users.add(row.assigned_to)
+	try:
+		from omni_crm.monitoring import alerts
+
+		alerts.deliver_now(
+			alerts.Alert(
+				kind=ALERT_KIND,
+				scope=f"{lead}:{old}",
+				subject=_("Lịch demo của khách đã đổi hoặc hủy"),
+				detail=_("Lead {0}. {1}").format(lead, note),
+				email=False,
+				users=tuple(sorted(users)),
+			)
+		)
+	except Exception:
+		frappe.log_error(title="Omni: không báo được thay đổi lịch demo", message=f"lead={lead}")
 
 
 # --- Các bước hội thoại ----------------------------------------------------------------------------------------
@@ -460,9 +583,11 @@ def propose(ctx: RouteContext) -> bool:
 		return False
 	state.update_state(ctx.identity, demo_slots=[_iso(s) for s in slots], flow=None, demo_wait=None)
 	labels = {f"khung_{i + 1}": slot_label(s) for i, s in enumerate(slots)}
-	if not _send(ctx, NODE_SLOTS, labels):
+	sent = _send(ctx, NODE_SLOTS, labels)
+	if not sent:
 		_handoff(ctx, _("Không gửi được danh sách khung giờ demo"))
 		return False
+	state.update_state(ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(now))
 	return True
 
 
@@ -482,26 +607,60 @@ def _offer_nearest(ctx: RouteContext, after: datetime) -> None:
 		_handoff(ctx, _("Khách muốn demo vào giờ đã kín lịch, không tìm được khung thay thế"))
 		return
 	state.update_state(ctx.identity, demo_slots=[_iso(nearest)], demo_at=None, flow=None, demo_wait=None)
-	if not _send(ctx, NODE_BUSY, {"khung_1": slot_label(nearest)}):
+	sent = _send(ctx, NODE_BUSY, {"khung_1": slot_label(nearest)})
+	if not sent:
 		propose(ctx)
+		return
+	state.update_state(ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(_now()))
 
 
 def confirm(ctx: RouteContext) -> None:
-	"""Bước 5 (4.4): chốt lịch đã chọn và gửi câu xác nhận."""
+	"""Bước 5 (4.4): chốt lịch đã chọn (có khóa theo khung giờ) rồi gửi câu xác nhận; không bao giờ chốt im lặng."""
 	st = _st(ctx.identity)
 	start = get_datetime(st.get("demo_at")) if st.get("demo_at") else None
 	if not start or not ctx.lead:
 		propose(ctx)
 		return
-	if not is_free(start, demo_user(_service(ctx)), _now(), lead=ctx.lead):
-		_offer_nearest(ctx, start)
-		return
+	user = demo_user(_service(ctx))
 	mode = st.get("demo_mode") or frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")
-	book(ctx.identity, ctx.lead, start, mode, cint(st.get("demo_attendees")) or None, _service(ctx))
-	state.update_state(ctx.identity, flow=None, demo_wait=None, demo_slots=None, demo_email_asked=None)
+	with slot_lock(user, start) as locked:
+		if not locked or not is_free(start, user, _now(), lead=ctx.lead):
+			_offer_nearest(ctx, start)
+			return
+		booked = book(
+			ctx.identity, ctx.lead, start, mode, cint(st.get("demo_attendees")) or None, _service(ctx)
+		)
+		frappe.db.commit()  # lịch đã chốt là một đơn vị việc; ghi xong mới nhả khóa
+	state.update_state(
+		ctx.identity,
+		flow=None,
+		demo_wait=None,
+		demo_slots=None,
+		demo_slots_msg=None,
+		demo_slots_at=None,
+		demo_email_asked=None,
+	)
 	extra = scheduler.demo_variables(start, mode)
-	if not any(_send(ctx, code, extra) for code in NODE_CONFIRM):
-		frappe.logger("omni").info("omni script demo: không gửi được câu xác nhận, identity=%s", ctx.identity)
+	if any(_send(ctx, code, extra) for code in NODE_CONFIRM):
+		return
+	_confirmation_failed(ctx, booked, start)
+
+
+def _confirmation_failed(ctx: RouteContext, booked: dict, start: datetime) -> None:
+	"""Đã chốt lịch mà không gửi được câu xác nhận nào: ghi vào việc của người demo; không có việc thì chuyển nhân viên."""
+	note = _(
+		"Bot CHƯA gửi được câu xác nhận lịch demo {0} cho khách. Vui lòng xác nhận trực tiếp với khách."
+	).format(slot_label(start))
+	frappe.logger("omni").info("omni script demo: không gửi được câu xác nhận, identity=%s", ctx.identity)
+	if booked.get("task"):
+		try:
+			from omni_crm.script import tasks
+
+			tasks.append_note(booked["task"], note)
+			return
+		except ImportError:
+			pass
+	_handoff(ctx, note)
 
 
 def _after_attendees(ctx: RouteContext) -> None:
@@ -523,6 +682,8 @@ def on_text(ctx: RouteContext) -> bool:
 		start = parse_time(ctx.text, _now())
 		if not start:
 			_handoff(ctx, _("Khách gõ giờ demo mà bot không đọc được"))
+		elif not in_booking_range(start, _now()):
+			_handoff(ctx, _("Khách muốn demo trong vòng 2 giờ tới hoặc xa hơn 45 ngày"))
 		else:
 			choose(ctx, start)
 	elif wait == "attendees":
@@ -556,11 +717,27 @@ def _on_format(ctx: RouteContext) -> None:
 
 def _on_slot(ctx: RouteContext) -> None:
 	index = cint(ctx.payload_code.rsplit("_", 1)[-1]) - 1
-	slots = _st(ctx.identity).get("demo_slots") or []
-	if not 0 <= index < len(slots):
-		propose(ctx)
+	st = _st(ctx.identity)
+	slots = st.get("demo_slots") or []
+	if not 0 <= index < len(slots) or not _slots_current(ctx.identity, st):
+		propose(ctx)  # nút của tin cũ: không đoán khung, gửi lại danh sách mới
 		return
 	choose(ctx, get_datetime(slots[index]))
+
+
+def _slots_current(identity: str, st: dict) -> bool:
+	"""Các khung đang lưu đúng là của tin có nút gần nhất gửi cho khách và chưa quá 24 giờ."""
+	sent_at = st.get("demo_slots_at")
+	if not st.get("demo_slots_msg") or not sent_at or _now() - get_datetime(sent_at) > SLOTS_TTL:
+		return False
+	last = frappe.get_all(
+		"Omni Outbound Message",
+		filters={"identity": identity, "script_node": ["in", list(SLOT_NODES)]},
+		pluck="name",
+		order_by="creation desc",
+		limit=1,
+	)
+	return bool(last) and last[0] == st.get("demo_slots_msg")
 
 
 def _on_other_time(ctx: RouteContext) -> None:
@@ -578,7 +755,7 @@ def _on_reschedule(ctx: RouteContext) -> None:
 
 
 def _on_cancel(ctx: RouteContext) -> None:
-	release(ctx.identity, ctx.lead, _("Khách hủy lịch demo"))
+	release(ctx.identity, ctx.lead, _("Khách hủy lịch demo"), journey=JOURNEY_AFTER_CANCEL)
 	state.update_state(ctx.identity, flow=None, demo_wait=None, demo_slots=None)
 	_send(ctx, NODE_CANCEL)
 
@@ -666,9 +843,18 @@ def action_demo(ctx: RouteContext, arg: str, node: dict) -> bool | None:
 		start = get_datetime(st.get("demo_at")) if st.get("demo_at") else None
 		booked = ctx.lead and frappe.db.get_value(LEAD, ctx.lead, "omni_demo_at")
 		if start and ctx.lead and (not booked or get_datetime(booked) != start):
-			book(ctx.identity, ctx.lead, start, st.get("demo_mode"), cint(st.get("demo_attendees")) or None)
-	elif arg in ("reschedule", "cancel"):
-		release(ctx.identity, ctx.lead)
+			user = demo_user(_service(ctx))
+			with slot_lock(user, start) as locked:
+				if not locked or not is_free(start, user, _now(), lead=ctx.lead):
+					_offer_nearest(ctx, start)
+					return True  # khung không còn hợp lệ: dừng chuỗi action của ô xác nhận
+				book(
+					ctx.identity, ctx.lead, start, st.get("demo_mode"), cint(st.get("demo_attendees")) or None
+				)
+	elif arg == "reschedule":
+		release(ctx.identity, ctx.lead, _("Khách đổi lịch demo"))
+	elif arg == "cancel":
+		release(ctx.identity, ctx.lead, _("Khách hủy lịch demo"), journey=JOURNEY_AFTER_CANCEL)
 	return None
 
 
