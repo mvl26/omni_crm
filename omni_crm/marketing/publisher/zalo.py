@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 
+import frappe
 from frappe import _
 
 from omni_crm.channels.zalo import config
@@ -32,18 +33,51 @@ def _client(channel: str):
 	return ZaloClient(channel)
 
 
-def to_publish_error(e: ZaloError) -> Exception:
+def _detail(e: ZaloError, step: str, sent: dict | None) -> str:
+	"""Phần chẩn đoán gắn sau thông điệp lỗi: bước gọi, mã gốc, câu báo lỗi của Zalo, tóm tắt dữ liệu đã gửi."""
+	parts = [_("bước {0}").format(step), _("mã Zalo {0}").format(e.code)]
+	raw = getattr(e, "raw_message", "")
+	if raw:
+		parts.append(_("Zalo nói: {0}").format(raw))
+	if sent:
+		# Địa chỉ ảnh dài bị bộ che bí mật của nhật ký đăng che mất: ghi riêng vào Error Log để chẩn đoán.
+		frappe.log_error(
+			title=_("Marketing Hub: Zalo từ chối bài (mã {0})").format(e.code),
+			message=f"Zalo: {raw}\n{sent_summary(sent)}",
+		)
+	return " [" + "; ".join(parts) + "]"
+
+
+def sent_summary(body: dict) -> str:
+	"""Tóm tắt yêu cầu tạo bài (thuần): độ dài các trường và các địa chỉ, không kèm nội dung bài hay token."""
+	items = body.get("body") or []
+	text_len = sum(len(str(i.get("content") or "")) for i in items if i.get("type") == "text")
+	images = [str(i.get("url") or "") for i in items if i.get("type") == "image"]
+	return (
+		f"title={len(str(body.get('title') or ''))} ký tự, author={body.get('author')}, "
+		f"description={len(str(body.get('description') or ''))} ký tự, body_text={text_len} ký tự, "
+		f"cover={(body.get('cover') or {}).get('photo_url')}, body_images={images}, "
+		f"tracking_link={body.get('tracking_link')!r}"
+	)
+
+
+def to_publish_error(e: ZaloError, step: str = "", sent: dict | None = None) -> Exception:
+	detail = _detail(e, step, sent) if step else ""
 	if e.kind == TRANSIENT:
 		return ProviderError(
-			_("Zalo lỗi tạm thời: {0}").format(e.message_vi), http_status=e.http_status, ambiguous=True
+			_("Zalo lỗi tạm thời: {0}").format(e.message_vi) + detail,
+			http_status=e.http_status,
+			ambiguous=True,
 		)
 	if e.kind == TOKEN:
 		return TerminalError(
-			_("Zalo từ chối mã truy cập OA: {0}").format(e.message_vi), http_status=e.http_status
+			_("Zalo từ chối mã truy cập OA: {0}").format(e.message_vi) + detail, http_status=e.http_status
 		)
 	if e.code in (-201, -102):
-		return PublishValidationError(_("Zalo báo dữ liệu bài không hợp lệ: {0}").format(e.message_vi))
-	return TerminalError(_("Zalo từ chối bài: {0}").format(e.message_vi), http_status=e.http_status)
+		return PublishValidationError(
+			_("Zalo báo dữ liệu bài không hợp lệ: {0}").format(e.message_vi) + detail
+		)
+	return TerminalError(_("Zalo từ chối bài: {0}").format(e.message_vi) + detail, http_status=e.http_status)
 
 
 def article_body(p: Payload) -> dict:
@@ -74,10 +108,11 @@ class ZaloAdapter(Adapter):
 		if not payload.channel:
 			raise TerminalError(_("Chưa chọn kênh Zalo OA"))
 		client = _client(payload.channel)
+		body = article_body(payload)
 		try:
-			created = client._request("POST", config.get("article_create_path"), body=article_body(payload))
+			created = client._request("POST", config.get("article_create_path"), body=body)
 		except ZaloError as e:
-			raise to_publish_error(e) from None
+			raise to_publish_error(e, "tạo bài", body) from None
 		token = str((created or {}).get("token") or "")
 		if not token:
 			raise ProviderError(_("Zalo không trả mã xử lý bài viết"), ambiguous=True)
@@ -86,7 +121,7 @@ class ZaloAdapter(Adapter):
 			try:
 				data = client._request("POST", config.get("article_verify_path"), body={"token": token}) or {}
 			except ZaloError as e:
-				raise to_publish_error(e) from None
+				raise to_publish_error(e, "kiểm tra bài") from None
 			article_id = str(data.get("article_id") or data.get("id") or "")
 			if article_id:
 				return PublishResult(external_post_id=article_id)

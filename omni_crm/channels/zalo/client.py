@@ -125,7 +125,8 @@ class ZaloClient:
 			raise to_error(None, resp.status_code) from None
 		code = payload.get("error") if isinstance(payload, dict) else None
 		if code not in (0, None) or resp.status_code >= 400:
-			raise to_error(code if isinstance(code, int) else None, resp.status_code)
+			raw = payload.get("message") if isinstance(payload, dict) else ""
+			raise to_error(code if isinstance(code, int) else None, resp.status_code, raw or "")
 		return payload.get("data") or {}
 
 	# --- API ---

@@ -522,6 +522,39 @@ class TestZaloAdapter(FrappeTestCase):
 		self.assertEqual(res.external_post_id, "art-1")
 		self.assertEqual(fake.calls[1][2]["body"], {"token": "tk"})
 
+	def test_rejected_article_keeps_zalo_code_and_message(self):
+		from omni_crm.channels.zalo import errors as zerr
+		from omni_crm.marketing.publisher.errors import PublishValidationError
+
+		class Rejecting(FakeZaloClient):
+			def _request(self, method, path, **kw):
+				self.calls.append((method, path, kw))
+				raise zerr.to_error(-201, 200, "cover photo_url is invalid")
+
+		with (
+			mock.patch.object(zalo, "_client", return_value=Rejecting([])),
+			mock.patch.object(zalo.frappe, "log_error") as log,
+		):
+			with self.assertRaises(PublishValidationError) as ctx:
+				zalo.ZaloAdapter().publish(self.payload(), sleep=lambda s: None)
+		msg = ctx.exception.message
+		self.assertIn("-201", msg)
+		self.assertIn("tạo bài", msg)
+		self.assertIn("cover photo_url is invalid", msg)
+		logged = log.call_args.kwargs["message"]
+		self.assertIn("cover=https://x/cover.jpg", logged)
+		self.assertNotIn("Nội dung", logged)  # không ghi nội dung bài
+
+	def test_parse_keeps_raw_message(self):
+		from omni_crm.channels.zalo.client import ZaloClient
+		from omni_crm.channels.zalo.errors import ZaloError
+
+		resp = mock.Mock(status_code=200)
+		resp.json.return_value = {"error": -201, "message": "title is invalid"}
+		with self.assertRaises(ZaloError) as ctx:
+			ZaloClient._parse(resp)
+		self.assertEqual(ctx.exception.raw_message, "title is invalid")
+
 	def test_poll_timeout_is_provider_error(self):
 		fake = FakeZaloClient([{"token": "tk"}] + [{"status": "processing"}] * 40)
 		with mock.patch.object(zalo, "_client", return_value=fake):
