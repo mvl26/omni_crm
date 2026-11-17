@@ -16,9 +16,3 @@ def after_migrate() -> None:
 	from omni_crm.bot.prompts.loader import sync_settings
 
 	sync_settings()
-	try:  # ADR 0032: nạp ô kịch bản còn thiếu (không ghi đè ô đã sửa trên site); lỗi không làm hỏng migrate
-		from omni_crm.script.seed.load import load
-
-		load()
-	except Exception:
-		frappe.log_error(title="Omni: nạp kho kịch bản lỗi")
