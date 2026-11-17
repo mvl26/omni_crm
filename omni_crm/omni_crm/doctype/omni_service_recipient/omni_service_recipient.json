@@ -1,0 +1,46 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 12:00:00.000000",
+ "modified": "2026-11-17 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Service Recipient",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "links": [],
+ "field_order": [
+  "service",
+  "primary_user",
+  "backup_user"
+ ],
+ "fields": [
+  {
+   "fieldname": "service",
+   "fieldtype": "Select",
+   "label": "Dịch vụ",
+   "options": "VATTU\nSUPPLYCORE\nSPD\nKHAC\nDEMO_SUPPLYCORE\nDEMO_SPD\nTUAN_THU\nQUAN_LY",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "primary_user",
+   "fieldtype": "Link",
+   "label": "Người nhận chính",
+   "options": "User",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "backup_user",
+   "fieldtype": "Link",
+   "label": "Người nhận thay",
+   "options": "User",
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [],
+ "istable": 1
+}
