@@ -523,6 +523,15 @@ class TestZaloAdapter(FrappeTestCase):
 		self.assertEqual(zalo.short_description("Ngắn\ngọn"), "Ngắn gọn")
 		self.assertLessEqual(len(zalo.short_description("ế" * 400).encode()), 300)
 
+	def test_body_html_keeps_paragraphs_and_lines(self):
+		html = zalo.body_html("Mở đầu:\n\n✅ Một\n✅ Hai <b>\n\nKết", "https://x.vn/?a=1&b=2")
+		self.assertEqual(
+			html,
+			"<p>Mở đầu:</p><p>✅ Một<br>✅ Hai &lt;b&gt;</p><p>Kết</p>"
+			'<p><a href="https://x.vn/?a=1&amp;b=2">https://x.vn/?a=1&amp;b=2</a></p>',
+		)
+		self.assertEqual(zalo.body_html("Một đoạn"), "<p>Một đoạn</p>")
+
 	def test_poll_until_article_id(self):
 		fake = FakeZaloClient([{"token": "tk"}, {"status": "processing"}, {"article_id": "art-1"}])
 		with mock.patch.object(zalo, "_client", return_value=fake):

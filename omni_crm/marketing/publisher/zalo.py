@@ -11,8 +11,10 @@ Token cần quyền quản lý bài viết của OA.
 
 from __future__ import annotations
 
+import re
 import time
 import unicodedata
+from html import escape
 
 import frappe
 from frappe import _
@@ -105,10 +107,23 @@ def short_description(caption: str | None) -> str:
 	return out + "…"
 
 
+def body_html(caption: str | None, tracking_url: str = "") -> str:
+	"""Nội dung bài dạng HTML (thuần): Zalo gộp mọi xuống dòng của văn bản thường thành một đoạn (thấy thật
+	17/11/2026), nên mỗi đoạn là một <p>, xuống dòng trong đoạn là <br>, link theo dõi là thẻ <a> ở cuối.
+	# VERIFY: chưa đọc được tài liệu chính thức về các thẻ HTML Zalo cho phép trong nội dung bài viết.
+	"""
+	text = (caption or "").replace("\r\n", "\n").strip()
+	paragraphs = [b.strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
+	parts = ["<p>" + "<br>".join(escape(line.strip()) for line in b.split("\n")) + "</p>" for b in paragraphs]
+	if tracking_url:
+		link = escape(tracking_url, quote=True)
+		parts.append(f'<p><a href="{link}">{link}</a></p>')
+	return "".join(parts)
+
+
 def article_body(p: Payload) -> dict:
 	"""Yêu cầu tạo bài viết OA (thuần). Link theo dõi nằm trong nội dung và tracking_link (để đối chiếu)."""
-	text = p.message()
-	body = [{"type": "text", "content": text}]
+	body = [{"type": "text", "content": body_html(p.caption, p.tracking_url)}]
 	body += [{"type": "image", "url": u} for u in p.images[1:]]
 	desc = short_description(p.caption)
 	return {
