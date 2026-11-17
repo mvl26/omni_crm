@@ -200,6 +200,7 @@ scheduler_events = {
 		"*/1 * * * *": ["omni_crm.marketing.publisher.dispatch.dispatch_due"],
 		# V3-10 Prompt 6: mỗi giờ (phút 23) xem đã đủ insights_sync_hours chưa rồi đồng bộ số liệu bài đăng
 		"23 * * * *": ["omni_crm.marketing.insights.sync_due"],
+		"*/15 * * * *": ["omni_crm.script.scheduler.run_due"],  # bot kịch bản v3 (K5): tin hẹn giờ đến hạn
 	},
 	"hourly": [
 		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi
