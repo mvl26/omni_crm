@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 import frappe
 from frappe import _
-from frappe.utils import add_months, cint, escape_html, get_datetime, getdate, now_datetime
+from frappe.utils import add_months, add_to_date, cint, escape_html, get_datetime, getdate, now_datetime
 
 from omni_crm.script import engine, router, send, state, store, timeutil, validate
 from omni_crm.script.router import RouteContext
@@ -63,7 +63,22 @@ SERVICE_NAMES = {
 	"SUPPLYCORE": "phần mềm SupplyCore",
 	"SPD": "hệ thống SPD",
 }
-DAY_WORDS = ("hôm nay", "hôm qua", "vừa qua")
+DAY_WORDS = ("hôm nay", "hôm qua", "vừa qua")  # dịch bằng _() khi dùng; "vừa qua" chưa có trong kịch bản
+TODAY_TEXT = "trong hôm nay"
+AWAIT_HOURS = 48  # quá hạn này tin gõ của khách không còn được coi là câu trả lời cho bước 5
+# Hành trình còn "trước demo": chỉ từ các trạng thái này mới chuyển sang "Đã demo" (không kéo lùi trạng thái sau)
+BEFORE_DEMO = (
+	None,
+	"",
+	"Mới",
+	"Đang tư vấn",
+	"Chờ gửi tài liệu",
+	"Chờ báo giá",
+	"Đã gửi tài liệu",
+	"Đã gửi báo giá",
+	"Đã hẹn demo",
+	J_DEMOED,
+)
 
 
 # --- Dữ liệu Lead -----------------------------------------------------------------------------------------------
@@ -103,7 +118,7 @@ def sales_allowed(lead: str | None) -> bool:
 def day_word(demo_day: date, send_day: date) -> str:
 	"""Giá trị `{hom_nay_hom_qua}` theo khoảng cách giữa ngày demo và ngày gửi."""
 	gap = (send_day - demo_day).days
-	return DAY_WORDS[0] if gap <= 0 else DAY_WORDS[1] if gap == 1 else DAY_WORDS[2]
+	return _(DAY_WORDS[0] if gap <= 0 else DAY_WORDS[1] if gap == 1 else DAY_WORDS[2])
 
 
 def lead_vars(lead: str | None, at: datetime | None = None) -> dict:
@@ -112,11 +127,12 @@ def lead_vars(lead: str | None, at: datetime | None = None) -> dict:
 	first = (frappe.db.get_value(LEAD, lead, "first_name") if lead else "") or ""
 	words = first.split()
 	next_day = timeutil.next_working_day_text(at)
+	service = service_of(lead)
 	return {
 		"ten": words[-1] if words else "",
-		"dich_vu": SERVICE_NAMES.get(service_of(lead) or "", ""),
+		"dich_vu": _(SERVICE_NAMES[service]) if service in SERVICE_NAMES else "",
 		"ngay_lam_viec_tiep_theo": next_day,
-		"thoi_diem": next_day if timeutil.cutoff_1630(at) else "trong hôm nay",
+		"thoi_diem": next_day if timeutil.cutoff_1630(at) else _(TODAY_TEXT),
 	}
 
 
@@ -230,11 +246,51 @@ def _script_state(identity: str) -> dict:
 def _await(identity: str, what: str | None, **extra) -> None:
 	"""Ghi bot đang chờ khách gõ gì ở bước 5 (`phone`/`reason`/`concern`); None = không chờ nữa."""
 	if what:
-		state.update_state(identity, flow=FLOW, postdemo_await=what, **extra)
+		state.update_state(identity, flow=FLOW, postdemo_await=what, postdemo_at=str(now_datetime()), **extra)
 	elif _script_state(identity).get("flow") == FLOW:
 		state.update_state(
-			identity, flow=None, postdemo_await=None, postdemo_pending=None, postdemo_tries=None
+			identity,
+			flow=None,
+			postdemo_await=None,
+			postdemo_at=None,
+			postdemo_pending=None,
+			postdemo_tries=None,
 		)
+
+
+def _await_expired(data: dict) -> bool:
+	"""Bot đã chờ quá lâu (hoặc không rõ từ lúc nào): tin gõ lúc này không phải câu trả lời cho câu hỏi cũ."""
+	try:
+		asked = get_datetime(data.get("postdemo_at")) if data.get("postdemo_at") else None
+	except (TypeError, ValueError):
+		asked = None
+	return not asked or asked < add_to_date(now_datetime(), hours=-AWAIT_HOURS)
+
+
+def after_demo(lead: str | None) -> bool:
+	"""Lead thật sự đã demo xong (nhân viên ghi "Đã demo", hoặc hành trình đang "Đã demo"/"Thương lượng")."""
+	if not lead:
+		return False
+	row = frappe.db.get_value(LEAD, lead, ["omni_demo_result", "omni_journey_status"], as_dict=True)
+	return bool(row) and (
+		row.omni_demo_result == RESULT_DONE or row.omni_journey_status in (J_DEMOED, J_NEGOTIATE)
+	)
+
+
+def _guard(handler: router.Handler) -> router.Handler:
+	"""Ô `SD_*` chỉ có nghĩa sau demo: Lead chưa demo thì không làm gì, đưa khách về menu (nếu engine đã có)."""
+
+	def wrapped(ctx: RouteContext) -> None:
+		if after_demo(ctx.lead):
+			handler(ctx)
+			return
+		_await(ctx.identity, None)
+		try:
+			engine.run_node(ctx, router.MENU_CODE)
+		except NotImplementedError:
+			pass
+
+	return wrapped
 
 
 def _send(ctx: RouteContext, code: str, extra: dict | None = None) -> bool:
@@ -270,19 +326,28 @@ def on_demo_result(lead: str, result: str) -> str | None:
 	row = frappe.db.get_value(
 		LEAD, lead, ["omni_journey_status", "omni_no_bot_followup", "omni_demo_at"], as_dict=True
 	)
-	agreed = row.omni_journey_status == J_AGREED
-	if not agreed:
+	journey = row.omni_journey_status
+	if journey in BEFORE_DEMO and journey != J_DEMOED:
 		state.set_journey(lead, J_DEMOED)
-	if agreed or cint(row.omni_no_bot_followup) or not sales_allowed(lead):
-		return None
+	if journey not in BEFORE_DEMO or cint(row.omni_no_bot_followup) or not sales_allowed(lead):
+		return None  # khách đã đồng ý ngay trong buổi demo, đang thương lượng, đã thua...: không hỏi cảm nhận nữa
 	identity = identity_of(lead)
 	if not identity:
 		return None
 	now = now_datetime()
-	due = timeutil.postdemo_send_at(now)
 	demo_day = getdate(row.omni_demo_at) if row.omni_demo_at else now.date()
-	payload = {"demo_date": str(demo_day), "hom_nay_hom_qua": day_word(demo_day, due.date())}
+	key = str(demo_day)
+	if _first_message_exists(lead, key):
+		return None  # mỗi buổi demo chỉ một Tin 1, kể cả khi nhân viên ghi lại kết quả vào ngày khác
+	due = timeutil.postdemo_send_at(now)
+	payload = {"key": key, "demo_date": key, "hom_nay_hom_qua": day_word(demo_day, due.date())}
 	return _schedule(KIND_FIRST, identity, lead, due, NODE_FIRST, payload)
+
+
+def _first_message_exists(lead: str, key: str) -> bool:
+	"""Đã có Tin 1 (ở bất kỳ trạng thái nào) cho buổi demo ngày `key` của Lead."""
+	rows = frappe.get_all(SCHEDULED, filters={"kind": KIND_FIRST, "lead": lead}, pluck="payload")
+	return any(store.as_dict(raw).get("key") == key for raw in rows)
 
 
 # --- 5.2: khách đồng ý ------------------------------------------------------------------------------------------
@@ -434,7 +499,9 @@ def schedule_lost_3m(lead: str, identity: str | None = None) -> str | None:
 	if frappe.db.exists(SCHEDULED, {"kind": KIND_3M, "lead": lead}):
 		return None
 	due = timeutil.next_proactive_slot(get_datetime(add_months(now_datetime(), 3)))
-	return _schedule(KIND_3M, identity or identity_of(lead), lead, due, NODE_3M, {"via": "email_task"})
+	return _schedule(
+		KIND_3M, identity or identity_of(lead), lead, due, NODE_3M, {"key": "once", "via": "email_task"}
+	)
 
 
 def send_lost_3m(lead: str) -> str | None:
@@ -475,6 +542,11 @@ def _on_text(ctx: RouteContext) -> bool:
 	data = _script_state(ctx.identity)
 	waiting = data.get("postdemo_await")
 	text = (ctx.text or "").strip()  # lời khách là dữ liệu: chỉ lưu, không làm theo
+	if not waiting:
+		return False
+	if _await_expired(data) or (waiting != "phone" and not after_demo(ctx.lead)):
+		_await(ctx.identity, None)
+		return False
 	if waiting == "phone":
 		return _on_phone_text(ctx, data, text)
 	if waiting == "reason":
@@ -527,30 +599,26 @@ def _act_notify(ctx: RouteContext, arg: str, node: dict) -> None:
 		ensure_won(ctx.lead, ctx.identity, order=node.get("code") == "DAT_HANG")
 
 
-def _act_lost_3m(ctx: RouteContext, arg: str, node: dict) -> None:
-	if ctx.lead:
-		send_lost_3m(ctx.lead)
-
-
 def _noop(ctx: RouteContext, arg: str, node: dict) -> None:
 	return None
 
 
 engine.register_action("require", _act_require)
 engine.register_action("notify", _act_notify)
-engine.register_action(KIND_3M, _act_lost_3m)
-for _name in (KIND_FIRST, "email_template", "zns_template"):
-	engine.register_action(_name, _noop)
+# Tên loại tin / mẫu ghi trên ô chỉ là nhãn: module nào đăng ký trước cũng được, ở đây chỉ bổ sung khi còn thiếu
+for _name in (KIND_FIRST, KIND_3M, "email_template", "zns_template"):
+	if _name not in engine._actions:
+		engine.register_action(_name, _noop)
 engine.register_state(FLOW, _on_text)
 
-for _code in WON_NODES:
-	router.register(_code, _on_won)
-router.register(NODE_COST, _on_cost)
-router.register(NODE_CONCERN, _on_concern_menu)
-router.register(NODE_CONCERN_KB, _on_concern_kb)
+router.register("DAT_HANG", _on_won)
+router.register("SD_BATDAU", _guard(_on_won))
+router.register(NODE_COST, _guard(_on_cost))
+router.register(NODE_CONCERN, _guard(_on_concern_menu))
+router.register(NODE_CONCERN_KB, _guard(_on_concern_kb))
 for _code in CONCERN_HANDOFF_NODES:
-	router.register(_code, _on_concern_handoff)
-router.register(NODE_REFUSE, _on_refuse)
+	router.register(_code, _guard(_on_concern_handoff))
+router.register(NODE_REFUSE, _guard(_on_refuse))
 for _code in REASON_NODES:
-	router.register(_code, _on_reason)
-router.register(NODE_CLOSE, _on_close)
+	router.register(_code, _guard(_on_reason))
+router.register(NODE_CLOSE, _guard(_on_close))
