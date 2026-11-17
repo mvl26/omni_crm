@@ -621,6 +621,8 @@ def _sending(draft: str) -> Iterator[None]:
 
 def assert_can_queue(req: OutboundRequest) -> None:
 	"""Gọi từ `queue_outbound` cho tin source=Bot: kiểm lần hai MỌI điều kiện; ném ValidationError nếu không đủ."""
+	if not req.bot_draft and _script_queue_ok(req):  # tin bot kịch bản v3 (ADR 0032): không có nháp
+		return
 	if not req.bot_draft or frappe.flags.get(SENDING_FLAG) != req.bot_draft:
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
 	group = frappe.db.get_value(DRAFT, req.bot_draft, "question_group")
@@ -636,8 +638,20 @@ def assert_can_queue(req: OutboundRequest) -> None:
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
 
 
+def _script_queue_ok(req: OutboundRequest) -> bool:
+	"""Tin Bot không nháp chỉ hợp lệ khi đang được `script.send` xếp cho đúng định danh và công tắc kịch bản bật."""
+	from omni_crm.script import send as script_send
+	from omni_crm.script import switch
+
+	return script_send.is_script_sending(req.identity) and switch.enabled_for(req.identity)
+
+
 def send_time_check(row: Any) -> tuple[bool, str]:
 	"""Ngay trước khi gửi tin Bot đang chờ (từ `send_outbound`): khóa hạ tầng, nhóm còn bật, bot chưa tạm dừng, trong giờ bot."""
+	if not row.get("bot_draft") and frappe.db.get_value(OUTBOUND, row.name, "script_node"):
+		from omni_crm.script import send as script_send  # ADR 0032: tin kịch bản kiểm công tắc riêng
+
+		return script_send.send_time_check(row)
 	if not flags.auto_send_infra_allowed():
 		return False, _("Khóa hạ tầng tự động gửi đang đóng")
 	draft = (

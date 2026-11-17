@@ -484,6 +484,7 @@ def send_outbound(outbound_name: str) -> str:
 		channel=claimed.channel,
 		identity=claimed.identity,
 		text=claimed.text,
+		meta={"outbound": claimed.name},  # ADR 0032: adapter đọc nút kịch bản theo tên tin
 		reply_to_external_id=_reply_target(claimed),
 		source=claimed.source,
 		purpose=claimed.purpose or "reply",

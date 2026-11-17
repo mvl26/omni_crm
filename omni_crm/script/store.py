@@ -1,0 +1,91 @@
+"""Kho ô kịch bản (Omni Script Node): đọc ô và điền biến. Câu gửi khách nằm trong DocType, không nằm trong code."""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import frappe
+
+from omni_crm.script import switch
+
+NODE = "Omni Script Node"
+ACTIVE, REVIEW, OFF = "Đang dùng", "Cần duyệt", "Tắt"
+_VAR = re.compile(r"\{(\w+)\}")
+
+
+def normalize_code(code: str | None) -> str:
+	"""Mã ô chuẩn: bỏ `#`, khoảng trắng, viết hoa."""
+	return (code or "").strip().lstrip("#").strip().upper()
+
+
+def get_node(code: str | None) -> dict | None:
+	"""Ô kịch bản theo mã: {code, text, buttons:[{label, target}], status, action, service, step, channel}; không có trả None."""
+	code = normalize_code(code)
+	if not code or not frappe.db.exists(NODE, code):
+		return None
+	doc = frappe.get_doc(NODE, code)
+	return {
+		"code": doc.code,
+		"text": doc.text or "",
+		"buttons": [{"label": b.label, "target": b.target} for b in doc.buttons or []],
+		"status": doc.status or ACTIVE,
+		"action": doc.action or "",
+		"service": doc.service or "",
+		"step": doc.step or "",
+		"channel": doc.channel or "Tất cả",
+	}
+
+
+def fill(text: str, ctx: dict | None) -> str:
+	"""Điền `{bien}` từ ctx; biến thiếu thành chuỗi rỗng (không để lộ `{ten}` cho khách), gọn khoảng trắng thừa."""
+	ctx = ctx or {}
+
+	def _sub(m: re.Match) -> str:
+		value = ctx.get(m.group(1))
+		return "" if value is None else str(value)
+
+	out = _VAR.sub(_sub, text or "")
+	out = re.sub(r"[ \t]{2,}", " ", out)
+	out = re.sub(r" +([,.!?])", r"\1", out)
+	return "\n".join(line.strip() for line in out.split("\n")).strip()
+
+
+def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]] | None:
+	"""(text, buttons) đã điền biến; None nếu ô không có, `Tắt`, nội dung trống, hoặc `Cần duyệt` mà không phải danh sách thử.
+
+	ctx có thể chứa `identity` (để kiểm danh sách thử) và các biến của câu.
+	"""
+	if not node:
+		return None
+	status = node.get("status") or ACTIVE
+	if status == OFF:
+		return None
+	if status == REVIEW and not switch.is_test((ctx or {}).get("identity")):
+		return None
+	if not (node.get("text") or "").strip():
+		return None
+	text = fill(node["text"], ctx)
+	if not text:
+		return None
+	buttons = [
+		{"label": fill(b.get("label") or "", ctx), "target": normalize_code(b.get("target"))}
+		for b in node.get("buttons") or []
+	]
+	return text, [b for b in buttons if b["label"] and b["target"]]
+
+
+def known_codes() -> set[str]:
+	"""Mọi mã ô kịch bản đang có (dùng nhận diện mã nút `#CODE`)."""
+	return set(frappe.get_all(NODE, pluck="name"))
+
+
+def as_dict(value: Any) -> dict:
+	"""JSON/dict → dict (lỗi hoặc rỗng trả {})."""
+	if isinstance(value, dict):
+		return value
+	try:
+		parsed = frappe.parse_json(value) if value else {}
+	except Exception:
+		return {}
+	return parsed if isinstance(parsed, dict) else {}
