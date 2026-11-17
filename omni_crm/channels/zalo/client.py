@@ -24,6 +24,9 @@ from omni_crm.channels.zalo.errors import TOKEN, TRANSIENT, ZaloError, to_error
 CHANNEL = "Omni Channel"
 
 
+BUTTON_TEXT_MAX = 2000  # nội dung tin tư vấn kèm nút (tài liệu bên thứ ba, docs/bot_v3_plan.md mục 3)
+
+
 def split_text(text: str, limit: int | None = None) -> list[str]:
 	"""Tách văn bản thành các đoạn không quá `limit` ký tự, ưu tiên ngắt ở xuống dòng/khoảng trắng; giữ thứ tự."""
 	limit = limit or config.get("max_text_length")
@@ -149,6 +152,39 @@ class ZaloClient:
 			sent.append(str(data.get("message_id") or ""))
 			self.last_quota_type = _quota_type(data)
 		return sent
+
+	def send_buttons(self, user_id: str, text: str, buttons: list[dict]) -> str:
+		"""Gửi tin tư vấn kèm nút (template, `oa.query.show`, payload `#mã`) trong MỘT tin; trả mã tin. Sandbox: không gọi HTTP.
+
+		Đã kiểm thật 17/11 (docs/bot_v3_plan.md mục 3): 5 nút, chỉ hiện trên app điện thoại. # VERIFY: giới hạn ký tự tiêu đề nút.
+		"""
+		text = (text or "").strip()
+		if not text:
+			raise ZaloError(None, "permanent", _("Tin nhắn rỗng"))
+		if len(text) > BUTTON_TEXT_MAX:
+			raise ZaloError(None, "permanent", _("Tin kèm nút dài quá {0} ký tự").format(BUTTON_TEXT_MAX))
+		if flags.sandbox():
+			frappe.logger("omni").info(
+				"omni sandbox: bỏ qua gửi Zalo kèm nút (kênh %s, %s nút)", self.channel, len(buttons)
+			)
+			return f"sandbox:{uuid.uuid4().hex[:16]}"
+		message = {
+			"text": text,
+			"attachment": {
+				"type": "template",
+				"payload": {
+					"buttons": [
+						{"title": b["label"], "type": "oa.query.show", "payload": "#" + b["target"]}
+						for b in buttons
+					]
+				},
+			},
+		}
+		data = self._request(
+			"POST", config.get("send_path"), body={"recipient": {"user_id": user_id}, "message": message}
+		)
+		self.last_quota_type = _quota_type(data)
+		return str(data.get("message_id") or "")
 
 	def send_request_user_info(
 		self, user_id: str, title: str, subtitle: str, image_url: str | None = None

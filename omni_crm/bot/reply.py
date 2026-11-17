@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -740,12 +741,30 @@ def reply_batch(batch_id: str) -> str:
 		return _reply_batch(batch_id)
 
 
+def _script_handled(batch_id: str) -> bool:
+	"""Gọi `script.router.handle_batch`; lỗi thì ghi log (không nội dung khách) và để luồng cũ chạy."""
+	try:
+		from omni_crm.script import router
+
+		return bool(router.handle_batch(batch_id))
+	except Exception as e:
+		frappe.db.rollback()
+		frames = "".join(traceback.format_list(traceback.extract_tb(e.__traceback__)[-6:]))
+		frappe.log_error(  # chỉ loại lỗi + vị trí code: thông điệp lỗi có thể chứa lời khách
+			title="Omni: bot kịch bản lỗi, dùng luồng cũ",
+			message=f"batch_id={batch_id}\nloai={type(e).__name__}\n{frames}",
+		)
+		return False
+
+
 def _reply_batch(batch_id: str) -> str:
 	"""Soạn nháp (Shadow hoặc Draft theo công tắc) cho lượt `batch_id`; trả "drafted" hoặc lý do bỏ qua. Không ném lỗi, không gửi gì.
 
 	Điều kiện (docs/08 mục 5.1): chế độ khác Off; tin cuối của lượt là tin khách; bot chưa bị tạm dừng với khách;
 	sale chưa trả lời sau tin đó (ngắt mạch); chưa quá giới hạn tần suất.
 	"""
+	if _script_handled(batch_id):  # ADR 0032: bot kịch bản v3 nhận lượt thì luồng cũ không chạy
+		return "script"
 	fallback: dict | None = (
 		None  # K1: đủ thông tin để chuyển người khi lượt này lỗi giữa chừng (chế độ Draft)
 	)

@@ -283,6 +283,13 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 	return _event(channel_doc, data, event_type="ignored", user_id=user, text=None)
 
 
+def _script_buttons(req: OutboundRequest) -> list[dict]:
+	"""Nút kịch bản của tin ra (`req.meta["outbound"]` do send_outbound đặt); trống nếu không có."""
+	from omni_crm.script import send as script_send
+
+	return script_send.buttons_of(req.meta.get("outbound"))
+
+
 class ZaloAdapter:
 	"""Adapter kênh Zalo OA."""
 
@@ -359,6 +366,11 @@ class ZaloAdapter:
 		client = ZaloClient(channel_doc.name)
 		if req.attachment:
 			message_id = self._send_attachment(client, user_id, req)
+			req.meta["quota_type"] = client.last_quota_type
+			return message_id
+		buttons = _script_buttons(req)
+		if buttons:  # ADR 0032: tin kịch bản kèm nút gửi dạng template trong một tin
+			message_id = client.send_buttons(user_id, req.text, buttons)
 			req.meta["quota_type"] = client.last_quota_type
 			return message_id
 		ids = client.send_text(user_id, req.text)
