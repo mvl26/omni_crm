@@ -26,6 +26,7 @@ from omni_crm.channels.meta_leads.client import MetaClient
 from omni_crm.channels.meta_leads.errors import TRANSIENT, MetaError
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.identity.normalize import normalize_email, normalize_phone
+from omni_crm.marketing import attribution as content_attribution
 from omni_crm.pipeline.retry import TransientError
 from omni_crm.prospect import contacts as prospect_contacts
 from omni_crm.prospect.normalize import InvalidTaxId, normalize_tax_id
@@ -246,6 +247,9 @@ def _attribution_values(form: dict, campaign: str | None, row: Any, created: boo
 		)
 		for key in ("source", "medium", "campaign", "content", "term"):
 			values[f"omni_utm_{key}"] = _data(utm.get(f"utm_{key}"))
+		post = content_attribution.match_post(utm.get("utm_content"))  # ADR 0029: utm_content = mã bài
+		if post and content_attribution.lead_field_ready():
+			values["omni_content_post"] = post
 	elif campaign and row.get("omni_campaign") and campaign != row.get("omni_campaign"):
 		returned_from = row.get("omni_campaign")
 	if campaign:

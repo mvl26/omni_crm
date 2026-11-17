@@ -27,3 +27,20 @@ class OmniCampaign(Document):
 			"Omni Campaign", {"campaign_key": self.campaign_key, "name": ["!=", self.name or ""]}
 		):
 			frappe.throw(_("Đã có chiến dịch cùng nền tảng và mã chiến dịch này"))
+		self.landing_url = (self.landing_url or "").strip() or None
+
+	def on_update(self) -> None:
+		# ADR 0029: link có UTM của bài lấy utm_campaign và trang đích của chiến dịch; đổi hai ô này thì sinh lại link
+		# cho bài chưa đăng. Bài đã đăng giữ link cũ (link đó đã ra ngoài).
+		before = self.get_doc_before_save()
+		if not before or (before.utm_campaign, before.landing_url) == (self.utm_campaign, self.landing_url):
+			return
+		from omni_crm.marketing.content_posts import refresh_utm_links
+
+		published = refresh_utm_links(self.name)
+		if published:
+			frappe.msgprint(
+				_(
+					"Chiến dịch có {0} bài đã đăng với link cũ. Lead vào qua link cũ vẫn gắn đúng bài theo mã bài."
+				).format(published)
+			)

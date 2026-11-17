@@ -1,0 +1,323 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 16:00:00.000000",
+ "modified": "2026-11-17 16:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Content Post",
+ "description": "Bài đăng của chiến dịch (ADR 0029): nội dung, ảnh, giờ đăng, link có UTM, kết quả đăng và chỉ số.",
+ "sort_field": "publish_at",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:post_code",
+ "naming_rule": "By fieldname",
+ "title_field": "title",
+ "show_title_field_in_link": 1,
+ "track_changes": 1,
+ "search_fields": "title,campaign,status",
+ "image_field": "image",
+ "field_order": [
+  "post_code",
+  "campaign",
+  "title",
+  "col_main",
+  "status",
+  "platform",
+  "publish_mode",
+  "publish_at",
+  "sec_content",
+  "content",
+  "image",
+  "col_content",
+  "pillar",
+  "funnel_stage",
+  "landing_url",
+  "utm_link",
+  "sec_result",
+  "post_url",
+  "published_at",
+  "external_post_id",
+  "col_result",
+  "last_attempt_at",
+  "last_error",
+  "sec_metrics",
+  "reach",
+  "reactions",
+  "comments",
+  "shares",
+  "link_clicks",
+  "col_metrics",
+  "lead_count",
+  "deal_count",
+  "metrics_synced_at",
+  "metrics_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "post_code",
+   "fieldtype": "Data",
+   "label": "Mã bài (utm_content)",
+   "reqd": 1,
+   "unique": 1,
+   "set_only_once": 1,
+   "in_list_view": 1,
+   "description": "Chữ thường không dấu, số và gạch ngang, ví dụ spd-b01. Mã này nằm trong link có UTM để biết Lead đến từ bài nào; không đổi được sau khi lưu."
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "options": "Omni Campaign",
+   "label": "Chiến dịch",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Tiêu đề",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Chỉ dùng trong CRM (lịch, báo cáo); không đăng lên Page."
+  },
+  {
+   "fieldname": "col_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Nháp\nĐã lên lịch\nĐang đăng\nĐã đăng\nLỗi\nCần kiểm\nBỏ lỡ\nĐã huỷ",
+   "default": "Nháp",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Select",
+   "label": "Kênh",
+   "options": "Facebook\nZalo OA\nKhác",
+   "default": "Facebook",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "publish_mode",
+   "fieldtype": "Select",
+   "label": "Cách đăng",
+   "options": "Đăng tay\nTự động",
+   "default": "Đăng tay",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "description": "Tự động: CRM đăng lên Page đúng giờ (chỉ Facebook, khi Omni Settings bật tự đăng). Đăng tay: đăng trên Business Suite rồi dán link bài vào mục Kết quả đăng."
+  },
+  {
+   "fieldname": "publish_at",
+   "fieldtype": "Datetime",
+   "label": "Giờ đăng",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "sec_content",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Text",
+   "label": "Nội dung bài",
+   "description": "Gõ {link} ở chỗ muốn đặt link có UTM. Không có {link} thì CRM tự gắn link khi đăng tự động."
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Ảnh"
+  },
+  {
+   "fieldname": "col_content",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pillar",
+   "fieldtype": "Link",
+   "options": "Omni Content Pillar",
+   "label": "Trụ cột",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "funnel_stage",
+   "fieldtype": "Select",
+   "label": "Giai đoạn phễu",
+   "options": "\nNhận biết\nCân nhắc\nChuyển đổi"
+  },
+  {
+   "fieldname": "landing_url",
+   "fieldtype": "Data",
+   "options": "URL",
+   "label": "Link đích",
+   "description": "Để trống thì dùng trang đích của chiến dịch."
+  },
+  {
+   "fieldname": "utm_link",
+   "fieldtype": "Small Text",
+   "label": "Link có UTM",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Tự sinh từ link đích, utm_campaign của chiến dịch và mã bài. Dùng đúng link này khi đăng tay."
+  },
+  {
+   "fieldname": "sec_result",
+   "fieldtype": "Section Break",
+   "label": "Kết quả đăng"
+  },
+  {
+   "fieldname": "post_url",
+   "fieldtype": "Data",
+   "options": "URL",
+   "label": "Link bài trên Facebook",
+   "no_copy": 1,
+   "description": "Đăng tay: dán link bài sau khi bài lên Page, bài chuyển sang Đã đăng."
+  },
+  {
+   "fieldname": "published_at",
+   "fieldtype": "Datetime",
+   "label": "Đăng lúc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "external_post_id",
+   "fieldtype": "Data",
+   "label": "Mã bài trên nền tảng",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "col_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Lần gọi Meta gần nhất",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Lỗi gần nhất",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "sec_metrics",
+   "fieldtype": "Section Break",
+   "label": "Chỉ số",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "reach",
+   "fieldtype": "Int",
+   "label": "Lượt tiếp cận",
+   "no_copy": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "reactions",
+   "fieldtype": "Int",
+   "label": "Lượt cảm xúc",
+   "no_copy": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "comments",
+   "fieldtype": "Int",
+   "label": "Bình luận",
+   "no_copy": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "shares",
+   "fieldtype": "Int",
+   "label": "Chia sẻ",
+   "no_copy": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "link_clicks",
+   "fieldtype": "Int",
+   "label": "Lượt bấm link",
+   "no_copy": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "col_metrics",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lead_count",
+   "fieldtype": "Int",
+   "label": "Số Lead (không tính Lead thử)",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "deal_count",
+   "fieldtype": "Int",
+   "label": "Số Deal",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "metrics_synced_at",
+   "fieldtype": "Datetime",
+   "label": "Cập nhật chỉ số lúc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "metrics_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Chỉ số insights gốc",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "report": 1
+  }
+ ]
+}

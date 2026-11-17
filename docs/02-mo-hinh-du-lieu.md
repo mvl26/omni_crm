@@ -386,10 +386,11 @@ Trường ẩn `omni_import_snapshot` (Long Text) trên CRM Organization và Con
 | Omni Bot Run, Omni Eval * | Đọc/Ghi | — | Đọc |
 | Omni Bid Award, Omni Hospital Alias | Đọc/Ghi | Đọc theo quyền xem Lead của nhà thầu (V2-02: Bid Award có `permission_query_conditions` + `has_permission` theo Lead có `organization` = nhà thầu, và API `api/organization.py`; Hospital Alias chỉ Omni Admin) | — |
 | Omni Prospect Import | Đọc/Ghi (chạy nhập); System Manager cũng được. Không có vai trò "CRM Manager" trên site; Sales Manager KHÔNG được nhập | — | — |
-| Omni Campaign | Đọc/Ghi | Đọc | — |
+| Omni Campaign | Đọc/Ghi (Sales Manager đọc, tạo, sửa từ ADR 0029) | Đọc | — |
 | Omni Lead Form | Đọc/Ghi (khóa bí mật chỉ Omni Admin) | — | — |
 | Omni Care Log | Đọc/Ghi | Đọc/ghi kết quả qua API theo quyền Lead | — |
 | Omni Chat Template | Đọc/Ghi (Sales Manager cũng Đọc/Ghi) | Đọc; mẫu đã điền chỉ qua API `messenger_tab.get_templates` (quyền đọc Lead) | — |
+| Omni Content Post, Omni Content Pillar | Đọc/Ghi (Sales Manager cũng Đọc/Ghi, lên lịch bài; ADR 0029) | Đọc | — |
 
 "Theo Lead xem được": kiểm tra quyền bằng `frappe.has_permission("CRM Lead", doc=lead)` trong API, không chỉ dựa vào quyền DocType.
 
@@ -403,3 +404,10 @@ D1-06 thi hành: hook `permission_query_conditions` và `has_permission` (`omni_
 - `Omni Channel`: thêm `meta_page_id, meta_app_secret, meta_verify_token, meta_page_access_token` (Password) và `webform_captcha_provider, webform_captcha_secret`. `Omni Identity.channel_type` thêm 3 loại.
 - `Omni Settings`: `ads_silence_hours`, `webform_rate_limit`, `webform_rate_window_minutes`; `default_lead_source_map` mặc định có 6 khóa (site cũ giữ giá trị đã lưu, mã lấy mặc định cho khóa còn thiếu nên KHÔNG cần patch).
 - CRM Lead: 14 Custom Field của docs/15 mục 6 trừ `omni_first_response_at` đã có (`omni_ad_platform, omni_campaign, omni_last_campaign, omni_ad_id, omni_adset_id, omni_form_id, omni_utm_*, omni_click_id, omni_landing_page, omni_is_test`), đều chỉ đọc với người dùng.
+
+## ADR 0029 · Marketing Hub: bài đăng
+
+- `Omni Content Post` (autoname theo `post_code`, mã bài chữ thường/số/gạch ngang, tối đa 40 ký tự, dùng làm `utm_content`): `campaign` (Link Omni Campaign), `title`, `status` (Nháp, Đã lên lịch, Đang đăng, Đã đăng, Lỗi, Cần kiểm, Bỏ lỡ, Đã huỷ; chỉ đổi qua `api/content_posts.py`), `platform` (Facebook, Zalo OA, Khác), `publish_mode` (Đăng tay, Tự động), `publish_at`, `content`, `image` (Attach Image, tệp gắn vào chính bài), `pillar`, `funnel_stage`, `landing_url`, `utm_link` (tự sinh), kết quả đăng (`post_url`, `published_at`, `external_post_id`, `last_attempt_at`, `last_error`), chỉ số (`reach`, `reactions`, `comments`, `shares`, `link_clicks`, `metrics_synced_at`, `metrics_json`) và `lead_count`, `deal_count` (tính lại mỗi đêm).
+- `Omni Content Pillar`: `pillar_name` (duy nhất), `enabled`, `description`. Patch `v3.seed_content_pillars` nạp 4 trụ cột khi bảng trống.
+- `Omni Campaign` thêm `objective`, `target_audience`, `landing_url`, `lead_target`, `brief`; `status` thêm Đã huỷ.
+- `CRM Lead.omni_content_post` (Link, chỉ đọc, search_index): bài đăng của lần chạm đầu, gán trong `crm_bridge/form_lead.py::_attribution_values` khi `utm_content` khớp mã bài, và gán bù khi tạo bài sau (`marketing/attribution.py::relink_post`).

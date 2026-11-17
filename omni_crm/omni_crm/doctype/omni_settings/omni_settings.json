@@ -114,7 +114,15 @@
   "q11_allowed",
   "col_release_gate",
   "gate_phan_tich_passed_at",
-  "gate_nhap_passed_at"
+  "gate_nhap_passed_at",
+  "sec_content_posts",
+  "content_publish_enabled",
+  "content_publish_channel",
+  "content_late_window_minutes",
+  "col_content_posts",
+  "content_metrics_enabled",
+  "content_reach_metric",
+  "content_clicks_metric"
  ],
  "fields": [
   {
@@ -781,6 +789,56 @@
    "fieldtype": "Datetime",
    "label": "Cổng nháp đã đạt lúc",
    "description": "Thời điểm cổng nhap (docs/08 mục 10) được đo bằng AI thật trên bộ đề đã duyệt và đạt. Trống = chưa đạt."
+  },
+  {
+   "fieldname": "sec_content_posts",
+   "fieldtype": "Section Break",
+   "label": "Bài đăng (Marketing Hub, ADR 0029)"
+  },
+  {
+   "fieldname": "content_publish_enabled",
+   "fieldtype": "Check",
+   "label": "Bật tự đăng bài lên Facebook",
+   "default": "0",
+   "description": "Chỉ bật khi token của kênh có pages_manage_posts và pages_read_engagement (thử theo spd/docs/24 ĐẠT, hoặc Meta đã duyệt). Tắt thì bài Tự động nằm chờ ở Đã lên lịch."
+  },
+  {
+   "fieldname": "content_publish_channel",
+   "fieldtype": "Link",
+   "options": "Omni Channel",
+   "label": "Kênh Page dùng để đăng bài",
+   "description": "Kênh Meta Messenger có Page ID và token System User của Page, ví dụ messenger-mvl. Kênh phải bật và bật chiều ra."
+  },
+  {
+   "fieldname": "content_late_window_minutes",
+   "fieldtype": "Int",
+   "label": "Cửa sổ đăng muộn (phút)",
+   "default": "30",
+   "non_negative": 1,
+   "description": "Quá giờ đăng hơn số phút này mà chưa đăng được (job hoặc máy chủ dừng) thì bài chuyển Bỏ lỡ, không đăng nữa."
+  },
+  {
+   "fieldname": "col_content_posts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "content_metrics_enabled",
+   "fieldtype": "Check",
+   "label": "Bật đồng bộ chỉ số bài hằng ngày",
+   "default": "0",
+   "description": "06:30 mỗi ngày đọc tương tác và insights của bài tự đăng trong 30 ngày. Cần read_insights cho lượt tiếp cận, lượt bấm."
+  },
+  {
+   "fieldname": "content_reach_metric",
+   "fieldtype": "Data",
+   "label": "Chỉ số Meta cho lượt tiếp cận",
+   "default": "post_impressions_unique"
+  },
+  {
+   "fieldname": "content_clicks_metric",
+   "fieldtype": "Data",
+   "label": "Chỉ số Meta cho lượt bấm link",
+   "default": "post_clicks_by_type"
   }
  ],
  "permissions": [
@@ -800,5 +858,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "modified": "2026-11-10 16:00:00.000000"
+ "modified": "2026-11-17 16:00:00.000000"
 }

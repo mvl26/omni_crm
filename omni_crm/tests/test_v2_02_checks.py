@@ -100,6 +100,15 @@ EXPECTED_WHITELISTED = {
 	},  # ADR 0023: tab Messenger, 1 Lead/1 khách mỗi lần gửi
 	# ADR 0028: nút Connect Facebook Page, chỉ Omni Admin; không gửi tin, không trả dữ liệu khách hay token
 	"api/meta_connect.py": {"start", "callback", "pages", "subscribe"},
+	# ADR 0029: nút trên form bài đăng (đòi quyền sửa đúng bài) và lịch (theo quyền đọc); không hàm nào gọi Meta
+	"api/content_posts.py": {
+		"schedule",
+		"unschedule",
+		"cancel",
+		"reopen",
+		"resolve_uncertain",
+		"calendar_events",
+	},
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {
 		"state",

@@ -1,0 +1,69 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 16:00:00.000000",
+ "modified": "2026-11-17 16:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Content Pillar",
+ "description": "Trụ cột nội dung của bài đăng (ADR 0029), ví dụ Kiến thức quản lý vật tư, Giới thiệu dịch vụ.",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:pillar_name",
+ "naming_rule": "By fieldname",
+ "title_field": "pillar_name",
+ "track_changes": 1,
+ "field_order": [
+  "pillar_name",
+  "enabled",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "pillar_name",
+   "fieldtype": "Data",
+   "label": "Tên trụ cột",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Còn dùng",
+   "default": "1",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Mô tả"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  }
+ ]
+}

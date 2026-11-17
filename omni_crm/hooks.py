@@ -174,6 +174,7 @@ scheduler_events = {
 			"omni_crm.channels.zalo.phone_request.run_due",  # V3-07: gửi thẻ xin số đã đến hẹn (60 giây sau tin khách)
 			"omni_crm.intake_files.runner.run",  # nạp file JSON của miyano-intake (tắt khi chưa đặt site_config omni_intake_dir)
 			"omni_crm.crm_bridge.list_refresh.flush_pending",  # danh sách Lead CRM tự tải lại: phát bù Lead bị gộp
+			"omni_crm.marketing.publisher.run_due",  # ADR 0029: đăng bài đến giờ lên Page (tắt khi content_publish_enabled = 0)
 		],
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",
@@ -197,6 +198,12 @@ scheduler_events = {
 		"20 2 * * *": [
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
+		"30 6 * * *": [
+			"omni_crm.marketing.metrics.sync_daily"
+		],  # ADR 0029: chỉ số bài tự đăng (content_metrics_enabled)
+		"40 1 * * *": [
+			"omni_crm.marketing.attribution.refresh_all_counts"
+		],  # ADR 0029: số Lead, Deal theo bài
 	},
 	"hourly": [
 		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi
