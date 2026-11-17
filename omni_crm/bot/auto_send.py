@@ -678,6 +678,11 @@ def revert_to_draft(row: Any) -> bool:
 
 	Chỉ nháp còn ở trạng thái Auto/Sent As Is mới quay lại; commit. Không ném lỗi. Trả True nếu đã đưa về nháp.
 	"""
+	if not row.get("bot_draft") and frappe.db.get_value(OUTBOUND, row.name, "script_node"):
+		from omni_crm.script import send as script_send  # tin kịch bản không có nháp: báo người phụ trách
+
+		script_send.on_blocked(row)
+		return False
 	try:
 		draft = row.get("bot_draft")
 		d = (

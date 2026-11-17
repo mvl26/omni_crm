@@ -4,7 +4,12 @@
 chạy (công tắc tắt với khách, không phải tin khách, hoặc chưa có handler cho tình huống).
 
 Điều kiện dừng (trả True, bot im lặng): bot đang tạm dừng (`bot_paused_until` ở tương lai), Lead `omni_do_not_contact`,
-Lead ở trạng thái `Junk` (spam). Handler do K2+ đăng ký trong `omni_crm/script/flows/`.
+Lead ở trạng thái `Junk` (spam), hoặc nhân viên đã trả lời sau tin khách cuối của lượt. Handler do K2+ đăng ký trong
+`omni_crm/script/flows/`.
+
+Chống trả lời hai lần: tin kịch bản ghi `script_batch`; lượt đã có tin kịch bản thì trả True mà không chạy lại handler
+(dấu bền, không phụ thuộc Redis). Khóa hạ tầng: khách ngoài danh sách thử chỉ được bot kịch bản nhận lượt khi
+site_config `omni_script_bot_allowed` đúng (xem `script.send`); khóa đóng thì trả False để luồng Reply cũ chạy.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from dataclasses import dataclass, field
 
 import frappe
 
+from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.script import send, state, store, switch
 
 INBOUND = "Omni Inbound Message"
@@ -28,6 +34,9 @@ DEFAULT_KEY = "*"  # handler cho tin gõ tự do (không phải mã nút)
 FOLLOW_KEY = "FOLLOW"  # handler cho sự kiện quan tâm OA
 HANDLED_TTL = 3600
 EVENTS = ("message", "follow")
+SILENT_STOPS = frozenset(
+	{send.PAUSED, send.DNC, send.JUNK}
+)  # chỉ ba lý do này làm bot kịch bản nhận lượt mà im lặng
 
 
 @dataclass
@@ -124,6 +133,7 @@ def build_context(batch_id: str) -> RouteContext | None:
 	if not last or not last.identity or last.event_type not in EVENTS:
 		return None
 	lead = last.lead or frappe.db.get_value(IDENTITY, last.identity, "lead")
+	lead = lead_bridge.follow_merged(lead) or lead  # Lead đã gộp: làm việc trên Lead chính
 	messages = [r for r in rows if r.event_type == "message"]
 	text = "\n".join((r.text or "").strip() for r in messages if (r.text or "").strip())
 	attachments: list = []
@@ -166,20 +176,58 @@ def handle_batch(batch_id: str) -> bool:
 	identity = rows[0].identity if rows else None
 	if not switch.enabled_for(identity):  # rẻ: khách ngoài danh sách thử không chạm gì thêm
 		return False
+	if not send.infra_ok(identity):  # khóa hạ tầng đóng với khách ngoài danh sách thử: luồng cũ chạy
+		return False
+	if send.batch_has_outbound(
+		batch_id
+	):  # dấu bền: lượt đã có tin kịch bản (Redis mất / job bị giết giữa chừng)
+		_mark(batch_id)
+		return True
 	ctx = build_context(batch_id)
 	if ctx is None:
 		return False
-	if send.blocked_reason(ctx.identity):  # tạm dừng / không liên hệ / spam: bot im lặng
+	code = send.block_code(ctx.identity)
+	if code in SILENT_STOPS or _sale_replied(ctx):  # nhân viên đang xử lý / không liên hệ / spam: bot im lặng
 		_mark(batch_id)
 		return True
+	if code:  # công tắc vừa tắt giữa chừng: trả lượt cho luồng cũ
+		return False
 	load_flows()
 	handler = find_handler(ctx)
 	if handler is None:
 		return False
-	handler(ctx)
+	_expire_stale_drafts(ctx.lead)
+	frappe.flags[send.BATCH_FLAG] = batch_id
+	try:
+		handler(ctx)
+	finally:
+		frappe.flags.pop(send.BATCH_FLAG, None)
 	_mark(batch_id)
 	frappe.db.commit()
 	return True
+
+
+def _sale_replied(ctx: RouteContext) -> bool:
+	"""Nhân viên đã trả lời sau tin khách cuối của lượt (như ngắt mạch của luồng Reply)."""
+	if not ctx.lead or ctx.event_type != "message":
+		return False
+	from omni_crm.bot import reply  # import trễ: reply gọi router
+
+	last_at = frappe.db.get_value(
+		INBOUND,
+		{"batch_id": ctx.batch_id, "event_type": "message"},
+		"received_at",
+		order_by="received_at desc",
+	)
+	return bool(last_at) and bool(reply.sale_replies_after(ctx.lead, last_at))
+
+
+def _expire_stale_drafts(lead: str | None) -> None:
+	"""Tin khách mới: nháp Draft cũ của Lead hết hạn trước khi bot kịch bản trả lời. Không commit."""
+	if lead:
+		from omni_crm.bot import reply  # import trễ: reply gọi router
+
+		reply.expire_stale_for_lead(lead)
 
 
 def _mark(batch_id: str) -> None:

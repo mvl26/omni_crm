@@ -12,6 +12,9 @@ from omni_crm.script import switch
 NODE = "Omni Script Node"
 ACTIVE, REVIEW, OFF = "Đang dùng", "Cần duyệt", "Tắt"
 _VAR = re.compile(r"\{(\w+)\}")
+OPTIONAL_VARS = frozenset(
+	{"ten"}
+)  # biến được phép trống (seed/VARIABLES.md); biến khác thiếu thì không gửi ô
 
 
 def normalize_code(code: str | None) -> str:
@@ -51,8 +54,17 @@ def fill(text: str, ctx: dict | None) -> str:
 	return "\n".join(line.strip() for line in out.split("\n")).strip()
 
 
+def missing_vars(text: str | None, ctx: dict | None) -> list[str]:
+	"""Các `{bien}` bắt buộc trong câu mà ctx không có giá trị (None hoặc chuỗi trắng); `ten` được phép trống."""
+	ctx = ctx or {}
+	names = dict.fromkeys(_VAR.findall(text or ""))
+	return [
+		n for n in names if n not in OPTIONAL_VARS and (ctx.get(n) is None or not str(ctx.get(n)).strip())
+	]
+
+
 def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]] | None:
-	"""(text, buttons) đã điền biến; None nếu ô không có, `Tắt`, nội dung trống, hoặc `Cần duyệt` mà không phải danh sách thử.
+	"""(text, buttons) đã điền biến; None nếu ô không có, `Tắt`, nội dung trống, thiếu biến bắt buộc, hoặc `Cần duyệt` mà không phải danh sách thử.
 
 	ctx có thể chứa `identity` (để kiểm danh sách thử) và các biến của câu.
 	"""
@@ -65,6 +77,9 @@ def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]]
 		return None
 	if not (node.get("text") or "").strip():
 		return None
+	parts = [node["text"], *((b.get("label") or "") for b in node.get("buttons") or [])]
+	if any(missing_vars(part, ctx) for part in parts):
+		return None  # thiếu biến bắt buộc: không gửi câu cụt
 	text = fill(node["text"], ctx)
 	if not text:
 		return None

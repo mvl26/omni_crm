@@ -17,12 +17,21 @@ SWITCHES = (*pricing.SWITCH_FIELDS.values(), pricing.REVIEW_FIELD)
 class TestPricing(FlowCase):
 	def setUp(self):
 		super().setUp()
-		self._quote_orig = {f: frappe.db.get_single_value("Omni Settings", f) for f in SWITCHES}
+		# Đọc dòng thô trong tabSingles: trường chưa lưu lần nào thì KHÔNG có dòng, khôi phục phải giữ nguyên điều đó
+		# (ghi 0 cho `script_quote_review_required` sẽ biến "chưa đặt" thành "đã tắt duyệt").
+		self._quote_orig = {f: self._raw_single(f) for f in SWITCHES}
 		self.addCleanup(self._restore_quote)
+
+	@staticmethod
+	def _raw_single(field: str):
+		rows = frappe.db.sql("select value from tabSingles where doctype='Omni Settings' and field=%s", field)
+		return rows[0][0] if rows else None
 
 	def _restore_quote(self):
 		for f, v in self._quote_orig.items():
-			frappe.db.set_single_value("Omni Settings", f, v)
+			frappe.db.sql("delete from tabSingles where doctype='Omni Settings' and field=%s", f)
+			if v is not None:
+				frappe.db.set_single_value("Omni Settings", f, v)
 		frappe.db.commit()
 
 	def test_switches_default_off_and_review_default_on(self):
@@ -35,8 +44,10 @@ class TestPricing(FlowCase):
 		for svc in (*pricing.SERVICES, "PHANMEM", "", None, "KHAC"):
 			self.assertFalse(pricing.quote_enabled(svc))
 			self.assertFalse(pricing.can_auto_quote(svc)[0])
-		with mock.patch.object(pricing.switch, "setting", return_value=None):
-			self.assertTrue(pricing.review_required())
+		frappe.db.sql(
+			"delete from tabSingles where doctype='Omni Settings' and field=%s", pricing.REVIEW_FIELD
+		)
+		self.assertTrue(pricing.review_required())  # chưa có dòng trong tabSingles = bắt buộc duyệt
 
 	def test_all_inputs_missing(self):
 		status = pricing.inputs_status()

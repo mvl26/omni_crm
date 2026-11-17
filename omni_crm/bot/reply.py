@@ -545,6 +545,10 @@ def make_draft(
 	prompt = load_prompt("reply")
 	turn_mode = current_turn_mode(prompt.version)
 	decision_intent = None if turn_mode else intent  # K1: v4 không dùng ý định của cả hội thoại
+	if (
+		turn_mode
+	):  # v4: "muốn gặp người" chỉ xét trên lời khách của lượt này, không theo phân tích cả hội thoại
+		wants_human = "gap_nguoi" in guards.sensitive_topics(customer_text)
 	include_summary = include_summary and not turn_mode
 	use_docs = kb_docs.enabled(prompt.version)  # ADR 0030: thêm đoạn tài liệu của Kho tri thức
 	passages = kb_docs.passages_for(customer_text) if use_docs else []
@@ -777,7 +781,10 @@ def reply_batch(batch_id: str) -> str:
 
 
 def _script_handled(batch_id: str) -> bool:
-	"""Gọi `script.router.handle_batch`; lỗi thì ghi log (không nội dung khách) và để luồng cũ chạy."""
+	"""Gọi `script.router.handle_batch`; lỗi thì ghi log (không nội dung khách) và để luồng cũ chạy.
+
+	Lỗi SAU KHI bot kịch bản đã gửi tin cho lượt này: không chạy luồng cũ (tránh trả lời hai lần), chuyển người.
+	"""
 	try:
 		from omni_crm.script import router
 
@@ -785,11 +792,52 @@ def _script_handled(batch_id: str) -> bool:
 	except Exception as e:
 		frappe.db.rollback()
 		frames = "".join(traceback.format_list(traceback.extract_tb(e.__traceback__)[-6:]))
+		partial = _script_already_sent(batch_id)
 		frappe.log_error(  # chỉ loại lỗi + vị trí code: thông điệp lỗi có thể chứa lời khách
-			title="Omni: bot kịch bản lỗi, dùng luồng cũ",
+			title="Omni: bot kịch bản lỗi sau khi đã gửi tin, chuyển người"
+			if partial
+			else "Omni: bot kịch bản lỗi, dùng luồng cũ",
 			message=f"batch_id={batch_id}\nloai={type(e).__name__}\n{frames}",
 		)
+		if partial:
+			_script_error_handoff(batch_id)
+		return partial
+
+
+def _script_already_sent(batch_id: str) -> bool:
+	"""Lượt đã có tin bot kịch bản được xếp (đã commit). Lỗi khi kiểm thì coi là chưa."""
+	try:
+		from omni_crm.script import send as script_send
+
+		return script_send.batch_has_outbound(batch_id)
+	except Exception:
 		return False
+
+
+def _script_error_handoff(batch_id: str) -> None:
+	"""Bot kịch bản lỗi giữa chừng sau khi đã gửi tin: ghi nháp Handoff và chuyển người (một lần cho lượt). Không ném lỗi."""
+	try:
+		rows = _batch_messages(batch_id)
+		last = rows[-1] if rows else None
+		lead = lead_bridge.follow_merged(last.lead) if last and last.lead else None
+		if (
+			not lead
+			or not last.identity
+			or not last.channel
+			or frappe.db.exists(DRAFT, {"batch_id": batch_id})
+		):
+			return
+		base = {
+			"lead": lead,
+			"identity": last.identity,
+			"channel": last.channel,
+			"batch_id": batch_id,
+			"mode": "Draft",
+		}
+		_fallback_handoff(base, [], FLAG_SYSTEM_ERROR)
+	except Exception as e:
+		frappe.db.rollback()
+		_log_failure(batch_id, e)
 
 
 def _reply_batch(batch_id: str) -> str:
