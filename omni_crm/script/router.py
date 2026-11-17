@@ -160,7 +160,7 @@ def handle_batch(batch_id: str) -> bool:
 	"""Xử lý lượt tin bằng bot kịch bản; True nếu đã nhận lượt (luồng Reply cũ dừng), False để luồng cũ chạy."""
 	if not batch_id:
 		return False
-	if frappe.cache().get_value(_handled_key(batch_id)):
+	if frappe.cache().get_value(_handled_key(batch_id), expires=True):
 		return True
 	rows = frappe.get_all(INBOUND, filters={"batch_id": batch_id}, fields=["identity"], limit=1)
 	identity = rows[0].identity if rows else None

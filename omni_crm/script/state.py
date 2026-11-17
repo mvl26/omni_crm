@@ -35,6 +35,7 @@ JOURNEY_TO_STATUS = {
 	"Thua": "Unqualified",
 	"Không liên hệ": "Unqualified",
 }
+LOST_REASON = "Other"  # CRM Lost Reason chuẩn của CRM
 KEEP_STATUSES = {"Converted"}  # không hạ trạng thái Lead đã chuyển đổi
 
 
@@ -127,4 +128,13 @@ def set_journey(lead: str | None, status: str) -> None:
 		return
 	doc = frappe.get_doc(LEAD, lead)
 	doc.status = target
+	if frappe.get_cached_value("CRM Lead Status", target, "type") == "Lost" and not doc.get("lost_reason"):
+		# CRM bắt buộc lý do khi chuyển sang trạng thái Lost: dùng "Other" + ghi chú nội bộ
+		doc.lost_reason = LOST_REASON if frappe.db.exists("CRM Lost Reason", LOST_REASON) else None
+		doc.lost_notes = (
+			doc.get("lost_notes") or doc.get("omni_lost_reason_text") or f"Bot kịch bản: {status}"
+		)
+		if not doc.lost_reason:
+			frappe.logger("omni").info("omni script: thiếu CRM Lost Reason %s, bỏ qua status", LOST_REASON)
+			return
 	doc.save(ignore_permissions=True)
