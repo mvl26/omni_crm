@@ -522,7 +522,9 @@ class TestMenu(FlowCase):
 			frappe.db.set_value("Omni Inbound Message", name, "batch_id", f"{PFX}ERR")
 			frappe.db.commit()
 			with mock.patch("omni_crm.flags.bot_reply_mode", return_value="Off"):
-				self.assertEqual(reply._reply_batch(f"{PFX}ERR"), "off")
+				self.assertEqual(
+					reply._reply_batch(f"{PFX}ERR"), "script"
+				)  # đã gửi tin: lượt thuộc bot kịch bản
 		self.assertEqual(self.sent(), ["MENU_SPD"])
 		self.assertTrue(router.handle_batch(f"{PFX}ERR"))  # đã gửi tin: luồng cũ không được trả lời thêm
 

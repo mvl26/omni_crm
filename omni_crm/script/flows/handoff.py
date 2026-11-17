@@ -115,7 +115,7 @@ def _vars(ctx: RouteContext, extra: dict | None = None) -> dict:
 		values = dict(engine.variables(ctx, extra) or {})
 	except Exception:  # engine chưa gộp (NotImplementedError) hoặc lỗi: tự dựng biến tối thiểu
 		values = {}
-	values.setdefault("ngay_lam_viec_tiep_theo", timeutil.next_working_day_text(now_datetime()))
+	values["ngay_lam_viec_tiep_theo"] = timeutil.next_working_day_text(now_datetime())
 	values.update(extra or {})
 	return values
 

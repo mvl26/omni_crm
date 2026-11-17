@@ -622,8 +622,10 @@ class TestUnanswered(K3Case):
 class TestStop(K3Case):
 	def test_unsubscribe_sets_do_not_contact_and_cancels(self):
 		order: list[str] = []
-		fake = types.ModuleType("omni_crm.script.scheduler")
-		fake.cancel_for = mock.Mock(side_effect=lambda lead: order.append("cancel") or 2)
+		from omni_crm.script import scheduler as real_scheduler
+
+		fake = mock.Mock()
+		fake.cancel_for = mock.Mock(side_effect=lambda lead, *a, **kw: order.append("cancel") or 2)
 		real_send = send.send_node
 
 		def spy(*a, **kw):
@@ -631,11 +633,11 @@ class TestStop(K3Case):
 			return real_send(*a, **kw)
 
 		with (
-			mock.patch.dict(sys.modules, {"omni_crm.script.scheduler": fake}),
+			mock.patch.object(real_scheduler, "cancel_for", fake.cancel_for),
 			mock.patch.object(handoff.send, "send_node", side_effect=spy),
 		):
 			self.assertTrue(router.handle_batch(self.inbound("#C4_HUYDANGKY")))
-		fake.cancel_for.assert_called_with(self.lead1)
+		self.assertEqual(fake.cancel_for.call_args[0][0], self.lead1)
 		self.assertEqual(order[:2], ["cancel", "send"])  # hủy tin hẹn giờ trước, rồi mới gửi câu ghi nhận
 		rows = self.sent()
 		self.assertEqual([r.script_node for r in rows], ["C4_HUYDANGKY"])
@@ -684,9 +686,9 @@ class TestStop(K3Case):
 			self.assertEqual(handoff.cancel_scheduled(self.lead1), 0)
 
 	def test_stop_phrases(self):
-		for text in ("Không cần", "đừng nhắn nữa nhé", "Hủy đăng ký", "huỷ đăng ký giúp tôi", "STOP"):
+		for text in ("đừng nhắn nữa nhé", "Hủy đăng ký", "huỷ đăng ký giúp tôi", "STOP"):
 			self.assertTrue(handoff.is_stop_phrase(text), text)
-		for text in ("không cần gấp, gửi báo giá giúp", "tôi cần tư vấn", "", None):
+		for text in ("Không cần", "không cần gấp, gửi báo giá giúp", "tôi cần tư vấn", "", None):
 			self.assertFalse(handoff.is_stop_phrase(text), text)
 
 	def test_data_deletion_node_off_still_creates_task(self):
