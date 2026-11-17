@@ -335,6 +335,7 @@ class TestRouter(K2Case):
 		self.assertEqual(self.outs(), [])
 
 	def test_no_handler_falls_back(self):
+		router.load_flows()  # K2-flow: luồng thật đăng ký `*` khi nạp; nạp trước rồi mới gỡ
 		router.unregister(router.DEFAULT_KEY)
 		self.set_switch(tests=self.ident1)
 		self.assertFalse(router.handle_batch(self.batch))
