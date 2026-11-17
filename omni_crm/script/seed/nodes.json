@@ -1,0 +1,3210 @@
+[
+ {
+  "code": "GREETING",
+  "title": "Tin chào",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano xin chào anh/chị ạ! Miyano là trợ lý AI của Miyano Việt Nam, rất vui được trò chuyện cùng anh/chị. Miyano đồng hành cùng các nhà thầu vật tư y tế với 3 dịch vụ: cung ứng vật tư, phần mềm quản lý chuỗi cung ứng và hệ thống SPD trọn gói.\n\nAnh/chị quan tâm nội dung nào ạ? Anh/chị có thể chọn bên dưới hoặc nhắn trực tiếp câu hỏi.",
+  "buttons": [
+   {
+    "label": "Cung ứng vật tư",
+    "target": "MENU_VATTU"
+   },
+   {
+    "label": "Phần mềm quản lý",
+    "target": "MENU_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "MENU_SPD"
+   },
+   {
+    "label": "Khác",
+    "target": "MENU_KHAC"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "menu",
+  "source_ref": "1.1",
+  "notes": ""
+ },
+ {
+  "code": "MENU_CHINH",
+  "title": "Menu chính (khách gõ \"menu\" / bấm menu OA)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị quan tâm nội dung nào ạ? Anh/chị có thể chọn bên dưới hoặc nhắn trực tiếp câu hỏi.",
+  "buttons": [
+   {
+    "label": "Cung ứng vật tư",
+    "target": "MENU_VATTU"
+   },
+   {
+    "label": "Phần mềm quản lý",
+    "target": "MENU_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "MENU_SPD"
+   },
+   {
+    "label": "Khác",
+    "target": "MENU_KHAC"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "menu",
+  "source_ref": "1.1, 1.5",
+  "notes": "Câu lấy nguyên văn đoạn 2 của tin chào 1.1. Mã đặc biệt #MENU / gõ \"menu\" → node này (giao ước §4)."
+ },
+ {
+  "code": "MESSENGER_GREETING",
+  "title": "Lời chào của Trang (Messenger greeting)",
+  "step": "1",
+  "service": "",
+  "channel": "Messenger",
+  "status": "Đang dùng",
+  "text": "Miyano xin chào anh/chị! Miyano là trợ lý AI của Miyano Việt Nam. Anh/chị chọn nội dung bên dưới hoặc nhắn câu hỏi cho Miyano nhé ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "1.5",
+  "notes": "Cấu hình trên Trang Facebook (greeting ~160 ký tự), không gửi qua bot. Ice Breakers: 3 dịch vụ + Gặp nhân viên. Persistent menu: Dịch vụ của Miyano · Gặp nhân viên · Website miyano.com.vn. Messenger chưa làm (giao ước)."
+ },
+ {
+  "code": "REASK_CHUARO",
+  "title": "Hỏi lại khi chưa rõ ý",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chưa rõ ý anh/chị lắm. Anh/chị chọn giúp Miyano một nội dung bên dưới ạ.",
+  "buttons": [
+   {
+    "label": "Cung ứng vật tư",
+    "target": "MENU_VATTU"
+   },
+   {
+    "label": "Phần mềm quản lý",
+    "target": "MENU_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "MENU_SPD"
+   },
+   {
+    "label": "Khác",
+    "target": "MENU_KHAC"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "reask",
+  "source_ref": "1.2",
+  "notes": "Hỏi lại tối đa 2 lần; lần 3 vẫn không hiểu → tự chuyển nhân viên (1.4). Dùng cả cho tin ghi âm/sticker/ảnh không rõ (C.3)."
+ },
+ {
+  "code": "BAOGIA_CHUARO",
+  "title": "Báo giá chưa rõ dịch vụ",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị muốn Miyano báo giá cho dịch vụ nào ạ?",
+  "buttons": [
+   {
+    "label": "Cung ứng vật tư",
+    "target": "BAOGIA_VATTU"
+   },
+   {
+    "label": "Phần mềm quản lý",
+    "target": "BAOGIA_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "BAOGIA_SPD"
+   }
+  ],
+  "action": "menu",
+  "source_ref": "1.2",
+  "notes": "1.2 ghi '+ 3 nút dịch vụ'; nút dẫn thẳng vào nhánh báo giá của dịch vụ. Xem thêm BAOGIA_HOISANPHAM (3.3 (0)) – hai câu khác nhau cho cùng tình huống."
+ },
+ {
+  "code": "MENU_KHAC",
+  "title": "Menu Khác",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị cần Miyano hỗ trợ việc gì ạ?",
+  "buttons": [
+   {
+    "label": "Đang dùng dịch vụ",
+    "target": "KHAC_KHACHCU"
+   },
+   {
+    "label": "Hợp tác / Chào hàng",
+    "target": "KHAC_HOPTAC"
+   },
+   {
+    "label": "Tuyển dụng",
+    "target": "KHAC_TUYENDUNG"
+   },
+   {
+    "label": "Câu hỏi khác",
+    "target": "KHAC_CAUHOI"
+   }
+  ],
+  "action": "menu",
+  "source_ref": "1.3",
+  "notes": ""
+ },
+ {
+  "code": "KHAC_KHACHCU",
+  "title": "Khác – Đang dùng dịch vụ",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã tin dùng dịch vụ của Miyano ạ. Anh/chị cho Miyano xin số đơn hàng hoặc nội dung cần hỗ trợ để Miyano chuyển đúng bộ phận phụ trách ạ.",
+  "buttons": [],
+  "action": "collect:order_info;handoff:KHAC",
+  "source_ref": "1.3",
+  "notes": "Kịch bản chỉ ghi 'Hỏi số đơn / nội dung, chuyển bộ phụ trách' – câu do agent soạn."
+ },
+ {
+  "code": "KHAC_HOPTAC",
+  "title": "Khác – Hợp tác / Chào hàng",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã quan tâm hợp tác cùng Miyano ạ. Anh/chị cho Miyano xin tên đơn vị và thông tin liên hệ để Miyano chuyển tới bộ phận phụ trách ạ.",
+  "buttons": [],
+  "action": "collect:name_org;handoff:KHAC",
+  "source_ref": "1.3",
+  "notes": "Kịch bản: 'Xin tên đơn vị, liên hệ; chuyển Mua hàng hoặc Lãnh đạo' – câu do agent soạn. Bảng người nhận (Omni Service Recipient) chưa có dòng Mua hàng/Lãnh đạo → tạm handoff:KHAC."
+ },
+ {
+  "code": "KHAC_TUYENDUNG",
+  "title": "Khác – Tuyển dụng",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã quan tâm đến cơ hội làm việc tại Miyano ạ. Anh/chị vui lòng gửi CV tới email {bo_sung_email_tuyen_dung} giúp Miyano nhé ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "1.3",
+  "notes": "Kịch bản: 'Gửi email nhận CV [Miyano bổ sung]'. Ô trống: email nhận CV. Câu do agent soạn → duyệt khi điền email."
+ },
+ {
+  "code": "KHAC_CAUHOI",
+  "title": "Khác – Câu hỏi khác",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị cứ nhắn câu hỏi, Miyano sẽ trả lời ngay ạ.",
+  "buttons": [],
+  "action": "kb_answer",
+  "source_ref": "1.3",
+  "notes": "Sau đó chờ khách gõ, trả lời theo C.3."
+ },
+ {
+  "code": "GAP_NHANVIEN",
+  "title": "Gặp nhân viên (mã nút đặc biệt)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "handoff",
+  "source_ref": "1.4, C.2",
+  "notes": "Node điều hướng, không có câu gửi khách. K3 xử lý: chưa có dịch vụ → GAP_NV_HOIDICHVU; trong giờ → GAP_NV_TRONGGIO; ngoài giờ → GAP_NV_NGOAIGIO."
+ },
+ {
+  "code": "GAP_NV_TRONGGIO",
+  "title": "Gặp nhân viên – trong giờ",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano đã báo nhân viên tư vấn. Anh/chị vui lòng chờ trong ít phút, nhân viên sẽ trả lời ngay trong khung chat này ạ.",
+  "buttons": [],
+  "action": "handoff;pause_bot",
+  "source_ref": "1.4",
+  "notes": "Trong giờ: 08:00–17:30, T2–T6, không lễ. Sau 15 phút chưa ai nhận → GAP_NV_GOIDIEN + báo quản lý."
+ },
+ {
+  "code": "GAP_NV_NGOAIGIO",
+  "title": "Gặp nhân viên – ngoài giờ",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, hiện đã ngoài giờ làm việc của Miyano (8:00–17:30, thứ Hai – thứ Sáu). Nhân viên tư vấn sẽ liên hệ anh/chị vào {ngay_lam_viec_tiep_theo}. Anh/chị muốn nhân viên nhắn tin tại đây hay gọi điện ạ?",
+  "buttons": [
+   {
+    "label": "Nhắn tin tại đây",
+    "target": "GAP_NV_NHANTIN"
+   },
+   {
+    "label": "Gọi điện cho tôi",
+    "target": "GAP_NV_GOIDIEN"
+   }
+  ],
+  "action": "handoff:task",
+  "source_ref": "1.4",
+  "notes": "Ngoài giờ không đưa hotline; bot vẫn tự tư vấn."
+ },
+ {
+  "code": "GAP_NV_GOIDIEN",
+  "title": "Gặp nhân viên – xin SĐT để gọi lại",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị cho Miyano xin số điện thoại để nhân viên gọi lại ạ.",
+  "buttons": [],
+  "action": "collect:phone;then:GAP_NV_GOIDIEN_XACNHAN",
+  "source_ref": "1.4",
+  "notes": "Bỏ qua câu này nếu Lead đã có SĐT. Dùng lại khi 15 phút trong giờ chưa có nhân viên nhận."
+ },
+ {
+  "code": "GAP_NV_GOIDIEN_XACNHAN",
+  "title": "Gặp nhân viên – xác nhận gọi lại",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị. Nhân viên sẽ gọi số {sdt} vào {ngay_lam_viec_tiep_theo} ạ.",
+  "buttons": [],
+  "action": "then:GAP_NV_CAUKET",
+  "source_ref": "1.4",
+  "notes": ""
+ },
+ {
+  "code": "GAP_NV_NHANTIN",
+  "title": "Gặp nhân viên – hẹn nhắn tin",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ vâng, nhân viên sẽ nhắn cho anh/chị ngay trong khung chat này vào {ngay_lam_viec_tiep_theo} ạ.",
+  "buttons": [],
+  "action": "then:GAP_NV_CAUKET",
+  "source_ref": "1.4",
+  "notes": ""
+ },
+ {
+  "code": "GAP_NV_CAUKET",
+  "title": "Gặp nhân viên – câu kết",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Trong lúc chờ, Miyano vẫn có thể giải đáp các thông tin cơ bản, anh/chị cứ nhắn cho Miyano nhé ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "1.4",
+  "notes": ""
+ },
+ {
+  "code": "GAP_NV_HOIDICHVU",
+  "title": "Gặp nhân viên – hỏi dịch vụ trước khi chuyển",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, để Miyano kết nối anh/chị với đúng chuyên viên, anh/chị muốn trao đổi về dịch vụ nào ạ?",
+  "buttons": [
+   {
+    "label": "Cung ứng vật tư",
+    "target": "GAP_NV_VATTU"
+   },
+   {
+    "label": "Phần mềm quản lý",
+    "target": "GAP_NV_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "GAP_NV_SPD"
+   },
+   {
+    "label": "Khác",
+    "target": "GAP_NV_KHAC"
+   }
+  ],
+  "action": "",
+  "source_ref": "1.4",
+  "notes": "Khách không chọn mà gõ tiếp → không hỏi lại, giao người nhận dòng Khác."
+ },
+ {
+  "code": "GAP_NV_VATTU",
+  "title": "Gặp nhân viên – chọn Cung ứng vật tư",
+  "step": "1",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "service:VATTU;handoff",
+  "source_ref": "1.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "GAP_NV_PHANMEM",
+  "title": "Gặp nhân viên – chọn Phần mềm",
+  "step": "1",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "service:SUPPLYCORE;handoff",
+  "source_ref": "1.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "GAP_NV_SPD",
+  "title": "Gặp nhân viên – chọn SPD",
+  "step": "1",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "service:SPD;handoff",
+  "source_ref": "1.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "GAP_NV_KHAC",
+  "title": "Gặp nhân viên – chọn Khác",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "service:KHAC;handoff",
+  "source_ref": "1.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "MENU_VATTU",
+  "title": "Cung ứng vật tư – tin mở đầu",
+  "step": "2",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã quan tâm đến dịch vụ cung ứng vật tư y tế. Miyano cung cấp vật tư theo đơn hoặc theo kỳ, kèm đầy đủ hoá đơn và biên bản giao nhận. Anh/chị muốn Miyano hỗ trợ gì ạ?",
+  "buttons": [
+   {
+    "label": "Tìm hiểu nhanh",
+    "target": "TIMHIEU_VATTU"
+   },
+   {
+    "label": "Nhận tài liệu",
+    "target": "TAILIEU_VATTU"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_VATTU"
+   },
+   {
+    "label": "Gửi danh mục",
+    "target": "DANHMUC_VATTU"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "service:VATTU;journey:Đang tư vấn",
+  "source_ref": "2.2",
+  "notes": "Khung nút 2.1. Kịch bản 2.1 ghi nút Vật tư là 'Gửi danh mục cần báo giá' (24 ký tự); 2.2/2.6 dùng 'Gửi danh mục'."
+ },
+ {
+  "code": "TIMHIEU_VATTU",
+  "title": "Cung ứng vật tư – Tìm hiểu nhanh",
+  "step": "2",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "- Nhóm vật tư Miyano cung cấp: {bo_sung_nhom_vat_tu}\n- Giao theo đơn hoặc theo kỳ, có hoá đơn và biên bản giao nhận.\n- Hỗ trợ nhà thầu tìm nguồn hàng để dự thầu.\n- Báo giá theo danh mục và số lượng cụ thể của từng đơn vị.",
+  "buttons": [],
+  "action": "need:Tìm hiểu;then:HOITIEP_VATTU",
+  "source_ref": "2.2",
+  "notes": "Gạch đầu chứa ô trống [anh Xuân cung cấp các nhóm hàng chính]. Ba gạch còn lại nguyên văn. Bật khi đã điền (hoặc duyệt bản bỏ gạch đầu)."
+ },
+ {
+  "code": "HOITIEP_VATTU",
+  "title": "Cung ứng vật tư – hỏi tiếp sau Tìm hiểu nhanh",
+  "step": "2",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị muốn Miyano hỗ trợ tiếp phần nào ạ?",
+  "buttons": [
+   {
+    "label": "Nhận tài liệu",
+    "target": "TAILIEU_VATTU"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_VATTU"
+   },
+   {
+    "label": "Gửi danh mục",
+    "target": "DANHMUC_VATTU"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "",
+  "source_ref": "2.1, 2.5",
+  "notes": "4 nút còn lại (không lặp Tìm hiểu nhanh). Dùng cả sau câu trả lời Kho tri thức ở bước 2 (2.5)."
+ },
+ {
+  "code": "MENU_PHANMEM",
+  "title": "Phần mềm SupplyCore – tin mở đầu",
+  "step": "2",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã quan tâm đến phần mềm quản lý chuỗi cung ứng SupplyCore. Phần mềm giúp nhà thầu quản lý đặt hàng, tồn kho, hạn dùng theo lô và công nợ trên cùng một hệ thống thay cho Excel. Anh/chị muốn Miyano hỗ trợ gì ạ?",
+  "buttons": [
+   {
+    "label": "Tìm hiểu nhanh",
+    "target": "TIMHIEU_PHANMEM"
+   },
+   {
+    "label": "Nhận tài liệu",
+    "target": "TAILIEU_PHANMEM"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_PHANMEM"
+   },
+   {
+    "label": "Đặt lịch demo",
+    "target": "DEMO_PHANMEM"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "service:SUPPLYCORE;journey:Đang tư vấn",
+  "source_ref": "2.3",
+  "notes": "Khung nút 2.1."
+ },
+ {
+  "code": "TIMHIEU_PHANMEM",
+  "title": "Phần mềm SupplyCore – Tìm hiểu nhanh",
+  "step": "2",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "- Danh mục vật tư chuẩn hoá; đặt hàng trực tuyến, đặt lại đơn cũ, theo dõi trạng thái đơn.\n- Tồn kho và hạn dùng theo lô; cảnh báo lô sắp hết hạn và tồn dưới định mức.\n- Công nợ và chứng từ tập trung; báo cáo tiêu thụ theo kỳ, khoa phòng, nhóm vật tư.\n- Phân quyền theo vai trò người dùng.",
+  "buttons": [],
+  "action": "need:Tìm hiểu;then:HOITIEP_PHANMEM",
+  "source_ref": "2.3",
+  "notes": ""
+ },
+ {
+  "code": "HOITIEP_PHANMEM",
+  "title": "Phần mềm SupplyCore – hỏi tiếp sau Tìm hiểu nhanh",
+  "step": "2",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị muốn Miyano hỗ trợ tiếp phần nào ạ?",
+  "buttons": [
+   {
+    "label": "Nhận tài liệu",
+    "target": "TAILIEU_PHANMEM"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_PHANMEM"
+   },
+   {
+    "label": "Đặt lịch demo",
+    "target": "DEMO_PHANMEM"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "",
+  "source_ref": "2.1, 2.5",
+  "notes": "4 nút còn lại (không lặp Tìm hiểu nhanh). Dùng cả sau câu trả lời Kho tri thức ở bước 2 (2.5)."
+ },
+ {
+  "code": "MENU_SPD",
+  "title": "Hệ thống SPD – tin mở đầu",
+  "step": "2",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã quan tâm đến hệ thống SPD. SPD (Supply – Processing – Distribution) là mô hình quản lý vật tư tập trung từ Nhật Bản: Miyano làm một đầu mối lo tìm nguồn, đặt hàng, kiểm nhập và giao hàng, anh/chị chỉ cần đặt hàng trên hệ thống. Anh/chị muốn Miyano hỗ trợ gì ạ?",
+  "buttons": [
+   {
+    "label": "Tìm hiểu nhanh",
+    "target": "TIMHIEU_SPD"
+   },
+   {
+    "label": "Nhận tài liệu",
+    "target": "TAILIEU_SPD"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_SPD"
+   },
+   {
+    "label": "Đặt lịch demo",
+    "target": "DEMO_SPD"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "service:SPD;journey:Đang tư vấn",
+  "source_ref": "2.4",
+  "notes": "Khung nút 2.1."
+ },
+ {
+  "code": "TIMHIEU_SPD",
+  "title": "Hệ thống SPD – Tìm hiểu nhanh",
+  "step": "2",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "- Quy trình 5 bước: anh/chị gửi đơn trên phần mềm → Miyano tìm nhà cung cấp → Miyano đặt hàng và thanh toán → Miyano nhận hàng, kiểm nhập, mã hoá theo lô → Miyano giao hàng, tồn kho tự cập nhật.\n- Bắt đầu trong 3 bước: khảo sát, tư vấn → chuẩn hoá danh mục, thiết lập hệ thống → đào tạo và chạy chính thức, có đồng hành trong những đơn đầu tiên.\n- Phần mềm miễn phí khi chọn Miyano làm nhà cung cấp duy nhất.\n- Demo miễn phí 30 phút, dùng chính danh mục vật tư của đơn vị anh/chị.",
+  "buttons": [],
+  "action": "need:Tìm hiểu;then:HOITIEP_SPD",
+  "source_ref": "2.4",
+  "notes": ""
+ },
+ {
+  "code": "HOITIEP_SPD",
+  "title": "Hệ thống SPD – hỏi tiếp sau Tìm hiểu nhanh",
+  "step": "2",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị muốn Miyano hỗ trợ tiếp phần nào ạ?",
+  "buttons": [
+   {
+    "label": "Nhận tài liệu",
+    "target": "TAILIEU_SPD"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_SPD"
+   },
+   {
+    "label": "Đặt lịch demo",
+    "target": "DEMO_SPD"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "",
+  "source_ref": "2.1, 2.5",
+  "notes": "4 nút còn lại (không lặp Tìm hiểu nhanh). Dùng cả sau câu trả lời Kho tri thức ở bước 2 (2.5)."
+ },
+ {
+  "code": "DEMO_VATTU",
+  "title": "Vật tư – khách xin demo",
+  "step": "2",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "goto:DANHMUC_VATTU",
+  "source_ref": "2.5",
+  "notes": "Node điều hướng, không có câu gửi khách. Vật tư không có demo: 'mời gửi danh mục' (2.5)."
+ },
+ {
+  "code": "DEMO_PHANMEM",
+  "title": "Phần mềm SupplyCore – Đặt lịch demo",
+  "step": "2",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "service:SUPPLYCORE;need:Demo;goto:DEMO_HINHTHUC",
+  "source_ref": "2.1, 4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_SPD",
+  "title": "Hệ thống SPD – Đặt lịch demo",
+  "step": "2",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "service:SPD;need:Demo;goto:DEMO_HINHTHUC",
+  "source_ref": "2.1, 4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DANHMUC_VATTU",
+  "title": "Vật tư – Gửi danh mục",
+  "step": "2",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị gửi giúp Miyano danh mục cần báo giá (file Excel, PDF hoặc ảnh chụp đều được ạ). Nếu có, anh/chị ghi thêm số lượng và thời gian cần hàng để Miyano báo giá sát hơn.",
+  "buttons": [],
+  "action": "need:Gửi danh mục;collect:file;then:DANHMUC_VATTU_DANHAN",
+  "source_ref": "2.2",
+  "notes": ""
+ },
+ {
+  "code": "DANHMUC_VATTU_DANHAN",
+  "title": "Vật tư – đã nhận danh mục",
+  "step": "2",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano đã nhận danh mục của anh/chị, cảm ơn anh/chị ạ.",
+  "buttons": [],
+  "action": "attach_file;branch:3b;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "2.2",
+  "notes": "File đính kèm vào Lead. Sang 3b: xin liên hệ để nhân viên gửi báo giá."
+ },
+ {
+  "code": "KB_CHUYENVIEN",
+  "title": "Câu hỏi ngoài Kho tri thức → chuyên viên",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Câu này Miyano xin phép để chuyên viên trả lời chính xác cho anh/chị ạ.",
+  "buttons": [],
+  "action": "log_unanswered;handoff",
+  "source_ref": "2.5, C.3",
+  "notes": "Chiết khấu, công nợ, điều khoản, tích hợp phần mềm khác, câu không có trong Kho tri thức. Ghi nguyên văn vào omni_unanswered_questions."
+ },
+ {
+  "code": "TAILIEU_VATTU",
+  "title": "Cung ứng vật tư – Nhận tài liệu: hỏi tài liệu cần",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị đang cần tài liệu về nội dung nào ạ?",
+  "buttons": [
+   {
+    "label": "Danh mục hàng",
+    "target": "TL_DANHMUC_HANG"
+   },
+   {
+    "label": "Hồ sơ pháp lý",
+    "target": "TL_PHAPLY_SP"
+   },
+   {
+    "label": "Hồ sơ năng lực",
+    "target": "TL_NANGLUC"
+   },
+   {
+    "label": "Khác",
+    "target": "TL_KHAC"
+   }
+  ],
+  "action": "service:VATTU;need:Tài liệu;branch:3a;journey:Đang tư vấn",
+  "source_ref": "3.2",
+  "notes": "Câu hỏi nguyên văn; nút gợi ý chờ [Miyano xác nhận danh sách tài liệu có sẵn] (3.2, 3.8) – xem script_docs_list. Nút 'Hồ sơ pháp lý sản phẩm' (22 ký tự) rút gọn thành 'Hồ sơ pháp lý'."
+ },
+ {
+  "code": "TAILIEU_PHANMEM",
+  "title": "Phần mềm SupplyCore – Nhận tài liệu: hỏi tài liệu cần",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị đang cần tài liệu về nội dung nào ạ?",
+  "buttons": [
+   {
+    "label": "Giới thiệu tính năng",
+    "target": "TL_TINHNANG"
+   },
+   {
+    "label": "Hồ sơ năng lực",
+    "target": "TL_NANGLUC"
+   },
+   {
+    "label": "Khác",
+    "target": "TL_KHAC"
+   }
+  ],
+  "action": "service:SUPPLYCORE;need:Tài liệu;branch:3a;journey:Đang tư vấn",
+  "source_ref": "3.2",
+  "notes": "Câu hỏi nguyên văn; nút gợi ý chờ [Miyano xác nhận danh sách tài liệu có sẵn] (3.2, 3.8) – xem script_docs_list."
+ },
+ {
+  "code": "TAILIEU_SPD",
+  "title": "Hệ thống SPD – Nhận tài liệu: hỏi tài liệu cần",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị đang cần tài liệu về nội dung nào ạ?",
+  "buttons": [
+   {
+    "label": "Giới thiệu SPD",
+    "target": "TL_GIOITHIEU_SPD"
+   },
+   {
+    "label": "Quy trình triển khai",
+    "target": "TL_QUYTRINH"
+   },
+   {
+    "label": "Hồ sơ năng lực",
+    "target": "TL_NANGLUC"
+   },
+   {
+    "label": "Khác",
+    "target": "TL_KHAC"
+   }
+  ],
+  "action": "service:SPD;need:Tài liệu;branch:3a;journey:Đang tư vấn",
+  "source_ref": "3.2",
+  "notes": "Câu hỏi nguyên văn; nút gợi ý chờ [Miyano xác nhận danh sách tài liệu có sẵn] (3.2, 3.8) – xem script_docs_list."
+ },
+ {
+  "code": "TL_DANHMUC_HANG",
+  "title": "Tài liệu chọn: Danh mục hàng",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:tai_lieu=Danh mục hàng;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "TL_PHAPLY_SP",
+  "title": "Tài liệu chọn: Hồ sơ pháp lý sản phẩm",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:tai_lieu=Hồ sơ pháp lý sản phẩm;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "TL_NANGLUC",
+  "title": "Tài liệu chọn: Hồ sơ năng lực",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:tai_lieu=Hồ sơ năng lực;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "TL_TINHNANG",
+  "title": "Tài liệu chọn: Giới thiệu tính năng",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:tai_lieu=Giới thiệu tính năng;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "TL_GIOITHIEU_SPD",
+  "title": "Tài liệu chọn: Giới thiệu SPD",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:tai_lieu=Giới thiệu SPD;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "TL_QUYTRINH",
+  "title": "Tài liệu chọn: Quy trình triển khai",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:tai_lieu=Quy trình triển khai;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "TL_KHAC",
+  "title": "Tài liệu chọn: Khác",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị ghi giúp Miyano tài liệu cần nhé ạ.",
+  "buttons": [],
+  "action": "collect:tai_lieu;then:HOI_EMAIL_TAILIEU",
+  "source_ref": "3.2",
+  "notes": ""
+ },
+ {
+  "code": "HOI_EMAIL_TAILIEU",
+  "title": "3a – xin email",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano xin phép xin email của anh/chị để nhân viên gửi tài liệu ạ.",
+  "buttons": [],
+  "action": "collect:email;then:HOI_SDT",
+  "source_ref": "3.2",
+  "notes": "Đã có email trên Lead → bỏ qua."
+ },
+ {
+  "code": "HOI_EMAIL_BAOGIA",
+  "title": "3b – xin email gửi báo giá",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano xin phép xin email của anh/chị để nhân viên gửi bản báo giá chi tiết ạ.",
+  "buttons": [],
+  "action": "collect:email;then:HOI_SDT",
+  "source_ref": "3.3.1",
+  "notes": "Kịch bản 3.3.1: 'xin email và SĐT (như Bước 3a) để gửi bản báo giá chi tiết'. Câu 3a nói 'gửi tài liệu' nên soạn biến thể cho báo giá."
+ },
+ {
+  "code": "HOI_SDT",
+  "title": "3a/3b – xin SĐT",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị. Anh/chị cho Miyano xin thêm số điện thoại để nhân viên tiện liên hệ khi cần ạ.",
+  "buttons": [],
+  "action": "collect:phone;then:HOI_TEN_DONVI",
+  "source_ref": "3.2",
+  "notes": "Khách từ chối thì không ép (3.1, 3.4)."
+ },
+ {
+  "code": "HOI_TEN_DONVI",
+  "title": "3a/3b – xin họ tên, đơn vị",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị cho Miyano biết tên và đơn vị của mình để nhân viên xưng hô cho đúng ạ.",
+  "buttons": [],
+  "action": "collect:name_org",
+  "source_ref": "3.2",
+  "notes": "Sau câu này router gửi xác nhận theo nhánh: 3a → TL_XACNHAN_*, 3b → BG_XACNHAN_* (hoặc báo giá nếu công tắc bật)."
+ },
+ {
+  "code": "BAOMAT",
+  "title": "Câu chính sách bảo mật (lần đầu để lại email/SĐT)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Thông tin của anh/chị được Miyano bảo mật theo chính sách bảo mật tại {chinh_sach_bao_mat}.",
+  "buttons": [],
+  "action": "consent",
+  "source_ref": "3.4",
+  "notes": "Nguyên văn kịch bản, chỉ thay URL 'miyano.com.vn/chinh-sach-bao-mat' bằng biến {chinh_sach_bao_mat} (mặc định đúng URL đó nếu script_privacy_url trống). Ghi omni_data_consent_at."
+ },
+ {
+  "code": "KHONG_THONGTIN",
+  "title": "Khách không cho email lẫn SĐT",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ không sao ạ.",
+  "buttons": [],
+  "action": "send_link:service_page",
+  "source_ref": "3.4",
+  "notes": "Kèm link trang dịch vụ trên website (ô trống: link từng dịch vụ). Nhân viên có thể nhắn lại trong khung chat."
+ },
+ {
+  "code": "KHONG_SDT_CAMON",
+  "title": "Có email, không cho SĐT – cảm ơn",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ vâng, Miyano cảm ơn anh/chị ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "3.4",
+  "notes": "Kịch bản: 'Cảm ơn, không hỏi lại' – câu do agent soạn."
+ },
+ {
+  "code": "SAI_EMAIL",
+  "title": "Email sai định dạng",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chưa ghi nhận được email này, anh/chị kiểm tra lại giúp Miyano ạ.",
+  "buttons": [],
+  "action": "reask:email",
+  "source_ref": "3.4",
+  "notes": "Hỏi lại 1 lần; sai lần 2 thì ghi nguyên văn để nhân viên kiểm tra."
+ },
+ {
+  "code": "SAI_SDT",
+  "title": "SĐT sai định dạng",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano chưa ghi nhận được số điện thoại này, anh/chị kiểm tra lại giúp Miyano ạ.",
+  "buttons": [],
+  "action": "reask:phone",
+  "source_ref": "3.4",
+  "notes": "Kịch bản chỉ có câu cho email; đổi 'email' → 'số điện thoại'."
+ },
+ {
+  "code": "TL_XACNHAN_TRONGGIO",
+  "title": "3a – xác nhận (trong giờ)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị {ten}. Nhân viên Miyano sẽ gửi {tai_lieu} tới email {email} trong hôm nay ạ. Anh/chị kiểm tra giúp Miyano cả hộp thư Spam nhé.",
+  "buttons": [],
+  "action": "task:docs;journey:Đang tư vấn;then:TL_HOITHEM",
+  "source_ref": "3.2, 3.5",
+  "notes": "Khách nhắn 08:00–16:30 ngày làm việc."
+ },
+ {
+  "code": "TL_XACNHAN_NGOAIGIO",
+  "title": "3a – xác nhận (ngoài giờ)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị {ten}. Nhân viên sẽ gửi {tai_lieu} tới email {email} vào {ngay_lam_viec_tiep_theo} ạ.",
+  "buttons": [],
+  "action": "task:docs;journey:Đang tư vấn;then:TL_HOITHEM",
+  "source_ref": "3.2, 3.5",
+  "notes": "Sau 16:30, trước 08:00, T7, CN, lễ."
+ },
+ {
+  "code": "TL_HOITHEM",
+  "title": "3a – còn cần gì không (Phần mềm, SPD)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị còn cần Miyano hỗ trợ gì thêm không ạ?",
+  "buttons": [
+   {
+    "label": "Đặt lịch demo",
+    "target": "DAT_DEMO"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "XIN_BAOGIA"
+   },
+   {
+    "label": "Không, cảm ơn",
+    "target": "KHONG_CAMON"
+   }
+  ],
+  "action": "",
+  "source_ref": "3.2",
+  "notes": "Bản mặc định (Phần mềm, SPD). Biến thể Vật tư: TL_HOITHEM_VATTU."
+ },
+ {
+  "code": "TL_HOITHEM_VATTU",
+  "title": "3a – còn cần gì không (Vật tư)",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị còn cần Miyano hỗ trợ gì thêm không ạ?",
+  "buttons": [
+   {
+    "label": "Gửi danh mục",
+    "target": "DANHMUC_VATTU"
+   },
+   {
+    "label": "Xin báo giá",
+    "target": "BAOGIA_VATTU"
+   },
+   {
+    "label": "Không, cảm ơn",
+    "target": "KHONG_CAMON"
+   }
+  ],
+  "action": "",
+  "source_ref": "3.2",
+  "notes": ""
+ },
+ {
+  "code": "DAT_DEMO",
+  "title": "Đặt lịch demo (dịch vụ đang tư vấn)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "need:Demo;goto:DEMO_HINHTHUC",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách. Dùng ở nút chung không gắn dịch vụ; Vật tư không có demo."
+ },
+ {
+  "code": "XIN_BAOGIA",
+  "title": "Xin báo giá (dịch vụ đang tư vấn)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "goto:BAOGIA_<dich_vu>",
+  "source_ref": "3.3",
+  "notes": "Node điều hướng, không có câu gửi khách. Router chuyển tới BAOGIA_VATTU/PHANMEM/SPD theo dịch vụ đang tư vấn; chưa có → BAOGIA_HOISANPHAM."
+ },
+ {
+  "code": "KHONG_CAMON",
+  "title": "Không, cảm ơn – kết",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã quan tâm. Chúc anh/chị một ngày làm việc hiệu quả ạ!",
+  "buttons": [],
+  "action": "",
+  "source_ref": "3.2",
+  "notes": ""
+ },
+ {
+  "code": "BAOGIA_HOISANPHAM",
+  "title": "3b – hỏi sản phẩm cần báo giá",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị đang cần Miyano báo giá cho sản phẩm nào ạ?",
+  "buttons": [
+   {
+    "label": "Vật tư y tế",
+    "target": "BAOGIA_VATTU"
+   },
+   {
+    "label": "Phần mềm SupplyCore",
+    "target": "BAOGIA_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "BAOGIA_SPD"
+   }
+  ],
+  "action": "need:Báo giá;branch:3b",
+  "source_ref": "3.3",
+  "notes": ""
+ },
+ {
+  "code": "BAOGIA_VATTU",
+  "title": "Vật tư – báo giá: câu 1 mặt hàng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị đang cần cung cấp những mặt hàng nào ạ? Anh/chị có thể gõ tên hàng, quy cách, hãng, hoặc gửi file danh mục (Excel, PDF, ảnh) đều được ạ.",
+  "buttons": [],
+  "action": "service:VATTU;need:Báo giá;branch:3b;quote_collect;collect:items;then:BG_VT_SOLUONG",
+  "source_ref": "3.3.1",
+  "notes": "Câu nào khách đã trả lời trong file danh mục thì bỏ qua."
+ },
+ {
+  "code": "BG_VT_SOLUONG",
+  "title": "Vật tư – báo giá: câu 2 số lượng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị cần số lượng bao nhiêu cho mỗi mặt hàng ạ?",
+  "buttons": [],
+  "action": "quote_collect;collect:quantity;then:BG_VT_THOIGIAN",
+  "source_ref": "3.3.1",
+  "notes": ""
+ },
+ {
+  "code": "BG_VT_THOIGIAN",
+  "title": "Vật tư – báo giá: câu 3 thời gian cần hàng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị cần hàng vào khoảng thời gian nào ạ?",
+  "buttons": [
+   {
+    "label": "Trong 1 tuần",
+    "target": "BG_VT_TG_1TUAN"
+   },
+   {
+    "label": "Trong 1 tháng",
+    "target": "BG_VT_TG_1THANG"
+   },
+   {
+    "label": "1–3 tháng",
+    "target": "BG_VT_TG_1_3THANG"
+   },
+   {
+    "label": "Theo lịch gói thầu",
+    "target": "BG_VT_TG_GOITHAU"
+   }
+  ],
+  "action": "quote_collect;collect:need_by",
+  "source_ref": "3.3.1",
+  "notes": ""
+ },
+ {
+  "code": "BG_VT_TG_1TUAN",
+  "title": "Vật tư – thời gian: Trong 1 tuần",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:need_by=Trong 1 tuần;then:BG_VT_THAYTHE",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách. Trong 1 tuần → kèm BG_VT_GAP khi báo giá + tạo việc."
+ },
+ {
+  "code": "BG_VT_TG_1THANG",
+  "title": "Vật tư – thời gian: Trong 1 tháng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:need_by=Trong 1 tháng;then:BG_VT_THAYTHE",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_TG_1_3THANG",
+  "title": "Vật tư – thời gian: 1–3 tháng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:need_by=1–3 tháng;then:BG_VT_THAYTHE",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_TG_GOITHAU",
+  "title": "Vật tư – thời gian: Theo lịch gói thầu",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:need_by=Theo lịch gói thầu;then:BG_VT_THAYTHE",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_THAYTHE",
+  "title": "Vật tư – báo giá: câu 4 hãng thay thế",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Nếu không có đúng hãng anh/chị yêu cầu, Miyano đề xuất hãng khác tương đương để thay thế được không ạ?",
+  "buttons": [
+   {
+    "label": "Được",
+    "target": "BG_VT_TT_DUOC"
+   },
+   {
+    "label": "Chỉ đúng hãng",
+    "target": "BG_VT_TT_DUNGHANG"
+   },
+   {
+    "label": "Tuỳ mặt hàng",
+    "target": "BG_VT_TT_TUY"
+   }
+  ],
+  "action": "quote_collect;collect:substitute",
+  "source_ref": "3.3.1",
+  "notes": ""
+ },
+ {
+  "code": "BG_VT_TT_DUOC",
+  "title": "Vật tư – hãng thay thế: Được",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:substitute=Được;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_TT_DUNGHANG",
+  "title": "Vật tư – hãng thay thế: Chỉ đúng hãng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:substitute=Chỉ đúng hãng;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_TT_TUY",
+  "title": "Vật tư – hãng thay thế: Tuỳ mặt hàng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:substitute=Tuỳ mặt hàng;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_XACNHAN_HANG",
+  "title": "Vật tư – hỏi lại mặt hàng khớp chưa chắc",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "Có phải anh/chị cần {ten_hang} – {quy_cach} – {hang_sx} không ạ?",
+  "buttons": [
+   {
+    "label": "Đúng",
+    "target": "BG_VT_HANG_DUNG"
+   },
+   {
+    "label": "Không phải",
+    "target": "BG_VT_HANG_SAI"
+   }
+  ],
+  "action": "quote_match",
+  "source_ref": "3.3.1",
+  "notes": "Cần đối chiếu danh mục hàng trên ERP – K7 chưa nối ERP. Câu nguyên văn."
+ },
+ {
+  "code": "BG_VT_HANG_DUNG",
+  "title": "Vật tư – mặt hàng: Đúng",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "",
+  "buttons": [],
+  "action": "answer:item_match=1",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_HANG_SAI",
+  "title": "Vật tư – mặt hàng: Không phải",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "",
+  "buttons": [],
+  "action": "answer:item_match=0;goto:BAOGIA_VATTU",
+  "source_ref": "3.3.1",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_VT_KETQUA",
+  "title": "Vật tư – bot báo giá trong khung chat",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "Dạ, Miyano gửi anh/chị báo giá như sau ạ:\n\n{dong_bao_gia}\n\nTổng cộng: {tong_tien} ({ghi_chu_vat_van_chuyen}). Mặt hàng đánh dấu (*) là hãng thay thế tương đương.\n\nBáo giá có hiệu lực đến {ngay_het_hieu_luc}. Miyano đã gửi bản báo giá chi tiết tới email {email} ạ.",
+  "buttons": [
+   {
+    "label": "Đặt hàng",
+    "target": "DAT_HANG"
+   },
+   {
+    "label": "Cần điều chỉnh",
+    "target": "BG_DIEUCHINH"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "quote_show;journey:Đã gửi báo giá",
+  "source_ref": "3.3.1",
+  "notes": "Nguyên văn; {dong_bao_gia} = các dòng '{ten_hang} – {quy_cach} – {hang_sx}: {so_luong} {dvt} × {don_gia} = {thanh_tien}'. Tắt: chưa có bảng giá/ngưỡng/VAT/hiệu lực [anh Xuân cung cấp], công tắc script_quote_enabled_vattu."
+ },
+ {
+  "code": "BG_DIEUCHINH",
+  "title": "Báo giá – Cần điều chỉnh",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị muốn điều chỉnh phần nào trong báo giá ạ? Anh/chị có thể đổi số lượng, mặt hàng hoặc hãng.",
+  "buttons": [],
+  "action": "quote_collect;collect:adjust",
+  "source_ref": "3.3.1",
+  "notes": "Kịch bản: 'hỏi khách muốn đổi gì (số lượng, mặt hàng, hãng) rồi báo giá lại' – câu do agent soạn. Với SupplyCore/SPD router có thể hỏi lại câu quy mô."
+ },
+ {
+  "code": "BG_VT_CHUACOGIA",
+  "title": "Vật tư – mặt hàng chưa có giá",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Mặt hàng {ten_hang} Miyano cần kiểm tra nguồn hàng, chuyên viên sẽ bổ sung báo giá {thoi_diem} ạ.",
+  "buttons": [],
+  "action": "task:purchasing",
+  "source_ref": "3.3.1",
+  "notes": "Tạo việc cho Mua hàng và nhân viên phụ trách."
+ },
+ {
+  "code": "BG_VT_CHUACOHANG",
+  "title": "Vật tư – 'Chỉ đúng hãng' mà chưa có hãng đó",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, mặt hàng {ten_hang} đúng hãng anh/chị yêu cầu hiện Miyano chưa có sẵn ạ. Chuyên viên sẽ kiểm tra nguồn hàng và phản hồi anh/chị {thoi_diem} ạ.",
+  "buttons": [],
+  "action": "task:purchasing",
+  "source_ref": "3.3.1",
+  "notes": "Kịch bản: 'Báo rõ mặt hàng đó chưa có sẵn, nhân viên kiểm tra nguồn và phản hồi {thoi_diem}' – câu do agent soạn."
+ },
+ {
+  "code": "BG_VT_GAP",
+  "title": "Vật tư – cần hàng gấp (trong 1 tuần)",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Chuyên viên sẽ xác nhận khả năng giao hàng kịp thời gian anh/chị cần ạ.",
+  "buttons": [],
+  "action": "task:urgent",
+  "source_ref": "3.3.1",
+  "notes": ""
+ },
+ {
+  "code": "BG_CHIETKHAU",
+  "title": "Khách đề nghị giảm giá / chiết khấu / giá dự thầu",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Phần này Miyano xin phép để chuyên viên trao đổi trực tiếp với anh/chị ạ.",
+  "buttons": [],
+  "action": "handoff;journey:Thương lượng",
+  "source_ref": "3.3.1",
+  "notes": ""
+ },
+ {
+  "code": "BG_XACNHAN_TRONGGIO",
+  "title": "3b – hẹn nhân viên gửi báo giá (trong giờ)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano cảm ơn anh/chị {ten}. Nhân viên Miyano sẽ gửi báo giá tới email {email} trong hôm nay ạ. Anh/chị kiểm tra giúp Miyano cả hộp thư Spam nhé.",
+  "buttons": [],
+  "action": "task:quote;journey:Đang tư vấn",
+  "source_ref": "3.3.4, 3.5",
+  "notes": "Dùng khi bot không tự báo giá (chưa có bảng giá – K7 tắt, vượt ngưỡng, khách cũ có giá riêng). Soạn theo mẫu TL_XACNHAN_TRONGGIO, thay tài liệu → báo giá."
+ },
+ {
+  "code": "BG_XACNHAN_NGOAIGIO",
+  "title": "3b – hẹn nhân viên gửi báo giá (ngoài giờ)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano cảm ơn anh/chị {ten}. Nhân viên sẽ gửi báo giá tới email {email} vào {ngay_lam_viec_tiep_theo} ạ.",
+  "buttons": [],
+  "action": "task:quote;journey:Đang tư vấn",
+  "source_ref": "3.3.4, 3.5",
+  "notes": "Như BG_XACNHAN_TRONGGIO, theo mẫu TL_XACNHAN_NGOAIGIO."
+ },
+ {
+  "code": "BAOGIA_PHANMEM",
+  "title": "Phần mềm – báo giá: xác nhận sản phẩm",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị cần báo giá phần mềm quản lý chuỗi cung ứng SupplyCore đúng không ạ?",
+  "buttons": [
+   {
+    "label": "Đúng",
+    "target": "BG_SC_MATHANG"
+   },
+   {
+    "label": "Sản phẩm khác",
+    "target": "BAOGIA_HOISANPHAM"
+   }
+  ],
+  "action": "service:SUPPLYCORE;need:Báo giá;branch:3b;quote_collect",
+  "source_ref": "3.3.2",
+  "notes": ""
+ },
+ {
+  "code": "BG_SC_MATHANG",
+  "title": "Phần mềm – báo giá: hỏi số mặt hàng",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Đơn vị anh/chị đang quản lý khoảng bao nhiêu mặt hàng ạ?",
+  "buttons": [
+   {
+    "label": "Dưới 500",
+    "target": "BG_SC_MATHANG_DUOI500"
+   },
+   {
+    "label": "500–2.000",
+    "target": "BG_SC_MATHANG_500_2000"
+   },
+   {
+    "label": "Trên 2.000",
+    "target": "BG_SC_MATHANG_TREN2000"
+   }
+  ],
+  "action": "quote_collect;collect:sc_items",
+  "source_ref": "3.3.2",
+  "notes": "Câu và nút nguyên văn; tiêu chí và mốc chia quy mô [anh Xuân xác nhận] → Cần duyệt."
+ },
+ {
+  "code": "BG_SC_MATHANG_DUOI500",
+  "title": "Phần mềm – số mặt hàng: Dưới 500",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_items=Dưới 500;then:BG_SC_NGUOIDUNG",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SC_MATHANG_500_2000",
+  "title": "Phần mềm – số mặt hàng: 500–2.000",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_items=500–2.000;then:BG_SC_NGUOIDUNG",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SC_MATHANG_TREN2000",
+  "title": "Phần mềm – số mặt hàng: Trên 2.000",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_items=Trên 2.000;then:BG_SC_NGUOIDUNG;quote:manual",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BG_SC_NGUOIDUNG",
+  "title": "Phần mềm – báo giá: hỏi số người dùng",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Có khoảng bao nhiêu người sẽ sử dụng phần mềm ạ?",
+  "buttons": [
+   {
+    "label": "Từ 1–5",
+    "target": "BG_SC_NGUOIDUNG_1_5"
+   },
+   {
+    "label": "6–20",
+    "target": "BG_SC_NGUOIDUNG_6_20"
+   },
+   {
+    "label": "Trên 20",
+    "target": "BG_SC_NGUOIDUNG_TREN20"
+   }
+  ],
+  "action": "quote_collect;collect:sc_users",
+  "source_ref": "3.3.2",
+  "notes": "Câu và nút nguyên văn; tiêu chí và mốc chia quy mô [anh Xuân xác nhận] → Cần duyệt."
+ },
+ {
+  "code": "BG_SC_NGUOIDUNG_1_5",
+  "title": "Phần mềm – số người dùng: Từ 1–5",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_users=Từ 1–5;then:BG_SC_COSO",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SC_NGUOIDUNG_6_20",
+  "title": "Phần mềm – số người dùng: 6–20",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_users=6–20;then:BG_SC_COSO",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SC_NGUOIDUNG_TREN20",
+  "title": "Phần mềm – số người dùng: Trên 20",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_users=Trên 20;then:BG_SC_COSO;quote:manual",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BG_SC_COSO",
+  "title": "Phần mềm – báo giá: hỏi số cơ sở/kho",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Anh/chị đang cung ứng cho bao nhiêu cơ sở y tế (hoặc quản lý bao nhiêu kho) ạ?",
+  "buttons": [
+   {
+    "label": "1",
+    "target": "BG_SC_COSO_1"
+   },
+   {
+    "label": "2–5",
+    "target": "BG_SC_COSO_2_5"
+   },
+   {
+    "label": "Trên 5",
+    "target": "BG_SC_COSO_TREN5"
+   }
+  ],
+  "action": "quote_collect;collect:sc_sites",
+  "source_ref": "3.3.2",
+  "notes": "Câu và nút nguyên văn; tiêu chí và mốc chia quy mô [anh Xuân xác nhận] → Cần duyệt."
+ },
+ {
+  "code": "BG_SC_COSO_1",
+  "title": "Phần mềm – số cơ sở/kho: 1",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_sites=1;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SC_COSO_2_5",
+  "title": "Phần mềm – số cơ sở/kho: 2–5",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_sites=2–5;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SC_COSO_TREN5",
+  "title": "Phần mềm – số cơ sở/kho: Trên 5",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:sc_sites=Trên 5;then:HOI_EMAIL_BAOGIA;quote:manual",
+  "source_ref": "3.3.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BAOGIA_SPD",
+  "title": "SPD – báo giá: hỏi số cơ sở y tế",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Anh/chị đang cung ứng vật tư cho bao nhiêu cơ sở y tế ạ?",
+  "buttons": [
+   {
+    "label": "1",
+    "target": "BG_SPD_COSO_1"
+   },
+   {
+    "label": "2–5",
+    "target": "BG_SPD_COSO_2_5"
+   },
+   {
+    "label": "Trên 5",
+    "target": "BG_SPD_COSO_TREN5"
+   }
+  ],
+  "action": "service:SPD;need:Báo giá;branch:3b;quote_collect;collect:spd_sites",
+  "source_ref": "3.3.3",
+  "notes": "Câu và nút nguyên văn; tiêu chí và mốc chia quy mô [anh Xuân xác nhận] → Cần duyệt."
+ },
+ {
+  "code": "BG_SPD_COSO_1",
+  "title": "SPD – số cơ sở y tế: 1",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_sites=1;then:BG_SPD_DANHMUC",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SPD_COSO_2_5",
+  "title": "SPD – số cơ sở y tế: 2–5",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_sites=2–5;then:BG_SPD_DANHMUC",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SPD_COSO_TREN5",
+  "title": "SPD – số cơ sở y tế: Trên 5",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_sites=Trên 5;then:BG_SPD_DANHMUC;quote:manual",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BG_SPD_DANHMUC",
+  "title": "SPD – báo giá: hỏi số mặt hàng",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Danh mục vật tư đang dùng khoảng bao nhiêu mặt hàng ạ?",
+  "buttons": [
+   {
+    "label": "Dưới 200",
+    "target": "BG_SPD_DANHMUC_DUOI200"
+   },
+   {
+    "label": "200–1.000",
+    "target": "BG_SPD_DANHMUC_200_1000"
+   },
+   {
+    "label": "Trên 1.000",
+    "target": "BG_SPD_DANHMUC_TREN1000"
+   }
+  ],
+  "action": "quote_collect;collect:spd_items",
+  "source_ref": "3.3.3",
+  "notes": "Câu và nút nguyên văn; tiêu chí và mốc chia quy mô [anh Xuân xác nhận] → Cần duyệt."
+ },
+ {
+  "code": "BG_SPD_DANHMUC_DUOI200",
+  "title": "SPD – số mặt hàng: Dưới 200",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_items=Dưới 200;then:BG_SPD_GIATRI",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SPD_DANHMUC_200_1000",
+  "title": "SPD – số mặt hàng: 200–1.000",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_items=200–1.000;then:BG_SPD_GIATRI",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SPD_DANHMUC_TREN1000",
+  "title": "SPD – số mặt hàng: Trên 1.000",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_items=Trên 1.000;then:BG_SPD_GIATRI;quote:manual",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BG_SPD_GIATRI",
+  "title": "SPD – báo giá: hỏi giá trị vật tư/tháng",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Giá trị vật tư sử dụng mỗi tháng khoảng bao nhiêu ạ?",
+  "buttons": [
+   {
+    "label": "Dưới 200 triệu",
+    "target": "BG_SPD_GIATRI_DUOI200TR"
+   },
+   {
+    "label": "200 triệu–1 tỷ",
+    "target": "BG_SPD_GIATRI_200TR_1TY"
+   },
+   {
+    "label": "Trên 1 tỷ",
+    "target": "BG_SPD_GIATRI_TREN1TY"
+   },
+   {
+    "label": "Chưa rõ",
+    "target": "BG_SPD_GIATRI_CHUARO"
+   }
+  ],
+  "action": "quote_collect;collect:spd_value",
+  "source_ref": "3.3.3",
+  "notes": "Câu và nút nguyên văn; tiêu chí và mốc chia quy mô [anh Xuân xác nhận] → Cần duyệt."
+ },
+ {
+  "code": "BG_SPD_GIATRI_DUOI200TR",
+  "title": "SPD – giá trị vật tư/tháng: Dưới 200 triệu",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_value=Dưới 200 triệu;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SPD_GIATRI_200TR_1TY",
+  "title": "SPD – giá trị vật tư/tháng: 200 triệu–1 tỷ",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_value=200 triệu–1 tỷ;then:HOI_EMAIL_BAOGIA",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "BG_SPD_GIATRI_TREN1TY",
+  "title": "SPD – giá trị vật tư/tháng: Trên 1 tỷ",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_value=Trên 1 tỷ;then:HOI_EMAIL_BAOGIA;quote:manual",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BG_SPD_GIATRI_CHUARO",
+  "title": "SPD – giá trị vật tư/tháng: Chưa rõ",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:spd_value=Chưa rõ;then:HOI_EMAIL_BAOGIA;quote:manual",
+  "source_ref": "3.3.3",
+  "notes": "Node điều hướng, không có câu gửi khách. Vượt bậc cao nhất / Chưa rõ → không tự báo giá, nhân viên báo giá riêng (BG_XACNHAN_*)."
+ },
+ {
+  "code": "BG_SC_KETQUA",
+  "title": "Phần mềm – bot báo giá theo bậc",
+  "step": "3",
+  "service": "SUPPLYCORE",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "Dạ, với quy mô của đơn vị mình, gói phù hợp là {ten_goi}: {gia_goi} / {ky_thanh_toan}, gồm {noi_dung_goi}. Chi phí triển khai và đào tạo: {phi_trien_khai}. Miyano đã gửi báo giá chi tiết tới email {email} ạ.\n\nNgoài ra, phần mềm được miễn phí nếu anh/chị chọn Miyano làm nhà cung cấp vật tư duy nhất (hệ thống SPD).",
+  "buttons": [
+   {
+    "label": "Đặt lịch demo",
+    "target": "DEMO_PHANMEM"
+   },
+   {
+    "label": "Cần điều chỉnh",
+    "target": "BG_DIEUCHINH"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "quote_show;journey:Đã gửi báo giá",
+  "source_ref": "3.3.2",
+  "notes": "Nguyên văn. Tắt: bảng giá theo bậc [anh Xuân cung cấp], công tắc script_quote_enabled_supplycore. Tích hợp HIS/kế toán hoặc vượt bậc → nhân viên báo giá riêng."
+ },
+ {
+  "code": "BG_SPD_KETQUA",
+  "title": "SPD – bot báo giá theo quy mô",
+  "step": "3",
+  "service": "SPD",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "Dạ, với quy mô của đơn vị mình, chi phí dịch vụ SPD là {cach_tinh_va_muc_phi}. Phần mềm đặt hàng và quản lý được miễn phí khi anh/chị chọn Miyano làm nhà cung cấp duy nhất. Miyano đã gửi báo giá chi tiết tới email {email} ạ. Để thấy rõ cách vận hành, anh/chị có muốn xem demo 30 phút miễn phí không ạ?",
+  "buttons": [
+   {
+    "label": "Đặt lịch demo",
+    "target": "DEMO_SPD"
+   },
+   {
+    "label": "Cần điều chỉnh",
+    "target": "BG_DIEUCHINH"
+   },
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "quote_show;journey:Đã gửi báo giá",
+  "source_ref": "3.3.3",
+  "notes": "Nguyên văn. Tắt: cách tính phí SPD [anh Xuân cung cấp], công tắc script_quote_enabled_spd."
+ },
+ {
+  "code": "NL_TAILIEU",
+  "title": "Nhắn lại sau khi gửi tài liệu – Tin 1",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị {ten} ạ. Hôm qua Miyano đã gửi {tai_lieu} tới email {email}. Anh/chị đã nhận được và xem qua chưa ạ?",
+  "buttons": [
+   {
+    "label": "Đã xem rồi",
+    "target": "NL_DAXEM"
+   },
+   {
+    "label": "Chưa nhận được",
+    "target": "NL_CHUANHAN"
+   },
+   {
+    "label": "Chưa kịp xem",
+    "target": "NL_CHUAKIPXEM"
+   }
+  ],
+  "action": "followup_docs",
+  "source_ref": "4.3",
+  "notes": "Gửi ~1 ngày làm việc sau 'Đã gửi tài liệu', 09:00–16:30 (4.1, 4.2)."
+ },
+ {
+  "code": "NL_TAILIEU_VUAROI",
+  "title": "Nhắn lại sau khi gửi tài liệu – Tin 1 (gửi > 1 ngày)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị {ten} ạ. Vừa rồi Miyano đã gửi {tai_lieu} tới email {email}. Anh/chị đã nhận được và xem qua chưa ạ?",
+  "buttons": [
+   {
+    "label": "Đã xem rồi",
+    "target": "NL_DAXEM"
+   },
+   {
+    "label": "Chưa nhận được",
+    "target": "NL_CHUANHAN"
+   },
+   {
+    "label": "Chưa kịp xem",
+    "target": "NL_CHUAKIPXEM"
+   }
+  ],
+  "action": "followup_docs",
+  "source_ref": "4.3",
+  "notes": "Theo quy tắc kịch bản: nhân viên gửi trước đó hơn 1 ngày thì thay 'Hôm qua' bằng 'Vừa rồi'."
+ },
+ {
+  "code": "NL_DAXEM",
+  "title": "Nhắn lại – Đã xem rồi (Phần mềm, SPD)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị ạ. Để thấy rõ hơn, anh/chị có muốn xem demo trực tiếp không ạ? Buổi demo miễn phí, khoảng 30 phút, dùng chính danh mục vật tư của đơn vị anh/chị.",
+  "buttons": [
+   {
+    "label": "Đặt lịch demo",
+    "target": "DAT_DEMO"
+   },
+   {
+    "label": "Có câu hỏi thêm",
+    "target": "CO_CAUHOI"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "answer:followup=Đã xem",
+  "source_ref": "4.3",
+  "notes": ""
+ },
+ {
+  "code": "NL_DAXEM_VATTU",
+  "title": "Nhắn lại – Đã xem rồi (Vật tư)",
+  "step": "4",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị ạ. Nếu anh/chị đang có danh mục cần mua hoặc cần cho gói thầu sắp tới, anh/chị gửi Miyano để báo giá nhé ạ.",
+  "buttons": [
+   {
+    "label": "Gửi danh mục",
+    "target": "DANHMUC_VATTU"
+   },
+   {
+    "label": "Có câu hỏi thêm",
+    "target": "CO_CAUHOI"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "answer:followup=Đã xem",
+  "source_ref": "4.3",
+  "notes": ""
+ },
+ {
+  "code": "NL_CHUANHAN",
+  "title": "Nhắn lại – Chưa nhận được",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị kiểm tra giúp Miyano cả hộp thư Spam ạ. Email của anh/chị là {email} đúng không ạ?",
+  "buttons": [
+   {
+    "label": "Đúng",
+    "target": "NL_GUILAI"
+   },
+   {
+    "label": "Đổi email khác",
+    "target": "NL_DOIEMAIL"
+   }
+  ],
+  "action": "answer:followup=Chưa nhận",
+  "source_ref": "4.3",
+  "notes": ""
+ },
+ {
+  "code": "NL_DOIEMAIL",
+  "title": "Nhắn lại – xin email mới",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị cho Miyano xin email mới để nhân viên gửi lại tài liệu ạ.",
+  "buttons": [],
+  "action": "collect:email;then:NL_GUILAI",
+  "source_ref": "4.3",
+  "notes": "Kịch bản có nút [Đổi email khác] nhưng không có câu xin email mới – câu do agent soạn."
+ },
+ {
+  "code": "NL_GUILAI",
+  "title": "Nhắn lại – báo nhân viên gửi lại tài liệu",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano đã báo nhân viên gửi lại tài liệu {thoi_diem} ạ.",
+  "buttons": [],
+  "action": "task:resend_docs",
+  "source_ref": "4.3",
+  "notes": "{thoi_diem} theo quy tắc 3.5."
+ },
+ {
+  "code": "NL_CHUAKIPXEM",
+  "title": "Nhắn lại – Chưa kịp xem (Phần mềm, SPD)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ không sao ạ. Nếu anh/chị bận, Miyano có thể hẹn một buổi demo 30 phút để chuyên viên giới thiệu trực tiếp, anh/chị đỡ mất thời gian đọc tài liệu.",
+  "buttons": [
+   {
+    "label": "Đặt lịch demo",
+    "target": "DAT_DEMO"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "answer:followup=Chưa kịp xem",
+  "source_ref": "4.3",
+  "notes": ""
+ },
+ {
+  "code": "NL_CHUAKIPXEM_VATTU",
+  "title": "Nhắn lại – Chưa kịp xem (Vật tư)",
+  "step": "4",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ không sao ạ. Nếu anh/chị đang có danh mục cần mua hoặc cần cho gói thầu sắp tới, anh/chị gửi Miyano để báo giá nhé ạ.",
+  "buttons": [
+   {
+    "label": "Gửi danh mục",
+    "target": "DANHMUC_VATTU"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "answer:followup=Chưa kịp xem",
+  "source_ref": "4.3",
+  "notes": "Kịch bản chỉ đổi nút cho Vật tư ([Gửi danh mục] [Để sau]) nhưng câu gốc mời demo – Vật tư không có demo (5.3). Câu ghép từ NL_DAXEM_VATTU."
+ },
+ {
+  "code": "CO_CAUHOI",
+  "title": "Có câu hỏi thêm",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị cứ nhắn câu hỏi ạ.",
+  "buttons": [],
+  "action": "kb_answer",
+  "source_ref": "4.3",
+  "notes": "Trả lời theo quy tắc 2.5."
+ },
+ {
+  "code": "DE_SAU",
+  "title": "Để sau",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ vâng ạ. Khi nào cần, anh/chị cứ nhắn cho Miyano nhé.",
+  "buttons": [],
+  "action": "answer:followup=Để sau;journey:Chăm sóc lại;cancel_followups",
+  "source_ref": "4.3, 4.4, 4.6, 5.3",
+  "notes": "Không nhắc tiếp trong đợt này."
+ },
+ {
+  "code": "EMAIL_NL_TAILIEU",
+  "title": "Email nhắn lại sau khi gửi tài liệu (Phần mềm, SPD)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Tiêu đề: Miyano – Anh/chị đã nhận được tài liệu {dich_vu} chưa?\n\nKính gửi anh/chị {ten},\n\nHôm qua Miyano đã gửi anh/chị tài liệu về {dich_vu}. Nếu anh/chị muốn xem trực tiếp, Miyano mời anh/chị một buổi demo miễn phí khoảng 30 phút, dùng chính danh mục vật tư của đơn vị.\n\nAnh/chị chỉ cần trả lời email này hoặc nhắn cho Miyano qua {kenh_chat} để chọn giờ phù hợp.\n\nTrân trọng, Miyano Việt Nam",
+  "buttons": [],
+  "action": "email_template",
+  "source_ref": "4.5",
+  "notes": "Email: tạo CRM Task cho nhân viên gửi tay (script_email_enabled = 0). Dòng đầu là tiêu đề."
+ },
+ {
+  "code": "EMAIL_NL_TAILIEU_VATTU",
+  "title": "Email nhắn lại sau khi gửi tài liệu (Vật tư)",
+  "step": "4",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Tiêu đề: Miyano – Anh/chị đã nhận được tài liệu {dich_vu} chưa?\n\nKính gửi anh/chị {ten},\n\nHôm qua Miyano đã gửi anh/chị tài liệu về {dich_vu}. Nếu anh/chị đang có danh mục cần mua hoặc cần cho gói thầu sắp tới, anh/chị gửi Miyano để báo giá nhé ạ.\n\nAnh/chị chỉ cần trả lời email này hoặc nhắn cho Miyano qua {kenh_chat}.\n\nTrân trọng, Miyano Việt Nam",
+  "buttons": [],
+  "action": "email_template",
+  "source_ref": "4.5",
+  "notes": "Kịch bản: 'Với Vật tư: thay đoạn mời demo bằng lời mời gửi danh mục để báo giá' – đoạn thay lấy từ câu 4.3 Vật tư; bỏ 'để chọn giờ phù hợp'."
+ },
+ {
+  "code": "ZNS_TAILIEU",
+  "title": "Tin ZNS sau khi gửi tài liệu (bản nháp mẫu)",
+  "step": "4",
+  "service": "",
+  "channel": "Zalo OA",
+  "status": "Tắt",
+  "text": "Miyano Việt Nam xin chào {ten}. Miyano đã gửi tài liệu {dich_vu} tới email của anh/chị. Anh/chị cần hỗ trợ thêm hoặc muốn đặt lịch demo, vui lòng bấm nút bên dưới để nhắn cho Miyano.",
+  "buttons": [],
+  "action": "zns_template",
+  "source_ref": "4.5",
+  "notes": "Nguyên văn. Mẫu ZNS phải đăng ký và được Zalo duyệt; nút [Nhắn cho Miyano] mở khung chat OA (không phải node). Tắt: script_zns_enabled = 0, chưa có template id."
+ },
+ {
+  "code": "NL_BAOGIA",
+  "title": "Nhắn lại sau khi gửi báo giá (Phần mềm, SPD)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị {ten} ạ. Anh/chị đã nhận được báo giá Miyano gửi chưa ạ? Nếu cần trao đổi thêm, Miyano sẵn sàng hỗ trợ.",
+  "buttons": [
+   {
+    "label": "Đã nhận cần trao đổi",
+    "target": "NL_BG_TRAODOI"
+   },
+   {
+    "label": "Đặt lịch demo",
+    "target": "DAT_DEMO"
+   },
+   {
+    "label": "Chưa nhận được",
+    "target": "NL_BG_CHUANHAN"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "followup_quote",
+  "source_ref": "4.6",
+  "notes": "Sau 2 ngày làm việc nếu nhân viên chưa cập nhật kết quả. Nút gốc 'Đã nhận, cần trao đổi' (21 ký tự) rút thành 'Đã nhận cần trao đổi'."
+ },
+ {
+  "code": "NL_BAOGIA_VATTU",
+  "title": "Nhắn lại sau khi gửi báo giá (Vật tư)",
+  "step": "4",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị {ten} ạ. Anh/chị đã nhận được báo giá Miyano gửi chưa ạ? Nếu cần trao đổi thêm, Miyano sẵn sàng hỗ trợ.",
+  "buttons": [
+   {
+    "label": "Đã nhận cần trao đổi",
+    "target": "NL_BG_TRAODOI"
+   },
+   {
+    "label": "Chưa nhận được",
+    "target": "NL_BG_CHUANHAN"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "followup_quote",
+  "source_ref": "4.6",
+  "notes": "Bỏ nút Đặt lịch demo (chỉ Phần mềm, SPD)."
+ },
+ {
+  "code": "NL_BG_TRAODOI",
+  "title": "Nhắn lại báo giá – Đã nhận, cần trao đổi",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:followup=Đã nhận;handoff",
+  "source_ref": "4.6",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "NL_BG_TRAODOI_VATTU",
+  "title": "Nhắn lại báo giá – Đã nhận (Vật tư)",
+  "step": "4",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:followup=Đã nhận;goto:CHOT_VATTU",
+  "source_ref": "4.6, 5.3",
+  "notes": "Node điều hướng, không có câu gửi khách. 5.3: Vật tư bấm 'Đã nhận' mà chưa có đơn → hỏi đặt hàng (mâu thuẫn với 4.6 'chuyển nhân viên' – cần chốt)."
+ },
+ {
+  "code": "NL_BG_CHUANHAN",
+  "title": "Nhắn lại báo giá – Chưa nhận được",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị kiểm tra giúp Miyano cả hộp thư Spam ạ. Email của anh/chị là {email} đúng không ạ?",
+  "buttons": [
+   {
+    "label": "Đúng",
+    "target": "NL_BG_GUILAI"
+   },
+   {
+    "label": "Đổi email khác",
+    "target": "NL_BG_DOIEMAIL"
+   }
+  ],
+  "action": "answer:followup=Chưa nhận",
+  "source_ref": "4.3, 4.6",
+  "notes": "Câu lấy nguyên văn 4.3 (kịch bản không có câu riêng cho báo giá)."
+ },
+ {
+  "code": "NL_BG_DOIEMAIL",
+  "title": "Nhắn lại báo giá – xin email mới",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị cho Miyano xin email mới để nhân viên gửi lại báo giá ạ.",
+  "buttons": [],
+  "action": "collect:email;then:NL_BG_GUILAI",
+  "source_ref": "4.6",
+  "notes": "Biến thể báo giá của NL_DOIEMAIL – câu do agent soạn."
+ },
+ {
+  "code": "NL_BG_GUILAI",
+  "title": "Nhắn lại báo giá – báo nhân viên gửi lại",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano đã báo nhân viên gửi lại báo giá {thoi_diem} ạ.",
+  "buttons": [],
+  "action": "task:resend_quote",
+  "source_ref": "4.6",
+  "notes": "Biến thể báo giá của NL_GUILAI (đổi 'tài liệu' → 'báo giá')."
+ },
+ {
+  "code": "DEMO_HINHTHUC",
+  "title": "Demo – hỏi hình thức",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị muốn xem demo theo hình thức nào ạ?",
+  "buttons": [
+   {
+    "label": "Online qua Teams",
+    "target": "DEMO_HT_ONLINE"
+   },
+   {
+    "label": "Gặp trực tiếp",
+    "target": "DEMO_HT_TRUCTIEP"
+   }
+  ],
+  "action": "demo",
+  "source_ref": "4.4",
+  "notes": "Kịch bản ghi thêm '[Miyano xác nhận phạm vi gặp trực tiếp]' trong hàng nút – là ô chờ chốt (4.9: chỉ Hà Nội hay cả tỉnh khác), không phải nút."
+ },
+ {
+  "code": "DEMO_HT_ONLINE",
+  "title": "Demo – Online qua Teams",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_mode=Online qua Teams;then:DEMO_KHUNGGIO",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_HT_TRUCTIEP",
+  "title": "Demo – Gặp trực tiếp",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_mode=Gặp trực tiếp;then:DEMO_KHUNGGIO",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách. Phạm vi gặp trực tiếp chưa chốt."
+ },
+ {
+  "code": "DEMO_KHUNGGIO",
+  "title": "Demo – đề xuất 3 khung giờ",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano đề xuất các khung giờ sau, anh/chị chọn giúp Miyano một khung phù hợp ạ:",
+  "buttons": [
+   {
+    "label": "{khung_1}",
+    "target": "DEMO_KHUNG_1"
+   },
+   {
+    "label": "{khung_2}",
+    "target": "DEMO_KHUNG_2"
+   },
+   {
+    "label": "{khung_3}",
+    "target": "DEMO_KHUNG_3"
+   },
+   {
+    "label": "Giờ khác",
+    "target": "DEMO_GIOKHAC"
+   }
+  ],
+  "action": "demo:slots",
+  "source_ref": "4.4",
+  "notes": "3 khung trống của người demo dịch vụ đó trong 3 ngày làm việc tới, dạng 'Thứ Ba 18/11, 9:00'. Người demo [anh Xuân] – bảng Omni Service Recipient DEMO_SUPPLYCORE/DEMO_SPD."
+ },
+ {
+  "code": "DEMO_KHUNG_1",
+  "title": "Demo – chọn khung 1",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_slot={khung_1};then:DEMO_SONGUOI",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_KHUNG_2",
+  "title": "Demo – chọn khung 2",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_slot={khung_2};then:DEMO_SONGUOI",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_KHUNG_3",
+  "title": "Demo – chọn khung 3",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_slot={khung_3};then:DEMO_SONGUOI",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_GIOKHAC",
+  "title": "Demo – Giờ khác",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị cho Miyano biết ngày giờ thuận tiện ạ.",
+  "buttons": [],
+  "action": "collect:demo_time",
+  "source_ref": "4.4",
+  "notes": "Giờ trống → chốt (DEMO_SONGUOI); bận hoặc ngày nghỉ → DEMO_GIOBAN."
+ },
+ {
+  "code": "DEMO_GIOBAN",
+  "title": "Demo – giờ khách chọn đã kín",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, khung giờ này bên Miyano đã kín lịch ạ. Miyano đề xuất khung gần nhất là {khung_1}, anh/chị thấy có phù hợp không ạ?",
+  "buttons": [
+   {
+    "label": "Đồng ý",
+    "target": "DEMO_KHUNG_1"
+   },
+   {
+    "label": "Giờ khác",
+    "target": "DEMO_GIOKHAC"
+   }
+  ],
+  "action": "demo:slots",
+  "source_ref": "4.4",
+  "notes": "Kịch bản: 'bận hoặc rơi vào ngày nghỉ thì đề xuất khung trống gần nhất ngay sau đó' – câu do agent soạn."
+ },
+ {
+  "code": "DEMO_SONGUOI",
+  "title": "Demo – số người tham dự",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Bên anh/chị dự kiến có bao nhiêu người tham dự ạ? Miyano hỏi để chuẩn bị nội dung cho phù hợp.",
+  "buttons": [],
+  "action": "collect:attendees;then:DEMO_XACNHAN",
+  "source_ref": "4.4",
+  "notes": "Không bắt buộc. Chưa có email trên Lead → DEMO_HOI_EMAIL trước khi xác nhận."
+ },
+ {
+  "code": "DEMO_HOI_EMAIL",
+  "title": "Demo – xin email gửi lời mời",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, anh/chị cho Miyano xin email để nhân viên gửi lời mời tham gia buổi demo ạ.",
+  "buttons": [],
+  "action": "collect:email;then:DEMO_XACNHAN",
+  "source_ref": "4.4",
+  "notes": "Kịch bản 4.4 xác nhận gửi lời mời tới {email} nhưng không có bước xin email khi khách vào demo thẳng từ Bước 2 – câu do agent soạn."
+ },
+ {
+  "code": "DEMO_XACNHAN",
+  "title": "Demo – xác nhận lịch",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano xác nhận lịch demo {dich_vu}: {thu_ngay}, {gio_bat_dau}–{gio_ket_thuc}, hình thức {hinh_thuc}. Lời mời và đường link tham gia sẽ được gửi tới email {email}. Miyano sẽ nhắc anh/chị trước buổi demo ạ.",
+  "buttons": [],
+  "action": "demo:book;task:demo_invite;journey:Đã hẹn demo",
+  "source_ref": "4.4",
+  "notes": "Nguyên văn. Chưa nối Microsoft 365/Teams: nhân viên gửi lời mời và link tay (Task). Có bản DEMO_XACNHAN_THUCONG (Cần duyệt) nói rõ nhân viên gửi."
+ },
+ {
+  "code": "DEMO_XACNHAN_THUCONG",
+  "title": "Demo – xác nhận lịch (nhân viên gửi lời mời)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano xác nhận lịch demo {dich_vu}: {thu_ngay}, {gio_bat_dau}–{gio_ket_thuc}, hình thức {hinh_thuc}. Nhân viên Miyano sẽ gửi lời mời và đường link tham gia tới email {email} trước buổi demo. Miyano sẽ nhắc anh/chị trước buổi demo ạ.",
+  "buttons": [],
+  "action": "demo:book;task:demo_invite;journey:Đã hẹn demo",
+  "source_ref": "4.4, 4.7",
+  "notes": "Không có tích hợp Microsoft 365 để tự tạo sự kiện Teams (4.7) → nhân viên gửi lời mời tay qua CRM Task. Router chọn bản này hay DEMO_XACNHAN – cần chốt."
+ },
+ {
+  "code": "DEMO_NHAC_1NGAY",
+  "title": "Demo – nhắc trước 1 ngày",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano chào anh/chị {ten} ạ. Miyano xin nhắc lịch demo {dich_vu} vào {thu_ngay}, {gio_bat_dau}–{gio_ket_thuc}, hình thức {hinh_thuc}. Nếu cần đổi lịch, anh/chị bấm nút bên dưới giúp Miyano nhé ạ.",
+  "buttons": [
+   {
+    "label": "Đổi lịch",
+    "target": "DEMO_DOILICH"
+   },
+   {
+    "label": "Huỷ lịch",
+    "target": "DEMO_HUY"
+   }
+  ],
+  "action": "demo_remind_1d",
+  "source_ref": "4.4",
+  "notes": "Kịch bản chỉ ghi 'Nhắc lịch: trước 1 ngày và trước 1 giờ' – câu do agent soạn. Kênh theo 4.2."
+ },
+ {
+  "code": "DEMO_NHAC_1GIO",
+  "title": "Demo – nhắc trước 1 giờ",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano chào anh/chị {ten} ạ. Buổi demo {dich_vu} của anh/chị sẽ bắt đầu lúc {gio_bat_dau} hôm nay, hình thức {hinh_thuc}. Miyano rất mong được gặp anh/chị ạ.",
+  "buttons": [
+   {
+    "label": "Đổi lịch",
+    "target": "DEMO_DOILICH"
+   },
+   {
+    "label": "Huỷ lịch",
+    "target": "DEMO_HUY"
+   }
+  ],
+  "action": "demo_remind_1h",
+  "source_ref": "4.4",
+  "notes": "Câu do agent soạn. Gửi đúng giờ (ngoại lệ C.5)."
+ },
+ {
+  "code": "DEMO_DOILICH",
+  "title": "Demo – đổi lịch",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "demo:reschedule;goto:DEMO_KHUNGGIO",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách. Đổi lịch → quay lại bước 2 của 4.4 (đề xuất khung giờ)."
+ },
+ {
+  "code": "DEMO_HUY",
+  "title": "Demo – huỷ lịch: hỏi lý do",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano đã ghi nhận anh/chị muốn huỷ lịch demo ạ. Anh/chị cho Miyano biết lý do được không ạ?",
+  "buttons": [
+   {
+    "label": "Bận đột xuất",
+    "target": "DEMO_HUY_BAN"
+   },
+   {
+    "label": "Chưa có nhu cầu",
+    "target": "DEMO_HUY_CHUANHUCAU"
+   },
+   {
+    "label": "Lý do khác",
+    "target": "DEMO_HUY_KHAC"
+   }
+  ],
+  "action": "demo:cancel",
+  "source_ref": "4.4",
+  "notes": "Kịch bản: 'hỏi nhẹ lý do bằng nút' – câu do agent soạn; nút nguyên văn."
+ },
+ {
+  "code": "DEMO_HUY_BAN",
+  "title": "Demo huỷ – Bận đột xuất",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_cancel_reason=Bận đột xuất;then:DEMO_HUY_CAMON",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_HUY_CHUANHUCAU",
+  "title": "Demo huỷ – Chưa có nhu cầu",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_cancel_reason=Chưa có nhu cầu;then:DEMO_HUY_CAMON",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_HUY_KHAC",
+  "title": "Demo huỷ – Lý do khác",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:demo_cancel_reason=Lý do khác;then:DEMO_HUY_CAMON",
+  "source_ref": "4.4",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "DEMO_HUY_CAMON",
+  "title": "Demo huỷ – cảm ơn",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano cảm ơn anh/chị đã cho Miyano biết ạ. Khi nào cần, anh/chị cứ nhắn cho Miyano nhé.",
+  "buttons": [],
+  "action": "journey:Chăm sóc lại;cancel_followups",
+  "source_ref": "4.4",
+  "notes": "Kịch bản: 'cảm ơn và chuyển Chăm sóc lại' – câu do agent soạn (dựa trên DE_SAU)."
+ },
+ {
+  "code": "DEMO_VANGMAT",
+  "title": "Demo – khách vắng mặt (sau 15 phút)",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano đang chờ anh/chị ở buổi demo lúc {gio}. Nếu anh/chị bận, Miyano có thể hẹn lại khung giờ khác ạ.",
+  "buttons": [
+   {
+    "label": "Hẹn lại",
+    "target": "DEMO_DOILICH"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "demo_noshow",
+  "source_ref": "4.4",
+  "notes": ""
+ },
+ {
+  "code": "SD_CAMNHAN",
+  "title": "Sau demo – Tin 1 cảm ơn, hỏi cảm nhận",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị {ten} đã dành thời gian tham gia buổi demo {dich_vu} {hom_nay_hom_qua} ạ. Anh/chị thấy giải pháp có phù hợp với đơn vị mình không ạ?",
+  "buttons": [
+   {
+    "label": "Rất phù hợp",
+    "target": "SD_PHUHOP"
+   },
+   {
+    "label": "Cần tìm hiểu thêm",
+    "target": "SD_TIMHIEUTHEM"
+   },
+   {
+    "label": "Chưa phù hợp",
+    "target": "SD_CHUAPHUHOP"
+   }
+  ],
+  "action": "postdemo_1",
+  "source_ref": "5.2",
+  "notes": "Nguyên văn; '{hom_nay/hom_qua}' đổi thành {hom_nay_hom_qua}. Gửi ~2 giờ sau 'Đã demo' nếu trước 16:30, nếu không 09:00 ngày làm việc kế tiếp (5.1)."
+ },
+ {
+  "code": "SD_PHUHOP",
+  "title": "Sau demo – Rất phù hợp",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano rất vui khi nghe điều này ạ! Anh/chị có muốn Miyano chuẩn bị các bước để đơn vị bắt đầu sử dụng không ạ?",
+  "buttons": [
+   {
+    "label": "Bắt đầu sử dụng",
+    "target": "SD_BATDAU"
+   },
+   {
+    "label": "Trao đổi về chi phí",
+    "target": "SD_CHIPHI"
+   }
+  ],
+  "action": "answer:postdemo_feel=Rất phù hợp",
+  "source_ref": "5.2",
+  "notes": "Nút gốc 'Trao đổi thêm về chi phí' (24 ký tự) rút thành 'Trao đổi về chi phí'."
+ },
+ {
+  "code": "SD_BATDAU",
+  "title": "Sau demo – Bắt đầu sử dụng (đồng ý mua)",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano xin cảm ơn anh/chị đã tin tưởng lựa chọn Miyano ạ! Chuyên viên phụ trách sẽ gọi điện cho anh/chị {thoi_diem} để hướng dẫn các bước tiếp theo: ký hợp đồng, thanh toán và thiết lập hệ thống cho đơn vị.",
+  "buttons": [],
+  "action": "require:phone;journey:Đồng ý mua – chờ ký hợp đồng;task:won_high;notify:manager",
+  "source_ref": "5.2",
+  "notes": "Chưa có SĐT → GAP_NV_GOIDIEN/HOI_SDT trước. {thoi_diem}: 'trong hôm nay' nếu trước 16:30, còn lại {ngay_lam_viec_tiep_theo}."
+ },
+ {
+  "code": "SD_CHIPHI",
+  "title": "Sau demo – Trao đổi thêm về chi phí",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano sẽ để chuyên viên phụ trách liên hệ và trao đổi chi tiết với anh/chị {thoi_diem} ạ.",
+  "buttons": [],
+  "action": "task:negotiate;journey:Thương lượng",
+  "source_ref": "5.2",
+  "notes": "Bot không nêu con số."
+ },
+ {
+  "code": "SD_TIMHIEUTHEM",
+  "title": "Sau demo – Cần tìm hiểu thêm",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, anh/chị còn băn khoăn ở điểm nào ạ?",
+  "buttons": [
+   {
+    "label": "Chi phí",
+    "target": "SD_BK_CHIPHI"
+   },
+   {
+    "label": "Cách triển khai",
+    "target": "SD_BK_TRIENKHAI"
+   },
+   {
+    "label": "Kết nối hệ thống",
+    "target": "SD_BK_KETNOI"
+   },
+   {
+    "label": "Khác",
+    "target": "SD_BK_KHAC"
+   }
+  ],
+  "action": "answer:postdemo_feel=Cần tìm hiểu thêm",
+  "source_ref": "5.2",
+  "notes": "Nút gốc 'Kết nối hệ thống đang dùng' (26 ký tự) rút thành 'Kết nối hệ thống'."
+ },
+ {
+  "code": "SD_BK_TRIENKHAI",
+  "title": "Băn khoăn – Cách triển khai",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:concern=Cách triển khai;kb_answer;then:SD_HOILAI",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Trả lời từ Kho tri thức (3 bước bắt đầu sử dụng)."
+ },
+ {
+  "code": "SD_BK_CHIPHI",
+  "title": "Băn khoăn – Chi phí",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:concern=Chi phí;handoff",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Chuyển nhân viên phụ trách kèm câu hỏi của khách."
+ },
+ {
+  "code": "SD_BK_KETNOI",
+  "title": "Băn khoăn – Kết nối hệ thống",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:concern=Kết nối hệ thống;handoff",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Chuyển nhân viên phụ trách kèm câu hỏi của khách."
+ },
+ {
+  "code": "SD_BK_KHAC",
+  "title": "Băn khoăn – Khác",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:concern=Khác;handoff",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách. Chuyển nhân viên phụ trách kèm câu hỏi của khách."
+ },
+ {
+  "code": "SD_HOILAI",
+  "title": "Sau demo – hỏi lại sau khi trả lời cách triển khai",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị có muốn Miyano chuẩn bị các bước để bắt đầu sử dụng không ạ?",
+  "buttons": [
+   {
+    "label": "Bắt đầu sử dụng",
+    "target": "SD_BATDAU"
+   },
+   {
+    "label": "Trao đổi về chi phí",
+    "target": "SD_CHIPHI"
+   }
+  ],
+  "action": "",
+  "source_ref": "5.2",
+  "notes": ""
+ },
+ {
+  "code": "SD_CHUAPHUHOP",
+  "title": "Sau demo – Chưa phù hợp: hỏi lý do",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị đã chia sẻ ạ. Anh/chị cho Miyano biết lý do để Miyano cải thiện dịch vụ được không ạ?",
+  "buttons": [
+   {
+    "label": "Chi phí",
+    "target": "SD_LD_CHIPHI"
+   },
+   {
+    "label": "Chưa có nhu cầu",
+    "target": "SD_LD_CHUANHUCAU"
+   },
+   {
+    "label": "Đã có đơn vị khác",
+    "target": "SD_LD_DONVIKHAC"
+   },
+   {
+    "label": "Lý do khác",
+    "target": "SD_LD_KHAC"
+   }
+  ],
+  "action": "answer:postdemo_feel=Chưa phù hợp",
+  "source_ref": "5.2",
+  "notes": "Dù khách chọn gì hoặc không trả lời → SD_KETTHUC."
+ },
+ {
+  "code": "SD_LD_CHIPHI",
+  "title": "Lý do từ chối – Chi phí",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:lost_reason=Chi phí;then:SD_KETTHUC",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "SD_LD_CHUANHUCAU",
+  "title": "Lý do từ chối – Chưa có nhu cầu",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:lost_reason=Chưa có nhu cầu;then:SD_KETTHUC",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "SD_LD_DONVIKHAC",
+  "title": "Lý do từ chối – Đã có đơn vị khác",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:lost_reason=Đã có đơn vị khác;then:SD_KETTHUC",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "SD_LD_KHAC",
+  "title": "Lý do từ chối – Lý do khác",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "answer:lost_reason=Lý do khác;then:SD_KETTHUC",
+  "source_ref": "5.2",
+  "notes": "Node điều hướng, không có câu gửi khách."
+ },
+ {
+  "code": "SD_KETTHUC",
+  "title": "Sau demo – kết khi khách từ chối",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano cảm ơn anh/chị đã dành thời gian tìm hiểu. Hy vọng sẽ có dịp được hợp tác cùng anh/chị trong tương lai. Khi cần, anh/chị cứ nhắn cho Miyano nhé ạ.",
+  "buttons": [],
+  "action": "journey:Thua;cancel_followups;schedule:lost_3m",
+  "source_ref": "5.2",
+  "notes": "Bot không thuyết phục thêm."
+ },
+ {
+  "code": "HOITHAM_3THANG",
+  "title": "Hỏi thăm lại sau 3 tháng (Lead Thua)",
+  "step": "5",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano Việt Nam xin chào anh/chị {ten}. Đã một thời gian kể từ buổi demo {dich_vu}, Miyano muốn hỏi thăm nhu cầu hiện tại của đơn vị anh/chị. Nếu cần thêm thông tin, anh/chị cứ nhắn cho Miyano ạ.",
+  "buttons": [],
+  "action": "lost_3m;email_template;zns_template",
+  "source_ref": "5.2",
+  "notes": "Qua email info@miyano.com.vn (CRM Task gửi tay) kèm ZNS (tắt). Gửi 1 lần; không phản hồi thì dừng hẳn; trả lời → quay lại Bước 2 với dịch vụ đó."
+ },
+ {
+  "code": "CHOT_VATTU",
+  "title": "Vật tư – hỏi đặt hàng theo báo giá",
+  "step": "5",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Anh/chị có muốn đặt hàng theo báo giá Miyano đã gửi không ạ?",
+  "buttons": [
+   {
+    "label": "Đặt hàng",
+    "target": "DAT_HANG"
+   },
+   {
+    "label": "Điều chỉnh báo giá",
+    "target": "CHOT_DIEUCHINH"
+   },
+   {
+    "label": "Để sau",
+    "target": "DE_SAU"
+   }
+  ],
+  "action": "",
+  "source_ref": "5.3",
+  "notes": "Nút gốc 'Cần điều chỉnh báo giá' (22 ký tự) rút thành 'Điều chỉnh báo giá'."
+ },
+ {
+  "code": "DAT_HANG",
+  "title": "Vật tư – Đặt hàng",
+  "step": "5",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano xin cảm ơn anh/chị đã tin tưởng lựa chọn Miyano ạ! Chuyên viên phụ trách sẽ gọi điện cho anh/chị {thoi_diem} để xác nhận đơn hàng, giao hàng và hoá đơn.",
+  "buttons": [],
+  "action": "require:phone;journey:Đồng ý mua – chờ ký hợp đồng;task:won_high;notify:manager",
+  "source_ref": "5.3, 3.3.1",
+  "notes": "Kịch bản: 'cảm ơn và hẹn nhân viên gọi xác nhận đơn, giao hàng, hoá đơn (giống nhánh [Bắt đầu sử dụng])' – câu ghép từ SD_BATDAU."
+ },
+ {
+  "code": "CHOT_DIEUCHINH",
+  "title": "Vật tư – Cần điều chỉnh báo giá",
+  "step": "5",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Phần này Miyano xin phép để chuyên viên trao đổi trực tiếp với anh/chị ạ.",
+  "buttons": [],
+  "action": "handoff;journey:Thương lượng",
+  "source_ref": "5.3",
+  "notes": "Kịch bản chỉ ghi 'chuyển nhân viên, trạng thái Thương lượng'; câu lấy nguyên văn từ 3.3.1 (chiết khấu)."
+ },
+ {
+  "code": "NHAC3N_B12",
+  "title": "Nhắc sau 3 ngày – Bước 1–2",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị ạ. Hôm trước anh/chị có quan tâm đến {dich_vu}. Anh/chị cần Miyano gửi tài liệu hay tư vấn thêm gì không ạ?",
+  "buttons": [],
+  "action": "silence_3d",
+  "source_ref": "C.1",
+  "notes": "Chỉ nhắc 1 lần; vẫn im lặng → Chăm sóc lại."
+ },
+ {
+  "code": "NHAC3N_B3",
+  "title": "Nhắc sau 3 ngày – Bước 3 (đang hỏi dở)",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị ạ. Để nhân viên gửi {tai_lieu_bao_gia}, anh/chị cho Miyano xin {thong_tin_con_thieu} nhé ạ.",
+  "buttons": [],
+  "action": "silence_3d",
+  "source_ref": "C.1",
+  "notes": "Nguyên văn; '{tai_lieu/bao_gia}' đổi thành {tai_lieu_bao_gia}."
+ },
+ {
+  "code": "NHAC3N_B4",
+  "title": "Nhắc sau 3 ngày – Bước 4 (Phần mềm, SPD)",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị ạ. Anh/chị đã có thời gian xem {tai_lieu_bao_gia} chưa ạ? Nếu tiện, Miyano mời anh/chị một buổi demo 30 phút miễn phí.",
+  "buttons": [],
+  "action": "silence_3d",
+  "source_ref": "C.1",
+  "notes": "Nguyên văn; '{tai_lieu/bao_gia}' đổi thành {tai_lieu_bao_gia}. Kịch bản không có nút."
+ },
+ {
+  "code": "NHAC3N_B4_VATTU",
+  "title": "Nhắc sau 3 ngày – Bước 4 (Vật tư)",
+  "step": "C",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Miyano chào anh/chị ạ. Anh/chị đã có thời gian xem {tai_lieu_bao_gia} chưa ạ? Nếu đang có danh mục cần mua hoặc cần cho gói thầu sắp tới, anh/chị gửi Miyano để báo giá nhé ạ.",
+  "buttons": [],
+  "action": "silence_3d",
+  "source_ref": "C.1",
+  "notes": "Kịch bản: '(Vật tư: mời gửi danh mục)' – câu mời ghép từ 4.3 Vật tư."
+ },
+ {
+  "code": "NHAC3N_B5",
+  "title": "Nhắc sau 3 ngày – Bước 5 (sau demo)",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano chào anh/chị ạ. Sau buổi demo {dich_vu}, anh/chị có cần Miyano hỗ trợ thêm thông tin gì không ạ?",
+  "buttons": [],
+  "action": "silence_3d",
+  "source_ref": "C.1",
+  "notes": ""
+ },
+ {
+  "code": "C3_YKHOA",
+  "title": "Hỏi tư vấn y khoa – câu cố định",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano không tư vấn chuyên môn y khoa, anh/chị vui lòng hỏi bác sĩ hoặc cơ sở y tế ạ.",
+  "buttons": [],
+  "action": "then:MENU_CHINH",
+  "source_ref": "C.3",
+  "notes": "Không chuyển người (giao ước 17/11); đưa lại menu."
+ },
+ {
+  "code": "C3_BOT",
+  "title": "\"Bạn là bot à?\"",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, đây là trợ lý AI của Miyano Việt Nam. Anh/chị muốn trao đổi với nhân viên thì Miyano kết nối ngay ạ.",
+  "buttons": [
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   }
+  ],
+  "action": "",
+  "source_ref": "C.3",
+  "notes": "1.2 lại xếp 'bạn là bot à?' vào GAP_NHANVIEN – mâu thuẫn, ở đây theo C.3 (cụ thể hơn)."
+ },
+ {
+  "code": "C3_KHONGLIENQUAN",
+  "title": "Không liên quan / trêu đùa / đòi đổi vai",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano xin phép chỉ hỗ trợ các nội dung về dịch vụ của Miyano Việt Nam ạ.",
+  "buttons": [],
+  "action": "then:MENU_CHINH",
+  "source_ref": "C.3",
+  "notes": "Kịch bản: 'Trả lời lịch sự 1 câu, đưa lại menu' – câu do agent soạn."
+ },
+ {
+  "code": "C3_SPAM",
+  "title": "Quảng cáo / lừa đảo / link lạ",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "",
+  "buttons": [],
+  "action": "spam;no_lead;stop",
+  "source_ref": "C.3",
+  "notes": "Node điều hướng, không có câu gửi khách. Không trả lời nội dung, không bấm link, đánh dấu Spam, không tạo Lead."
+ },
+ {
+  "code": "C4_HUYDANGKY",
+  "title": "Khách yêu cầu dừng nhắn",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano đã ghi nhận. Cảm ơn anh/chị ạ.",
+  "buttons": [],
+  "action": "stop;do_not_contact;journey:Không liên hệ;cancel_followups",
+  "source_ref": "C.4",
+  "notes": "Dừng mọi tin chủ động (chat, email, ZNS)."
+ },
+ {
+  "code": "C4_XOADULIEU",
+  "title": "Khách yêu cầu xoá dữ liệu",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Tắt",
+  "text": "Dạ, Miyano đã ghi nhận yêu cầu xoá dữ liệu của anh/chị ạ. Anh/chị xem hướng dẫn xoá dữ liệu tại {bo_sung_link_xoa_du_lieu}, bộ phận phụ trách sẽ liên hệ hỗ trợ anh/chị ạ.",
+  "buttons": [],
+  "action": "handoff:TUAN_THU",
+  "source_ref": "C.4",
+  "notes": "Kịch bản: 'gửi link hướng dẫn xoá dữ liệu trên website và chuyển người phụ trách tuân thủ' – câu do agent soạn; ô trống: link hướng dẫn xoá dữ liệu."
+ }
+]
