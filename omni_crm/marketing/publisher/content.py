@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import frappe
 from frappe import _
@@ -63,7 +63,7 @@ def public_image_url(file_url: str | None) -> str:
 		raise PublishValidationError(
 			_("Tệp ảnh {0} không còn trên máy chủ").format(os.path.basename(file_url))
 		)
-	return get_url(file_url)
+	return get_url(quote(file_url))  # tên tệp có dấu cách/tiếng Việt: mã hóa để nền tảng tải được
 
 
 def build(target_name: str) -> Payload:

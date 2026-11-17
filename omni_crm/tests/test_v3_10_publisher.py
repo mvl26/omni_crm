@@ -578,3 +578,12 @@ class TestImages(FrappeTestCase):
 		with self.assertRaises(PublishValidationError):
 			content.public_image_url("http://insecure/a.jpg")
 		self.assertEqual(content.public_image_url("https://cdn/a.jpg"), "https://cdn/a.jpg")
+
+	def test_public_image_url_encodes_spaces(self):
+		with (
+			mock.patch.object(content.frappe.db, "get_value", return_value=frappe._dict(name="f", is_private=0)),
+			mock.patch.object(content.os.path, "exists", return_value=True),
+		):
+			url = content.public_image_url("/files/Ảnh bìa 1.png")
+		self.assertNotIn(" ", url)
+		self.assertTrue(url.endswith("/files/%E1%BA%A2nh%20b%C3%ACa%201.png"))
