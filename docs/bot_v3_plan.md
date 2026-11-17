@@ -189,7 +189,7 @@ Ký hiệu: ✅ đã có · ◐ có một phần · ✗ chưa có.
 
 | Hiện tượng | Nguyên nhân gốc (đã đối chiếu dữ liệu) | Đã sửa? |
 | --- | --- | --- |
-| BOT-076 "Demo supply core có mất phí k" → chuyển người, nháp rỗng | Lượt Analyze (v1, cả hội thoại) ra `Hỏi giá` → `y_dinh_hoi_gia`; AI trả action handoff, text rỗng → `tra_loi_rong` | ◐ v313 chỉ bỏ chặn khi lượt hiện tại **không** có chữ giá/phí. Câu này có chữ "phí" nên **vẫn chuyển người**. K1 cần: "có mất phí không" mà Kho có câu trả lời (demo miễn phí) thì trả lời |
+| BOT-076 "Demo supply core có mất phí k" → chuyển người, nháp rỗng | Lượt Analyze (v1, cả hội thoại) ra `Hỏi giá` → `y_dinh_hoi_gia`; **và** câu lệnh reply v3 quy tắc 2 ("Khách hỏi phí … → handoff") khiến AI tự trả action handoff, text rỗng → `tra_loi_rong`. Bộ lọc chữ **không** bắt câu này (`sensitive_topics` = [] – đã kiểm trên omni.test 17/11) | ◐ v313 gỡ phần ý định; phần câu lệnh sửa ở reply v4 (K1) |
 | BOT-080/082 "spd là gì" → nhóm Hỏi giá, mẫu báo giá | (a) Analyze ra `Hỏi giá`; (b) **chính AI Reply chọn nhóm "Hỏi giá"** (0,92/0,95) do lịch sử hội thoại có chuyện báo giá; nhóm `always_handoff` → `nhom_luon_chuyen_nguoi` | ◐ v313 gỡ (a), **chưa gỡ (b)**. K1: nhóm phải xét theo tin hiện tại |
 | 19/30 lượt Analyze ra "Hỏi giá" | Prompt Analyze v1 xét cả hội thoại; trong hội thoại có tin của Miyano: thẻ xin SĐT "Để Miyano gửi báo giá…" (`phone_request.card_texts`), tin mẫu báo giá | ✗ K1 mục 3 |
 | BOT-074 Invalid Output (vi phạm `required`) | `ai_client.call_tool` **đã thử lại** khi sai định dạng (`schema_left`, kèm ghi chú sửa) rồi vẫn sai → trả None → `make_draft` trả None, **không nháp, không báo ai** (chỉ có đường dự phòng khi khách đòi gặp người) | ◐ thử lại đã có; thiếu chuyển người + báo nhân viên (K1 mục 4) |
@@ -223,3 +223,24 @@ Rủi ro:
 6. Tư vấn y khoa: đổi từ "chuyển người" sang "trả câu cố định + menu" như C.3?
 7. Cập nhật CRM Lead Status gốc theo bảng quy đổi ở mục 6, hay chỉ ghi trường trạng thái riêng?
 8. Tắt chatbot/tin chào trên Zalo OA Manager trước khi bật bot kịch bản (anh làm tay)?
+
+## 14. K1 – đã làm (17/11, nhánh `v4/kich-ban-bot`, chưa deploy)
+
+Người dùng chốt 17/11: **không dùng người nhận mặc định** (Lead chuyển thẳng về CRM); **tư vấn y khoa trả câu cố định ở C.3 rồi đưa lại menu** (làm ở K2 vì cần menu nút).
+
+| Mục K1 | Thay đổi | Công tắc |
+| --- | --- | --- |
+| 2 – quyết định theo tin hiện tại | Câu lệnh `reply_v4.md`: tin cần trả lời trong `<tin_moi>`, nhóm/hành động chỉ xét tin đó, dòng "miyano" không phải ý khách; v4 không gửi `<tom_tat_lead>` và không dùng ý định của lượt Analyze (`reply.current_turn_mode`) | `Omni Settings.reply_prompt_version`: v3 = như cũ, v4 = mới. **Người dùng tự đổi** |
+| 2 – "Yêu cầu đề xuất" | Nhận từ lời khách ở lượt hiện tại (`guards` chủ đề `yeu_cau_de_xuat`), áp cho mọi phiên bản | – |
+| 3 – Analyze không gán "Hỏi giá" sai | **Chưa sửa câu lệnh Analyze** (v1 đang chạy). Từ reply v4, ý định Analyze không còn ảnh hưởng quyết định trả lời; `omni_intent` chỉ để nhân viên đọc. Sửa Analyze (đổi sang bản mới) là thay đổi dữ liệu Lead, đề xuất làm riêng | – |
+| 3 – "có mất phí không" | reply v4 quy tắc 3: câu có/không mà kho có câu trả lời thì trả lời (demo miễn phí, 30 phút) | reply v4 |
+| 4 – AI sai định dạng | `check_reply_output` + `repair`: action reply mà text rỗng thì AI được yêu cầu làm lại. Vẫn không có kết quả → nháp **chuyển người** `ai_khong_tra_ket_qua` + báo nhân viên | chế độ Draft |
+| 4 – không tin nào im lặng | Chế độ Draft: AI lỗi, lỗi giữa chừng (`loi_he_thong`), quá 6 nháp/giờ (`qua_nhieu_tin`), kho quá lớn → nháp chuyển người. Vẫn im lặng có chủ đích: bot tắt, bot đang tạm dừng, nhân viên đã trả lời, lượt không có tin khách, job trùng lượt đang chạy (`locked`) | `bot_reply_mode` |
+| 6 – không người nhận | Không thêm người nhận mặc định (theo người dùng). Thêm cảnh báo giám sát `chuyen_nguoi_khong_nguoi_nhan` (gửi Omni Admin) khi có nháp chuyển người không báo được ai trong 24 giờ | luồng cảnh báo sẵn có |
+| 7 – khung nháp | Lý do chuyển người hiện tiếng Việt (`handoff.explain_reason`, dịch lúc đọc nên nháp cũ cũng đúng); nguồn gộp theo tên tài liệu. Không đổi giao diện (không phải build lại) | – |
+| 8 – tin gửi từ CRM | `api/inbox.get_thread`: Outbound có `sent_at` khác thời điểm echo (do CRM gửi) thì hiện bản Outbound kèm tên người gửi, bỏ echo; Outbound do echo tạo (nhân viên gõ trên OA, chatbot Zalo) giữ nhãn "Nhân viên (ngoài hệ thống)" | – |
+| 9 – bộ kiểm thử | `eval/cases/k1-kich-ban-v3.jsonl` (45 ca Synthetic, từ bảng 1.2, 2.5, C.3 và tài liệu "Câu hỏi thường gặp"); ý phải có/không được có lưu trong `expected_fields._phai_co/_khong_duoc_co`; bộ chạy dùng tài liệu Kho tri thức + câu lệnh v4 như production, thêm `case_pass_rate` và `by_group` | `run_cli(allow_real=…)` |
+
+Rủi ro cần biết: khi AI lỗi kéo dài, mỗi khách nhắn vào sẽ thành một nháp chuyển người và bot **tạm dừng 24 giờ** với khách đó (cơ chế chuyển người hiện có). Cảnh báo `ai_loi_nhieu`/`ai_ngat_mach` đã có sẵn.
+
+Deploy: `api/inbox.py` và `pipeline/worker.py` đang bị dev khác sửa dở trên máy chủ; K1 sửa `api/inbox.py` nên script deploy phải cất/trả lại cả tệp này (ngoài `outbound.py`, `omni_inbox.js`).
