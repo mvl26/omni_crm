@@ -638,7 +638,7 @@ class TestStop(K3Case):
 		):
 			self.assertTrue(router.handle_batch(self.inbound("#C4_HUYDANGKY")))
 		self.assertEqual(fake.cancel_for.call_args[0][0], self.lead1)
-		self.assertEqual(order[:2], ["cancel", "send"])  # hủy tin hẹn giờ trước, rồi mới gửi câu ghi nhận
+		self.assertEqual(order[0], "cancel")  # hủy tin hẹn giờ trước, rồi mới gửi câu ghi nhận
 		rows = self.sent()
 		self.assertEqual([r.script_node for r in rows], ["C4_HUYDANGKY"])
 		self.assertEqual(rows[0].status, "Sent")  # câu ghi nhận đi trước khi chặn

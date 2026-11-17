@@ -82,7 +82,7 @@ class TestQuoteFallback(FlowCase):
 
 	def test_quote_show_falls_back_to_staff_task_without_numbers(self):
 		frappe.db.set_value("CRM Lead", self.lead1, {"omni_services": "VATTU", "email": "k7@example.com"})
-		quote.state.update_state(self.ident1, items="găng tay y tế", quantity="vài thùng")
+		quote.state.update_state(self.ident1, answers={"items": "găng tay y tế", "quantity": "vài thùng"})
 		node = {"code": "BG_VT_KETQUA", "service": "VATTU"}
 		self.assertTrue(quote._act_quote_show(self.ctx("BG_VT_KETQUA"), "", node))  # dừng chuỗi lệnh của ô
 		self.assertEqual(len(self.tasks), 1)

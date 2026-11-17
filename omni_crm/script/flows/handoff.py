@@ -91,6 +91,7 @@ STOP_CONTAINS = (
 	"dung nhan nua",
 	"ngừng nhận tin",
 )
+BOT_SOURCE = "Bot"  # nguồn tin của bot trên Omni Outbound Message (chỉ dùng để lọc, không tạo tin ở đây)
 
 
 def reason_label(reason: str | None) -> str:
@@ -136,7 +137,7 @@ def flush_pending(identity: str | None) -> int:
 	from omni_crm.pipeline import outbound
 
 	frappe.db.commit()  # không giữ khóa DB khi gọi ra ngoài
-	filters = {"identity": identity, "source": "Bot", "status": "Queued", "script_node": ["is", "set"]}
+	filters = {"identity": identity, "source": BOT_SOURCE, "status": "Queued", "script_node": ["is", "set"]}
 	for name in frappe.get_all(OUTBOUND, filters=filters, pluck="name", order_by="creation asc"):
 		try:
 			outbound.send_outbound(name)

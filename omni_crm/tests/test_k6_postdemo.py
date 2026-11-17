@@ -339,7 +339,7 @@ class TestBranches(FlowCase):
 		self.set_lead(omni_demo_result="", omni_journey_status="Đang tư vấn", mobile_no="0912345678")
 		for code in ("SD_BATDAU", "SD_CHIPHI", "SD_BK_KHAC", "SD_CHUAPHUHOP", "SD_LD_CHIPHI", "SD_KETTHUC"):
 			router._handlers[code](self.ctx(code))
-		self.assertEqual(self.sent_nodes(), [])
+		self.assertEqual(set(self.sent_nodes()) - {router.MENU_CODE}, set())  # chỉ đưa lại menu chính
 		self.assertEqual((self.tasks, self.handoffs, self.scheduled), ([], [], []))
 		self.assertEqual(self.lead("omni_journey_status"), "Đang tư vấn")
 		self.assertFalse(self.lead("omni_lost_reason_text"))

@@ -35,9 +35,11 @@ def action_schedule(ctx: RouteContext, arg: str, node: dict) -> bool | None:
 	elif kind == "silence_3d":
 		scheduler.schedule_silence(ctx.identity, ctx.lead)
 	elif kind == "lost_3m":
-		scheduler.schedule(
-			kind, ctx.identity, ctx.lead, _later(ctx.identity, scheduler.LOST_FOLLOWUP_DAYS), None
-		)
+		from omni_crm.script.flows import (
+			postdemo,
+		)  # K6 giữ luật "một lần cho mỗi Lead, không gửi khi Không liên hệ"
+
+		postdemo.schedule_lost_3m(ctx.lead, ctx.identity)
 	elif kind == "postdemo_1":
 		now = scheduler._now()
 		due = (
