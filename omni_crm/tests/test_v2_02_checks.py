@@ -111,6 +111,21 @@ EXPECTED_WHITELISTED = {
 	},
 	# ADR 0030: ảnh bài đăng trên kho S3, chỉ trả cho người đọc được bài; kiểm kho chỉ Omni Admin/System Manager
 	"api/media.py": {"post_image", "check_storage"},
+	# ADR 0031: Marketing Hub trong /crm; đọc theo quyền DocType/Lead, ghi qua Document.save, thiết lập chỉ Omni Admin
+	"api/marketing_ui.py": {
+		"ui_state",
+		"campaigns",
+		"campaign",
+		"save_campaign",
+		"post",
+		"save_post",
+		"pillars",
+		"calendar",
+		"report",
+		"settings",
+		"save_settings",
+		"lead_marketing",
+	},
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {
 		"state",

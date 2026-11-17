@@ -678,6 +678,21 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 			"frontend/src/composables/messenger.js",  # ADR 0023
 			"frontend/src/utils/messengerThread.js",  # ADR 0023
 			"frontend/tests/unit/messengerThread.test.js",  # ADR 0023
+			"frontend/src/router.js",  # ADR 0031: 3 route /marketing/*
+			"frontend/src/components/Layouts/AppSidebar.vue",  # ADR 0031: nhóm menu Marketing
+			"frontend/src/components/Settings/Settings.vue",  # ADR 0031: mục Thiết lập Marketing
+			"frontend/src/pages/MarketingCampaigns.vue",  # ADR 0031
+			"frontend/src/pages/MarketingCalendar.vue",  # ADR 0031
+			"frontend/src/pages/MarketingReport.vue",  # ADR 0031
+			"frontend/src/components/Marketing/PostDialog.vue",  # ADR 0031
+			"frontend/src/components/Marketing/CampaignDialog.vue",  # ADR 0031
+			"frontend/src/components/Marketing/LeadMarketingSection.vue",  # ADR 0031: mục Marketing trang Lead
+			"frontend/src/components/Settings/MarketingSocialSettings.vue",  # ADR 0031
+			"frontend/src/components/Settings/MarketingPublishSettings.vue",  # ADR 0031
+			"frontend/src/components/Settings/MarketingContentSettings.vue",  # ADR 0031
+			"frontend/src/composables/marketing.js",  # ADR 0031
+			"frontend/src/utils/marketing.js",  # ADR 0031
+			"frontend/tests/unit/marketing.test.js",  # ADR 0031
 		}
 	)
 
