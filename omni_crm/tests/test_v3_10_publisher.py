@@ -563,6 +563,21 @@ class TestZaloAdapter(FrappeTestCase):
 			ZaloClient._parse(resp)
 		self.assertEqual(ctx.exception.raw_message, "title is invalid")
 
+	def test_processing_code_keeps_polling(self):
+		from omni_crm.channels.zalo import errors as zerr
+
+		class Slow(FakeZaloClient):
+			def _request(self, method, path, **kw):
+				reply = super()._request(method, path, **kw)
+				if reply == "processing":
+					raise zerr.to_error(-214, 200, "Media is being processed. Please wait for a moment")
+				return reply
+
+		fake = Slow([{"token": "tk"}, "processing", "processing", {"article_id": "art-9"}])
+		with mock.patch.object(zalo, "_client", return_value=fake):
+			res = zalo.ZaloAdapter().publish(self.payload(), sleep=lambda s: None)
+		self.assertEqual(res.external_post_id, "art-9")
+
 	def test_poll_timeout_is_provider_error(self):
 		fake = FakeZaloClient([{"token": "tk"}] + [{"status": "processing"}] * 40)
 		with mock.patch.object(zalo, "_client", return_value=fake):

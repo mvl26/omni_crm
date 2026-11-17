@@ -25,6 +25,7 @@ from omni_crm.marketing.publisher.errors import ProviderError, PublishValidation
 
 AUTHOR = "Miyano"
 POLL_SECONDS = 5
+PROCESSING_CODE = -214  # "Media is being processed. Please wait for a moment" (thấy thật 17/11/2026)
 POLL_MAX_SECONDS = 120  # ~2 phút; quá thì ProviderError (lần sau đối chiếu trước khi đăng lại)
 
 
@@ -143,7 +144,9 @@ class ZaloAdapter(Adapter):
 			try:
 				data = client._request("POST", config.get("article_verify_path"), body={"token": token}) or {}
 			except ZaloError as e:
-				raise to_publish_error(e, "kiểm tra bài") from None
+				if e.code != PROCESSING_CODE:
+					raise to_publish_error(e, "kiểm tra bài") from None
+				data = {}  # Zalo đang xử lý bài: chờ rồi hỏi lại
 			article_id = str(data.get("article_id") or data.get("id") or "")
 			if article_id:
 				return PublishResult(external_post_id=article_id)
