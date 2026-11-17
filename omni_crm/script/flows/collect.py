@@ -466,7 +466,11 @@ def _task_title(kind: str, ctx: RouteContext) -> str:
 		"purchasing": _("Kiểm tra nguồn hàng và bổ sung báo giá"),
 		"urgent": _("Xác nhận khả năng giao hàng gấp"),
 	}
-	return titles.get(kind) or _("Việc từ bot kịch bản: {0}").format(kind or "-")
+	title = titles.get(kind) or _("Việc từ bot kịch bản: {0}").format(kind or "-")
+	svc = engine.current_service(
+		ctx
+	)  # mỗi dịch vụ một việc riêng (người nhận theo dịch vụ), không gộp vào việc của dịch vụ khác
+	return f"{title} - {engine.service_label(svc)}" if svc else title
 
 
 ANSWER_LABELS = {

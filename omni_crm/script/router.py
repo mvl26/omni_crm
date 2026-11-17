@@ -33,6 +33,7 @@ INBOUND = "Omni Inbound Message"
 IDENTITY = "Omni Identity"
 MENU_CODE = "MENU_CHINH"
 MENU_ALIASES = {"MENU"}  # `#MENU` -> MENU_CHINH
+FILE_TYPES = ("image", "file")
 MENU_WORDS = {"menu"}  # khách gõ "menu" -> MENU_CHINH
 SPECIAL_CODES = {"GAP_NHANVIEN", "MENU", MENU_CODE}
 DEFAULT_KEY = "*"  # handler cho tin gõ tự do (không phải mã nút)
@@ -168,7 +169,10 @@ def _attachments_of(raw) -> list:
 		value = frappe.parse_json(raw) if raw else []
 	except Exception:
 		return []
-	return value if isinstance(value, list) else []
+	if not isinstance(value, list):
+		return []
+	# chỉ ảnh và tệp mới là "tệp khách gửi" (danh mục...); sticker, GIF, vị trí, liên kết không tính (thử thật 17/11)
+	return [a for a in value if isinstance(a, dict) and str(a.get("type") or "file").lower() in FILE_TYPES]
 
 
 def _handled_key(batch_id: str) -> str:
