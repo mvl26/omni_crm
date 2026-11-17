@@ -11,7 +11,7 @@ Biến viết dạng `{ten_bien}` theo kiểu `str.format`. Biến nào không c
 | --- | --- | --- |
 | `{ten}` | **Chỉ tên** khách (ví dụ "Nam", "Hà"), có thể **trống**. | Câu kịch bản đã viết sẵn "anh/chị {ten}", nên biến **không** được chứa "anh/chị", nếu không sẽ thành "anh/chị anh/chị". Trống thì render bỏ biến và gộp khoảng trắng ("anh/chị {ten}." → "anh/chị."). Gọi "anh Nam"/"chị Hà" khi biết giới tính là việc của renderer: thay cả cụm "anh/chị {ten}". |
 | `{dich_vu}` | Tên dịch vụ đang tư vấn, viết thường để chèn giữa câu: "cung ứng vật tư y tế" / "phần mềm SupplyCore" / "hệ thống SPD" | Lead `omni_services` |
-| `{ngay_lam_viec_tiep_theo}` | "sáng mai" nếu ngày mai là ngày làm việc, nếu không thì thứ và ngày, ví dụ "sáng thứ Hai 17/11" | `timeutil.next_working_day_text` (1.4, 3.5) |
+| `{ngay_lam_viec_tiep_theo}` | "sáng mai" nếu ngày mai là ngày làm việc, nếu không thì thứ và ngày, dạng "sáng thứ Hai 17/11" (ví dụ của kịch bản theo lịch 2025, chỉ để xem định dạng: 17/11/2026 là thứ Ba) | `timeutil.next_working_day_text` (1.4, 3.5) |
 | `{thoi_diem}` | "trong hôm nay" nếu trước 16:30 ngày làm việc, nếu không thì bằng `{ngay_lam_viec_tiep_theo}` | 3.5, 5.2 |
 | `{email}` | Email khách | Lead. Khi ghi log phải che phần giữa. |
 | `{sdt}` | SĐT khách | Lead. Khi ghi log phải che phần giữa. |
@@ -21,8 +21,8 @@ Biến viết dạng `{ten_bien}` theo kiểu `str.format`. Biến nào không c
 | `{chinh_sach_bao_mat}` | Link chính sách bảo mật | `Omni Settings.script_privacy_url`. **Mặc định khi trống: `miyano.com.vn/chinh-sach-bao-mat`** (URL nguyên văn ở 3.4). |
 | `{kenh_chat}` | Tên kênh chat khách đã dùng: "Zalo OA" / "Messenger" | 4.5 (email) |
 | `{hom_nay_hom_qua}` | "hôm nay" hoặc "hôm qua" theo ngày demo | Kịch bản 5.2 viết `{hom_nay/hom_qua}`. Đã đổi tên. |
-| `{khung_1}` `{khung_2}` `{khung_3}` | 3 khung demo trống, ví dụ "Thứ Ba 18/11, 9:00". Dùng làm **nhãn nút**, nên bản render phải ≤ 20 ký tự (dài nhất "Thứ Năm 20/11, 14:00" = 20). | Lịch người demo trong 3 ngày làm việc tới (4.4) |
-| `{thu_ngay}` | Thứ và ngày demo, ví dụ "Thứ Ba 18/11" | 4.4 |
+| `{khung_1}` `{khung_2}` `{khung_3}` | 3 khung demo trống, dạng "Thứ Ba 18/11, 9:00" (ví dụ 4.4 theo lịch 2025, chỉ để xem định dạng). Dùng làm **nhãn nút**, nên bản render phải ≤ 20 ký tự (dạng dài nhất "Thứ Năm 20/11, 14:00" = 20). | Lịch người demo trong 3 ngày làm việc tới (4.4) |
+| `{thu_ngay}` | Thứ và ngày demo, dạng "Thứ Ba 18/11" | 4.4 |
 | `{gio_bat_dau}` `{gio_ket_thuc}` | Giờ bắt đầu và kết thúc demo | 4.4 |
 | `{gio}` | Giờ hẹn demo (tin vắng mặt) | 4.4 bước 8 |
 | `{hinh_thuc}` | "Online qua Teams" / "Gặp trực tiếp" | 4.4 |

@@ -479,7 +479,7 @@
   ],
   "action": "",
   "source_ref": "2.1, 2.5",
-  "notes": "4 nút còn lại (không lặp Tìm hiểu nhanh). Dùng cả sau câu trả lời Kho tri thức ở bước 2 (2.5)."
+  "notes": "4 nút còn lại (không lặp Tìm hiểu nhanh). Dùng cả sau câu trả lời Kho tri thức ở bước 2 (2.5). Kịch bản 2.1 ghi nút Vật tư là 'Gửi danh mục cần báo giá' (24 ký tự); dùng 'Gửi danh mục' như 2.2/2.6."
  },
  {
   "code": "MENU_PHANMEM",
@@ -2284,7 +2284,7 @@
   ],
   "action": "followup_quote",
   "source_ref": "4.6",
-  "notes": "Bỏ nút Đặt lịch demo (chỉ Phần mềm, SPD)."
+  "notes": "Bỏ nút Đặt lịch demo (chỉ Phần mềm, SPD). Nút gốc 'Đã nhận, cần trao đổi' (21 ký tự) rút thành 'Đã nhận cần trao đổi'."
  },
  {
   "code": "NL_BG_TRAODOI",
@@ -2897,7 +2897,7 @@
   ],
   "action": "",
   "source_ref": "5.2",
-  "notes": ""
+  "notes": "Nút gốc 'Trao đổi thêm về chi phí' (24 ký tự) rút thành 'Trao đổi về chi phí'."
  },
  {
   "code": "SD_CHUAPHUHOP",

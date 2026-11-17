@@ -90,6 +90,38 @@ def main() -> int:
 			errs.append(f"{c}: Cần duyệt nhưng thiếu trong CAN_DUYET.md")
 		if x["status"] == "Tắt" and f"`{c}`" not in docs["EMPTY_SLOTS.md"]:
 			errs.append(f"{c}: Tắt nhưng thiếu trong EMPTY_SLOTS.md")
+	byc = {x["code"]: x for x in nodes}
+	warns = []
+	for x in nodes:
+		c = x["code"]
+		for f in ("code", "title", "action", "source_ref"):
+			if len(x[f]) > 140:
+				errs.append(f"{c}: {f} dài {len(x[f])} > 140 (Data)")
+		for b in x["buttons"]:
+			if len(b["target"]) > 140:
+				errs.append(f"{c}: target dài > 140")
+		if x["status"] != "Đang dùng":
+			continue
+		refs = [b["target"] for b in x["buttons"]] + re.findall(r"(?:then|goto):([A-Z0-9_]+)", x["action"])
+		for t in refs:
+			if t in byc and byc[t]["status"] != "Đang dùng":
+				warns.append(f"{c} → {t} ({byc[t]['status']})")
+	# Nhãn rút gọn (CAN_DUYET §3): nhãn gốc phải nằm trong notes.
+	sec3 = docs["CAN_DUYET.md"].split("## 3.", 1)[1].split("\n## ", 1)[0]
+	for row in sec3.splitlines():
+		cells = [x.strip() for x in row.strip().strip("|").split("|")]
+		if len(cells) != 3 or not cells[0].startswith("`"):
+			continue
+		orig = re.sub(r"\s*\(\d+.*$", "", cells[1])
+		for c in re.findall(r"`([A-Z0-9_]+)`", cells[0]):
+			if c not in byc:
+				errs.append(f"CAN_DUYET §3: mã {c} không tồn tại")
+			elif orig not in byc[c]["notes"]:
+				errs.append(f"{c}: notes thiếu nhãn gốc '{orig}'")
+	for w in warns:
+		print("CẢNH BÁO nút/then từ node Đang dùng tới node chưa gửi được:", w)
+	routing = sum(1 for x in nodes if not x["text"] and x["status"] == "Đang dùng")
+	print(f"node điều hướng (text trống, Đang dùng): {routing}; node có câu: {sum(1 for x in nodes if x['text'])}")
 	for v in sorted(used_vars):
 		if f"{{{v}}}" not in docs["VARIABLES.md"]:
 			errs.append(f"biến {{{v}}} chưa ghi trong VARIABLES.md")
@@ -97,8 +129,9 @@ def main() -> int:
 		print(f"nhãn > 20 ký tự: {lab!r}")
 	counts = {}
 	for x in nodes:
-		counts.setdefault(x["step"], {}).setdefault(x["status"], 0)
-		counts[x["step"]][x["status"]] += 1
+		key = x["status"] if x["text"] else "điều hướng" if x["status"] == "Đang dùng" else x["status"] + " (trống)"
+		counts.setdefault(x["step"], {}).setdefault(key, 0)
+		counts[x["step"]][key] += 1
 	print(f"{len(nodes)} node; biến dùng: {len(used_vars)}")
 	for s in sorted(counts):
 		print(f"  bước {s}: {sum(counts[s].values())} ({', '.join(f'{k} {v}' for k, v in sorted(counts[s].items()))})")
