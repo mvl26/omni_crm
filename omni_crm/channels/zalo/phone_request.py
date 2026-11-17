@@ -122,7 +122,10 @@ def ineligible_reason(identity_doc: Any, channel_doc: Any, *, manual: bool) -> s
 		return _("Người này đã từ chối nhận liên hệ")
 	if not manual:
 		from omni_crm.bot import handoff
+		from omni_crm.script import switch as script_switch
 
+		if script_switch.enabled_for(identity_doc.name):  # ADR 0032: bot kịch bản tự xin SĐT ở Bước 3
+			return _("Khách đang chạy bot kịch bản (bot tự xin số điện thoại)")
 		if handoff.is_bot_paused(identity_doc.name):
 			return _("Bot đang tạm dừng với khách này (sale đang trao đổi)")
 	return None
