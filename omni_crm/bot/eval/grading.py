@@ -143,6 +143,38 @@ def critical_reasons(
 # --- Tổng hợp -----------------------------------------------------------------------------------------------
 
 
+def _fold_text(text: str | None) -> str:
+	"""Chữ thường, bỏ dấu tiếng Việt, gộp khoảng trắng: so ý phải có/không được có không phụ thuộc cách gõ dấu."""
+	import unicodedata
+
+	t = unicodedata.normalize("NFD", str(text or "").lower().replace("đ", "d"))
+	t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+	return " ".join(t.split())
+
+
+def content_check(text: str, must: list[str] | None, must_not: list[str] | None) -> dict[str, Any]:
+	"""K1: câu trả lời có đủ các ý phải có và không có ý cấm (so chuỗi đã bỏ dấu; một ý có thể ghi "a|b" = a hoặc b)."""
+	folded = _fold_text(text)
+	missing = [m for m in must or [] if not any(_fold_text(alt) in folded for alt in str(m).split("|"))]
+	forbidden = [m for m in must_not or [] if any(_fold_text(alt) in folded for alt in str(m).split("|"))]
+	return {"pass": not missing and not forbidden, "missing": missing, "forbidden": forbidden}
+
+
+def by_group(results: list[dict]) -> dict[str, dict[str, Any]]:
+	"""K1: tỷ lệ đạt theo nhóm mong đợi (ca không ghi nhóm gộp theo hành động). Đạt = đúng hành động, đúng nhóm, đủ ý."""
+	out: dict[str, dict[str, Any]] = {}
+	for r in results:
+		if r.get("unmeasured") or r.get("case_pass") is None:
+			continue
+		key = r.get("expected_group") or f"({r.get('expected_action')})"
+		g = out.setdefault(key, {"cases": 0, "passed": 0})
+		g["cases"] += 1
+		g["passed"] += 1 if r["case_pass"] else 0
+	for g in out.values():
+		g["pass_rate"] = _rate(g["passed"], g["cases"])
+	return out
+
+
 def _rate(num: int, den: int) -> float | None:
 	return num / den if den else None
 
@@ -167,6 +199,11 @@ def aggregate(results: list[dict]) -> dict[str, Any]:
 		"action_accuracy": _rate(sum(1 for r in act if r["action_correct"]), len(act)),
 		"answer_pass_rate": _rate(sum(1 for r in ans if r["answer_pass"]), len(ans)),
 		"critical_failures": sum(1 for r in results if r.get("critical_reasons")),
+		"case_pass_rate": _rate(
+			sum(1 for r in measured if r.get("case_pass")),
+			sum(1 for r in measured if r.get("case_pass") is not None),
+		),
+		"by_group": by_group(results),
 	}
 
 
