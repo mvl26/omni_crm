@@ -8,7 +8,8 @@ Câu gửi khách đều lấy từ Omni Script Node qua `engine.run_node`; câu
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint, get_datetime, now_datetime
+from frappe import _
+from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.script import engine, router, send, state, store, switch
@@ -17,7 +18,6 @@ from omni_crm.script.router import MENU_CODE, RouteContext
 UNCLEAR = "CHUA_RO"  # = classify.UNKNOWN
 CONF_MIN = 0.6  # = classify.LOW_CONFIDENCE (dùng khi chưa có module classify)
 MAX_REASK = 2  # 1.2: hỏi lại tối đa 2 lần, lần 3 chuyển nhân viên
-REPEAT_SECONDS = 30  # bấm lặp cùng một nút trong khoảng này thì không gửi lại
 FLOW_KB = "kb_wait"  # ô "Câu hỏi khác": tin gõ kế tiếp trả lời bằng Kho tri thức
 CLASSIFIED_KEY = "_classified"
 LEAD = "CRM Lead"
@@ -31,6 +31,8 @@ NODE_KB_NONE = "KB_CHUYENVIEN"
 NODE_FILE_RECEIVED = "DANHMUC_VATTU_DANHAN"
 NODE_NO_THANKS = "KHONG_CAMON"
 NODE_STOP = "C4_HUYDANGKY"
+NODE_ASK_EMAIL_DOCS = "HOI_EMAIL_TAILIEU"
+MAX_LABEL_TEXT = 40
 KB_CODE = "KB_ANSWER"  # script_node của tin trả lời bằng Kho tri thức
 MAX_QUESTION = 500
 # mã phân loại -> ô gửi thẳng (bảng 1.2, 2.5, C.3, C.4)
@@ -83,31 +85,14 @@ def greet(ctx: RouteContext) -> None:
 
 
 def on_button(ctx: RouteContext) -> None:
-	"""Khách bấm nút (lượt nhiều nút: router chỉ lấy nút cuối); bấm lặp trong 30 giây thì không gửi lại."""
-	code = ctx.payload_code
-	st = engine.script_state(ctx)
-	now = now_datetime()
-	last_at = st.get("last_btn_at")
-	if st.get("last_btn") == code and last_at:
-		try:
-			if (now - get_datetime(last_at)).total_seconds() < REPEAT_SECONDS:
-				return
-		except Exception:
-			pass
+	"""Khách bấm nút (lượt nhiều nút: router chỉ lấy nút cuối; chống bấm lặp do router lo)."""
 	if ctx.is_first_contact:
 		state.mark_greeted(ctx.identity)
 	state.reset_reask(ctx.identity)
 	state.update_state(  # bấm nút = rời câu đang hỏi; ô mới cần hỏi thì tự ghi lại
-		ctx.identity,
-		flow=None,
-		field=None,
-		node=None,
-		pending=None,
-		wrong=None,
-		last_btn=code,
-		last_btn_at=str(now),
+		ctx.identity, flow=None, field=None, node=None, pending=None, wrong=None, force=None, resend=None
 	)
-	engine.run_button(ctx, code)
+	engine.run_button(ctx, ctx.payload_code)
 
 
 def on_text(ctx: RouteContext) -> None:
@@ -116,10 +101,18 @@ def on_text(ctx: RouteContext) -> None:
 	if first:
 		state.mark_greeted(ctx.identity)
 	st = engine.script_state(ctx)
-	if st.get("last_btn"):
-		state.update_state(ctx.identity, last_btn=None, last_btn_at=None)
 	text = (ctx.text or "").strip()
-	handler = engine._state_handlers.get((st.get("flow") or "").lower())
+	flow = (st.get("flow") or "").lower()
+	button = _typed_button(ctx, text)
+	if button and flow in ("", "collect"):  # gõ đúng chữ trên nút của câu đang hỏi = bấm nút đó
+		ctx.payload_code = button
+		handler = _foreign_handler(button)
+		if handler is not None:
+			handler(ctx)
+		else:
+			on_button(ctx)
+		return
+	handler = engine._state_handlers.get(flow)
 	if handler is not None and handler(ctx):
 		return
 	if ctx.attachments:
@@ -137,7 +130,7 @@ def on_text(ctx: RouteContext) -> None:
 		return
 	if _is_no_thanks(
 		ctx, text
-	):  # "không cần" trả lời câu "còn cần hỗ trợ gì không": lời kết, không phải huỷ đăng ký
+	):  # "không cần" sau câu "hỗ trợ tiếp phần nào": lời kết lịch sự, không dừng nhắn
 		state.reset_reask(ctx.identity)
 		engine.run_button(ctx, NODE_NO_THANKS)
 		return
@@ -145,11 +138,56 @@ def on_text(ctx: RouteContext) -> None:
 		state.reset_reask(ctx.identity)
 		go(ctx, NODE_STOP)
 		return
-	code, _conf = classify_text(ctx)
+	if _typed_document(ctx, text):
+		return
+	code, _confidence = classify_text(ctx)
 	if first and code == UNCLEAR:  # "Alo", "hi": chào như khách mới mở khung chat
 		greet(ctx)
 		return
 	route(ctx, code)
+
+
+def _fold(text: str | None) -> str:
+	try:
+		from omni_crm.script import classify
+
+		return classify.fold(text)
+	except Exception:
+		return " ".join((text or "").lower().split())
+
+
+def _typed_button(ctx: RouteContext, text: str) -> str | None:
+	"""Mã đích của nút trên ô đang đứng có nhãn trùng (bỏ dấu, hoa thường) với câu khách gõ; không trùng → None."""
+	if not text or len(text) > MAX_LABEL_TEXT:
+		return None
+	node = store.get_node(ctx.state.get("script_node"))
+	typed = _fold(text)
+	for b in (node or {}).get("buttons") or []:
+		if typed and typed == _fold(b.get("label")):
+			return store.normalize_code(b.get("target"))
+	return None
+
+
+def _typed_document(ctx: RouteContext, text: str) -> bool:
+	"""Ô "cần tài liệu nào" (TAILIEU_*, 3.1: chọn bằng nút hoặc gõ): khách gõ tên tài liệu → ghi lại, hỏi email."""
+	node = str(ctx.state.get("script_node") or "")
+	if not node.startswith("TAILIEU_") or engine.script_state(ctx).get("branch") != "3a":
+		return False
+	try:
+		from omni_crm.script import classify
+
+		if (
+			classify.classify_by_rules(text) is not None
+		):  # có ý rõ (gặp người, báo giá, chào…): phân loại bình thường
+			return False
+	except Exception:
+		return False
+	from omni_crm.script.flows import collect
+
+	state.reset_reask(ctx.identity)
+	collect.save_answer(ctx, "tai_lieu", text, typed=True)
+	engine.run_button(ctx, NODE_ASK_EMAIL_DOCS)
+	return True
 
 
 def register_handlers() -> None:
@@ -213,7 +251,7 @@ def route(ctx: RouteContext, code: str) -> None:
 		state.reset_reask(ctx.identity)
 		go(ctx, _needs_human_node(ctx))
 	elif code == "SPAM":
-		engine.run_node(ctx, "C3_SPAM")  # C.3: không trả lời nội dung
+		flag_spam(ctx)  # C.3: không trả lời; KHÔNG dừng hẳn/không liên hệ chỉ vì AI phân loại
 	elif code == "XOA_DULIEU":
 		if _foreign_handler("C4_XOADULIEU"):
 			go(ctx, "C4_XOADULIEU")
@@ -289,12 +327,15 @@ def _needs_human_node(ctx: RouteContext) -> str:
 
 
 def _is_no_thanks(ctx: RouteContext, text: str) -> bool:
-	"""Ô đang đứng có nút [Không, cảm ơn] và khách gõ câu phủ định ngắn."""
+	"""Khách gõ câu phủ định ngắn ("không cần") sau câu hỏi "hỗ trợ tiếp/thêm gì không": lời kết, không phải dừng nhắn."""
 	from omni_crm.script.flows import collect
 
 	if len(text) > collect.DECLINE_MAX_LEN or not collect.DECLINE.search(text):
 		return False
-	node = store.get_node(ctx.state.get("script_node"))
+	code = str(ctx.state.get("script_node") or "")
+	if code.startswith("HOITIEP_"):
+		return True
+	node = store.get_node(code)
 	return bool(node) and any(b.get("target") == NODE_NO_THANKS for b in node["buttons"])
 
 
@@ -325,21 +366,42 @@ def answer_kb(ctx: RouteContext) -> None:
 	"""Trả lời câu hỏi bằng Kho tri thức rồi hỏi tiếp kèm nút của bước đang đứng; không có câu trả lời thì chuyển người."""
 	res = kb_draft(ctx)
 	if res and res["action"] == "Reply" and (res["text"] or "").strip():
-		if _kb_auto_send(ctx, res["group"]):
+		if _kb_auto_send(ctx, res):
 			if send.send_text(ctx.identity, res["text"], code=KB_CODE):
 				router._mark(ctx.batch_id)
 				engine.run_node(ctx, engine.service_code(ctx, "HOITIEP") or MENU_CODE)
 				return
-		elif _to_sale_draft(ctx, res["name"]):
+		elif not _shadow_only(res["group"]) and _to_sale_draft(ctx, res["name"]):
 			return  # luồng nháp sẵn có: nhân viên duyệt rồi gửi
 	if not engine.run_node(ctx, NODE_KB_NONE, {"question": ctx.text}):
 		engine.fallback(ctx, NODE_KB_NONE)
 
 
-def _kb_auto_send(ctx: RouteContext, group: str | None) -> bool:
-	if switch.is_test(ctx.identity) and cint(switch.setting("script_auto_send_kb_for_test")):
-		return True
-	return flags.group_auto_send(group)
+def _kb_auto_send(ctx: RouteContext, res: dict) -> bool:
+	"""Câu Kho tri thức được bot tự gửi: khách thử (công tắc riêng) hoặc nhóm đang Auto, và qua các chốt chặn chung."""
+	allowed = bool(switch.is_test(ctx.identity) and cint(switch.setting("script_auto_send_kb_for_test")))
+	if not allowed and not flags.group_auto_send(res.get("group")):
+		return False
+	flags_ = [f.strip() for f in str(res.get("flags") or "").splitlines() if f.strip()]
+	if any(not f.startswith("info:") for f in flags_):  # chốt chặn đầu ra đã gắn cờ: không tự gửi
+		return False
+	try:
+		from omni_crm.bot import handoff as bot_handoff
+		from omni_crm.bot import reply
+
+		if not bot_handoff.bot_active_now(now_datetime()):
+			return False
+		last = (reply._batch_messages(ctx.batch_id) or [None])[-1]
+		if last and reply.sale_replies_after(ctx.lead, last.received_at):
+			return False  # nhân viên đã trả lời sau tin này
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không kiểm được điều kiện tự gửi (%s)", type(e).__name__)
+		return False
+	return True
+
+
+def _shadow_only(group: str | None) -> bool:
+	return bool(group) and bool(cint(frappe.db.get_value("Omni Question Group", group, "shadow_only")))
 
 
 def kb_draft(ctx: RouteContext) -> dict | None:
@@ -362,7 +424,9 @@ def kb_draft(ctx: RouteContext) -> dict | None:
 			)
 		if not name:
 			return None
-		row = frappe.db.get_value(DRAFT, name, ["action", "draft_text", "question_group"], as_dict=True)
+		row = frappe.db.get_value(
+			DRAFT, name, ["action", "draft_text", "question_group", "guard_flags"], as_dict=True
+		)
 	except Exception as e:  # không ghi nội dung khách
 		frappe.db.rollback()
 		frappe.logger("omni").info(
@@ -371,7 +435,13 @@ def kb_draft(ctx: RouteContext) -> dict | None:
 		return None
 	if not row:
 		return None
-	return {"name": name, "action": row.action, "text": row.draft_text, "group": row.question_group}
+	return {
+		"name": name,
+		"action": row.action,
+		"text": row.draft_text,
+		"group": row.question_group,
+		"flags": row.guard_flags,
+	}
 
 
 def _to_sale_draft(ctx: RouteContext, name: str) -> bool:
@@ -402,6 +472,28 @@ def _log_unanswered(ctx: RouteContext, arg: str, node: dict) -> None:
 	)
 
 
+def flag_spam(ctx: RouteContext, arg: str = "", node: dict | None = None) -> None:
+	"""Tin bị AI xếp loại quảng cáo/rác: bot im lặng lượt này và ghi chú cho nhân viên xem; không đánh dấu gì lên Lead."""
+	router._mark(ctx.batch_id)
+	frappe.logger("omni").info(
+		"omni script: nghi tin rác, bot không trả lời identity=%s batch=%s", ctx.identity, ctx.batch_id
+	)
+	if not ctx.lead or ctx.state.get("_spam_flagged"):
+		return
+	ctx.state["_spam_flagged"] = True
+	try:
+		frappe.get_doc(LEAD, ctx.lead).add_comment(
+			"Comment",
+			_(
+				"Bot kịch bản: tin vừa rồi của khách có vẻ là quảng cáo/tin rác nên bot không trả lời. Nhờ anh/chị xem lại."
+			),
+		)
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không ghi được ghi chú tin rác (%s)", type(e).__name__)
+
+
+engine.register_action("spam", flag_spam)
+engine.register_action("no_lead", lambda ctx, arg, node: None)
 engine.register_action("log_unanswered", _log_unanswered)
 engine.register_state(FLOW_KB, _on_kb_text)
 register_handlers()

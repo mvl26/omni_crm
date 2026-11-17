@@ -80,7 +80,7 @@ NODE_REASONS = {  # ô kịch bản có lệnh `handoff` → lý do
 	"SD_BATDAU": REASON_AGREES_TO_BUY,
 	"DAT_HANG": REASON_AGREES_TO_BUY,
 }
-STOP_EXACT = {"không cần", "ko cần", "khong can", "stop", "unsubscribe"}
+STOP_EXACT = {"stop", "unsubscribe"}  # "không cần" là lời từ chối lịch sự, không phải yêu cầu dừng nhắn
 STOP_CONTAINS = (
 	"đừng nhắn nữa",
 	"dừng nhắn",
@@ -458,6 +458,12 @@ def on_phone_typed(ctx: RouteContext) -> bool:
 	if is_stop_phrase(ctx.text):
 		on_stop(ctx)
 		return True
+	if _is_short_decline(
+		ctx.text
+	):  # "không", "thôi": không cho số, vẫn giữ việc chuyển nhân viên, gửi câu kết
+		state.update_state(ctx.identity, flow=None, handoff_phone_tries=None)
+		_send(ctx, NODE_CLOSING)
+		return True
 	phone = validate.find_phone(ctx.text) or validate.validate_phone(ctx.text)
 	if phone:
 		_phone_received(ctx, phone)
@@ -472,6 +478,13 @@ def on_phone_typed(ctx: RouteContext) -> bool:
 	):  # ô "Cần duyệt" chưa gửi được cho khách thường → hỏi lại bằng câu xin số
 		_send(ctx, NODE_CALL)
 	return True
+
+
+def _is_short_decline(text: str | None) -> bool:
+	from omni_crm.script.flows import collect
+
+	raw = (text or "").strip()
+	return bool(raw) and len(raw) <= collect.DECLINE_MAX_LEN and bool(collect.DECLINE.search(raw))
 
 
 def _phone_received(ctx: RouteContext, phone: str) -> None:
