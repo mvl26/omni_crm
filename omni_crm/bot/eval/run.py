@@ -277,7 +277,7 @@ def reply_case(
 	items, groups = kb["items"], kb["groups"]
 	prompt = _load("reply")
 	customer_text = _customer_text(turns, after_last_sale=True)
-	use_docs = kb.get("docs", True) and kb_docs.enabled(prompt.version)  # ADR 0030, như make_draft
+	use_docs = kb.get("docs", True) and kb_docs.enabled(prompt.version)  # ADR 0030, như bot trả lời thật
 	passages = kb_docs.passages_for(customer_text) if use_docs else []
 	if not items and passages:
 		pass  # chỉ có tài liệu: vẫn gọi AI với các đoạn liên quan
@@ -311,7 +311,7 @@ def reply_case(
 	hours = reply.hours_context(at)
 	batch_id = f"eval::{tag}::{case['case_id']}"
 	conversation = render_turns(turns, reply.MAX_TURNS, 6000, mask)
-	turn_mode = reply.current_turn_mode(prompt.version)  # K1: như make_draft
+	turn_mode = reply.current_turn_mode(prompt.version)  # K1: như bot trả lời thật
 	content = reply.compose_user_message(
 		conversation, DEFAULT_CHANNEL, None, mask, groups=reply.groups_block(groups)
 	)
