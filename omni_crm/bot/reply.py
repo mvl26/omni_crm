@@ -112,6 +112,39 @@ def check_reply_output(out: dict) -> str | None:
 	return None
 
 
+CLAIMS_REPAIR_NOTE = (
+	"reply_text có cụm {0!r} không có nguyên văn trong các đoạn đã trích (kb_item_ids). Chép nguyên văn cụm có con "
+	"số/thời gian từ đoạn tài liệu, giữ cả từ đứng ngay trước con số, không đánh số thứ tự bằng chữ số; hoặc bỏ con số đó"
+)
+
+
+def make_reply_check(items: list[dict], allowed_phrases: list[str] | tuple[str, ...] = ()) -> Any:
+	"""Hàm kiểm cho call_tool: như check_reply_output, thêm MỘT lần nhờ AI sửa khi câu trả lời vướng chốt chặn số/thời hạn.
+
+	Không nới chốt chặn: sau lần sửa, đầu ra được nhận nguyên và `evaluate` vẫn chặn như cũ nếu còn sai.
+	"""
+	by_id = {i["id"]: i for i in items}
+	left = {"claims": 1}
+
+	def check(out: dict) -> str | None:
+		problem = check_reply_output(out)
+		if problem or not isinstance(out, dict) or out.get("action") != "reply" or left["claims"] <= 0:
+			return problem
+		ids = [str(x).strip() for x in out.get("kb_item_ids") or []]
+		texts = [by_id[k]["answer"] for k in ids if k in by_id]
+		if not texts:
+			return None  # thiếu/sai mã nguồn: để evaluate chặn bằng cờ riêng
+		blocked, flag = guards.guard_unsupported_claims(
+			str(out.get("reply_text") or ""), texts, allowed_phrases
+		)
+		if not blocked:
+			return None
+		left["claims"] -= 1
+		return CLAIMS_REPAIR_NOTE.format(flag.split(":", 1)[-1][:40])
+
+	return check
+
+
 # --- Đầu vào cho bot (docs/08 mục 5.2) -----------------------------------------------------------------------
 
 
@@ -558,7 +591,9 @@ def make_draft(
 		cache_blocks=[knowledge.render_kb()],
 		prompt_version=prompt.version,
 		max_tokens=REPLY_MAX_TOKENS,
-		check=check_reply_output,
+		check=make_reply_check(items + kb_docs.as_items(passages), [hours["gio_lam_viec_ke_tiep"]])
+		if turn_mode
+		else check_reply_output,
 		repair=True,
 	)  # KHÔNG truyền synthetic: hội thoại khách luôn qua cổng Q11
 	if raw is None:

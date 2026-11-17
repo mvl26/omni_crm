@@ -334,7 +334,9 @@ def reply_case(
 		cache_blocks=[knowledge.render_items(items)],
 		prompt_version=prompt.version,
 		max_tokens=reply.REPLY_MAX_TOKENS,
-		check=reply.check_reply_output,
+		check=reply.make_reply_check(items + kb_docs.as_items(passages), [hours["gio_lam_viec_ke_tiep"]])
+		if turn_mode
+		else reply.check_reply_output,
 		repair=True,
 		synthetic=case["source"] == "Synthetic",
 		eval_mode=True,

@@ -45,6 +45,20 @@ class TestPureHelpers(FrappeTestCase):
 		self.assertIsNone(reply.check_reply_output({"action": "handoff", "reply_text": ""}))
 		self.assertIsNone(reply.check_reply_output({"action": "reply", "reply_text": "Dạ ạ"}))
 
+	def test_claims_check_asks_repair_once(self):
+		items = [{"id": "c1", "answer": "Demo SupplyCore và SPD miễn phí, khoảng 30 phút."}]
+		chk = reply.make_reply_check(items)
+		bad = {"action": "reply", "reply_text": "Dạ, buổi demo kéo dài 30 phút ạ.", "kb_item_ids": ["c1"]}
+		self.assertIn("30 phút", chk(bad) or "")
+		self.assertIsNone(chk(bad))  # chỉ nhờ sửa một lần; evaluate vẫn chặn như cũ
+		good = {
+			"action": "reply",
+			"reply_text": "Dạ, demo miễn phí, khoảng 30 phút ạ.",
+			"kb_item_ids": ["c1"],
+		}
+		self.assertIsNone(reply.make_reply_check(items)(good))
+		self.assertIsNotNone(reply.make_reply_check(items)({"action": "reply", "reply_text": ""}))
+
 	def test_free_question_is_not_price_topic(self):
 		self.assertEqual(guards.sensitive_topics("Demo supply core có mất phí k"), [])
 		self.assertIn("hoi_gia", guards.sensitive_topics("báo giá cho anh về phần mềm spd"))
