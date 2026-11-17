@@ -650,7 +650,8 @@ class TestStop(K3Case):
 		# sau đó mọi tin kịch bản bị chặn
 		self.assertTrue(send.blocked_reason(self.ident1))
 		self.assertIsNone(send.send_node(self.ident1, "GAP_NV_CAUKET", {}))
-		self.assertTrue(router.handle_batch(self.inbound("#GAP_NHANVIEN")))
+		# khách chủ động nhắn lại: bot kịch bản không trả lời, lượt về luồng cũ để thành nháp cho nhân viên
+		self.assertFalse(router.handle_batch(self.inbound("#GAP_NHANVIEN")))
 		self.assertEqual(self.codes(), ["C4_HUYDANGKY"])
 
 	def test_flag_set_even_when_confirmation_or_journey_fails(self):
