@@ -78,12 +78,17 @@ def _enabled(user: str | None) -> str | None:
 
 
 def pick_recipient(rows: list[dict], service: str, role: str = "primary") -> str | None:
-	"""Hàm thuần: người nhận của `service` trong các dòng bảng (dòng đầu khớp); `primary` vắng thì lấy người thay."""
+	"""Hàm thuần: người nhận của `service`; dòng không có người dùng được (trống/bị khóa) thì xét dòng sau cùng dịch vụ.
+
+	`primary`: người chính, vắng thì người thay của dòng đó; `backup`: chỉ người thay.
+	"""
 	for row in rows:
 		if (row.get("service") or "").strip().upper() != service:
 			continue
 		primary, backup = row.get("primary_user"), row.get("backup_user")
-		return (backup or None) if role == "backup" else (primary or backup or None)
+		user = backup if role == "backup" else (primary or backup)
+		if user:
+			return user
 	return None
 
 
@@ -188,6 +193,7 @@ def create_task(
 	title = " ".join((title or "").split())[:TITLE_MAX] or _("Việc từ bot kịch bản")
 	existing = open_task(lead, title)
 	if existing:
+		_refresh_task(existing, lead, description, due)
 		return existing
 	code = normalize_service(service)
 	user = assignee_for(lead, code)
@@ -214,6 +220,44 @@ def create_task(
 	if not user:
 		_warn_unassigned(lead, code, str(task.name))
 	return str(task.name)
+
+
+def _refresh_task(task: str, lead: str, description: str, due: datetime | None) -> None:
+	"""Việc cùng tiêu đề còn mở (khách yêu cầu lại): làm mới hạn, ghi thêm tóm tắt mới, báo lại người được giao."""
+	try:
+		new_due = due or timeutil.task_due(now_datetime())
+		frappe.db.set_value(TASK, task, "due_date", new_due)
+		append_note(task, _("Khách yêu cầu lại lúc {0}:").format(now_datetime().strftime("%H:%M %d/%m/%Y")))
+		append_note(task, description)
+		user = _enabled(frappe.db.get_value(TASK, task, "assigned_to"))
+		if user:
+			from omni_crm.crm_bridge import notify
+
+			notify.crm_notify(lead, [user], _("Khách yêu cầu lại, việc đang mở: {0}").format(task))
+	except Exception:
+		frappe.log_error(title="Omni: không làm mới được việc kịch bản", message=f"task={task}")
+
+
+def warn_no_lead(identity: str | None, what: str) -> None:
+	"""Định danh chưa có Lead nên không tạo được việc: ghi Error Log và báo Omni Admin (không im lặng bỏ qua)."""
+	detail = f"identity={identity} viec={what}"
+	frappe.log_error(title="Omni: kịch bản cần giao việc nhưng định danh chưa có Lead", message=detail)
+	try:
+		from omni_crm.monitoring import alerts
+
+		alerts.deliver_now(
+			alerts.Alert(
+				kind="kịch bản không có Lead",
+				scope=str(identity or "-"),
+				subject=_("Khách cần nhân viên nhưng chưa có Lead"),
+				detail=_(
+					"Định danh {0} chưa gắn Lead nên bot không tạo được việc ({1}). Hãy kiểm tra hội thoại."
+				).format(identity or "-", what),
+				email=False,
+			)
+		)
+	except Exception:
+		frappe.log_error(title="Omni: không gửi được cảnh báo thiếu Lead", message=detail)
 
 
 def _warn_unassigned(lead: str, service: str, task: str) -> None:

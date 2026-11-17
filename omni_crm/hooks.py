@@ -181,6 +181,7 @@ scheduler_events = {
 			"omni_crm.bot.reply.expire_pending_drafts",  # D3-01: nháp Draft chờ duyệt quá 24 giờ -> Expired
 			"omni_crm.crm_bridge.response_sla.run",  # V2-05: nhắc lead quảng cáo quá hạn phản hồi (giờ làm việc)
 			"omni_crm.bot.handoff.email_unread_handoffs",  # D3-02: email nhắc nếu chưa mở thông báo chuyển người sau 10 phút
+			"omni_crm.script.flows.handoff.check_unanswered",  # K3: 15 phút chưa ai nhận khách -> xin SĐT, báo quản lý
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"10 */6 * * *": [
@@ -244,6 +245,11 @@ doc_events = {
 		"on_trash": "omni_crm.crm_bridge.care_log.delete_for_lead",  # V2-04: nhật ký chăm sóc đi theo Lead
 	},
 }
+# K3 (bot kịch bản v3): nhân viên sửa trường "Hành trình bot" trên Lead. Nối ngoài dict để không đụng dòng on_update ở trên.
+doc_events["CRM Lead"]["on_update"] = [
+	doc_events["CRM Lead"]["on_update"],
+	"omni_crm.script.lead_ui.on_lead_fields_changed",
+]
 fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},
 	{"dt": "Custom Field", "filters": [["module", "=", "Omni CRM"]]},
