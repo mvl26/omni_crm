@@ -805,11 +805,12 @@ def _script_handled(batch_id: str) -> bool:
 
 
 def _script_already_sent(batch_id: str) -> bool:
-	"""Lượt đã có tin bot kịch bản được xếp (đã commit). Lỗi khi kiểm thì coi là chưa."""
+	"""Lượt đã được bot kịch bản đánh dấu nhận (Redis) hoặc đã có tin kịch bản được xếp. Lỗi khi kiểm thì coi là chưa."""
 	try:
+		from omni_crm.script import router
 		from omni_crm.script import send as script_send
 
-		return script_send.batch_has_outbound(batch_id)
+		return router.is_marked(batch_id) or script_send.batch_has_outbound(batch_id)
 	except Exception:
 		return False
 

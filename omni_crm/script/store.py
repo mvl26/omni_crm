@@ -65,6 +65,7 @@ def missing_vars(text: str | None, ctx: dict | None) -> list[str]:
 
 def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]] | None:
 	"""(text, buttons) đã điền biến; None nếu ô không có, `Tắt`, nội dung trống, thiếu biến bắt buộc, hoặc `Cần duyệt` mà không phải danh sách thử.
+	Nút dẫn tới ô `Tắt` (hay `Cần duyệt` với khách ngoài danh sách thử) bị bỏ; hết nút thì vẫn gửi phần chữ.
 
 	ctx có thể chứa `identity` (để kiểm danh sách thử) và các biến của câu.
 	"""
@@ -87,7 +88,20 @@ def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]]
 		{"label": fill(b.get("label") or "", ctx), "target": normalize_code(b.get("target"))}
 		for b in node.get("buttons") or []
 	]
-	return text, [b for b in buttons if b["label"] and b["target"]]
+	buttons = [b for b in buttons if b["label"] and b["target"]]
+	return text, _usable_buttons(buttons, (ctx or {}).get("identity"))
+
+
+def _usable_buttons(buttons: list[dict], identity: str | None) -> list[dict]:
+	"""Bỏ nút dẫn tới ô `Tắt` (và ô `Cần duyệt` khi khách không thuộc danh sách thử); mã không phải ô kịch bản thì giữ."""
+	if not buttons:
+		return buttons
+	rows = frappe.get_all(
+		NODE, filters={"name": ["in", [b["target"] for b in buttons]]}, fields=["name", "status"]
+	)
+	hidden = {OFF} if switch.is_test(identity) else {OFF, REVIEW}
+	dead = {r.name for r in rows if (r.status or ACTIVE) in hidden}
+	return [b for b in buttons if b["target"] not in dead]
 
 
 def known_codes() -> set[str]:

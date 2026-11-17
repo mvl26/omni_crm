@@ -3,9 +3,13 @@
 `handle_batch(batch_id) -> bool`: True = bot kịch bản đã nhận lượt này, luồng Reply cũ KHÔNG chạy; False = để luồng cũ
 chạy (công tắc tắt với khách, không phải tin khách, hoặc chưa có handler cho tình huống).
 
-Điều kiện dừng (trả True, bot im lặng): bot đang tạm dừng (`bot_paused_until` ở tương lai), Lead `omni_do_not_contact`,
-Lead ở trạng thái `Junk` (spam), hoặc nhân viên đã trả lời sau tin khách cuối của lượt. Handler do K2+ đăng ký trong
+Điều kiện dừng (trả True, bot im lặng): bot đang tạm dừng (`bot_paused_until` ở tương lai) hoặc nhân viên đã trả lời
+sau tin khách cuối của lượt. Lead `omni_do_not_contact` hay `Junk`: bot kịch bản không gửi gì (send chặn) nhưng trả
+False để luồng Reply cũ vẫn soạn nháp cho nhân viên, tin khách không biến mất. Handler do K2+ đăng ký trong
 `omni_crm/script/flows/`.
+
+Trước khi gọi handler (cho MỌI handler): chặn bấm lặp cùng một nút trong 30 giây, xóa câu hỏi dở khi khách bấm nút mở
+luồng khác, báo bộ hẹn giờ là khách vừa nhắn.
 
 Chống trả lời hai lần: tin kịch bản ghi `script_batch`; lượt đã có tin kịch bản thì trả True mà không chạy lại handler
 (dấu bền, không phụ thuộc Redis). Khóa hạ tầng: khách ngoài danh sách thử chỉ được bot kịch bản nhận lượt khi
@@ -20,6 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import frappe
+from frappe.utils import get_datetime, now_datetime
 
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.script import send, state, store, switch
@@ -35,8 +40,12 @@ FOLLOW_KEY = "FOLLOW"  # handler cho sự kiện quan tâm OA
 HANDLED_TTL = 3600
 EVENTS = ("message", "follow")
 SILENT_STOPS = frozenset(
-	{send.PAUSED, send.DNC, send.JUNK}
-)  # chỉ ba lý do này làm bot kịch bản nhận lượt mà im lặng
+	{send.PAUSED}
+)  # bot tạm dừng (nhân viên đang xử lý): bot kịch bản nhận lượt mà im lặng
+TAP_SECONDS = 30  # bấm lặp cùng một nút trong khoảng này thì không gửi lại
+# Nút mở một luồng cấp cao khác: câu đang hỏi dở (`script_state.flow/field`) của luồng cũ không còn hiệu lực
+FLOW_START_PREFIXES = ("MENU", "GAP_", "DEMO_", "DAT_DEMO", "SD_", "C4_", "TAILIEU_", "BAOGIA_")
+STALE_KEYS = ("flow", "field", "node", "pending", "wrong")
 
 
 @dataclass
@@ -187,15 +196,20 @@ def handle_batch(batch_id: str) -> bool:
 	if ctx is None:
 		return False
 	code = send.block_code(ctx.identity)
-	if code in SILENT_STOPS or _sale_replied(ctx):  # nhân viên đang xử lý / không liên hệ / spam: bot im lặng
+	if code in SILENT_STOPS or _sale_replied(ctx):  # nhân viên đang xử lý: bot im lặng
 		_mark(batch_id)
 		return True
-	if code:  # công tắc vừa tắt giữa chừng: trả lượt cho luồng cũ
+	if code:  # không liên hệ / rác / công tắc vừa tắt: bot kịch bản im, luồng cũ soạn nháp cho nhân viên
 		return False
 	load_flows()
 	handler = find_handler(ctx)
 	if handler is None:
 		return False
+	if _repeated_tap(ctx):  # bấm lặp cùng nút trong 30 giây: không gửi lại
+		_mark(batch_id)
+		return True
+	_clear_stale_flow(ctx)
+	_notify_scheduler(ctx)
 	_expire_stale_drafts(ctx.lead)
 	frappe.flags[send.BATCH_FLAG] = batch_id
 	try:
@@ -205,6 +219,56 @@ def handle_batch(batch_id: str) -> bool:
 	_mark(batch_id)
 	frappe.db.commit()
 	return True
+
+
+def _repeated_tap(ctx: RouteContext) -> bool:
+	"""Khách bấm lại đúng nút vừa bấm trong `TAP_SECONDS` giây; tin gõ thì xóa dấu nút vừa bấm. Không commit.
+
+	Dấu nằm trong `script_state` (`tap`, `tap_at`), ghi cùng transaction với handler: handler lỗi thì dấu cũng lùi lại.
+	"""
+	if ctx.event_type != "message":
+		return False
+	current = ctx.state.get("script_state") or {}
+	code = ctx.payload_code
+	if not code:
+		if current.get("tap"):
+			ctx.state["script_state"] = state.update_state(ctx.identity, tap=None, tap_at=None)
+		return False
+	now = now_datetime()
+	if current.get("tap") == code and current.get("tap_at"):
+		try:
+			if 0 <= (now - get_datetime(current["tap_at"])).total_seconds() < TAP_SECONDS:
+				return True
+		except Exception:
+			pass
+	ctx.state["script_state"] = state.update_state(ctx.identity, tap=code, tap_at=str(now))
+	return False
+
+
+def _clear_stale_flow(ctx: RouteContext) -> None:
+	"""Khách bấm nút mở luồng cấp cao khác: bỏ câu đang hỏi dở của luồng cũ (`flow`, `field`...). Không commit."""
+	code = ctx.payload_code
+	current = ctx.state.get("script_state") or {}
+	if not code or not code.startswith(FLOW_START_PREFIXES) or not any(current.get(k) for k in STALE_KEYS):
+		return
+	ctx.state["script_state"] = state.update_state(ctx.identity, **dict.fromkeys(STALE_KEYS))
+
+
+def _notify_scheduler(ctx: RouteContext) -> None:
+	"""Báo bộ hẹn giờ là khách vừa nhắn (hủy tin nhắc đang chờ); phần đó chưa có hoặc lỗi thì bỏ qua."""
+	try:
+		from omni_crm.script import scheduler
+
+		scheduler.on_inbound(ctx.identity, ctx.lead)
+	except ImportError:
+		return
+	except Exception as e:
+		frappe.logger("omni").info("omni script: scheduler.on_inbound lỗi (%s)", type(e).__name__)
+
+
+def is_marked(batch_id: str | None) -> bool:
+	"""Lượt đã được đánh dấu là bot kịch bản nhận (khóa Redis `omni:script:batch:<id>`)."""
+	return bool(batch_id) and bool(frappe.cache().get_value(_handled_key(batch_id), expires=True))
 
 
 def _sale_replied(ctx: RouteContext) -> bool:

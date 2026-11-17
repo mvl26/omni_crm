@@ -24,6 +24,7 @@ LOG = "Notification Log"
 class FixCase(K2Case):
 	def setUp(self):
 		super().setUp()
+		router.load_flows()  # luồng thật đăng ký `*` khi nạp lần đầu: nạp trước để handler của test không bị ghi đè
 		self.calls: list = []
 		self.addCleanup(self._clean_fix)
 
@@ -311,3 +312,99 @@ class TestNodeAndRender(FixCase):
 		self.set_switch(tests=self.ident1)
 		self.assertIsNone(self.send(f"{PFX}VAR", {"ten": "Mai"}))
 		self.assertEqual(self.outs(), [])
+
+
+class TestAddendum(FixCase):
+	def setUp(self):
+		super().setUp()
+		router.register(router.DEFAULT_KEY, self.calls.append)
+		router.register(f"{PFX}MENU", self.calls.append)
+		self.addCleanup(self._clear_state)
+		self._clear_state()
+		self.set_switch(tests=self.ident1)
+
+	def _clear_state(self):
+		frappe.db.rollback()
+		frappe.db.set_value("Omni Identity", self.ident1, "script_state", None)
+		frappe.db.commit()
+
+	def new_batch(self, text: str) -> str:
+		batch = f"{PFX}{frappe.generate_hash(length=8)}"
+		frappe.db.set_value("Omni Inbound Message", self.zalo1, {"batch_id": batch, "text": text})
+		frappe.db.commit()
+		return batch
+
+	def test_marked_batch_error_never_falls_to_old_flow(self):
+		def mark_then_fail(batch_id):
+			router._mark(batch_id)  # như engine sau khi gửi được một tin
+			raise RuntimeError("x")
+
+		with (
+			mock.patch("frappe.enqueue"),
+			mock.patch("omni_crm.script.router.handle_batch", side_effect=mark_then_fail),
+			mock.patch.object(reply, "make_draft") as old_flow,
+		):
+			self.assertEqual(reply._reply_batch(self.batch), "script")
+		old_flow.assert_not_called()
+		self.forget()
+
+	def test_repeated_tap_within_30s_not_resent(self):
+		make_node(f"{PFX}MENU")
+		first = self.new_batch(f"#{PFX}MENU")
+		self.assertTrue(self.handle(first))
+		self.assertTrue(self.handle(self.new_batch(f"#{PFX}MENU")))  # bấm lại: nhận lượt, không gọi handler
+		self.assertEqual(len(self.calls), 1)
+		self.assertTrue(self.handle(self.new_batch("em muốn hỏi thêm")))  # tin gõ xóa dấu nút vừa bấm
+		self.assertTrue(self.handle(self.new_batch(f"#{PFX}MENU")))
+		self.assertEqual(len(self.calls), 3)
+
+	def test_failed_handler_does_not_leave_tap_mark(self):
+		make_node(f"{PFX}MENU")
+		router.register(f"{PFX}MENU", mock.Mock(side_effect=RuntimeError("x")))
+		batch = self.new_batch(f"#{PFX}MENU")
+		with self.assertRaises(RuntimeError):
+			self.handle(batch)
+		frappe.db.rollback()  # như `reply._script_handled`
+		self.assertFalse(state.get(self.ident1)["script_state"].get("tap"))
+
+	def test_old_tap_is_not_a_repeat(self):
+		make_node(f"{PFX}MENU")
+		old = add_to_date(now_datetime(), seconds=-(router.TAP_SECONDS + 5))
+		state.update_state(self.ident1, tap=f"{PFX}MENU", tap_at=str(old))
+		frappe.db.commit()
+		self.assertTrue(self.handle(self.new_batch(f"#{PFX}MENU")))
+		self.assertEqual(len(self.calls), 1)
+
+	def test_top_level_button_clears_stale_question(self):
+		state.update_state(self.ident1, flow="collect", field="email", pending="x", service="SPD")
+		self.assertTrue(self.handle(self.new_batch(f"#{PFX}MENU")))  # nút thường: giữ câu đang hỏi
+		self.assertEqual(state.get(self.ident1)["script_state"].get("flow"), "collect")
+		self.assertTrue(self.handle(self.new_batch("menu")))  # MENU_CHINH mở luồng khác
+		st = state.get(self.ident1)["script_state"]
+		self.assertEqual((st.get("flow"), st.get("field"), st.get("pending")), (None, None, None))
+		self.assertEqual(st.get("service"), "SPD")
+		self.assertFalse(self.calls[-1].state["script_state"].get("flow"))
+
+	def test_scheduler_notified_and_errors_ignored(self):
+		with mock.patch("omni_crm.script.scheduler.on_inbound", side_effect=RuntimeError("x")) as on_inbound:
+			self.assertTrue(self.handle())
+		on_inbound.assert_called_once_with(self.ident1, self.lead1)
+		self.assertEqual(len(self.calls), 1)
+
+	def test_buttons_to_disabled_nodes_dropped(self):
+		make_node(f"{PFX}OFF", status="Tắt")
+		make_node(f"{PFX}REV", status="Cần duyệt")
+		make_node(f"{PFX}ON")
+		targets = [
+			("Tắt", f"{PFX}OFF"),
+			("Duyệt", f"{PFX}REV"),
+			("Bật", f"{PFX}ON"),
+			("Người", "GAP_KHONGCO_O"),
+		]
+		make_node(f"{PFX}M", text="Chọn", buttons=targets)
+		node = store.get_node(f"{PFX}M")
+		labels = lambda ident: [b["label"] for b in store.render(node, {"identity": ident})[1]]  # noqa: E731
+		self.assertEqual(labels(self.ident1), ["Duyệt", "Bật", "Người"])  # danh sách thử: thấy ô Cần duyệt
+		self.assertEqual(labels(self.ident2), ["Bật", "Người"])
+		make_node(f"{PFX}ONLYOFF", text="Chỉ còn chữ", buttons=[("Tắt", f"{PFX}OFF")])
+		self.assertEqual(store.render(store.get_node(f"{PFX}ONLYOFF"), {}), ("Chỉ còn chữ", []))
