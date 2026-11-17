@@ -11,15 +11,16 @@ Thứ tự bắt buộc khi tạm dừng / dừng hẳn: câu cho khách phải 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import cint, get_datetime, now_datetime
+from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from omni_crm import flags
 from omni_crm.bot import handoff as bot_handoff
-from omni_crm.script import engine, router, send, state, tasks, timeutil, validate
+from omni_crm.script import engine, router, send, state, switch, tasks, timeutil, validate
 from omni_crm.script.router import RouteContext
 
 IDENTITY = "Omni Identity"
@@ -50,7 +51,9 @@ FLOW_PHONE = "handoff_phone"
 MODE_IN, MODE_AFTER = "in_hours", "after_hours"
 UNANSWERED_MINUTES = 15  # 1.4: sau 15 phút trong giờ chưa có nhân viên nhận
 PHONE_REASKS = 1  # 3.4: số sai chỉ hỏi lại 1 lần
-PAUSE_HOURS = 24 * 365  # 1.4: bot im cho đến khi nhân viên bấm "Trả lại cho bot" (không tự mở lại sau 24 giờ)
+NODE_CALL_CONFIRM_IN = (
+	"GAP_NV_GOIDIEN_XACNHAN_TRONGGIO"  # seed/nodes_k3.json (Cần duyệt): xác nhận gọi lại trong giờ
+)
 COMPLIANCE = "TUAN_THU"
 MANAGER = "QUAN_LY"
 JOURNEY_STOPPED = "Không liên hệ"
@@ -64,6 +67,14 @@ REASON_MISUNDERSTOOD = "misunderstood_3"
 REASON_NOT_IN_KB = "not_in_kb"
 REASON_AGREES_TO_BUY = "agrees_to_buy"
 HIGH_PRIORITY = {REASON_COMPLAINT, REASON_AGREES_TO_BUY}
+KNOWN_REASONS = {
+	REASON_REQUESTED,
+	REASON_COMPLAINT,
+	REASON_MISUNDERSTOOD,
+	REASON_NOT_IN_KB,
+	REASON_AGREES_TO_BUY,
+}
+REASON_MAX = 200
 NODE_REASONS = {  # ô kịch bản có lệnh `handoff` → lý do
 	"KB_CHUYENVIEN": REASON_NOT_IN_KB,
 	"SD_BATDAU": REASON_AGREES_TO_BUY,
@@ -115,33 +126,37 @@ def _send(ctx: RouteContext, code: str, extra: dict | None = None) -> str | None
 
 
 def flush_pending(identity: str | None) -> int:
-	"""Gửi ngay các tin kịch bản còn chờ của định danh (đường gửi chung `send_outbound`); trả số tin đã xử lý.
+	"""Gửi ngay các tin kịch bản còn chờ của định danh (đường gửi chung `send_outbound`); trả số tin CÒN chờ (chưa đi).
 
-	Phải gọi trước khi tạm dừng bot / đánh dấu không liên hệ: nếu không, câu vừa xếp bị chặn lúc gửi.
+	Phải gọi trước khi tạm dừng bot / đánh dấu không liên hệ: nếu không, câu vừa xếp bị chặn lúc gửi. Trả > 0 nghĩa là
+	còn tin chưa gửi được (lỗi tạm, đang thử lại): bên gọi không nên tạm dừng ngay kẻo lần thử lại bị chặn.
 	"""
 	if not identity:
 		return 0
 	from omni_crm.pipeline import outbound
 
 	frappe.db.commit()  # không giữ khóa DB khi gọi ra ngoài
-	names = frappe.get_all(
-		OUTBOUND,
-		filters={"identity": identity, "source": "Bot", "status": "Queued", "script_node": ["is", "set"]},
-		pluck="name",
-		order_by="creation asc",
-	)
-	for name in names:
+	filters = {"identity": identity, "source": "Bot", "status": "Queued", "script_node": ["is", "set"]}
+	for name in frappe.get_all(OUTBOUND, filters=filters, pluck="name", order_by="creation asc"):
 		try:
 			outbound.send_outbound(name)
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(title="Omni: không gửi kịp tin kịch bản trước khi dừng", message=f"out={name}")
-	return len(names)
+	return cint(frappe.db.count(OUTBOUND, filters))
 
 
 def _handoff_state(identity: str) -> dict:
 	value = state.get(identity)["script_state"].get("handoff")
 	return value if isinstance(value, dict) else {}
+
+
+def _live_state(identity: str) -> dict:
+	"""Trạng thái chuyển người còn hiệu lực: chỉ khi bot đang tạm dừng với khách (nhân viên đang giữ cuộc trò chuyện).
+
+	Bot đã được mở lại (hết hạn tạm dừng, nút cũ "Cho bot tiếp tục", "Trả lại cho bot") thì trạng thái cũ là rác.
+	"""
+	return _handoff_state(identity) if bot_handoff.is_bot_paused(identity) else {}
 
 
 def _flow(identity: str) -> str:
@@ -208,6 +223,10 @@ def _description(ctx: RouteContext, reason: str, service: str, extra: str = "") 
 		_("Lý do chuyển: {0}").format(reason_label(reason)),
 		_("Người nhận theo dịch vụ: {0}").format(tasks.service_label(service)),
 	]
+	if (
+		reason and reason not in KNOWN_REASONS
+	):  # lý do do luồng khác ghi (có thể trích lời khách): che email/SĐT
+		lines.append(_("Chi tiết: {0}").format(tasks.mask_pii(" ".join(reason.split()))[:REASON_MAX]))
 	if extra:
 		lines.append(extra)
 	return "\n".join(lines)
@@ -225,6 +244,8 @@ def start(ctx: RouteContext, service: str | None = None, reason: str = "", task_
 	if send.blocked_reason(ctx.identity):
 		return
 	reason = (reason or "").strip() or REASON_REQUESTED
+	if not ctx.lead:  # vẫn trả lời khách, nhưng không tạo được việc: báo quản trị
+		tasks.warn_no_lead(ctx.identity, reason_label(reason))
 	svc = _resolve_service(ctx, service, reason, task_only)
 	if not svc:
 		return  # đã hỏi dịch vụ, chờ khách chọn
@@ -239,7 +260,7 @@ def _resolve_service(ctx: RouteContext, service: str | None, reason: str, task_o
 	svc = tasks.normalize_service(service) or _current_service(ctx.lead)
 	if svc:
 		return svc
-	if _handoff_state(ctx.identity).get("assignee"):  # đang có người giữ cuộc trò chuyện
+	if _live_state(ctx.identity).get("assignee"):  # đang có người giữ cuộc trò chuyện
 		return tasks.OTHER
 	if _flow(ctx.identity) == FLOW_SERVICE:  # đã hỏi rồi: không hỏi lại
 		return tasks.OTHER
@@ -259,8 +280,8 @@ def _pending(identity: str) -> dict:
 
 def _in_hours(ctx: RouteContext, svc: str, reason: str, send_text: bool = True) -> None:
 	"""Trong giờ: câu chờ → giao Lead → việc + tóm tắt → báo người nhận → tạm dừng bot (sau khi câu đã gửi)."""
-	previous = _handoff_state(ctx.identity)
-	# Khách đổi chủ đề giữa chừng: người đang nhận giữ cuộc trò chuyện (1.4)
+	previous = _live_state(ctx.identity)
+	# Khách đổi chủ đề khi nhân viên đang giữ cuộc trò chuyện: người đang nhận giữ nguyên (1.4)
 	assignee = previous.get("assignee") or tasks.assignee_for(ctx.lead, svc)
 	if send_text:
 		_send(ctx, NODE_IN_HOURS)
@@ -295,32 +316,63 @@ def _in_hours(ctx: RouteContext, svc: str, reason: str, send_text: bool = True) 
 	_pause(ctx.lead, ctx.identity, reason)
 
 
-def _pause(lead: str | None, identity: str, reason: str = "") -> None:
-	"""Tạm dừng bot đến khi nhân viên bấm "Trả lại cho bot"; gửi hết tin đang chờ trước, rồi ghi dòng thời gian."""
-	flush_pending(identity)
-	if not lead:
-		frappe.db.set_value(
-			IDENTITY,
-			identity,
-			"bot_paused_until",
-			now_datetime() + timedelta(hours=PAUSE_HOURS),
-			update_modified=False,
+def _pause(lead: str | None, identity: str, reason: str = "") -> bool:
+	"""Tạm dừng bot theo `handoff_pause_hours` (cơ chế có sẵn; nhân viên bấm "Trả lại cho bot" để mở sớm).
+
+	Gửi hết tin đang chờ trước. Còn tin chưa đi được (lỗi tạm) thì CHƯA tạm dừng (kẻo lần thử lại bị chặn), ghi
+	`pause_pending` để `check_unanswered` tạm dừng sau; việc và thông báo cho nhân viên vẫn đã tạo. True nếu đã dừng.
+	"""
+	left = flush_pending(identity)
+	if left:
+		state.update_state(identity, pause_pending=1, pause_reason=reason or None)
+		frappe.log_error(
+			title="Omni: chưa tạm dừng bot vì câu chờ chưa gửi xong",
+			message=f"identity={identity} con_cho={left}",
 		)
-		return
+		return False
+	state.update_state(identity, pause_pending=None, pause_reason=None)
+	hours = bot_handoff.pause_hours() or bot_handoff.DEFAULT_PAUSE_HOURS
+	if not lead:
+		until = add_to_date(None, hours=hours)
+		frappe.db.set_value(IDENTITY, identity, "bot_paused_until", until, update_modified=False)
+		return True
 	already = bot_handoff.paused_until(lead)
-	bot_handoff.pause_lead(lead, PAUSE_HOURS)
+	until = bot_handoff.pause_lead(lead, hours)
 	if not already:
 		bot_handoff.note_on_lead(
 			lead,
-			_('Bot kịch bản chuyển người: {0}. Bot tạm dừng đến khi nhân viên bấm "Trả lại cho bot".').format(
-				reason_label(reason)
-			),
+			_(
+				'Bot kịch bản chuyển người: {0}. Bot tạm dừng đến {1} hoặc đến khi nhân viên bấm "Trả lại cho bot".'
+			).format(reason_label(reason), frappe.utils.format_datetime(until)),
 		)
+	return True
+
+
+def finish_pending_pauses() -> int:
+	"""Tạm dừng nốt các khách đã chuyển người mà lúc đó câu chờ chưa gửi xong; trả số khách đã tạm dừng."""
+	rows = frappe.get_all(
+		IDENTITY,
+		filters={"script_state": ["like", '%"pause_pending": 1%']},
+		fields=["name", "lead"],
+		limit_page_length=SCAN_LIMIT,
+	)
+	done = 0
+	for row in rows:
+		try:
+			reason = state.get(row.name)["script_state"].get("pause_reason") or REASON_REQUESTED
+			if switch.enabled_for(row.name) and _pause(row.lead, row.name, reason):
+				done += 1
+			frappe.db.commit()
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(title="Omni: lỗi tạm dừng bù sau chuyển người", message=f"identity={row.name}")
+	return done
 
 
 def _after_hours(ctx: RouteContext, svc: str, reason: str, send_text: bool = True) -> None:
 	"""Ngoài giờ: câu hẹn + nút [Nhắn tin tại đây] [Gọi điện cho tôi], tạo việc hạn ngày làm việc kế tiếp; bot KHÔNG dừng."""
-	previous = _handoff_state(ctx.identity)
+	previous = _live_state(ctx.identity)
+	assignee = previous.get("assignee") or tasks.assignee_for(ctx.lead, svc)
 	if send_text:
 		_send(ctx, NODE_AFTER_HOURS)
 	task = None
@@ -332,6 +384,8 @@ def _after_hours(ctx: RouteContext, svc: str, reason: str, send_text: bool = Tru
 			_description(ctx, reason, svc),
 			priority="High" if reason in HIGH_PRIORITY else "Medium",
 		)
+		if assignee:
+			_notify(ctx.lead, [assignee], reason_label(reason), ctx.identity)
 	state.update_state(
 		ctx.identity,
 		flow=None,
@@ -339,11 +393,11 @@ def _after_hours(ctx: RouteContext, svc: str, reason: str, send_text: bool = Tru
 		handoff={
 			"at": str(now_datetime()),
 			"service": svc,
-			"assignee": previous.get("assignee") or tasks.assignee_for(ctx.lead, svc),
+			"assignee": assignee,
 			"reason": reason,
 			"task": task,
 			"mode": MODE_AFTER,
-			"escalated": cint(previous.get("escalated")),
+			"escalated": 0,
 		},
 	)
 	state.set_node(ctx.identity, NODE_AFTER_HOURS, "1")
@@ -367,6 +421,9 @@ def on_service_button(ctx: RouteContext) -> None:
 
 def on_service_typed(ctx: RouteContext) -> bool:
 	"""Trạng thái `handoff_service`: khách gõ thay vì chọn → không hỏi lại, giao người nhận dòng "Khác" (1.4)."""
+	if is_stop_phrase(ctx.text):
+		on_stop(ctx)
+		return True
 	pending = _pending(ctx.identity)
 	start(ctx, tasks.OTHER, pending.get("reason") or REASON_REQUESTED, bool(cint(pending.get("task_only"))))
 	return True
@@ -386,10 +443,11 @@ def on_call_me(ctx: RouteContext) -> None:
 
 
 def ask_phone(identity: str, variables: dict | None = None) -> str | None:
-	"""Gửi câu xin SĐT gọi lại và đặt trạng thái chờ số; trả tên tin ra (None nếu không gửi được)."""
+	"""Gửi câu xin SĐT gọi lại; gửi được thì đặt trạng thái chờ số. Trả tên tin ra (None nếu không gửi được)."""
 	name = send.send_node(identity, NODE_CALL, variables or {})
-	state.update_state(identity, flow=FLOW_PHONE, handoff_phone_tries=0)
-	state.set_node(identity, NODE_CALL, "1")
+	if name:
+		state.update_state(identity, flow=FLOW_PHONE, handoff_phone_tries=0)
+		state.set_node(identity, NODE_CALL, "1")
 	return name
 
 
@@ -397,6 +455,9 @@ def on_phone_typed(ctx: RouteContext) -> bool:
 	"""Trạng thái `handoff_phone`: nhận SĐT khách gõ (kiểm bằng `validate`); sai thì hỏi lại 1 lần rồi thôi."""
 	if ctx.payload_code:
 		return False
+	if is_stop_phrase(ctx.text):
+		on_stop(ctx)
+		return True
 	phone = validate.find_phone(ctx.text) or validate.validate_phone(ctx.text)
 	if phone:
 		_phone_received(ctx, phone)
@@ -417,7 +478,14 @@ def _phone_received(ctx: RouteContext, phone: str) -> None:
 	local = validate.phone_local(phone)
 	info = _handoff_state(ctx.identity)
 	_save_phone(ctx.lead, phone)
-	_send(ctx, NODE_CALL_CONFIRM, {"sdt": local})
+	if timeutil.in_hours(now_datetime()):
+		# Trong giờ (15 phút chưa ai nhận): không hứa "ngày làm việc kế tiếp"; ô riêng đang "Cần duyệt"
+		if not _send(ctx, NODE_CALL_CONFIRM_IN, {"sdt": local}):
+			frappe.logger("omni").info(
+				"omni script: chưa có câu xác nhận gọi lại trong giờ identity=%s", ctx.identity
+			)
+	else:
+		_send(ctx, NODE_CALL_CONFIRM, {"sdt": local})
 	_send(ctx, NODE_CLOSING)
 	state.update_state(
 		ctx.identity, flow=None, handoff_phone_tries=None, handoff={**info, "phone": phone, "contact": "call"}
@@ -445,19 +513,31 @@ def _save_phone(lead: str | None, phone: str) -> None:
 # --- 15 phút chưa có nhân viên nhận (1.4) --------------------------------------------------------------------------
 
 
+def business_wait_minutes(
+	started_at: datetime | None, now: datetime, cfg: timeutil.Config | None = None
+) -> float:
+	"""Hàm thuần (khi truyền `cfg`): số phút nhân viên đã có để nhận khách trong khung giờ làm việc ĐANG mở lúc `now`.
+
+	Ngoài giờ trả 0; chuyển người từ khung trước (hôm qua 17:20) chỉ tính từ giờ mở cửa của khung hiện tại.
+	"""
+	cfg = cfg if cfg is not None else timeutil.load_config()
+	hours, holidays = cfg
+	window = None if now.date() in holidays else hours.get(now.weekday())
+	if not started_at or not window:
+		return 0.0
+	open_at, close_at = datetime.combine(now.date(), window[0]), datetime.combine(now.date(), window[1])
+	if not (open_at <= now <= close_at):
+		return 0.0
+	return max(0.0, (now - max(started_at, open_at)).total_seconds() / 60)
+
+
 def should_escalate(
-	started_at: datetime | None,
-	now: datetime,
-	*,
-	staff_replied: bool,
-	escalated: bool,
-	in_hours: bool,
-	minutes: int = UNANSWERED_MINUTES,
+	waited_minutes: float, *, staff_replied: bool, escalated: bool, minutes: int = UNANSWERED_MINUTES
 ) -> bool:
-	"""Hàm thuần: đã quá `minutes` phút trong giờ mà chưa có nhân viên nhận và chưa báo quản lý lần nào."""
-	if not started_at or staff_replied or escalated or not in_hours:
+	"""Hàm thuần: nhân viên đã có đủ `minutes` phút làm việc mà chưa nhận khách và chưa báo quản lý lần nào."""
+	if staff_replied or escalated:
 		return False
-	return now - started_at >= timedelta(minutes=minutes)
+	return waited_minutes >= minutes
 
 
 def _staff_replied(identity: str, since: datetime) -> bool:
@@ -467,24 +547,28 @@ def _staff_replied(identity: str, since: datetime) -> bool:
 
 
 def check_unanswered(now: datetime | None = None) -> dict[str, int]:
-	"""Tác vụ định kỳ: khách đã được chuyển trong giờ mà 15 phút chưa ai nhận → bot xin SĐT và báo quản lý (QUAN_LY).
+	"""Tác vụ định kỳ (5 phút): khách đã được chuyển trong giờ mà 15 phút làm việc chưa ai nhận → bot xin SĐT và báo
+	quản lý (QUAN_LY). Cũng tạm dừng bù các khách mà lúc chuyển câu chờ chưa gửi xong.
 
-	Để hỏi được SĐT, bot được mở lại với khách đó (như trường hợp ngoài giờ: bot vẫn tư vấn trong lúc chờ).
-	Commit sau từng khách; lỗi một khách không chặn khách khác.
+	Chỉ xét định danh bot kịch bản đang bật (`switch.enabled_for`). Commit sau từng khách; lỗi một khách không chặn khách khác.
 	"""
 	now = now or now_datetime()
-	out = {"checked": 0, "escalated": 0}
+	out = {"checked": 0, "escalated": 0, "paused": finish_pending_pauses()}
 	rows = frappe.get_all(
 		IDENTITY,
-		filters={"script_state": ["like", '%"handoff"%'], "bot_paused_until": [">", now]},
+		filters=[
+			["script_state", "like", '%"handoff"%'],
+			["script_state", "not like", '%"escalated": 1%'],  # đã xử lý thì không quét lại
+			["bot_paused_until", ">", now],
+		],
 		fields=["name", "lead"],
+		order_by="modified desc",
 		limit_page_length=SCAN_LIMIT,
 	)
-	in_hours = timeutil.in_hours(now)
 	for row in rows:
 		out["checked"] += 1
 		try:
-			if _escalate_one(row.name, row.lead, now, in_hours):
+			if _escalate_one(row.name, row.lead, now):
 				out["escalated"] += 1
 			frappe.db.commit()
 		except Exception:
@@ -493,37 +577,47 @@ def check_unanswered(now: datetime | None = None) -> dict[str, int]:
 	return out
 
 
-def _escalate_one(identity: str, lead: str | None, now: datetime, in_hours: bool) -> bool:
+def _escalate_one(identity: str, lead: str | None, now: datetime) -> bool:
+	if not switch.enabled_for(identity):  # công tắc tắt với khách này: không gửi, không mở lại bot
+		return False
 	info = _handoff_state(identity)
 	if info.get("mode") != MODE_IN or not info.get("at"):
 		return False
 	started = get_datetime(info["at"])
 	if not should_escalate(
-		started,
-		now,
+		business_wait_minutes(started, now),
 		staff_replied=_staff_replied(identity, started),
 		escalated=bool(cint(info.get("escalated"))),
-		in_hours=in_hours,
 	):
 		return False
 	state.update_state(identity, handoff={**info, "escalated": 1})
-	if lead:
-		bot_handoff.resume_lead(lead)
-	else:
-		frappe.db.set_value(IDENTITY, identity, "bot_paused_until", None, update_modified=False)
+	names = frappe.get_all(IDENTITY, filters={"lead": lead}, pluck="name") if lead else [identity]
+	paused = {n: frappe.db.get_value(IDENTITY, n, "bot_paused_until") for n in names}
+	for n in names:  # phải mở bot thì câu xin số mới gửi được
+		frappe.db.set_value(IDENTITY, n, "bot_paused_until", None, update_modified=False)
+	asked = ask_phone(identity, {"ngay_lam_viec_tiep_theo": timeutil.next_working_day_text(now)})
+	if not asked:  # không gửi được câu xin số: giữ nguyên tạm dừng, vẫn báo quản lý
+		for n, until in paused.items():
+			frappe.db.set_value(IDENTITY, n, "bot_paused_until", until, update_modified=False)
 	frappe.db.commit()
-	ask_phone(identity, {"ngay_lam_viec_tiep_theo": timeutil.next_working_day_text(now)})
-	if lead:
-		manager = tasks.recipient(MANAGER)
-		label = _("Khách chờ nhân viên quá {0} phút").format(UNANSWERED_MINUTES)
-		if manager:
-			_notify(lead, [manager], label, identity)
-		else:
-			frappe.log_error(
-				title="Omni: quá 15 phút chưa ai nhận, chưa cấu hình quản lý", message=f"lead={lead}"
-			)
-		tasks.append_note(info.get("task"), label + ". " + _("Bot đã xin số điện thoại của khách."))
-		bot_handoff.note_on_lead(lead, label + ". " + _("Bot đã xin số điện thoại và báo quản lý."))
+	label = _("Khách chờ nhân viên quá {0} phút").format(UNANSWERED_MINUTES)
+	if not lead:
+		tasks.warn_no_lead(identity, label)
+		return True
+	manager = tasks.recipient(MANAGER)
+	if manager:
+		_notify(lead, [manager], label, identity)
+	else:
+		frappe.log_error(
+			title="Omni: quá 15 phút chưa ai nhận, chưa cấu hình quản lý", message=f"lead={lead}"
+		)
+	done = (
+		_("Bot đã xin số điện thoại của khách.") if asked else _("Bot chưa gửi được câu xin số điện thoại.")
+	)
+	tasks.append_note(info.get("task"), f"{label}. {done}")
+	bot_handoff.note_on_lead(
+		lead, f"{label}. {done} " + _("Đã báo quản lý.") if manager else f"{label}. {done}"
+	)
 	return True
 
 
@@ -535,12 +629,13 @@ def clear(lead: str) -> int:
 	done = 0
 	for identity in frappe.get_all(IDENTITY, filters={"lead": lead}, pluck="name"):
 		data = state.get(identity)["script_state"]
-		if not (
-			data.get("handoff") or data.get("handoff_pending") or str(data.get("flow") or "")[:7] == "handoff"
-		):
+		in_flow = str(data.get("flow") or "").startswith("handoff")
+		if not (data.get("handoff") or data.get("handoff_pending") or data.get("pause_pending") or in_flow):
 			continue
-		values: dict = {"handoff": None, "handoff_pending": None, "handoff_phone_tries": None}
-		if str(data.get("flow") or "").startswith("handoff"):
+		values: dict = dict.fromkeys(
+			("handoff", "handoff_pending", "handoff_phone_tries", "pause_pending", "pause_reason")
+		)
+		if in_flow:
 			values["flow"] = None
 		state.update_state(identity, **values)
 		state.reset_reask(identity)
@@ -585,33 +680,55 @@ def cancel_scheduled(lead: str | None) -> int:
 		return 0
 
 
-def stop_contact(lead: str | None, identity: str | None = None) -> None:
-	"""Dừng hẳn với khách (C.4): gửi nốt câu xác nhận đang chờ, bật `omni_do_not_contact`, hành trình "Không liên hệ",
-	hủy mọi tin hẹn giờ. Lead rác (Junk) giữ nguyên trạng thái. Không commit."""
-	flush_pending(identity)
+def stop_contact(
+	lead: str | None, identity: str | None = None, confirm: Callable[[], object] | None = None
+) -> None:
+	"""Dừng hẳn với khách (C.4). Thứ tự: hủy tin hẹn giờ → gửi câu ghi nhận (`confirm`, nếu có) và đẩy tin đang chờ →
+	bật `omni_do_not_contact` (ghi thẳng DB, luôn chạy dù bước gửi lỗi) → hành trình "Không liên hệ" (lỗi chỉ ghi log).
+
+	Cờ không liên hệ phải bật SAU câu ghi nhận vì `send` chặn mọi tin khi cờ đã bật. Lead rác (Junk) giữ nguyên trạng thái.
+	"""
+	has_lead = bool(lead and frappe.db.exists(LEAD, lead))
+	if has_lead:
+		cancel_scheduled(lead)
+	try:
+		if confirm:
+			confirm()
+		if flush_pending(identity):
+			frappe.logger("omni").info(
+				"omni script: câu ghi nhận dừng liên hệ chưa gửi được identity=%s", identity
+			)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Omni: lỗi gửi câu ghi nhận dừng liên hệ", message=f"identity={identity}")
+	if has_lead:
+		frappe.db.set_value(LEAD, lead, "omni_do_not_contact", 1, update_modified=False)
 	if identity:
 		state.update_state(
 			identity,
 			flow=None,
 			handoff_pending=None,
 			handoff_phone_tries=None,
+			pause_pending=None,
 			stopped_at=str(now_datetime()),
 		)
-	if not lead or not frappe.db.exists(LEAD, lead):
+	frappe.db.commit()
+	if not has_lead:
 		return
-	if frappe.db.get_value(LEAD, lead, "status") == JUNK_STATUS:
-		frappe.db.set_value(LEAD, lead, "omni_do_not_contact", 1, update_modified=False)
-	else:
-		with flags.omni_bot():
-			state.set_journey(lead, JOURNEY_STOPPED)
-	cancel_scheduled(lead)
+	try:
+		if frappe.db.get_value(LEAD, lead, "status") != JUNK_STATUS:
+			with flags.omni_bot():
+				state.set_journey(lead, JOURNEY_STOPPED)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Omni: không ghi được hành trình Không liên hệ", message=f"lead={lead}")
+	cancel_scheduled(lead)  # tin hẹn giờ có thể vừa được đặt trong lúc gửi câu ghi nhận
 	frappe.logger("omni").info("omni script: dừng liên hệ lead=%s", lead)
 
 
 def on_stop(ctx: RouteContext) -> None:
-	"""Router: mã `C4_HUYDANGKY` (khách bấm hoặc bộ phân loại trả về) → câu ghi nhận rồi dừng hẳn."""
-	_send(ctx, NODE_STOP)
-	stop_contact(ctx.lead, ctx.identity)
+	"""Router: mã `C4_HUYDANGKY` (khách bấm, gõ câu dừng, hoặc bộ phân loại trả về) → câu ghi nhận rồi dừng hẳn."""
+	stop_contact(ctx.lead, ctx.identity, confirm=lambda: _send(ctx, NODE_STOP))
 
 
 def request_data_deletion(ctx: RouteContext, send_text: bool = True) -> str | None:
@@ -619,6 +736,9 @@ def request_data_deletion(ctx: RouteContext, send_text: bool = True) -> str | No
 	người phụ trách tuân thủ (`TUAN_THU`). Trả tên việc."""
 	if send_text:
 		_send(ctx, NODE_DELETE_DATA)
+	if not ctx.lead:
+		tasks.warn_no_lead(ctx.identity, _("Khách yêu cầu xoá dữ liệu"))
+		return None
 	task = tasks.create_task(
 		ctx.lead,
 		COMPLIANCE,

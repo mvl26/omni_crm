@@ -1,0 +1,15 @@
+[
+ {
+  "code": "GAP_NV_GOIDIEN_XACNHAN_TRONGGIO",
+  "title": "Gặp nhân viên – xác nhận gọi lại (trong giờ, quá 15 phút chưa ai nhận)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Cần duyệt",
+  "text": "Dạ, Miyano cảm ơn anh/chị. Miyano đã ghi nhận số {sdt} và chuyển cho nhân viên tư vấn ạ.",
+  "buttons": [],
+  "action": "then:GAP_NV_CAUKET",
+  "source_ref": "1.4",
+  "notes": "K3 thêm: kịch bản 1.4 chỉ có câu xác nhận ngoài giờ (hẹn {ngay_lam_viec_tiep_theo}); trong giờ không được hẹn ngày làm việc kế tiếp. Chờ duyệt câu chữ."
+ }
+]

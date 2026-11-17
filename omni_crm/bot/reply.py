@@ -922,12 +922,23 @@ def _fallback_after_error(base: dict) -> None:
 		_log_failure(base["batch_id"], e)
 
 
+def _script_enabled_batch(batch_id: str) -> bool:
+	"""Lượt có định danh đang chạy bot kịch bản v3 (ADR 0032): vẫn đẩy job dù chế độ Reply là Off. Lỗi thì coi là không."""
+	try:
+		from omni_crm.script import switch
+
+		rows = frappe.get_all(INBOUND, filters={"batch_id": batch_id}, pluck="identity", distinct=True)
+		return any(switch.enabled_for(i) for i in rows if i)
+	except Exception:
+		return False
+
+
 def enqueue_reply(batch_id: str, lead: str | None) -> bool:
 	"""Đẩy `reply_batch` khi công tắc không Off và lượt có tin khách; lỗi enqueue không ném ra.
 
 	Gọi từ `analyze.after_analyze` (bot phân tích bật) hoặc `post_batch_hooks` (bot phân tích tắt).
 	"""
-	if not lead or flags.bot_reply_mode() == "Off":
+	if not lead or (flags.bot_reply_mode() == "Off" and not _script_enabled_batch(batch_id)):
 		return False
 	try:
 		frappe.enqueue(

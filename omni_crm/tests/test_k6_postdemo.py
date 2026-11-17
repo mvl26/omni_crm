@@ -5,6 +5,7 @@ Phần của người khác (tasks, scheduler, flows.handoff) được giả b�
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -143,6 +144,18 @@ class FlowCase(K2Case):
 		)
 		p.start()
 		self.addCleanup(p.stop)
+		# module thật đã được import thì `from gói import tên` lấy thuộc tính của gói: giả cả ở đó
+		import omni_crm.script as script_pkg
+		import omni_crm.script.flows as flows_pkg
+
+		for pkg, name, fake in (
+			(script_pkg, "tasks", tasks),
+			(script_pkg, "scheduler", scheduler),
+			(flows_pkg, "handoff", handoff),
+		):
+			pp = mock.patch.object(pkg, name, fake, create=True)
+			pp.start()
+			self.addCleanup(pp.stop)
 
 	def _clean_flow(self):
 		frappe.db.rollback()
@@ -222,7 +235,30 @@ class TestDemoResult(FlowCase):
 			(row["kind"], row["node"], row["identity"]), ("postdemo_1", "SD_CAMNHAN", self.ident1)
 		)
 		self.assertEqual(row["due_at"], timeutil.postdemo_send_at(TUESDAY_10H))
-		self.assertEqual(set(row["payload"]), {"demo_date", "hom_nay_hom_qua"})
+		self.assertEqual(set(row["payload"]), {"key", "demo_date", "hom_nay_hom_qua"})
+		self.assertEqual(self.lead("omni_journey_status"), "Đã demo")
+
+	def test_rerun_on_later_day_does_not_schedule_again(self):
+		self.set_lead(omni_demo_at="2026-11-17 09:00:00")
+		first = self.run_result()
+		self.assertTrue(first)
+		frappe.db.set_value(SCHEDULED, first, "status", "Sent")
+		with mock.patch.object(postdemo, "now_datetime", return_value=datetime(2026, 11, 19, 10, 0, 0)):
+			self.assertIsNone(postdemo.on_demo_result(self.lead1, "Đã demo"))
+		self.assertEqual(len(self.scheduled), 1)
+		# buổi demo khác (ngày khác) thì được hỏi lại
+		self.set_lead(omni_demo_at="2026-11-24 09:00:00")
+		self.assertTrue(self.run_result())
+		self.assertEqual(len(self.scheduled), 2)
+
+	def test_journey_never_regresses(self):
+		for journey in ("Thương lượng", postdemo.J_AGREED, "Thua", "Chăm sóc lại"):
+			self.set_lead(omni_journey_status=journey)
+			self.assertIsNone(self.run_result())
+			self.assertEqual(self.lead("omni_journey_status"), journey)
+		self.assertEqual(self.scheduled, [])
+		self.set_lead(omni_journey_status="Đã hẹn demo")
+		self.assertTrue(self.run_result())
 		self.assertEqual(self.lead("omni_journey_status"), "Đã demo")
 
 	def test_not_sent_when_staff_says_no_bot_followup(self):
@@ -257,7 +293,12 @@ class TestDemoResult(FlowCase):
 		self.assertEqual(postdemo.day_word(d, d.replace(day=20)), "vừa qua")
 
 	def test_demo_note_never_leaks(self):
-		self.set_lead(omni_demo_note=SECRET_NOTE, omni_services="SPD", mobile_no="0912345678")
+		self.set_lead(
+			omni_demo_note=SECRET_NOTE,
+			omni_services="SPD",
+			mobile_no="0912345678",
+			omni_demo_result="Đã demo",
+		)
 		self.run_result()
 		payload = self.scheduled[0]["payload"]
 		variables = {**postdemo.lead_vars(self.lead1), **payload}
@@ -290,10 +331,44 @@ class TestDemoResult(FlowCase):
 class TestBranches(FlowCase):
 	NODES = STEP5
 
+	def setUp(self):
+		super().setUp()
+		self.set_lead(omni_demo_result="Đã demo")
+
+	def test_sd_codes_ignored_before_demo(self):
+		self.set_lead(omni_demo_result="", omni_journey_status="Đang tư vấn", mobile_no="0912345678")
+		for code in ("SD_BATDAU", "SD_CHIPHI", "SD_BK_KHAC", "SD_CHUAPHUHOP", "SD_LD_CHIPHI", "SD_KETTHUC"):
+			router._handlers[code](self.ctx(code))
+		self.assertEqual(self.sent_nodes(), [])
+		self.assertEqual((self.tasks, self.handoffs, self.scheduled), ([], [], []))
+		self.assertEqual(self.lead("omni_journey_status"), "Đang tư vấn")
+		self.assertFalse(self.lead("omni_lost_reason_text"))
+		with mock.patch.object(engine, "run_node", return_value=True) as run:
+			router._handlers["SD_KETTHUC"](self.ctx("SD_KETTHUC"))
+		self.assertEqual(run.call_args.args[1], router.MENU_CODE)
+
+	def test_late_text_is_not_a_refusal_reason(self):
+		postdemo._on_refuse(self.ctx("SD_CHUAPHUHOP"))
+		state.update_state(self.ident1, postdemo_at="2026-01-01 09:00:00")
+		self.assertFalse(postdemo._on_text(self.ctx(text="cho mình hỏi về vật tư")))
+		self.assertFalse(self.lead("omni_lost_reason_text"))
+		self.assertNotEqual(self.lead("omni_journey_status"), "Thua")
+		self.assertEqual(self.sent_nodes(), ["SD_CHUAPHUHOP"])
+		self.assertNotIn("flow", self.sstate())
+
+	def test_marker_actions_registered_only_if_absent(self):
+		def marker(ctx, arg, node):
+			return None
+
+		with mock.patch.dict(engine._actions, {"lost_3m": marker, "postdemo_1": marker}):
+			importlib.reload(postdemo)
+			self.assertIs(engine._actions["lost_3m"], marker)
+			self.assertIs(engine._actions["postdemo_1"], marker)
+
 	def test_registered(self):
 		for name in ("require", "notify", "lost_3m", "postdemo_1", "email_template", "zns_template"):
 			self.assertIn(name, engine._actions)
-		self.assertIs(engine._state_handlers["postdemo"], postdemo._on_text)
+		self.assertIn("postdemo", engine._state_handlers)
 		for code in (
 			"SD_BATDAU",
 			"DAT_HANG",
@@ -321,7 +396,7 @@ class TestBranches(FlowCase):
 		self.assertIn((self.lead1, postdemo.SALES_KINDS), self.cancelled)
 		# khách bấm lại, hoặc lệnh notify:manager của ô chạy thêm: không tạo việc lần hai
 		postdemo._on_won(self.ctx("SD_BATDAU"))
-		postdemo._act_notify(self.ctx("SD_BATDAU"), "manager", {"code": "SD_BATDAU"})
+		engine._actions["notify"](self.ctx("SD_BATDAU"), "manager", {"code": "SD_BATDAU"})
 		self.assertEqual(len(self.tasks), 1)
 
 	def test_start_without_phone_asks_phone_first(self):

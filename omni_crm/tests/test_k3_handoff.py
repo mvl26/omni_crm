@@ -32,6 +32,7 @@ OUT = "Omni Outbound Message"
 LEAD = "CRM Lead"
 WEEKDAYS = (parse_hours({"mon-fri": "08:00-17:30"}), frozenset())
 WITH_HOLIDAY = (WEEKDAYS[0], frozenset({date(2026, 11, 19)}))
+PROD = (parse_hours({"mon-fri": "08:00-17:30", "sat": "08:00-12:00"}), frozenset())  # lịch như máy chủ thật
 SEED = Path(handoff.__file__).resolve().parents[1] / "seed" / "nodes.json"
 CODES = (
 	"GAP_NHANVIEN",
@@ -39,6 +40,7 @@ CODES = (
 	"GAP_NV_NGOAIGIO",
 	"GAP_NV_GOIDIEN",
 	"GAP_NV_GOIDIEN_XACNHAN",
+	"GAP_NV_GOIDIEN_XACNHAN_TRONGGIO",
 	"GAP_NV_NHANTIN",
 	"GAP_NV_CAUKET",
 	"GAP_NV_HOIDICHVU",
@@ -57,7 +59,9 @@ def dt(day: int, hh: int, mm: int = 0) -> datetime:
 
 
 def seed_nodes() -> dict:
-	return {n["code"]: n for n in json.loads(SEED.read_text(encoding="utf-8"))}
+	nodes = json.loads(SEED.read_text(encoding="utf-8"))
+	nodes += json.loads(SEED.with_name("nodes_k3.json").read_text(encoding="utf-8"))
+	return {n["code"]: n for n in nodes}
 
 
 class K3Case(K2Case):
@@ -179,6 +183,9 @@ class TestRecipient(K3Case):
 		self.assertIsNone(tasks.pick_recipient(rows, "KHAC"))
 		self.assertIsNone(tasks.pick_recipient(rows, "SUPPLYCORE"))
 		self.assertIsNone(tasks.pick_recipient([], "SPD"))
+		# dòng đầu không có người dùng được (trống/bị khóa) → xét dòng sau cùng dịch vụ
+		later = [*rows, {"service": "KHAC", "primary_user": "d@x.vn", "backup_user": None}]
+		self.assertEqual(tasks.pick_recipient(later, "KHAC"), "d@x.vn")
 
 	def test_service_alias_and_unknown(self):
 		self.rows = [{"service": "SUPPLYCORE", "primary_user": SALE2, "backup_user": None}]
@@ -232,8 +239,20 @@ class TestCreateTask(K3Case):
 		self.assertEqual(get_datetime(row.due_date), dt(17, 17, 30))
 		self.assertEqual(row.reference_docname, self.lead1)
 		self.assertIn("&lt;b&gt;", row.description)  # nội dung được thoát HTML
-		self.assertEqual(tasks.create_task(self.lead1, "SPD", "TK3 việc", "lần 2"), name)  # không tạo trùng
 		self.assertEqual(frappe.session.user, "Administrator")
+
+	def test_repeat_request_refreshes_open_task(self):
+		self.rows = [{"service": "SPD", "primary_user": SALE2, "backup_user": None}]
+		name = tasks.create_task(self.lead1, "SPD", "TK3 việc", "tóm tắt lần một")
+		self.at(dt(17, 18))  # khách yêu cầu lại sau giờ chốt: hạn dời sang ngày làm việc kế tiếp
+		with mock.patch("omni_crm.crm_bridge.notify.crm_notify") as bell:
+			self.assertEqual(tasks.create_task(self.lead1, "SPD", "TK3 việc", "tóm tắt lần hai"), name)
+		self.assertEqual(len(self.lead_tasks()), 1)
+		row = frappe.db.get_value(TASK, name, ["due_date", "description"], as_dict=True)
+		self.assertEqual(get_datetime(row.due_date), dt(18, 17, 30))
+		self.assertIn("tóm tắt lần một", row.description)
+		self.assertIn("tóm tắt lần hai", row.description)
+		self.assertEqual(bell.call_args.args[:2], (self.lead1, [SALE2]))
 
 	def test_no_recipient_unassigned_and_logged(self):
 		frappe.db.set_value(LEAD, self.lead1, {"lead_owner": None, "_assign": None})
@@ -324,18 +343,54 @@ class TestInHours(K3Case):
 		self.assertIn("phàn nàn", found[0].description)
 		self.assertNotIn("tôi rất bực", found[0].title)
 
-	def test_topic_change_keeps_assignee(self):
+	def test_stale_handoff_state_ignored_after_bot_resumed(self):
 		self.set_services("SUPPLYCORE")
 		self.rows = [
 			{"service": "SUPPLYCORE", "primary_user": SALE1, "backup_user": None},
 			{"service": "SPD", "primary_user": SALE2, "backup_user": None},
 		]
 		handoff.start(self.ctx())
-		bot_handoff.resume_lead(self.lead1)  # mở tạm (chưa "Trả lại cho bot": trạng thái chuyển người còn)
+		state.update_state(self.ident1, handoff={**self.hstate()["handoff"], "escalated": 1})
+		bot_handoff.resume_lead(
+			self.lead1
+		)  # mở bằng đường cũ (không qua "Trả lại cho bot"): trạng thái cũ còn nằm lại
 		self.set_services("SUPPLYCORE, SPD")
 		handoff.start(self.ctx())
-		self.assertEqual(self.hstate()["handoff"]["assignee"], SALE1)
-		self.assertEqual(len(self.lead_tasks()), 1)
+		info = self.hstate()["handoff"]
+		self.assertEqual((info["assignee"], info["service"], info["escalated"]), (SALE2, "SPD", 0))
+		self.assertEqual(len(self.lead_tasks()), 1)  # việc đang mở được làm mới, không tạo trùng
+
+	def test_pause_uses_handoff_pause_hours(self):
+		self.set_services("SPD")
+		with mock.patch.object(bot_handoff, "pause_hours", return_value=24):
+			handoff.start(self.ctx())
+		until = get_datetime(frappe.db.get_value("Omni Identity", self.ident1, "bot_paused_until"))
+		self.assertLess(abs((until - now_datetime()).total_seconds() - 24 * 3600), 120)
+
+	def test_waiting_sentence_not_sent_yet_delays_pause(self):
+		self.set_services("SPD")
+		with (
+			mock.patch("omni_crm.pipeline.outbound.send_outbound", return_value="Queued"),
+			mock.patch("frappe.log_error"),
+		):
+			handoff.start(self.ctx())
+		self.assertFalse(bot_handoff.is_bot_paused(self.ident1))  # chưa dừng: lần thử lại không bị chặn
+		self.assertEqual(self.hstate()["pause_pending"], 1)
+		self.assertEqual(len(self.lead_tasks()), 1)  # việc và thông báo vẫn đã tạo
+		self.assertEqual(handoff.finish_pending_pauses(), 1)  # câu chờ đi được rồi mới dừng
+		self.assertEqual(self.sent()[0].status, "Sent")
+		self.assertTrue(bot_handoff.is_bot_paused(self.ident1))
+		self.assertNotIn("pause_pending", self.hstate())
+
+	def test_identity_without_lead_alerts(self):
+		ctx = self.ctx()
+		ctx.lead = None
+		with mock.patch.object(tasks, "warn_no_lead") as warn:
+			handoff.start(ctx, "SPD")
+			self.assertIsNone(handoff.request_data_deletion(ctx))
+		self.assertEqual(warn.call_count, 2)
+		self.assertEqual(warn.call_args.args[0], self.ident1)
+		self.assertEqual(self.lead_tasks(), [])
 
 	def test_switch_off_sends_nothing(self):
 		self.set_switch(enabled=0, tests="")
@@ -360,6 +415,7 @@ class TestAfterHours(K3Case):
 		self.at(when)
 		self.patch("omni_crm.script.timeutil.load_config", return_value=cfg)
 		self.set_services("VATTU")
+		self.notify = self.patch("omni_crm.script.flows.handoff._notify")
 		self.assertTrue(router.handle_batch(self.inbound("#GAP_NHANVIEN")))
 		return self.sent(), self.lead_tasks()
 
@@ -372,6 +428,7 @@ class TestAfterHours(K3Case):
 		)
 		self.assertEqual(get_datetime(found[0].due_date), dt(18, 17, 30))
 		self.assertFalse(bot_handoff.is_bot_paused(self.ident1))  # ngoài giờ bot vẫn tư vấn
+		self.assertEqual(self.notify.call_args.args[1], [SALE1])  # người nhận được báo cả khi ngoài giờ
 		self.assertIsNone(send.blocked_reason(self.ident1))
 		self.assertEqual(self.hstate()["handoff"]["mode"], "after_hours")
 
@@ -452,17 +509,41 @@ class TestUnknownService(K3Case):
 
 class TestUnanswered(K3Case):
 	def test_decision_pure(self):
-		t0 = dt(17, 10)
-		ok = dict(staff_replied=False, escalated=False, in_hours=True)
-		self.assertFalse(handoff.should_escalate(t0, t0 + timedelta(minutes=14, seconds=59), **ok))
-		self.assertTrue(handoff.should_escalate(t0, t0 + timedelta(minutes=15), **ok))
+		ok = dict(staff_replied=False, escalated=False)
+		self.assertFalse(handoff.should_escalate(14.9, **ok))
+		self.assertTrue(handoff.should_escalate(15, **ok))
+		self.assertFalse(handoff.should_escalate(60, staff_replied=True, escalated=False))
+		self.assertFalse(handoff.should_escalate(60, staff_replied=False, escalated=True))
+		self.assertTrue(handoff.should_escalate(5, minutes=5, **ok))
+
+	def test_wait_counts_only_current_business_window(self):
+		wait = handoff.business_wait_minutes
+		self.assertEqual(wait(dt(17, 10), dt(17, 10, 15), WEEKDAYS), 15)
+		self.assertEqual(wait(None, dt(17, 10), WEEKDAYS), 0)
+		# chuyển lúc 17:20, hết giờ 17:30: tối và sáng hôm sau trước giờ mở cửa không tính
+		self.assertEqual(wait(dt(17, 17, 20), dt(17, 17, 29), WEEKDAYS), 9)
+		self.assertEqual(wait(dt(17, 17, 20), dt(17, 20), WEEKDAYS), 0)
+		self.assertEqual(wait(dt(17, 17, 20), dt(18, 8, 0), WEEKDAYS), 0)
+		self.assertEqual(wait(dt(17, 17, 20), dt(18, 8, 14), WEEKDAYS), 14)
+		self.assertEqual(wait(dt(17, 17, 20), dt(18, 8, 15), WEEKDAYS), 15)
 		self.assertFalse(
-			handoff.should_escalate(t0, t0 + timedelta(hours=1), **{**ok, "staff_replied": True})
+			handoff.should_escalate(
+				wait(dt(17, 17, 20), dt(18, 8, 0), WEEKDAYS), staff_replied=False, escalated=False
+			)
 		)
-		self.assertFalse(handoff.should_escalate(t0, t0 + timedelta(hours=1), **{**ok, "escalated": True}))
-		self.assertFalse(handoff.should_escalate(t0, t0 + timedelta(hours=1), **{**ok, "in_hours": False}))
-		self.assertFalse(handoff.should_escalate(None, t0, **ok))
-		self.assertTrue(handoff.should_escalate(t0, t0 + timedelta(minutes=5), minutes=5, **ok))
+		# qua ngày lễ 19/11
+		self.assertEqual(wait(dt(18, 17, 25), dt(19, 10), WITH_HOLIDAY), 0)
+		self.assertEqual(wait(dt(18, 17, 25), dt(20, 8, 10), WITH_HOLIDAY), 10)
+
+	def test_wait_production_calendar_with_saturday_morning(self):
+		wait = handoff.business_wait_minutes
+		self.assertEqual(wait(dt(20, 17, 20), dt(21, 8, 10), PROD), 10)  # thứ Sáu 17:20 → thứ Bảy 08:10
+		self.assertEqual(wait(dt(20, 17, 20), dt(21, 8, 15), PROD), 15)
+		self.assertEqual(wait(dt(21, 11, 50), dt(21, 12, 0), PROD), 10)  # thứ Bảy đóng cửa 12:00
+		self.assertEqual(wait(dt(21, 11, 50), dt(21, 12, 30), PROD), 0)
+		self.assertEqual(wait(dt(21, 11, 50), dt(22, 9), PROD), 0)  # Chủ nhật
+		self.assertEqual(wait(dt(21, 11, 50), dt(23, 8, 14), PROD), 14)  # thứ Hai
+		self.assertEqual(wait(dt(21, 11, 50), dt(23, 8, 15), PROD), 15)
 
 	def _handoff_now(self):
 		"""Chuyển người với mốc bắt đầu là giờ thật (để so với bot_paused_until và tin của sale)."""
@@ -470,6 +551,11 @@ class TestUnanswered(K3Case):
 		p.start()
 		self.addCleanup(p.stop)
 		self.patch("omni_crm.script.timeutil.in_hours", return_value=True)
+		# phút chờ = phút đồng hồ (lịch làm việc đã kiểm ở các test hàm thuần)
+		self.patch(
+			"omni_crm.script.flows.handoff.business_wait_minutes",
+			side_effect=lambda started, now, cfg=None: (now - started).total_seconds() / 60,
+		)
 		self.set_services("SPD")
 		self.rows = [
 			{"service": "SPD", "primary_user": SALE1, "backup_user": None},
@@ -491,6 +577,14 @@ class TestUnanswered(K3Case):
 		with mock.patch.object(handoff, "_notify") as notify:
 			handoff.check_unanswered(now_datetime() + timedelta(minutes=40))
 		notify.assert_not_called()  # chỉ báo một lần
+		# khách cho số khi nhân viên đang trong giờ: không hẹn "ngày làm việc kế tiếp"
+		self.assertTrue(handoff.on_phone_typed(self.ctx("0912345678")))
+		rows = self.sent()
+		self.assertEqual(
+			[r.script_node for r in rows][-2:], ["GAP_NV_GOIDIEN_XACNHAN_TRONGGIO", "GAP_NV_CAUKET"]
+		)
+		self.assertIn("0912345678", rows[-2].text)
+		self.assertNotIn("sáng", rows[-2].text)
 
 	def test_staff_replied_no_escalation(self):
 		self._handoff_now()
@@ -501,14 +595,48 @@ class TestUnanswered(K3Case):
 		self.assertEqual(handoff.check_unanswered(now_datetime() + timedelta(minutes=30))["escalated"], 0)
 		self.assertTrue(bot_handoff.is_bot_paused(self.ident1))
 
+	def test_switch_off_never_runs(self):
+		self._handoff_now()
+		self.set_switch(enabled=0, tests="")
+		with mock.patch.object(handoff, "_notify") as notify:
+			out = handoff.check_unanswered(now_datetime() + timedelta(minutes=30))
+		self.assertEqual(out["escalated"], 0)
+		notify.assert_not_called()
+		self.assertTrue(bot_handoff.is_bot_paused(self.ident1))
+		self.assertEqual(self.codes(), ["GAP_NV_TRONGGIO"])
+		self.assertFalse(self.hstate()["handoff"]["escalated"])
+
+	def test_ask_phone_not_queued_keeps_pause(self):
+		self._handoff_now()
+		with (
+			mock.patch.object(handoff.send, "send_node", return_value=None),
+			mock.patch.object(handoff, "_notify") as notify,
+		):
+			out = handoff.check_unanswered(now_datetime() + timedelta(minutes=30))
+		self.assertEqual(out["escalated"], 1)
+		self.assertEqual(notify.call_args.args[1], [SALE2])  # quản lý vẫn được báo
+		self.assertTrue(bot_handoff.is_bot_paused(self.ident1))  # không mở bot khi chưa hỏi được số
+		self.assertNotIn("flow", self.hstate())
+
 
 class TestStop(K3Case):
 	def test_unsubscribe_sets_do_not_contact_and_cancels(self):
+		order: list[str] = []
 		fake = types.ModuleType("omni_crm.script.scheduler")
-		fake.cancel_for = mock.Mock(return_value=2)
-		with mock.patch.dict(sys.modules, {"omni_crm.script.scheduler": fake}):
+		fake.cancel_for = mock.Mock(side_effect=lambda lead: order.append("cancel") or 2)
+		real_send = send.send_node
+
+		def spy(*a, **kw):
+			order.append("send")
+			return real_send(*a, **kw)
+
+		with (
+			mock.patch.dict(sys.modules, {"omni_crm.script.scheduler": fake}),
+			mock.patch.object(handoff.send, "send_node", side_effect=spy),
+		):
 			self.assertTrue(router.handle_batch(self.inbound("#C4_HUYDANGKY")))
-		fake.cancel_for.assert_called_once_with(self.lead1)
+		fake.cancel_for.assert_called_with(self.lead1)
+		self.assertEqual(order[:2], ["cancel", "send"])  # hủy tin hẹn giờ trước, rồi mới gửi câu ghi nhận
 		rows = self.sent()
 		self.assertEqual([r.script_node for r in rows], ["C4_HUYDANGKY"])
 		self.assertEqual(rows[0].status, "Sent")  # câu ghi nhận đi trước khi chặn
@@ -522,6 +650,34 @@ class TestStop(K3Case):
 		self.assertIsNone(send.send_node(self.ident1, "GAP_NV_CAUKET", {}))
 		self.assertTrue(router.handle_batch(self.inbound("#GAP_NHANVIEN")))
 		self.assertEqual(self.codes(), ["C4_HUYDANGKY"])
+
+	def test_flag_set_even_when_confirmation_or_journey_fails(self):
+		with (
+			mock.patch.object(handoff.send, "send_node", side_effect=RuntimeError("gửi lỗi")),
+			mock.patch.object(
+				handoff.state, "set_journey", side_effect=frappe.ValidationError("thiếu lý do")
+			),
+			mock.patch("frappe.log_error") as log,
+		):
+			handoff.on_stop(self.ctx(code="C4_HUYDANGKY"))  # không ném lỗi
+		self.assertEqual(frappe.db.get_value(LEAD, self.lead1, "omni_do_not_contact"), 1)
+		self.assertEqual(log.call_count, 2)
+		self.assertTrue(send.blocked_reason(self.ident1))
+
+	def test_stop_phrase_while_waiting_for_phone_or_service(self):
+		handoff.ask_phone(self.ident1, {})
+		self.assertTrue(handoff.on_phone_typed(self.ctx("thôi đừng nhắn nữa")))
+		self.assertEqual(frappe.db.get_value(LEAD, self.lead1, "omni_do_not_contact"), 1)
+		self.assertEqual(self.codes(), ["GAP_NV_GOIDIEN", "C4_HUYDANGKY"])
+		self.assertNotIn("flow", self.hstate())
+
+	def test_stop_phrase_instead_of_choosing_service(self):
+		self.set_services(None)
+		handoff.start(self.ctx())
+		self.assertTrue(handoff.on_service_typed(self.ctx("hủy đăng ký")))
+		self.assertEqual(frappe.db.get_value(LEAD, self.lead1, "omni_do_not_contact"), 1)
+		self.assertEqual(self.codes(), ["GAP_NV_HOIDICHVU", "C4_HUYDANGKY"])
+		self.assertEqual(self.lead_tasks(), [])
 
 	def test_scheduler_missing_is_tolerated(self):
 		with mock.patch.dict(sys.modules, {"omni_crm.script.scheduler": None}):
@@ -661,6 +817,32 @@ class TestLeadApi(K3Case):
 			with mock.patch("omni_crm.flags.is_system_write", return_value=True):
 				lead_ui.on_lead_fields_changed(doc)
 		call.assert_not_called()
+		with (
+			mock.patch.object(lead_ui, "_call") as call,
+			mock.patch("omni_crm.flags.is_system_write", return_value=False),
+		):
+			same = frappe.get_doc(LEAD, self.lead1)  # không trường hành trình nào đổi: không đọc gì thêm
+			same._doc_before_save = frappe.get_doc(LEAD, self.lead1)
+			with mock.patch.object(lead_ui, "_script_lead") as lookup:
+				lead_ui.on_lead_fields_changed(same)
+			lookup.assert_not_called()
+			self.set_switch(enabled=0, tests="")  # Lead không chạy bot kịch bản: bỏ qua
+			lead_ui.on_lead_fields_changed(doc)
+			call.assert_not_called()
+			self.set_switch(enabled=0, tests=self.ident1)
+			with (
+				mock.patch.object(lead_ui, "after_docs_sent", side_effect=RuntimeError("lỗi")),
+				mock.patch("frappe.log_error") as log,
+			):
+				lead_ui.on_lead_fields_changed(doc)  # không bao giờ ném lỗi ra ngoài
+			self.assertEqual(log.call_count, 1)
+
+	def test_hook_wired(self):
+		hooks = frappe.get_hooks("doc_events")["CRM Lead"]["on_update"]
+		self.assertIn("omni_crm.script.lead_ui.on_lead_fields_changed", hooks)
+		self.assertIn("omni_crm.crm_bridge.lead.track_manual_edits", hooks)
+		cron = frappe.get_hooks("scheduler_events")["cron"]["*/5 * * * *"]
+		self.assertIn("omni_crm.script.flows.handoff.check_unanswered", cron)
 
 	def test_layout_section_pure(self):
 		layout = [{"name": "contact", "columns": [{"fields": ["email", "omni_services"]}]}]

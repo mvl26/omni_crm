@@ -1,0 +1,15 @@
+[
+	{
+		"code": "XACNHAN_KHONG_EMAIL",
+		"title": "Bước 3 – xác nhận khi khách không để lại email hợp lệ",
+		"step": "3",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Cần duyệt",
+		"text": "Dạ, Miyano cảm ơn anh/chị {ten}. Nhân viên Miyano sẽ liên hệ anh/chị {thoi_diem} ạ.",
+		"buttons": [],
+		"action": "task;journey:Đang tư vấn",
+		"source_ref": "3.4, 3.5",
+		"notes": "Câu bổ sung (không có nguyên văn trong kịch bản): dùng khi khách chỉ để lại SĐT hoặc email sai định dạng 2 lần nên không gửi được câu xác nhận có {email}. Mốc hẹn theo 3.5. Cần Truyền thông duyệt."
+	}
+]

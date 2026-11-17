@@ -15,7 +15,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
-from omni_crm.script import state
+from omni_crm.script import state, switch
 
 LEAD = "CRM Lead"
 LAYOUT = "CRM Fields Layout"
@@ -133,23 +133,47 @@ def set_no_bot_followup(lead: str, value: Any) -> dict:
 	return {"omni_no_bot_followup": int(on)}
 
 
-def on_lead_fields_changed(doc: Any, method: str | None = None) -> None:
-	"""Hook `CRM Lead.on_update` (CHƯA nối, xem báo cáo K3): nhân viên sửa trường trong bảng bên thì chạy cùng logic với nút.
+WATCHED = (
+	"omni_docs_sent_at",
+	"omni_quote_sent_at",
+	"omni_demo_result",
+	"omni_no_bot_followup",
+	"omni_do_not_contact",
+)
 
-	Bỏ qua khi tạo mới và khi hệ thống ghi (cờ in_omni_bot, job nền, migrate/patch) để không chạy hai lần.
+
+def _script_lead(lead: str) -> bool:
+	"""Lead có định danh đang chạy bot kịch bản (bật toàn bộ hoặc trong danh sách thử)."""
+	identities = frappe.get_all("Omni Identity", filters={"lead": lead}, pluck="name")
+	return any(switch.enabled_for(i) for i in identities)
+
+
+def on_lead_fields_changed(doc: Any, method: str | None = None) -> None:
+	"""Hook `CRM Lead.on_update`: nhân viên sửa trường hành trình trong bảng bên thì chạy cùng logic với nút bấm.
+
+	Rẻ và an toàn: không trường nào trong `WATCHED` đổi thì thoát ngay; bỏ qua khi tạo mới, khi hệ thống ghi (cờ
+	in_omni_bot, job nền, migrate/patch) và với Lead không chạy bot kịch bản; không bao giờ ném lỗi ra ngoài.
 	"""
-	if doc.flags.in_insert or flags.is_system_write():
-		return
-	if doc.has_value_changed("omni_docs_sent_at") and doc.get("omni_docs_sent_at"):
-		after_docs_sent(doc.name)
-	if doc.has_value_changed("omni_quote_sent_at") and doc.get("omni_quote_sent_at"):
-		after_quote_sent(doc.name)
-	if doc.has_value_changed("omni_demo_result") and doc.get("omni_demo_result") in DEMO_RESULTS:
-		after_demo_result(doc.name, doc.get("omni_demo_result"))
-	if doc.has_value_changed("omni_no_bot_followup"):
-		after_no_bot_followup(doc.name, bool(cint(doc.get("omni_no_bot_followup"))))
-	if doc.has_value_changed("omni_do_not_contact") and cint(doc.get("omni_do_not_contact")):
-		_call("scheduler", "cancel_for", doc.name)
+	try:
+		if doc.flags.in_insert or flags.is_system_write():
+			return
+		changed = [f for f in WATCHED if doc.has_value_changed(f)]
+		if not changed or not _script_lead(doc.name):
+			return
+		if "omni_docs_sent_at" in changed and doc.get("omni_docs_sent_at"):
+			after_docs_sent(doc.name)
+		if "omni_quote_sent_at" in changed and doc.get("omni_quote_sent_at"):
+			after_quote_sent(doc.name)
+		if "omni_demo_result" in changed and doc.get("omni_demo_result") in DEMO_RESULTS:
+			after_demo_result(doc.name, doc.get("omni_demo_result"))
+		if "omni_no_bot_followup" in changed:
+			after_no_bot_followup(doc.name, bool(cint(doc.get("omni_no_bot_followup"))))
+		if "omni_do_not_contact" in changed and cint(doc.get("omni_do_not_contact")):
+			_call("scheduler", "cancel_for", doc.name)
+	except Exception:
+		frappe.log_error(
+			title="Omni: lỗi xử lý trường hành trình bot trên Lead", message=f"lead={doc.get('name')}"
+		)
 
 
 def add_section(sections: list) -> bool:
