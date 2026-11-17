@@ -412,8 +412,22 @@ def thread_data(lead: str) -> dict:
 	user_names: dict[
 		str, str
 	] = {}  # tên người dùng theo lượt gọi: bỏ truy vấn User lặp lại cho mỗi tin/cuộc gọi
+	# K1: echo của tin gửi TỪ CRM (Outbound đã có trước, sent_at là lúc hệ thống gửi) thì hiện bản Outbound kèm tên người gửi
+	# và bỏ echo. Outbound do chính echo tạo ra (nhân viên gõ trên công cụ OA, chatbot Zalo) có sent_at = thời điểm echo.
+	echo_at = {
+		m.external_message_id: m.received_at
+		for m in inbound
+		if m.event_type == "oa_echo" and m.external_message_id
+	}
+	crm_sent = {
+		o.external_message_id
+		for o in outbound
+		if o.external_message_id in echo_at and o.sent_at and o.sent_at != echo_at[o.external_message_id]
+	}
 	for m in inbound:
 		echo = m.event_type == "oa_echo"
+		if echo and m.external_message_id in crm_sent:
+			continue
 		items.append(
 			{
 				"name": m.name,
@@ -435,7 +449,7 @@ def thread_data(lead: str) -> dict:
 	for c in call_rows:
 		items.append(_call_item(c, user_names))
 	# Tin Sale trả lời ngoài hệ thống (oa_echo) có cả Omni Outbound Message cùng mã tin: chỉ hiện bản echo.
-	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
+	echo_ids = set(echo_at) - crm_sent
 	for o in outbound:
 		if o.external_message_id and o.external_message_id in echo_ids:
 			continue
