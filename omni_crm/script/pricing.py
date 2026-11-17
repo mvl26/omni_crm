@@ -70,8 +70,16 @@ def quote_enabled(service: str | None) -> bool:
 
 def review_required() -> bool:
 	"""Báo giá phải qua nhân viên duyệt trước khi gửi (`script_quote_review_required`, mặc định bật)."""
-	value = switch.setting(REVIEW_FIELD)
-	return True if value is None else bool(cint(value))
+	# Đọc thẳng tabSingles: Single chưa lưu lần nào thì không có dòng, `get_single_value` trả 0 thay vì mặc định 1.
+	try:
+		rows = frappe.db.sql(
+			"select value from tabSingles where doctype=%s and field=%s", (switch.SETTINGS, REVIEW_FIELD)
+		)
+	except Exception:
+		return True
+	if not rows or rows[0][0] is None or str(rows[0][0]).strip() == "":
+		return True  # chưa có dòng = chưa ai tắt: mặc định bắt buộc duyệt
+	return bool(cint(rows[0][0]))
 
 
 def _configured(fieldname: str) -> bool:

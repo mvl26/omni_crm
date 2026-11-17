@@ -45,6 +45,8 @@ class K2Case(OutboundTestCase):
 	def setUp(self):
 		super().setUp()
 		self._orig = {f: frappe.db.get_single_value("Omni Settings", f) for f in SETTING_FIELDS}
+		self._conf = frappe.conf.get(send.INFRA_CONF)
+		frappe.conf[send.INFRA_CONF] = 1  # khóa hạ tầng mở cho các test dùng `script_bot_enabled`=1
 		self.addCleanup(self._restore)
 		self.set_switch(enabled=0, tests="")
 		self.sandbox(True)
@@ -54,6 +56,7 @@ class K2Case(OutboundTestCase):
 
 	def _restore(self):
 		frappe.db.rollback()
+		frappe.conf[send.INFRA_CONF] = self._conf
 		for f, v in self._orig.items():
 			frappe.db.set_single_value("Omni Settings", f, v)
 		frappe.db.delete(NODE, {"name": ["like", f"{PFX}%"]})
@@ -117,8 +120,11 @@ class TestStore(K2Case):
 	def test_render_vars(self):
 		make_node(f"{PFX}V", text="Dạ {ten} quan tâm {dich_vu}, hẹn {ngay_lam_viec_tiep_theo}.")
 		node = store.get_node(f"#{PFX.lower()}v")
-		text, buttons = store.render(node, {"ten": "Mai", "dich_vu": "SPD"})
-		self.assertEqual(text, "Dạ Mai quan tâm SPD, hẹn.")
+		self.assertIsNone(
+			store.render(node, {"ten": "Mai", "dich_vu": "SPD"})
+		)  # thiếu biến bắt buộc: không gửi
+		text, buttons = store.render(node, {"dich_vu": "SPD", "ngay_lam_viec_tiep_theo": "thứ Hai"})
+		self.assertEqual(text, "Dạ quan tâm SPD, hẹn thứ Hai.")  # `ten` được phép trống
 		self.assertEqual(buttons, [])
 
 	def test_off_and_empty_not_sent(self):
@@ -308,19 +314,23 @@ class TestRouter(K2Case):
 		self.assertEqual(self.calls[0].payload_code, f"{PFX}MENU")
 
 	def test_stop_conditions(self):
+		# tạm dừng: bot kịch bản nhận lượt (True) và im; không liên hệ / rác: im nhưng trả False để luồng cũ soạn nháp
 		self.set_switch(tests=self.ident1)
-		for setup, undo in (
+		for handled, setup, undo in (
 			(
+				True,
 				lambda: frappe.db.set_value(
 					"Omni Identity", self.ident1, "bot_paused_until", add_to_date(now_datetime(), hours=1)
 				),
 				lambda: frappe.db.set_value("Omni Identity", self.ident1, "bot_paused_until", None),
 			),
 			(
+				False,
 				lambda: frappe.db.set_value("CRM Lead", self.lead1, "omni_do_not_contact", 1),
 				lambda: frappe.db.set_value("CRM Lead", self.lead1, "omni_do_not_contact", 0),
 			),
 			(
+				False,
 				lambda: frappe.db.set_value("CRM Lead", self.lead1, "status", "Junk"),
 				lambda: frappe.db.set_value("CRM Lead", self.lead1, "status", "New"),
 			),
@@ -328,7 +338,7 @@ class TestRouter(K2Case):
 			setup()
 			batch = f"{PFX}{frappe.generate_hash(length=8)}"
 			frappe.db.set_value("Omni Inbound Message", self.zalo1, "batch_id", batch)
-			self.assertTrue(router.handle_batch(batch))
+			self.assertEqual(router.handle_batch(batch), handled)
 			self.assertEqual(self.calls, [])
 			self.assertIsNone(send.send_text(self.ident1, "x"))
 			undo()

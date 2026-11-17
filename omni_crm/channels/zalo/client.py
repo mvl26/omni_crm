@@ -24,6 +24,7 @@ from omni_crm.channels.zalo.errors import TOKEN, TRANSIENT, ZaloError, to_error
 CHANNEL = "Omni Channel"
 
 
+# VERIFY: giới hạn 2000 ký tự lấy từ tài liệu bên thứ ba, chưa kiểm với Zalo OA thật (script.send và Omni Script Node dựa vào số này)
 BUTTON_TEXT_MAX = 2000  # nội dung tin tư vấn kèm nút (tài liệu bên thứ ba, docs/bot_v3_plan.md mục 3)
 
 

@@ -136,12 +136,16 @@ GREETINGS = frozenset(
 MENU_EXACT = frozenset({"menu", "menu chinh", "ve menu", "quay lai menu", "quay ve menu", "xem menu"})
 # "không cần" chỉ nhận khi là CẢ câu (C.4); "không cần gấp, gửi báo giá giúp" không phải yêu cầu dừng.
 STOP_EXACT = frozenset({"khong can", "stop", "unsubscribe", "huy dang ky"})
+# "không cần" trơ trọi khi bot đang đứng ở một ô (đang hỏi dở) có thể chỉ là trả lời câu hỏi: không coi là dừng.
+STOP_NEEDS_IDLE = frozenset({"khong can"})
+# "hủy đăng ký demo / lịch / đơn ..." là hủy một việc cụ thể, không phải dừng nhận tin.
+_NOT_UNSUBSCRIBE = r"(?! (?:buoi |cuoc |cai )?(?:demo|lich|don|hen|cuoc hen|hoi thao|su kien|khoa|lop|goi|dung thu|dat hang|tai khoan)\b)"
 STOP_PATTERNS = (
 	r"\b(?:dung|ngung|thoi) (?:co )?(?:nhan|gui|lien he|lien lac|lam phien|spam)\b(?: \w+){0,4}? nua\b",
 	r"\b(?:dung|ngung|thoi|khong) (?:nhan|gui) (?:tin nhan|tin)\b(?: \w+){0,3}? nua\b",
 	r"\bdung lam phien\b",
 	r"\bkhong (?:muon|can) nhan (?:tin nhan|tin|thong tin|quang cao)\b",
-	r"\bhuy (?:dang ky|theo doi|nhan tin)\b",
+	r"\bhuy (?:dang ky|theo doi|nhan tin)\b" + _NOT_UNSUBSCRIBE,
 	r"\bunsubscribe\b",
 	r"\bstop (?:messaging|texting|sending|contacting)\b",
 	r"\b(?:do not|dont|don t) (?:contact|message|text) me\b",
@@ -249,8 +253,11 @@ def _rule_for_clause(clause: str) -> str | None:
 	return None
 
 
-def classify_by_rules(text: str | None) -> tuple[str, float] | None:
-	"""Lớp 1: (mã, confidence) theo luật cố định, hoặc None khi phải hỏi AI. Hàm thuần, không đọc/ghi DB."""
+def classify_by_rules(text: str | None, state: dict | None = None) -> tuple[str, float] | None:
+	"""Lớp 1: (mã, confidence) theo luật cố định, hoặc None khi phải hỏi AI. Hàm thuần, không đọc/ghi DB.
+
+	`state` có `script_node` (bot đang đứng ở một ô) thì "không cần" trơ trọi không được coi là yêu cầu dừng nhắn.
+	"""
 	if not isinstance(text, str) or not _WORD.search(text):
 		return UNKNOWN, 0.0  # rỗng, sticker, ghi âm, chỉ có biểu tượng: không có gì để phân loại
 	if guards.guard_injection(text)[0]:
@@ -260,7 +267,11 @@ def classify_by_rules(text: str | None) -> tuple[str, float] | None:
 	# Yêu cầu dừng nhắn / xoá dữ liệu được nhận ở bất kỳ vế nào của tin (tuân thủ C.4), trước mọi ý khác.
 	if any(_ERASE_RE.search(c) for c in clauses):
 		return "XOA_DULIEU", RULE_CONFIDENCE
-	if whole in STOP_EXACT or any(_STOP_RE.search(c) for c in clauses):
+	st = state if isinstance(state, dict) else {}
+	pending = bool(st.get("script_node") or st.get("node"))
+	if any(_STOP_RE.search(c) for c in clauses) or (
+		whole in STOP_EXACT and not (pending and whole in STOP_NEEDS_IDLE)
+	):
 		return "HUY_DANGKY", RULE_CONFIDENCE
 	content = [c for c in clauses if not _is_greeting(c)]  # lời chào đầu tin không phải một ý
 	if not content:
@@ -349,7 +360,7 @@ def classify(
 ) -> tuple[str, float]:
 	"""Phân loại tin khách gõ thành (mã trong `CODES`, confidence 0..1); không bao giờ ném lỗi, lỗi → (UNKNOWN, 0.0)."""
 	try:
-		hit = classify_by_rules(text)
+		hit = classify_by_rules(text, state)
 		if hit is not None:
 			return hit
 		return _classify_ai(text, state, lead, identity, batch_id)

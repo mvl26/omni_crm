@@ -38,6 +38,34 @@ JOURNEY_TO_STATUS = {
 }
 LOST_REASON = "Other"  # CRM Lost Reason chuẩn của CRM
 KEEP_STATUSES = {"Converted"}  # không hạ trạng thái Lead đã chuyển đổi
+# Chỉ đẩy CRM Lead Status TIẾN theo bậc; status ngoài bảng (Junk, Lost, tự đặt) không bị bot đổi
+STATUS_RANK = {"New": 0, "Contacted": 1, "Nurture": 2, "Qualified": 3}
+LOST_JOURNEYS = frozenset({"Thua", "Không liên hệ"})  # chuyển rõ ràng sang trạng thái thua
+JUNK_STATUS = "Junk"
+JOURNEY_FIELD = "omni_journey_status"
+
+
+def journey_options() -> set[str]:
+	"""Các lựa chọn hợp lệ của trường Select `omni_journey_status` trên CRM Lead."""
+	field = frappe.get_meta(LEAD).get_field(JOURNEY_FIELD)
+	return {o.strip() for o in (field.options or "").split("\n") if o.strip()} if field else set()
+
+
+def _is_lost(status: str | None) -> bool:
+	return bool(status) and frappe.get_cached_value("CRM Lead Status", status, "type") == "Lost"
+
+
+def _may_move(current: str | None, target: str, journey: str) -> bool:
+	"""Có được đổi CRM Lead Status từ `current` sang `target` không (chỉ tiến, không đụng Converted/Lost/Junk)."""
+	if current == target or current in KEEP_STATUSES or current == JUNK_STATUS or _is_lost(current):
+		return False
+	if journey in LOST_JOURNEYS:
+		return True
+	if not current:
+		return True
+	if current not in STATUS_RANK or target not in STATUS_RANK:
+		return False
+	return STATUS_RANK[target] > STATUS_RANK[current]
 
 
 def get(identity: str) -> dict:
@@ -109,10 +137,15 @@ def add_service(lead: str | None, svc: str | None) -> list[str]:
 def set_journey(lead: str | None, status: str) -> None:
 	"""Ghi `omni_journey_status` và cập nhật CRM Lead Status gốc theo bảng quy đổi (mục 6 kế hoạch).
 
-	Không hạ Lead đã Converted; status quy đổi không có trên site thì chỉ ghi trường hành trình và log một dòng.
-	"Không liên hệ" bật thêm `omni_do_not_contact`.
+	Trạng thái hành trình không nằm trong lựa chọn của trường thì KHÔNG ghi gì (log một dòng). CRM Lead Status chỉ tiến
+	theo bậc New < Contacted < Nurture < Qualified; không đổi Lead đã Converted, đang ở trạng thái thua hay Junk; riêng
+	"Thua"/"Không liên hệ" đưa Lead đang mở về Unqualified. Status quy đổi không có trên site thì chỉ ghi trường hành
+	trình và log một dòng. "Không liên hệ" bật thêm `omni_do_not_contact`.
 	"""
 	if not lead or not frappe.db.exists(LEAD, lead):
+		return
+	if status not in journey_options():
+		frappe.logger("omni").info("omni script: trạng thái hành trình không hợp lệ, bỏ qua (lead=%s)", lead)
 		return
 	values: dict = {"omni_journey_status": status}
 	if status == "Không liên hệ":
@@ -120,9 +153,7 @@ def set_journey(lead: str | None, status: str) -> None:
 	frappe.db.set_value(LEAD, lead, values, update_modified=False)
 	target = JOURNEY_TO_STATUS.get(status)
 	current = frappe.db.get_value(LEAD, lead, "status")
-	if not target or current == target or current in KEEP_STATUSES:
-		return
-	if status == "Mới" and current:  # không đưa Lead đã tiến triển về New
+	if not target or not _may_move(current, target, status):
 		return
 	if not frappe.db.exists("CRM Lead Status", target):
 		frappe.logger("omni").info("omni script: CRM Lead Status %s không có trên site, bỏ qua", target)

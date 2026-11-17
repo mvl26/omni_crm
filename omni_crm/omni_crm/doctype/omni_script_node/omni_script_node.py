@@ -2,17 +2,30 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from omni_crm.channels.zalo.client import BUTTON_TEXT_MAX
+
 MAX_BUTTONS = 5  # Zalo nhận 5 nút (đã kiểm 17/11, docs/bot_v3_plan.md mục 3)
 MAX_LABEL = 20  # giới hạn kịch bản v3 cho nhãn nút
+
+
+def normalize_code(code: str | None) -> str:
+	"""Mã ô chuẩn: bỏ `#`, khoảng trắng, viết hoa (cùng quy tắc với `script.store.normalize_code`)."""
+	return (code or "").strip().lstrip("#").strip().upper()
 
 
 class OmniScriptNode(Document):
 	"""Một ô kịch bản bot v3 (nội dung, nút, hành động)."""
 
+	def before_naming(self) -> None:
+		"""Chuẩn hóa mã trước khi đặt tên (autoname `field:code`) để name == code."""
+		self.code = normalize_code(self.code)
+
 	def validate(self) -> None:
-		"""Chuẩn hóa mã (bỏ #, viết hoa) và kiểm nút: ≤ 5 nút, nhãn ≤ 20 ký tự."""
-		self.code = (self.code or "").strip().lstrip("#").upper()
+		"""Chuẩn hóa mã (bỏ #, viết hoa) và kiểm nút: ≤ 5 nút, nhãn ≤ 20 ký tự, tin kèm nút ≤ 2000 ký tự."""
+		self.code = normalize_code(self.code)
 		validate_buttons([(b.label, b.target) for b in self.buttons or []])
+		if self.buttons and len(self.text or "") > BUTTON_TEXT_MAX:
+			frappe.throw(_("Tin kèm nút dài quá {0} ký tự").format(BUTTON_TEXT_MAX), frappe.ValidationError)
 		for b in self.buttons or []:
 			b.label = (b.label or "").strip()
 			b.target = (b.target or "").strip().lstrip("#").upper()

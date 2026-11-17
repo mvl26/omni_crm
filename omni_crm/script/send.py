@@ -2,6 +2,13 @@
 
 Quy tắc an toàn số 1: `switch.enabled_for(identity)` sai thì KHÔNG tạo tin nào (trả None). Công tắc được kiểm lại ngay
 trước khi gửi (`send_time_check`, gọi từ `bot.auto_send.send_time_check`).
+
+Khóa hạ tầng: khách NGOÀI danh sách thử (tức là đang chạy nhờ `script_bot_enabled`=1) chỉ được nhận tin khi site_config
+có `omni_script_bot_allowed` đúng (ngoài DB, như `omni_auto_send_allowed`). Khách trong danh sách thử không cần khóa này.
+
+Mỗi tin ghi `script_batch` = lượt đang xử lý (router đặt `frappe.flags.omni_script_batch`) để chống trả lời hai lần.
+Tin kèm nút dài quá `BUTTON_TEXT_MAX` bị từ chối ngay lúc xếp (trả None) để nơi gọi còn kịp đi đường khác. Tin kịch bản
+bị chặn lúc gửi vì lý do khác công tắc / không liên hệ / rác thì báo người phụ trách (`on_blocked`).
 """
 
 from __future__ import annotations
@@ -16,6 +23,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from omni_crm.bot import handoff
+from omni_crm.channels.zalo.client import BUTTON_TEXT_MAX
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.omni_crm.doctype.omni_script_node.omni_script_node import validate_buttons
 from omni_crm.pipeline.retry import redact
@@ -28,6 +36,13 @@ SENDING_FLAG = "omni_script_sending"  # frappe.flags: định danh đang đượ
 SAVEPOINT = "omni_script_queue"
 TEXT_CODE = "_TEXT"  # script_node của tin gửi bằng send_text không kèm mã (câu Kho tri thức)
 JUNK_STATUS = "Junk"  # CRM Lead Status coi là spam (không có trường spam riêng)
+BATCH_FLAG = (
+	"omni_script_batch"  # frappe.flags: lượt tin router đang xử lý, ghi vào `script_batch` của tin ra
+)
+INFRA_CONF = "omni_script_bot_allowed"  # site_config: khóa hạ tầng cho khách ngoài danh sách thử
+# Mã lý do chặn: nhóm "im lặng có chủ ý" (không báo nhân viên khi tin bị chặn lúc gửi)
+SWITCH, INFRA, PAUSED, DNC, JUNK = "switch", "infra", "paused", "dnc", "junk"
+QUIET_BLOCKS = frozenset({SWITCH, INFRA, DNC, JUNK})
 
 
 @contextmanager
@@ -49,20 +64,47 @@ def channel_of(identity: str) -> str | None:
 	return frappe.db.get_value(INBOUND, {"identity": identity}, "channel", order_by="received_at desc")
 
 
-def blocked_reason(identity: str | None) -> str | None:
-	"""Lý do không được gửi tin kịch bản cho định danh lúc này (công tắc, tạm dừng, không liên hệ, spam); None nếu được."""
+def infra_allowed() -> bool:
+	"""Khóa hạ tầng NGOÀI DB cho bot kịch bản (site_config `omni_script_bot_allowed`); vắng, sai kiểu hay lỗi thì chặn."""
+	try:
+		return bool(cint(frappe.conf.get(INFRA_CONF)))
+	except Exception:
+		return False
+
+
+def infra_ok(identity: str | None) -> bool:
+	"""Định danh trong danh sách thử, hoặc khóa hạ tầng đang mở (khách chạy nhờ `script_bot_enabled`)."""
+	return switch.is_test(identity) or infra_allowed()
+
+
+def block_code(identity: str | None) -> str | None:
+	"""Mã lý do chặn tin kịch bản lúc này: switch / infra / paused / dnc / junk; None nếu được gửi."""
 	if not switch.enabled_for(identity):
-		return _("Bot kịch bản đang tắt với khách này")
+		return SWITCH
+	if not infra_ok(identity):
+		return INFRA
 	if handoff.is_bot_paused(identity):
-		return _("Bot đang tạm dừng với khách này")
+		return PAUSED
 	lead = frappe.db.get_value(IDENTITY, identity, "lead")
 	if lead:
 		row = frappe.db.get_value("CRM Lead", lead, ["status", "omni_do_not_contact"], as_dict=True) or {}
 		if cint(row.get("omni_do_not_contact")):
-			return _("Lead đánh dấu không liên hệ")
+			return DNC
 		if row.get("status") == JUNK_STATUS:
-			return _("Lead bị đánh dấu rác")
+			return JUNK
 	return None
+
+
+def blocked_reason(identity: str | None) -> str | None:
+	"""Lý do không được gửi tin kịch bản cho định danh lúc này (công tắc, tạm dừng, không liên hệ, spam); None nếu được."""
+	labels = {
+		SWITCH: _("Bot kịch bản đang tắt với khách này"),
+		INFRA: _("Khóa hạ tầng bot kịch bản đang đóng"),
+		PAUSED: _("Bot đang tạm dừng với khách này"),
+		DNC: _("Lead đánh dấu không liên hệ"),
+		JUNK: _("Lead bị đánh dấu rác"),
+	}
+	return labels.get(block_code(identity))
 
 
 def send_node(identity: str, code: str, ctx: dict | None = None, *, purpose: str = "reply") -> str | None:
@@ -105,6 +147,9 @@ def _queue(
 	except frappe.ValidationError:
 		_log("nut_khong_hop_le", identity, code)
 		return None
+	if buttons and len(text) > BUTTON_TEXT_MAX:  # Zalo từ chối vĩnh viễn: không xếp, để nơi gọi đi đường khác
+		_log("tin_kem_nut_qua_dai", identity, code)
+		return None
 	if blocked_reason(identity):
 		return None
 	channel = channel_of(identity)
@@ -126,7 +171,11 @@ def _queue(
 	frappe.db.set_value(
 		OUTBOUND,
 		name,
-		{"script_node": code, "buttons": json.dumps(buttons, ensure_ascii=False) if buttons else None},
+		{
+			"script_node": code,
+			"buttons": json.dumps(buttons, ensure_ascii=False) if buttons else None,
+			"script_batch": frappe.flags.get(BATCH_FLAG) or None,
+		},
 		update_modified=False,
 	)
 	frappe.db.set_value(IDENTITY, identity, "script_last_bot_at", now_datetime(), update_modified=False)
@@ -138,6 +187,44 @@ def send_time_check(row: Any) -> tuple[bool, str]:
 	"""Ngay trước khi gửi tin kịch bản đang chờ (từ `auto_send.send_time_check`): kiểm lại công tắc và điều kiện dừng."""
 	why = blocked_reason(row.get("identity"))
 	return (False, why) if why else (True, "")
+
+
+def batch_has_outbound(batch_id: str | None) -> bool:
+	"""Lượt này đã có tin kịch bản được xếp (đã commit) hay chưa: dấu bền để không trả lời hai lần."""
+	return bool(batch_id) and bool(frappe.db.exists(OUTBOUND, {"script_batch": batch_id}))
+
+
+def on_blocked(row: Any) -> bool:
+	"""Tin kịch bản bị chặn lúc gửi (gọi từ `auto_send.revert_to_draft`): báo người phụ trách, trừ khi bị chặn vì
+	công tắc / khóa hạ tầng / không liên hệ / rác. Trả True nếu đã báo. Không ném lỗi."""
+	try:
+		if block_code(row.get("identity")) in QUIET_BLOCKS:
+			return False
+		lead = row.get("lead") or frappe.db.get_value(IDENTITY, row.get("identity"), "lead")
+		if not lead:
+			return False
+		subject = _("Tin bot kịch bản không gửi được, khách đang chờ trả lời: {0}").format(lead)[:140]
+		users = handoff.recipients(lead)
+		for user in users:
+			frappe.get_doc(
+				{
+					"doctype": "Notification Log",
+					"type": "Alert",
+					"for_user": user,
+					"subject": subject,
+					"email_content": frappe.utils.escape_html(subject),
+					"document_type": "CRM Lead",
+					"document_name": lead,
+				}
+			).insert(ignore_permissions=True)
+		frappe.db.commit()
+		return bool(users)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(
+			title="Omni: không báo được tin kịch bản bị chặn", message=f"outbound={row.get('name')}"
+		)
+		return False
 
 
 def buttons_of(outbound_name: str | None) -> list[dict]:
