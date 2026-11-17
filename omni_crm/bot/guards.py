@@ -156,6 +156,12 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bnoi chuyen voi (?:nguoi|nhan vien)\b",
 		r"\bgoi lai cho toi\b",
 	),
+	# K1: "Yêu cầu đề xuất" nhận từ lời khách ở lượt hiện tại (câu lệnh reply v4 không dùng ý định của cả hội thoại).
+	"yeu_cau_de_xuat": (
+		r"\b(?:xin|gui|cho xin|can) (?:\w+ ){0,3}de xuat\b",
+		r"\bde xuat (?:dich vu|bang van ban|hop tac)\b",
+		r"\bhop dong mau\b",
+	),
 }
 # V21-07: từ khóa so dạng viết liền / đảo ngược / trong một từ (guard_text.compact_hit), chuẩn hóa cùng cách văn bản.
 COMPACT_KEYWORDS = {
