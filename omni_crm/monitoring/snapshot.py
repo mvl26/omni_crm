@@ -207,6 +207,15 @@ def _bot(now) -> dict[str, Any]:
 		"errors_24h": cint(counts.get("Error")) + cint(counts.get("Invalid Output")),
 		"skipped_budget_24h": cint(counts.get("Skipped Budget")),
 		"breaker_open": bool(breaker_open()),
+		# K1: nháp chuyển người trong 24 giờ không báo được ai (Lead chưa có người phụ trách); số lượng, không có nội dung
+		"handoff_no_recipient_24h": frappe.db.count(
+			"Omni Bot Draft",
+			{
+				"handoff_logs": "NO_RECIPIENT",
+				"handoff_notified_at": ["is", "not set"],
+				"creation": [">=", since],
+			},
+		),
 	}
 
 

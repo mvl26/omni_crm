@@ -193,6 +193,19 @@ def evaluate(snap: dict[str, Any], now=None) -> list[Alert]:
 				),
 			)
 		)
+	no_recipient = cint(bot.get("handoff_no_recipient_24h"))
+	if no_recipient:
+		out.append(
+			Alert(
+				"chuyen_nguoi_khong_nguoi_nhan",
+				"",
+				_("Bot chuyển người nhưng không có ai nhận"),
+				_(
+					"{0} cuộc trò chuyện trong 24 giờ bot đã chuyển người nhưng Lead chưa có người phụ trách. Bot đang tạm "
+					"dừng với các khách này; hãy gán người phụ trách cho Lead trên CRM."
+				).format(no_recipient),
+			)
+		)
 	tel = snap.get("telephony") or {}
 	if cint(tel.get("callbacks_overdue")):
 		out.append(
