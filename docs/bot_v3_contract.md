@@ -119,3 +119,18 @@ Mã nút đặc biệt: `#GAP_NHANVIEN` → K3 handoff; `#MENU` hoặc khách g�
 ## 6. Gửi tin kèm nút (Zalo)
 
 Đã kiểm thật 17/11 (xem `docs/bot_v3_plan.md` mục 3): `POST /v3.0/oa/message/cs`, `message={text, attachment:{type:"template", payload:{buttons:[{title, type:"oa.query.show", payload:"#CODE"}]}}}`; 5 nút được nhận; nút chỉ hiện trên app điện thoại; khách bấm → `user_send_text` với text = payload. Nối trong `channels/zalo/adapter.py` (không dirty): nếu Outbound có `buttons` thì gửi kiểu template. `# VERIFY:` cho giới hạn ký tự tiêu đề nút.
+
+## 7. Bộ chạy action (bổ sung 17/11, sau khi có seed)
+
+Seed (`omni_crm/script/seed/nodes.json`, quy ước ở `seed/VARIABLES.md`) dùng chuỗi `action`. `omni_crm/script/engine.py` (người làm K2 sở hữu, người khác KHÔNG sửa) chạy chuỗi đó:
+- `engine.run_node(ctx, code, extra=None) -> bool`, `engine.variables(ctx, extra=None) -> dict`.
+- `engine.register_action(name, fn(ctx, arg, node) -> bool|None)`: luồng khác đăng ký lệnh của mình trong module `flows/<x>.py` (router tự import mọi module trong `flows/`).
+- `engine.register_state(flow, fn(ctx) -> bool)`: xử lý tin gõ khi `script_state["flow"] == flow`.
+- K2 sở hữu các lệnh: `menu`, `reask`, `kb_answer`, `service`, `need`, `journey`, `branch`, `collect`, `answer`, `then`, `goto` và việc thu thông tin 3a/3b (K4).
+- K3 sở hữu: `handoff`, `pause_bot`, `stop`, xoá dữ liệu; `tasks.py`; API cho trang Lead (`api/script.py`).
+- K5 sở hữu: `demo*`, `schedule*`, `scheduler.py`; K6/K7: lệnh sau demo, đặt hàng, báo giá.
+- Hàm gọi chéo giữa các phần (import trễ trong hàm, bọc try/except ImportError khi phần kia chưa gộp):
+  - `tasks.create_task(lead, service, title, description, due=None, priority="Medium") -> str | None`; `tasks.recipient(service, role="primary") -> str | None`
+  - `flows.handoff.start(ctx, service=None, reason="", task_only=False) -> None`
+  - `scheduler.schedule(kind, identity, lead, due_at, node, payload=None) -> str | None`; `scheduler.cancel_for(lead, kinds=None) -> int`
+  - `scheduler.on_docs_sent(lead)`, `scheduler.on_quote_sent(lead)`, `flows.postdemo.on_demo_result(lead, result)` (gọi từ API trang Lead của K3)
