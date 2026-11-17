@@ -12,6 +12,7 @@ Token cần quyền quản lý bài viết của OA.
 from __future__ import annotations
 
 import time
+import unicodedata
 
 import frappe
 from frappe import _
@@ -80,14 +81,35 @@ def to_publish_error(e: ZaloError, step: str = "", sent: dict | None = None) -> 
 	return TerminalError(_("Zalo từ chối bài: {0}").format(e.message_vi) + detail, http_status=e.http_status)
 
 
+def short_description(caption: str | None) -> str:
+	"""Mô tả bài viết (thuần): gọn trong 300 BYTE UTF-8, cắt ở ranh giới từ.
+
+	Zalo từ chối mô tả đúng 300 ký tự tiếng Việt ("description allow 1 to 300 characters", 17/11/2026):
+	cách Zalo đếm chưa rõ (ký tự hay byte), nên giới hạn theo byte để an toàn với mọi cách đếm.
+	"""
+	desc = " ".join(unicodedata.normalize("NFC", caption or "").split())
+	if len(desc.encode()) <= ZALO_DESC_MAX:
+		return desc
+	out = ""
+	for word in desc.split(" "):
+		nxt = f"{out} {word}".strip()
+		if len((nxt + "…").encode()) > ZALO_DESC_MAX:
+			break
+		out = nxt
+	if not out:  # một từ dài hơn giới hạn: cắt theo ký tự
+		for ch in desc:
+			if len((out + ch + "…").encode()) > ZALO_DESC_MAX:
+				break
+			out += ch
+	return out + "…"
+
+
 def article_body(p: Payload) -> dict:
 	"""Yêu cầu tạo bài viết OA (thuần). Link theo dõi nằm trong nội dung và tracking_link (để đối chiếu)."""
 	text = p.message()
 	body = [{"type": "text", "content": text}]
 	body += [{"type": "image", "url": u} for u in p.images[1:]]
-	desc = (p.caption or "").strip().replace("\n", " ")
-	if len(desc) > ZALO_DESC_MAX:
-		desc = desc[: ZALO_DESC_MAX - 1].rstrip() + "…"
+	desc = short_description(p.caption)
 	return {
 		"type": "normal",
 		"title": p.title,

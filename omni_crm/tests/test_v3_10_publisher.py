@@ -515,6 +515,14 @@ class TestZaloAdapter(FrappeTestCase):
 		self.assertEqual(body["body"][1], {"type": "image", "url": "https://x/2.jpg"})
 		self.assertEqual(body["tracking_link"], "https://yhct.miyano.com.vn/spd/?utm_source=zalo")
 
+	def test_description_fits_300_bytes(self):
+		desc = zalo.short_description("Hệ thống quản lý vật tư y tế cho bệnh viện và nhà thầu " * 20)
+		self.assertLessEqual(len(desc.encode()), 300)
+		self.assertTrue(desc.endswith("…"))
+		self.assertNotIn("  ", desc)
+		self.assertEqual(zalo.short_description("Ngắn\ngọn"), "Ngắn gọn")
+		self.assertLessEqual(len(zalo.short_description("ế" * 400).encode()), 300)
+
 	def test_poll_until_article_id(self):
 		fake = FakeZaloClient([{"token": "tk"}, {"status": "processing"}, {"article_id": "art-1"}])
 		with mock.patch.object(zalo, "_client", return_value=fake):
