@@ -122,7 +122,17 @@
   "col_content_posts",
   "content_metrics_enabled",
   "content_reach_metric",
-  "content_clicks_metric"
+  "content_clicks_metric",
+  "sec_s3_media",
+  "s3_media_enabled",
+  "s3_endpoint_url",
+  "s3_bucket",
+  "s3_prefix",
+  "col_s3_media",
+  "s3_access_key",
+  "s3_secret_key",
+  "s3_region",
+  "s3_verify_tls"
  ],
  "fields": [
   {
@@ -839,6 +849,65 @@
    "fieldtype": "Data",
    "label": "Chỉ số Meta cho lượt bấm link",
    "default": "post_clicks_by_type"
+  },
+  {
+   "fieldname": "sec_s3_media",
+   "fieldtype": "Section Break",
+   "label": "Kho ảnh S3 (MinIO, ADR 0030)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "s3_media_enabled",
+   "fieldtype": "Check",
+   "label": "Lưu ảnh bài đăng trên kho S3",
+   "default": "0",
+   "description": "Bật thì ảnh bài đăng mới tải lên được chuyển sang kho S3 (MinIO) và xóa khỏi đĩa máy chủ CRM; ảnh cũ được chuyển dần mỗi giờ. Bấm Kiểm kho ảnh S3 trước khi bật."
+  },
+  {
+   "fieldname": "s3_endpoint_url",
+   "fieldtype": "Data",
+   "label": "Endpoint S3",
+   "description": "Ví dụ https://minio.miyano.local:9000 (máy chủ CRM phải gọi được)."
+  },
+  {
+   "fieldname": "s3_bucket",
+   "fieldtype": "Data",
+   "label": "Bucket",
+   "description": "Ví dụ crm-media. IT tạo bucket trước."
+  },
+  {
+   "fieldname": "s3_prefix",
+   "fieldtype": "Data",
+   "label": "Thư mục trong bucket",
+   "default": "omni-content-post/"
+  },
+  {
+   "fieldname": "col_s3_media",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "s3_access_key",
+   "fieldtype": "Data",
+   "label": "Access key",
+   "description": "Khóa riêng cho CRM, chỉ có quyền trên bucket này."
+  },
+  {
+   "fieldname": "s3_secret_key",
+   "fieldtype": "Password",
+   "label": "Secret key"
+  },
+  {
+   "fieldname": "s3_region",
+   "fieldtype": "Data",
+   "label": "Region",
+   "default": "us-east-1"
+  },
+  {
+   "fieldname": "s3_verify_tls",
+   "fieldtype": "Check",
+   "label": "Kiểm chứng chỉ TLS",
+   "default": "1",
+   "description": "Chỉ tắt khi MinIO dùng chứng chỉ tự ký trong mạng nội bộ."
   }
  ],
  "permissions": [

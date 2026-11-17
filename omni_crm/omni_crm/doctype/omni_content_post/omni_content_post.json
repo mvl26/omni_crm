@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-17 16:00:00.000000",
- "modified": "2026-11-17 16:00:00.000000",
+ "modified": "2026-11-17 18:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -141,7 +141,8 @@
   {
    "fieldname": "image",
    "fieldtype": "Attach Image",
-   "label": "Ảnh"
+   "label": "Ảnh",
+   "no_copy": 1
   },
   {
    "fieldname": "col_content",

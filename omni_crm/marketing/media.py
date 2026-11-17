@@ -1,4 +1,4 @@
-"""Đọc ảnh của bài đăng để gửi lên Meta (ADR 0029). Nhánh MinIO (ADR 0030) thêm đường đọc từ kho S3."""
+"""Đọc ảnh của bài đăng để gửi lên Meta (ADR 0029); ảnh đã chuyển sang kho S3 thì đọc từ S3 (ADR 0030)."""
 
 from __future__ import annotations
 
@@ -19,8 +19,11 @@ class MediaError(Exception):
 
 
 def is_stored_file_url(file_url: str | None) -> bool:
-	"""Ảnh là tệp đã tải lên CRM (không phải link ngoài). Nhánh MinIO thêm đường dẫn tải về của kho S3."""
-	return str(file_url or "").startswith(("/files/", "/private/files/"))
+	"""Ảnh là tệp đã tải lên CRM (trên đĩa, hoặc đã chuyển sang kho S3), không phải link ngoài."""
+	from omni_crm.marketing import s3_media
+
+	url = str(file_url or "")
+	return url.startswith(("/files/", "/private/files/")) or s3_media.is_download_url(url)
 
 
 def image_file(post: str, file_url: str):
@@ -37,7 +40,15 @@ def image_file(post: str, file_url: str):
 
 
 def read_bytes(file_doc) -> bytes:
-	"""Nội dung tệp. Nhánh MinIO thay hàm này để đọc tệp đã chuyển sang kho S3."""
+	"""Nội dung tệp: tệp đã chuyển sang kho S3 (ADR 0030) thì đọc từ S3, còn lại đọc trên đĩa."""
+	from omni_crm.marketing import s3_media
+
+	key = file_doc.get(s3_media.KEY_FIELD)
+	if key:
+		try:
+			return s3_media.get_object(key)[0]
+		except s3_media.S3Error as e:
+			raise MediaError(str(e)) from None
 	content = file_doc.get_content()
 	return content.encode() if isinstance(content, str) else content
 

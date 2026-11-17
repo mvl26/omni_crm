@@ -209,6 +209,7 @@ scheduler_events = {
 		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi
 		"omni_crm.channels.meta_leads.reconcile.run",  # V2-05: bù lead Meta mà webhook bị sót
 		"omni_crm.channels.zalo.sigprobe.cleanup",  # V21-05: xóa bản ghi chẩn đoán chữ ký quá 24 giờ
+		"omni_crm.marketing.s3_media.push_pending",  # ADR 0030: đẩy lại ảnh bài đăng còn trên đĩa lên kho S3
 	],
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
 }
@@ -241,6 +242,12 @@ doc_events = {
 	},
 	"Email Queue": {
 		"after_insert": "omni_crm.crm_bridge.fast_email.on_email_queue_insert",  # thư sale gửi từ Lead/Deal đi ngay
+	},
+	"Omni Content Post": {
+		"on_change": "omni_crm.marketing.s3_media.on_post_change",  # ADR 0030: ảnh mới tải lên -> kho S3 (MinIO)
+	},
+	"File": {
+		"after_delete": "omni_crm.marketing.s3_media.on_file_delete",  # ADR 0030: xóa object S3 của ảnh đã chuyển
 	},
 	"CRM Lead": {
 		"validate": [

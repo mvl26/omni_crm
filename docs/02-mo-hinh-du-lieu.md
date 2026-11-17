@@ -411,3 +411,9 @@ D1-06 thi hành: hook `permission_query_conditions` và `has_permission` (`omni_
 - `Omni Content Pillar`: `pillar_name` (duy nhất), `enabled`, `description`. Patch `v3.seed_content_pillars` nạp 4 trụ cột khi bảng trống.
 - `Omni Campaign` thêm `objective`, `target_audience`, `landing_url`, `lead_target`, `brief`; `status` thêm Đã huỷ.
 - `CRM Lead.omni_content_post` (Link, chỉ đọc, search_index): bài đăng của lần chạm đầu, gán trong `crm_bridge/form_lead.py::_attribution_values` khi `utm_content` khớp mã bài, và gán bù khi tạo bài sau (`marketing/attribution.py::relink_post`).
+
+## ADR 0030 · Ảnh bài đăng trên kho S3
+
+- `File.omni_s3_key` (Custom Field, chỉ đọc): khóa object trên kho S3 của ảnh bài đăng đã chuyển khỏi đĩa. File đó có `file_url` = `/api/method/omni_crm.api.media.post_image?file=<File>` và `content_hash` rỗng (để Frappe không gộp tệp mới trùng nội dung vào tệp không còn trên đĩa).
+- `Omni Content Post.image` thêm `no_copy`.
+- `Omni Settings`: mục "Kho ảnh S3 (MinIO, ADR 0030)", xem docs/09.

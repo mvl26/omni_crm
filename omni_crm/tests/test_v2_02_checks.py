@@ -109,6 +109,8 @@ EXPECTED_WHITELISTED = {
 		"resolve_uncertain",
 		"calendar_events",
 	},
+	# ADR 0030: ảnh bài đăng trên kho S3, chỉ trả cho người đọc được bài; kiểm kho chỉ Omni Admin/System Manager
+	"api/media.py": {"post_image", "check_storage"},
 	"identity/duplicates.py": {"dismiss", "merge"},
 	"api/lead_contact.py": {
 		"state",
