@@ -59,7 +59,7 @@ Không đưa `auto-imports.d.ts`, `components.d.ts` hay thư mục build vào pa
 
 Worktree phải nằm ở `<bench>/worktrees/<tên>`: `src/socket.js` của crm đọc `../../../../sites/common_site_config.json`, đặt chỗ khác thì `vite build` báo "Could not resolve" (lỗi môi trường, không phải lỗi patch). vitest không cần điều này.
 
-Số test hiện tại (`npx vitest run`, 2026-11-18, Marketing Hub ADR 0031): **11 tệp, 275 test** (2026-11-13, sửa realtime phòng `doc:`: 10 tệp, 263 test) (ADR 0027 đợt 2: 10 tệp, 255 test; ADR 0027: 10 tệp, 238 test; ADR 0026: 10 tệp, 207 test; ADR 0023: 10 tệp, 192 test; trước tab Messenger: 9 tệp, 167 test).
+Số test hiện tại (`npx vitest run`, 2026-11-18, 0001 + 0002 Marketing Hub ADR 0031): **11 tệp, 275 test** (chỉ 0001, 2026-11-13, sửa realtime phòng `doc:`: 10 tệp, 263 test) (ADR 0027 đợt 2: 10 tệp, 255 test; ADR 0027: 10 tệp, 238 test; ADR 0026: 10 tệp, 207 test; ADR 0023: 10 tệp, 192 test; trước tab Messenger: 9 tệp, 167 test).
 
 ## Nhắn từ trang Zalo OA
 
@@ -102,13 +102,20 @@ Tab **Messenger** cạnh tab Zalo trên trang Lead và Deal, chỉ hiện khi `o
 17. (ADR 0027 đợt 2) Có hai khách Messenger thử nghiệm (Lead A, Lead B, B còn trong 24 giờ). Ở Lead A, ⋯ trên một tin sale đã gửi (chữ, ảnh hoặc ghi âm) có **Chuyển tiếp**; ⋯ trên tin của khách KHÔNG có. Bấm: hộp thoại liệt kê khách khác, gõ một phần tên B thì lọc; khách ngoài 24 giờ hiện lý do và không bấm được. Chọn B, đọc hộp hỏi, OK: "Đã chuyển tiếp", hộp thoại đóng; khách B nhận tin trên Messenger như tin mới từ Page; mở Lead B: bong bóng bên phải có nhãn "Đã chuyển tiếp" (tệp nằm trong tab Đính kèm của Lead B). Hủy ở hộp hỏi: không gửi gì.
 18. (Realtime, 2026-11-13) Mở cùng một Lead ở hai tab trình duyệt (tốt hơn: thêm một người dùng KHÔNG phải người phụ trách hay người được giao), cả hai đang ở tab **Messenger**: khách nhắn tin mới trên Messenger thì bong bóng hiện trong vài giây ở cả hai tab, KHÔNG cần F5. Lặp lại với một Lead CHƯA có người phụ trách, và trên trang Deal của Lead đó. Khách nhắn Zalo: tab **Zalo** cập nhật trong vài giây (trang Lead và trang Deal). Email mới tới Lead / Deal: khung hoạt động / tab Email cập nhật không cần F5. Đóng tab Messenger, mở tab Email: email mới vẫn hiện ngay (trang không rời phòng Lead). Tắt mạng vài giây rồi bật lại (socket kết nối lại): tin mới vẫn hiện ngay. Trên site thử, dừng realtime (`node-socketio`): tab Messenger vẫn tự tải lại sau tối đa 30 giây khi tab trình duyệt đang hiện.
 
-## Marketing Hub (ADR 0031)
+## Marketing Hub (ADR 0031): patch riêng `0002-marketing-hub.patch`
 
-Nhóm menu **Marketing** ở thanh bên (Chiến dịch, Lịch đăng content, Báo cáo marketing), mục **Mạng xã hội** (nhóm Tích hợp) và nhóm **Marketing** (Đăng bài & kho ảnh, Nội dung) trong cửa sổ Thiết lập, mục **Marketing** đầu cột bên trang Lead. Mọi thứ chỉ hiện khi `omni_crm.api.marketing_ui.ui_state` trả `enabled` (người dùng đọc được Omni Campaign); không có omni_crm hoặc bản omni_crm cũ thì ẩn, CRM chạy như cũ.
+Phần Marketing tách khỏi `0001` để không đụng giao diện đang chạy: `0001-zalo-tab.patch`, `apply.sh`, `build.sh` giữ nguyên như production; `0002` là `git diff` tính từ crm v1.73.0 **đã áp 0001**, áp bằng `apply-marketing.sh`.
 
-- Tệp mới: `pages/MarketingCampaigns.vue`, `pages/MarketingCalendar.vue`, `pages/MarketingReport.vue`, `components/Marketing/PostDialog.vue` (hộp soạn bài dùng chung), `components/Marketing/CampaignDialog.vue`, `components/Marketing/LeadMarketingSection.vue`, `components/Settings/MarketingSocialSettings.vue`, `components/Settings/MarketingPublishSettings.vue`, `components/Settings/MarketingContentSettings.vue`, `composables/marketing.js`, `utils/marketing.js` (hàm thuần: lưới tháng, nút theo trạng thái, mã bài, định dạng) và `tests/unit/marketing.test.js`.
-- Tệp crm bị sửa thêm (ngoài 6 tệp cũ): `router.js` (3 route `/marketing/*`), `components/Layouts/AppSidebar.vue` (nhóm Marketing), `components/Settings/Settings.vue` (mục Thiết lập). `pages/Lead.vue` thêm một dòng `<LeadMarketingSection>`.
-- Trạng thái bài chỉ đổi qua `omni_crm.api.content_posts.*` (Lên lịch, Huỷ lịch, Huỷ bài, Mở lại, Đã kiểm Page); luật nút ở `postActions` khớp máy chủ. Bài Đang đăng, Đã đăng, Cần kiểm khoá các ô nội dung như máy chủ. Link (bài, trang đích) chỉ thành liên kết khi là http(s) (`safeUrl`).
-- Thiết lập Đăng bài & kho ảnh và Mạng xã hội chỉ Omni Admin, System Manager thấy và sửa; secret key S3 không bao giờ gửi về trình duyệt (chỉ báo "đã có").
-- Không làm phần AI của nguyên mẫu (soạn kế hoạch, chấm điểm, Kho tri thức) và không có bước duyệt (ADR 0029).
+```bash
+cd <bench>/apps/omni_crm/omni_crm/crm_frontend_patch
+./apply.sh                    # 0001 (production đã có thì in "đã được áp từ trước")
+./apply-marketing.sh --check  # chỉ kiểm
+./apply-marketing.sh          # áp 0002 chồng lên 0001
+./build.sh
+```
 
+- `apply-marketing.sh` từ chối khi crm khác `CRM_VERSION` hoặc khi 0001 chưa áp; idempotent; `--revert` chỉ gỡ 0002 (0001 giữ nguyên). Gỡ cả hai: `./apply-marketing.sh --revert` TRƯỚC rồi `./apply.sh --revert`. Đã thử: có 0002 thì `apply.sh` vẫn nhận ra 0001 đã áp và gỡ được 0001 (hai patch không chồng ngữ cảnh).
+- Nội dung: nhóm menu **Marketing** ở thanh bên (Chiến dịch, Lịch đăng content, Báo cáo marketing), mục **Mạng xã hội** (nhóm Tích hợp) và nhóm **Marketing** (Đăng bài & kho ảnh, Nội dung) trong cửa sổ Thiết lập, mục **Marketing** đầu cột bên trang Lead. Chỉ hiện khi `omni_crm.api.marketing_ui.ui_state` trả `enabled` (người dùng đọc được Omni Campaign); không có omni_crm hoặc bản omni_crm cũ thì ẩn.
+- Tệp mới: `pages/MarketingCampaigns.vue`, `pages/MarketingCalendar.vue`, `pages/MarketingReport.vue`, `components/Marketing/PostDialog.vue` (hộp soạn bài dùng chung), `components/Marketing/CampaignDialog.vue`, `components/Marketing/LeadMarketingSection.vue`, `components/Settings/MarketingSocialSettings.vue`, `components/Settings/MarketingPublishSettings.vue`, `components/Settings/MarketingContentSettings.vue`, `composables/marketing.js`, `utils/marketing.js` (hàm thuần) và `tests/unit/marketing.test.js`. Tệp crm bị sửa: `router.js`, `components/Layouts/AppSidebar.vue`, `components/Settings/Settings.vue`, và hai dòng trong `pages/Lead.vue` (đã sửa ở 0001, 0002 sửa chỗ khác).
+- Bài mới mặc định **Tự động** (18/11/2026). Trạng thái bài chỉ đổi qua `omni_crm.api.content_posts.*`; luật nút ở `postActions` khớp máy chủ; bài Đang đăng, Đã đăng, Cần kiểm khoá ô nội dung. Link chỉ thành liên kết khi là http(s) (`safeUrl`). Thiết lập Đăng bài & kho ảnh và Mạng xã hội chỉ Omni Admin, System Manager; secret key S3 không gửi về trình duyệt.
+- Không làm phần AI của nguyên mẫu và không có bước duyệt (ADR 0029).

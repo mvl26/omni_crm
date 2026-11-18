@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-17 16:00:00.000000",
- "modified": "2026-11-17 18:00:00.000000",
+ "modified": "2026-11-18 10:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -114,10 +114,10 @@
    "fieldtype": "Select",
    "label": "Cách đăng",
    "options": "Đăng tay\nTự động",
-   "default": "Đăng tay",
+   "default": "Tự động",
    "reqd": 1,
    "in_standard_filter": 1,
-   "description": "Tự động: CRM đăng lên Page đúng giờ (chỉ Facebook, khi Omni Settings bật tự đăng). Đăng tay: đăng trên Business Suite rồi dán link bài vào mục Kết quả đăng."
+   "description": "Tự động (mặc định): CRM đăng lên Page đúng giờ (chỉ Facebook, khi Omni Settings bật tự đăng). Đăng tay: đăng trên Business Suite rồi dán link bài vào mục Kết quả đăng."
   },
   {
    "fieldname": "publish_at",

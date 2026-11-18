@@ -35,7 +35,8 @@ Chọn A1, B1.
 
 ## Hệ quả
 
-- `0001-zalo-tab.patch` thêm 3 tệp crm bị sửa (`router.js`, `components/Layouts/AppSidebar.vue`, `components/Settings/Settings.vue`) ngoài 6 tệp cũ. Nâng cấp crm phải tạo lại patch như ADR 0016.
-- Triển khai cần `apply.sh` (bản patch mới) và `build.sh` ngoài giờ làm việc; Desk vẫn dùng được song song.
+- Phần Marketing là patch riêng `0002-marketing-hub.patch`, áp chồng lên `0001` bằng `apply-marketing.sh` (người phụ trách 18/11/2026: không đẩy lại giao diện đang chạy để tránh xung đột). `0001`, `apply.sh`, `build.sh` giữ nguyên như production. 0002 sửa thêm 3 tệp crm (`router.js`, `components/Layouts/AppSidebar.vue`, `components/Settings/Settings.vue`) và hai dòng ở `Lead.vue`. Nâng cấp crm phải tạo lại cả hai patch như ADR 0016.
+- Triển khai: `apply-marketing.sh` rồi `build.sh` ngoài giờ làm việc, không cần gỡ 0001; Desk vẫn dùng được song song.
+- Bài mới mặc định Tự động; tự đăng bật sẵn khi triển khai (patch `v3.enable_content_publish`, xem ADR 0029).
 - Không làm: phần AI và Kho tri thức của nguyên mẫu; cột "Chiến dịch nguồn" ở danh sách Lead (người dùng tự thêm cột trong `/crm`).
 - `tests/test_v2_02_checks.py` thêm các hàm của `api/marketing_ui.py`.

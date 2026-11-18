@@ -678,21 +678,6 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 			"frontend/src/composables/messenger.js",  # ADR 0023
 			"frontend/src/utils/messengerThread.js",  # ADR 0023
 			"frontend/tests/unit/messengerThread.test.js",  # ADR 0023
-			"frontend/src/router.js",  # ADR 0031: 3 route /marketing/*
-			"frontend/src/components/Layouts/AppSidebar.vue",  # ADR 0031: nhóm menu Marketing
-			"frontend/src/components/Settings/Settings.vue",  # ADR 0031: mục Thiết lập Marketing
-			"frontend/src/pages/MarketingCampaigns.vue",  # ADR 0031
-			"frontend/src/pages/MarketingCalendar.vue",  # ADR 0031
-			"frontend/src/pages/MarketingReport.vue",  # ADR 0031
-			"frontend/src/components/Marketing/PostDialog.vue",  # ADR 0031
-			"frontend/src/components/Marketing/CampaignDialog.vue",  # ADR 0031
-			"frontend/src/components/Marketing/LeadMarketingSection.vue",  # ADR 0031: mục Marketing trang Lead
-			"frontend/src/components/Settings/MarketingSocialSettings.vue",  # ADR 0031
-			"frontend/src/components/Settings/MarketingPublishSettings.vue",  # ADR 0031
-			"frontend/src/components/Settings/MarketingContentSettings.vue",  # ADR 0031
-			"frontend/src/composables/marketing.js",  # ADR 0031
-			"frontend/src/utils/marketing.js",  # ADR 0031
-			"frontend/tests/unit/marketing.test.js",  # ADR 0031
 		}
 	)
 
@@ -735,6 +720,45 @@ class TestCrmFrontendPatchFiles(BridgeTestCase):
 		self.assertEqual(len(pin[1]), 40)
 		for name in ("apply.sh", "build.sh"):
 			self.assertTrue(os.access(self.dir / name, os.X_OK), name)
+
+	def test_marketing_patch_is_separate_and_minimal(self):
+		"""ADR 0031: phần Marketing nằm ở 0002 (áp chồng lên 0001 bằng apply-marketing.sh), 0001 không chứa tệp Marketing."""
+		import os
+		import re
+
+		marketing = (self.dir / "0002-marketing-hub.patch").read_text(encoding="utf-8")
+		files = set(re.findall(r"^diff --git a/(\S+) b/", marketing, flags=re.M))
+		self.assertEqual(files, self.MARKETING_ALLOWED)
+		self.assertFalse(
+			files
+			& set(re.findall(r"^diff --git a/(\S+) b/", self.patch, flags=re.M))
+			- {"frontend/src/pages/Lead.vue"}
+		)
+		added = "\n".join(line for line in marketing.splitlines() if line.startswith("+"))
+		for bad in ("v-html", "innerHTML", "eval(", "document.write"):
+			self.assertNotIn(bad, added)
+		self.assertTrue(os.access(self.dir / "apply-marketing.sh", os.X_OK))
+
+	MARKETING_ALLOWED = frozenset(
+		{
+			"frontend/src/router.js",  # 3 route /marketing/*
+			"frontend/src/components/Layouts/AppSidebar.vue",  # nhóm menu Marketing
+			"frontend/src/components/Settings/Settings.vue",  # mục Thiết lập Marketing
+			"frontend/src/pages/Lead.vue",  # một dòng <LeadMarketingSection>
+			"frontend/src/pages/MarketingCampaigns.vue",
+			"frontend/src/pages/MarketingCalendar.vue",
+			"frontend/src/pages/MarketingReport.vue",
+			"frontend/src/components/Marketing/PostDialog.vue",
+			"frontend/src/components/Marketing/CampaignDialog.vue",
+			"frontend/src/components/Marketing/LeadMarketingSection.vue",
+			"frontend/src/components/Settings/MarketingSocialSettings.vue",
+			"frontend/src/components/Settings/MarketingPublishSettings.vue",
+			"frontend/src/components/Settings/MarketingContentSettings.vue",
+			"frontend/src/composables/marketing.js",
+			"frontend/src/utils/marketing.js",
+			"frontend/tests/unit/marketing.test.js",
+		}
+	)
 
 	def test_compose_exposes_max_chars(self):
 		self.assertEqual(zalo_tab._compose({}, False)["max_chars"], outbound.MAX_TEXT_CHARS)

@@ -54,7 +54,7 @@ Chọn A1, B2, C1, D2, E1.
 
 ## Hệ quả
 
-- Mặc định phát hành: `content_publish_enabled = 0`, `content_metrics_enabled = 0`. Bật chỉ khi lần thử `spd/docs/24` ĐẠT (hoặc Meta đã duyệt quyền) và token của kênh có `pages_manage_posts`, `pages_read_engagement` (chỉ số cần thêm `read_insights`). Token thử 4 quyền không dùng cho kênh đang chạy.
+- Mặc định phát hành: `content_publish_enabled = 0`, `content_metrics_enabled = 0`. **Đổi ngày 18/11/2026** theo yêu cầu người phụ trách: patch `v3.enable_content_publish` bật `content_publish_enabled` và chọn kênh Meta Messenger duy nhất có Page ID khi triển khai; `publish_mode` mặc định Tự động. Khi token chưa có quyền, bài Tự động đến giờ chuyển Lỗi kèm mã Meta, không đăng gì. Bật chỉ khi lần thử `spd/docs/24` ĐẠT (hoặc Meta đã duyệt quyền) và token của kênh có `pages_manage_posts`, `pages_read_engagement` (chỉ số cần thêm `read_insights`). Token thử 4 quyền không dùng cho kênh đang chạy.
 - Không có người duyệt: một người có vai trò Sales Manager lên lịch nhầm bài thì bài vẫn lên Page. Kiểm soát còn lại: công tắc chung, trạng thái phải là Đã lên lịch, cửa sổ đăng muộn, lịch sử sửa (`track_changes`).
 - Tên chỉ số insights của Meta đổi theo phiên bản Graph. Mặc định `post_impressions_unique` **[Chưa xác nhận]** với Graph v23; chỉ số nào lỗi thì ghi vào `last_error` của bài, các số khác vẫn lưu.
 - Ảnh lưu như File riêng tư của Frappe. Lưu ảnh trên MinIO là ADR 0030, nhánh `feat/marketing-hub-minio`.

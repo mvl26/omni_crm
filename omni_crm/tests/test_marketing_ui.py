@@ -16,6 +16,7 @@ from omni_crm.tests.test_marketing_hub import (
 	SALES,
 	_delete_all,
 	make_campaign,
+	make_channel,
 	make_lead,
 	make_post,
 	make_users,
@@ -190,3 +191,27 @@ class TestLeadSection(UICase):
 		frappe.set_user("Guest")
 		with self.assertRaises(frappe.PermissionError):
 			ui.lead_marketing(lead)
+
+
+class TestEnablePublishPatch(UICase):
+	def test_turns_on_and_picks_the_only_page_channel(self):
+		from omni_crm.patches.v3 import enable_content_publish as patch
+
+		make_channel()  # kênh Meta Messenger đang bật, có Page ID
+		frappe.db.set_single_value(
+			"Omni Settings", {"content_publish_enabled": 0, "content_publish_channel": ""}
+		)
+		frappe.db.commit()
+		page_channels = frappe.get_all(
+			"Omni Channel",
+			filters={"channel_type": "Meta Messenger", "enabled": 1, "meta_page_id": ["is", "set"]},
+			pluck="name",
+		)
+		patch.execute()
+		s = frappe.get_single("Omni Settings")
+		self.assertEqual(s.content_publish_enabled, 1)
+		self.assertEqual(s.content_publish_channel or "", page_channels[0] if len(page_channels) == 1 else "")
+		# đã có kênh thì không đổi
+		frappe.db.set_single_value("Omni Settings", "content_publish_channel", "kenh-khac")
+		patch.execute()
+		self.assertEqual(frappe.db.get_single_value("Omni Settings", "content_publish_channel"), "kenh-khac")
