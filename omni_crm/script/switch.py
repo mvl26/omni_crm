@@ -35,3 +35,32 @@ def enabled_for(identity: str | None) -> bool:
 	if not identity:
 		return False
 	return bool(cint(setting("script_bot_enabled"))) or is_test(identity)
+
+
+FAST_CHANNEL = "Zalo OA"
+TYPED_DEBOUNCE_MAX = 1  # giây chờ gom tin gõ khi bot kịch bản trả lời (bấm nút: không chờ)
+
+
+def fast_debounce(identity_key: str) -> int | None:
+	"""Giây chờ gom tin cho định danh đang chạy bot kịch bản: 0 nếu mọi tin đang chờ là bấm nút (`#MÃ`), tối đa
+	`TYPED_DEBOUNCE_MAX` với tin gõ; None = dùng `debounce_seconds` chung (kênh khác, bot kịch bản không chạy, lỗi).
+	"""
+	try:
+		rows = frappe.get_all(
+			"Omni Inbound Message",
+			filters={"identity_key": identity_key, "status": ["in", ["New", "Retry"]]},
+			fields=["channel_type", "text"],
+			limit_page_length=20,
+		)
+		if not rows or any(r.channel_type != FAST_CHANNEL for r in rows):
+			return None
+		if not cint(setting("script_bot_enabled")):
+			name = frappe.db.get_value("Omni Identity", {"identity_key": identity_key}, "name")
+			if not name or not is_test(name):
+				return None
+		if all((r.text or "").strip().startswith("#") for r in rows):
+			return 0
+		base = cint(frappe.db.get_single_value("Omni Settings", "debounce_seconds") or 0)
+		return min(base, TYPED_DEBOUNCE_MAX)
+	except Exception:
+		return None

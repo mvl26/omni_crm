@@ -215,6 +215,7 @@ def post_batch_hooks(batch_id: str, lead: str | None) -> None:
 	from omni_crm.channels.zalo import phone_request
 
 	phone_request.on_batch_done(batch_id)  # V3-07: hẹn gửi thẻ xin số sau 60 giây (tự bắt lỗi)
+	reply.enqueue_reply(batch_id, lead, script_first=True)  # bot kịch bản trả lời ngay, không chờ phân tích
 	try:
 		callbacks.after_batch(batch_id)
 	finally:  # lỗi ở việc gọi lại không được làm mất lượt phân tích, và ngược lại enqueue_analyze tự bắt lỗi

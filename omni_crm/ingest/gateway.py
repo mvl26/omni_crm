@@ -88,12 +88,15 @@ def enqueue_identity(identity_key: str, *, after_commit: bool = True, job_suffix
 
 	def _enqueue() -> None:
 		try:
+			from omni_crm.script.switch import fast_debounce
+
 			frappe.enqueue(
 				WORKER_METHOD,
 				queue=queue_for_identity(identity_key),
 				job_id=job_id,
 				deduplicate=True,
 				identity_key=identity_key,
+				debounce_seconds=fast_debounce(identity_key),  # bot kịch bản: không chờ gom tin (None = mặc định)
 			)
 		except Exception:
 			# Không ghi identity_key (có thể chứa SĐT/email) và không ghi nội dung lỗi.

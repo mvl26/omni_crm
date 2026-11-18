@@ -41,6 +41,7 @@ INBOUND = "Omni Inbound Message"
 GROUP = "Omni Question Group"
 QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 JOB = "omni_crm.bot.reply.reply_batch"
+SCRIPT_FIRST_JOB = "omni_crm.bot.reply.script_first_batch"
 JOB_TIMEOUT = 600
 LOCK_WAIT_SECONDS = 100  # chờ khóa lượt tối đa (E12); nhỏ hơn timeout job RQ để job còn kịp trả "locked"
 LOCK_TTL_SECONDS = 150  # khóa tự hết nếu tiến trình chết; nhỏ hơn timeout job RQ
@@ -934,18 +935,36 @@ def _script_enabled_batch(batch_id: str) -> bool:
 		return False
 
 
-def enqueue_reply(batch_id: str, lead: str | None) -> bool:
+def script_first_batch(batch_id: str) -> str:
+	"""Job nền chạy NGAY sau khi lượt tin xử lý xong, không chờ bot phân tích: chỉ thử bot kịch bản.
+
+	Cùng khóa lượt với `reply_batch`: job trả lời (đến sau khi phân tích xong) chờ job này rồi thấy lượt đã được nhận;
+	bot kịch bản không nhận thì job đó chạy luồng cũ như trước.
+	"""
+	with _batch_lock(batch_id) as held:
+		if not held:
+			return "locked"
+		return "script" if _script_handled(batch_id) else "skipped"
+
+
+def enqueue_reply(batch_id: str, lead: str | None, *, script_first: bool = False) -> bool:
 	"""Đẩy `reply_batch` khi công tắc không Off và lượt có tin khách; lỗi enqueue không ném ra.
 
 	Gọi từ `analyze.after_analyze` (bot phân tích bật) hoặc `post_batch_hooks` (bot phân tích tắt).
+	`script_first`: đẩy `script_first_batch` (chỉ khi lượt có định danh chạy bot kịch bản), từ `post_batch_hooks`.
 	"""
-	if not lead or (flags.bot_reply_mode() == "Off" and not _script_enabled_batch(batch_id)):
+	if not lead:
+		return False
+	if script_first:
+		if not _script_enabled_batch(batch_id):
+			return False
+	elif flags.bot_reply_mode() == "Off" and not _script_enabled_batch(batch_id):
 		return False
 	try:
 		frappe.enqueue(
-			JOB,
+			SCRIPT_FIRST_JOB if script_first else JOB,
 			queue=QUEUE,
-			job_id=f"omni-reply::{batch_id}",
+			job_id=f"omni-script::{batch_id}" if script_first else f"omni-reply::{batch_id}",
 			deduplicate=True,
 			timeout=JOB_TIMEOUT,
 			batch_id=batch_id,
