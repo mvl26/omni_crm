@@ -51,7 +51,7 @@ RULE_CONFIDENCE = 1.0
 AI_KIND = "Reply"  # Omni Bot Run.kind không có loại riêng cho phân loại; lượt này thay cho lượt Reply cũ
 DEFAULT_MODEL = "claude-haiku-5-5"
 PROMPT_NAME = "script_classify"
-PROMPT_VERSION = "v1"  # ghim trong code: câu lệnh này không có trường ghim trong Omni Settings
+PROMPT_VERSION = "v2"  # ghim trong code: câu lệnh này không có trường ghim trong Omni Settings
 MAX_TEXT_CHARS = 1000
 MAX_TOKENS = 200
 DATA_OPEN, DATA_CLOSE = "<tin_khach>", "</tin_khach>"
@@ -66,6 +66,10 @@ TOOL = {
 		"properties": {
 			"code": {"type": "string", "enum": list(CODES)},
 			"confidence": {"type": "number", "minimum": 0, "maximum": 1},
+			"service": {"type": "string", "enum": ["VATTU", "PHANMEM", "SPD", "KHONG_RO"]},
+			"mat_hang": {"type": "string"},
+			"so_luong": {"type": "string"},
+			"thoi_gian": {"type": "string"},
 		},
 		"required": ["code", "confidence"],
 		"additionalProperties": False,
@@ -327,7 +331,7 @@ def build_user_message(text: str, state: dict | None = None) -> str:
 
 def _classify_ai(
 	text: str, state: dict | None, lead: str | None, identity: str | None, batch_id: str | None
-) -> tuple[str, float]:
+) -> dict:
 	prompt = load_prompt(PROMPT_NAME, PROMPT_VERSION)
 	model = frappe.get_cached_doc("Omni Settings").get("analyze_model") or DEFAULT_MODEL
 	raw = ai_client.call_tool(
@@ -343,11 +347,78 @@ def _classify_ai(
 		max_tokens=MAX_TOKENS,
 	)  # KHÔNG truyền synthetic: tin khách luôn qua cổng Q11
 	if not isinstance(raw, dict) or raw.get("code") not in CODES:
-		return UNKNOWN, 0.0
+		return _detail(UNKNOWN, 0.0)
 	confidence = raw.get("confidence")
 	if isinstance(confidence, bool) or not isinstance(confidence, int | float):
-		return UNKNOWN, 0.0
-	return raw["code"], min(max(float(confidence), 0.0), 1.0)
+		return _detail(UNKNOWN, 0.0)
+	service = raw.get("service") if raw.get("service") in SERVICES else ""
+	return _detail(raw["code"], min(max(float(confidence), 0.0), 1.0), service, slots_from(raw, text))
+
+
+DETAIL_FLAG = "omni_script_classify_detail"
+SERVICES = ("VATTU", "PHANMEM", "SPD")
+SLOT_FIELDS = {"mat_hang": "items", "so_luong": "quantity", "thoi_gian": "need_by"}  # trường AI -> câu hỏi 3b
+MAX_SLOT = 200
+
+
+def _detail(code: str, confidence: float, service: str = "", slots: dict | None = None) -> dict:
+	return {"code": code, "confidence": confidence, "service": service, "slots": slots or {}}
+
+
+def _squash(value: object) -> str:
+	return " ".join(str(value or "").split()).casefold()
+
+
+def slots_from(raw: dict, text: str) -> dict:
+	"""Thông tin khách ĐÃ nêu trong tin (mặt hàng, số lượng, thời gian) — thuần. Chỉ nhận giá trị là nguyên văn
+	một đoạn của tin khách: AI không được thêm, đổi hay suy ra con số."""
+	source = _squash(text)
+	out: dict = {}
+	for key, field in SLOT_FIELDS.items():
+		value = " ".join(str(raw.get(key) or "").split())
+		if value and len(value) <= MAX_SLOT and _squash(value) in source:
+			out[field] = value
+	return out
+
+
+RULE_NEEDS_DETAIL = ("BAOGIA", "MENU_VATTU")  # luật trúng nhưng tin dài: vẫn hỏi AI để lấy thông tin khách đã nêu
+RULE_DETAIL_MIN_WORDS = 4
+
+
+def classify_detail(
+	text: str,
+	state: dict | None = None,
+	*,
+	lead: str | None = None,
+	identity: str | None = None,
+	batch_id: str | None = None,
+) -> dict:
+	"""Như `classify` nhưng trả dict: code, confidence, service (dịch vụ khách nhắc tới) và slots (thông tin khách
+	đã nêu trong tin: items, quantity, need_by). Không bao giờ ném lỗi."""
+	hit = None
+	try:
+		hit = classify_by_rules(text, state)
+		wants_detail = (
+			bool(hit)
+			and hit[0] in RULE_NEEDS_DETAIL
+			and len(text.split()) >= RULE_DETAIL_MIN_WORDS
+			and any(ch.isdigit() for ch in text)  # có con số: nhiều khả năng khách đã nêu số lượng
+		)
+		if hit is not None and not wants_detail:
+			return _detail(*hit)
+		got = _classify_ai(text, state, lead, identity, batch_id)
+		if hit is not None:  # luật đã quyết mã: AI chỉ bổ sung dịch vụ và thông tin đã nêu
+			return _detail(hit[0], hit[1], got.get("service", ""), got.get("slots"))
+		return got
+	except Exception as e:
+		try:  # chỉ ghi loại lỗi: thông điệp lỗi có thể chứa lời khách
+			frappe.log_error(
+				title="Omni: phân loại tin kịch bản lỗi",
+				message=f"batch_id={batch_id or '-'}; loai={type(e).__name__}",
+			)
+		except Exception:
+			pass
+		return _detail(*hit) if hit else _detail(UNKNOWN, 0.0)
 
 
 def classify(
@@ -359,17 +430,6 @@ def classify(
 	batch_id: str | None = None,
 ) -> tuple[str, float]:
 	"""Phân loại tin khách gõ thành (mã trong `CODES`, confidence 0..1); không bao giờ ném lỗi, lỗi → (UNKNOWN, 0.0)."""
-	try:
-		hit = classify_by_rules(text, state)
-		if hit is not None:
-			return hit
-		return _classify_ai(text, state, lead, identity, batch_id)
-	except Exception as e:
-		try:  # chỉ ghi loại lỗi: thông điệp lỗi có thể chứa lời khách
-			frappe.log_error(
-				title="Omni: phân loại tin kịch bản lỗi",
-				message=f"batch_id={batch_id or '-'}; loai={type(e).__name__}",
-			)
-		except Exception:
-			pass
-		return UNKNOWN, 0.0
+	got = classify_detail(text, state, lead=lead, identity=identity, batch_id=batch_id)
+	frappe.flags[DETAIL_FLAG] = {**got, "batch_id": batch_id}  # bên gọi (flows/menu) đọc dịch vụ và thông tin đã nêu
+	return got["code"], got["confidence"]

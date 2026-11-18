@@ -56,7 +56,7 @@ class TestCodes(ClassifyCase):
 
 	def test_prompt_lists_every_code_and_example(self):
 		prompt = load_prompt(cl.PROMPT_NAME, cl.PROMPT_VERSION)
-		self.assertEqual(prompt.version, "v1")
+		self.assertEqual(prompt.version, "v2")
 		for code, examples in md_rows():
 			self.assertIn(f"| {code} |", prompt.text)
 			for phrase in QUOTED.findall(examples):
@@ -167,7 +167,7 @@ class TestAI(ClassifyCase):
 			BOT_RUN, filters={"batch_id": BATCH}, fields=["kind", "status", "prompt_version"]
 		)
 		self.assertEqual(
-			{(r.kind, r.status, r.prompt_version) for r in run}, {("Reply", "Success", "script_classify:v1")}
+			{(r.kind, r.status, r.prompt_version) for r in run}, {("Reply", "Success", "script_classify:v2")}
 		)
 
 	def test_model_from_settings(self):

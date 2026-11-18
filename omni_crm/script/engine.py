@@ -272,7 +272,8 @@ def _collect_known(ctx: RouteContext, cmds: list[tuple[str, str]]) -> bool:
 
 	# `branch:` đứng trước `collect` sẽ xoá câu trả lời cũ: chỉ coi là đã biết khi thông tin nằm trên Lead
 	lead_only = "branch" in names[: names.index("collect")]
-	return all(collect.known(ctx, f, lead_only=lead_only) for f in fields)
+	prefill = ctx.state.get(collect.PREFILL_KEY) or {}
+	return all(collect.known(ctx, f, lead_only=lead_only) or f.strip().lower() in prefill for f in fields)
 
 
 def _warn_once(name: str) -> None:
@@ -319,6 +320,7 @@ def _branch(ctx: RouteContext, arg: str, node: dict) -> None:
 	from omni_crm.script.flows import collect
 
 	collect.reset_answers(ctx.identity, branch=arg.lower() or None)
+	collect.apply_prefill(ctx)  # thông tin khách đã nêu ngay trong tin mở nhánh: ghi lại để không hỏi lại
 
 
 def _answer(ctx: RouteContext, arg: str, node: dict) -> None:

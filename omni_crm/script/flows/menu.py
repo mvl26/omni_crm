@@ -20,6 +20,8 @@ CONF_MIN = 0.6  # = classify.LOW_CONFIDENCE (dùng khi chưa có module classify
 MAX_REASK = 2  # 1.2: hỏi lại tối đa 2 lần, lần 3 chuyển nhân viên
 FLOW_KB = "kb_wait"  # ô "Câu hỏi khác": tin gõ kế tiếp trả lời bằng Kho tri thức
 CLASSIFIED_KEY = "_classified"
+DETAIL_FLAG = "omni_script_classify_detail"  # = classify.DETAIL_FLAG
+DETAIL_KEY = "_classify_detail"  # dict của classify_detail: dịch vụ và thông tin khách đã nêu trong tin
 LEAD = "CRM Lead"
 DRAFT = "Omni Bot Draft"
 IDENTITY = "Omni Identity"
@@ -33,6 +35,7 @@ NODE_NO_THANKS = "KHONG_CAMON"
 NODE_STOP = "C4_HUYDANGKY"
 NODE_ASK_EMAIL_DOCS = "HOI_EMAIL_TAILIEU"
 MAX_LABEL_TEXT = 40
+KB_AUTO_CONF = "omni_script_kb_auto_send"
 KB_CODE = "KB_ANSWER"  # script_node của tin trả lời bằng Kho tri thức
 MAX_QUESTION = 500
 # mã phân loại -> ô gửi thẳng (bảng 1.2, 2.5, C.3, C.4)
@@ -215,9 +218,13 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 			threshold = getattr(classifier, "LOW_CONFIDENCE", CONF_MIN)
 			try:
 				info = {**ctx.state, "service": engine.current_service(ctx) or ""}
+				frappe.flags.pop(DETAIL_FLAG, None)
 				code, conf = classifier.classify(
 					text, info, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id
 				)
+				detail = frappe.flags.pop(DETAIL_FLAG, None) or {}
+				if detail.get("batch_id") == ctx.batch_id and detail.get("code") == code:
+					ctx.state[DETAIL_KEY] = detail
 				conf = float(conf or 0)
 				result = (str(code or UNCLEAR).upper(), conf) if conf >= threshold else (UNCLEAR, conf)
 			except Exception as e:  # nội dung khách không vào log
@@ -233,6 +240,8 @@ def route(ctx: RouteContext, code: str) -> None:
 	if code == "PHAN_NAN":  # C.2: khách phàn nàn thì tự chuyển nhân viên
 		state.reset_reask(ctx.identity)
 		auto_handoff(ctx, "REASON_COMPLAINT")
+	elif _quote_with_details(ctx, code):
+		return
 	elif code in DIRECT:
 		state.reset_reask(ctx.identity)
 		go(ctx, DIRECT[code])
@@ -259,6 +268,32 @@ def route(ctx: RouteContext, code: str) -> None:
 			engine.fallback(ctx, "C4_XOADULIEU", "TUAN_THU")
 	else:
 		reask(ctx)
+
+
+QUOTE_SERVICE_NODE = {"VATTU": "BAOGIA_VATTU", "PHANMEM": "BAOGIA_PHANMEM", "SPD": "BAOGIA_SPD"}
+
+
+def _quote_with_details(ctx: RouteContext, code: str) -> bool:
+	"""Khách gõ nhu cầu kèm thông tin ("đặt 30 cái bơm kim tiêm"): vào thẳng nhánh báo giá của dịch vụ khách nhắc tới
+	và ghi sẵn thông tin đã nêu để bot KHÔNG hỏi lại. True nếu đã định tuyến."""
+	detail = ctx.state.get(DETAIL_KEY) or {}
+	slots = detail.get("slots") or {}
+	service = detail.get("service") or ""
+	buying = code == "BAOGIA" or (code == "MENU_VATTU" and slots.get("items") and slots.get("quantity"))
+	if not buying:
+		return False
+	if code == "MENU_VATTU":
+		service = "VATTU"
+	target = QUOTE_SERVICE_NODE.get(service)
+	if not target or not store.get_node(target):
+		return False  # không rõ dịch vụ: đi đường cũ (theo dịch vụ đang tư vấn / hỏi lại sản phẩm)
+	if service == "VATTU" and slots:
+		from omni_crm.script.flows import collect
+
+		ctx.state[collect.PREFILL_KEY] = dict(slots)
+	state.reset_reask(ctx.identity)
+	go(ctx, target)
+	return True
 
 
 def go(ctx: RouteContext, code: str) -> None:
@@ -380,6 +415,8 @@ def answer_kb(ctx: RouteContext) -> None:
 def _kb_auto_send(ctx: RouteContext, res: dict) -> bool:
 	"""Câu Kho tri thức được bot tự gửi: khách thử (công tắc riêng) hoặc nhóm đang Auto, và qua các chốt chặn chung."""
 	allowed = bool(switch.is_test(ctx.identity) and cint(switch.setting("script_auto_send_kb_for_test")))
+	# bật cho mọi khách: khóa ngoài DB `omni_script_kb_auto_send` trong site_config (các chốt chặn bên dưới vẫn áp)
+	allowed = allowed or bool(cint(frappe.conf.get(KB_AUTO_CONF) or 0))
 	if not allowed and not flags.group_auto_send(res.get("group")):
 		return False
 	flags_ = [f.strip() for f in str(res.get("flags") or "").splitlines() if f.strip()]

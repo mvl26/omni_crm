@@ -55,6 +55,9 @@ _NAME_SPLIT = re.compile(r"\s*[,;\n]\s*|\s+[-–]\s+")  # noqa: RUF001 (gạch n
 
 
 FORCE_MARK = "!"
+PREFILL_KEY = "_prefill"  # ctx.state: thông tin khách đã nêu trong tin (items, quantity, need_by)
+PREFILL_FIELDS = ("items", "quantity", "need_by")
+EXTRACT_FROM = "items"  # câu trả lời mặt hàng hay kèm luôn số lượng / thời gian
 FORCED_NODES = ("NL_DOIEMAIL", "NL_BG_DOIEMAIL")  # "Đổi email khác": luôn hỏi email mới dù Lead đã có
 OWN_TASK_KINDS = ("docs", "quote", "resend_docs", "resend_quote")
 LEAVE_CODES = (
@@ -146,6 +149,25 @@ def after_skip(ctx: RouteContext, field: str, node: dict, rest: list) -> bool | 
 	return True
 
 
+def apply_prefill(ctx: RouteContext) -> None:
+	"""Ghi thông tin khách đã nêu trong tin (`ctx.state[PREFILL_KEY]`) thành câu trả lời của nhánh vừa mở."""
+	for field, value in (ctx.state.get(PREFILL_KEY) or {}).items():
+		if field in PREFILL_FIELDS and str(value or "").strip():
+			save_answer(ctx, field, str(value), typed=True)
+
+
+def _more_from_answer(ctx: RouteContext, text: str) -> dict:
+	"""Khách trả lời câu hỏi mặt hàng kèm luôn số lượng / thời gian ("bơm 5ml 10 hộp"): lấy phần đã nêu. Lỗi → {}."""
+	try:
+		from omni_crm.script import classify
+
+		got = classify.classify_detail(text, ctx.state, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id)
+		slots = got.get("slots") or {}
+		return {f: v for f, v in slots.items() if f in PREFILL_FIELDS and f != EXTRACT_FROM}
+	except Exception:
+		return {}
+
+
 def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) -> None:
 	"""Lưu câu trả lời (nút bấm hoặc khách gõ) vào `script_state.answers`; khách đã trả lời nên thôi chờ câu đó."""
 	field = field.strip().lower()
@@ -220,6 +242,9 @@ def on_text(ctx: RouteContext) -> bool:
 		if ctx.attachments:
 			remember_files(ctx)
 		save_answer(ctx, field, value, typed=True)
+		if field == EXTRACT_FROM and st.get("branch") == "3b" and text:
+			for extra, extra_value in _more_from_answer(ctx, text).items():
+				save_answer(ctx, extra, extra_value, typed=True)
 		_advance(ctx, st, node)
 	state.reset_reask(ctx.identity)
 	if _bot_mark(ctx) == before and not engine.script_state(ctx).get("flow"):
