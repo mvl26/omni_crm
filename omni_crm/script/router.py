@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -113,6 +114,9 @@ def find_handler(ctx: RouteContext) -> Handler | None:
 	return _handlers.get(DEFAULT_KEY)
 
 
+CHOICE_NUMBER = re.compile(r"(?:số\s*)?(\d{1,2})[.)]?")
+
+
 def payload_code(text: str | None, known: set[str] | None = None) -> str | None:
 	"""Mã nút trong tin khách: `#CODE` có trong danh sách mã (ô kịch bản + handler + mã đặc biệt), hoặc gõ "menu"."""
 	raw = (text or "").strip()
@@ -125,6 +129,32 @@ def payload_code(text: str | None, known: set[str] | None = None) -> str | None:
 		return MENU_CODE
 	codes = known if known is not None else store.known_codes() | set(_handlers) | SPECIAL_CODES
 	return code if code in codes else None
+
+
+def typed_choice(text: str | None, st: dict | None) -> str | None:
+	"""Mã nút khi khách GÕ thay vì bấm (Zalo máy tính không hiện nút): số thứ tự trong danh sách của tin bot
+	gần nhất, hoặc gõ lại đúng nhãn nút. Chỉ xét tin ngắn khớp trọn; không khớp thì None (đi đường hiểu ý như cũ).
+	"""
+	choices = ((st or {}).get("script_state") or {}).get("choices") or {}
+	items = choices.get("items") or []
+	raw = " ".join((text or "").split()).strip().lower()
+	if not items or not raw or len(raw) > 60:
+		return None
+	target = None
+	m = CHOICE_NUMBER.fullmatch(raw)
+	if m and choices.get("numbered"):
+		index = int(m.group(1)) - 1
+		target = items[index][1] if 0 <= index < len(items) else None
+	else:
+		target = next((t for label, t in items if str(label).strip().lower() == raw.rstrip(".")), None)
+	return payload_code(f"#{target}") if target else None
+
+
+def _code_of(last, st: dict) -> str | None:
+	"""Mã nút của tin cuối: bấm nút / gõ "menu", hoặc gõ số / nhãn của danh sách lựa chọn."""
+	if last.event_type != "message":
+		return None
+	return payload_code(last.text) or typed_choice(last.text, st)
 
 
 def _batch_rows(batch_id: str) -> list:
@@ -156,7 +186,7 @@ def build_context(batch_id: str) -> RouteContext | None:
 		lead=lead,
 		channel=last.channel,
 		text=text,
-		payload_code=payload_code(last.text) if last.event_type == "message" else None,
+		payload_code=_code_of(last, st),
 		attachments=attachments,
 		is_first_contact=not st.get("script_greeted_at"),
 		state=st,

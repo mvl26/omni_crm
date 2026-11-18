@@ -65,3 +65,43 @@ class TestScriptFirst(FrappeTestCase):
 		old.assert_not_called()
 		with mock.patch.object(reply, "_script_handled", return_value=True):
 			self.assertEqual(reply.script_first_batch("b-none"), "script")
+
+
+class TestChoiceList(FrappeTestCase):
+	def test_numbered_list_and_typed_number(self):
+		from omni_crm.script import router, send
+
+		buttons = [{"label": "Nhận tài liệu", "target": "A"}, {"label": "Xin báo giá", "target": "B"}]
+		text, choices = send.with_choice_list("Anh/chị cần gì ạ?", buttons)
+		self.assertIn("1. Nhận tài liệu\n2. Xin báo giá", text)
+		self.assertTrue(choices["numbered"])
+		st = {"script_state": {"choices": choices}}
+		with mock.patch.object(router, "payload_code", side_effect=lambda t, known=None: t.lstrip("#")):
+			self.assertEqual(router.typed_choice("2", st), "B")
+			self.assertEqual(router.typed_choice(" Số 1. ", st), "A")
+			self.assertEqual(router.typed_choice("xin báo giá", st), "B")
+			self.assertIsNone(router.typed_choice("3", st))
+			self.assertIsNone(router.typed_choice("tôi muốn hỏi giá găng tay", st))
+			self.assertIsNone(router.typed_choice("1", {"script_state": {}}))
+
+	def test_labels_with_digits_are_not_numbered(self):
+		from omni_crm.script import router, send
+
+		buttons = [{"label": "1", "target": "X1"}, {"label": "2–5", "target": "X2"}, {"label": "Trên 5", "target": "X3"}]
+		text, choices = send.with_choice_list("Mấy cơ sở ạ?", buttons)
+		self.assertIn("• 2–5", text)
+		self.assertNotIn("1. 1", text)
+		st = {"script_state": {"choices": choices}}
+		with mock.patch.object(router, "payload_code", side_effect=lambda t, known=None: t.lstrip("#")):
+			self.assertEqual(router.typed_choice("1", st), "X1")  # khớp nhãn, không phải thứ tự
+			self.assertIsNone(router.typed_choice("3", st))
+			self.assertEqual(router.typed_choice("trên 5", st), "X3")
+
+	def test_single_button_or_too_long_keeps_text(self):
+		from omni_crm.script import send
+
+		one = [{"label": "Menu", "target": "M"}]
+		self.assertEqual(send.with_choice_list("Chào", one), ("Chào", None))
+		two = [*one, {"label": "Khác", "target": "K"}]
+		long_text = "a" * send.BUTTON_TEXT_MAX
+		self.assertEqual(send.with_choice_list(long_text, two), (long_text, None))

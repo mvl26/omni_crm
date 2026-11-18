@@ -41,7 +41,9 @@ class CollectCase(FlowCase):
 
 	def assert_no_price(self):
 		for text in self.texts():
-			self.assertIsNone(MONEY.search(text), text)
+			# danh sách lựa chọn lặp lại nhãn nút (vd khoảng giá trị "200 triệu–1 tỷ" khách tự chọn): không phải giá bot nêu
+			said = text.split("\n\n• ")[0].split("\n\n1. ")[0]
+			self.assertIsNone(MONEY.search(said), text)
 
 
 class TestBranch3a(CollectCase):

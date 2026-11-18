@@ -150,6 +150,7 @@ def _queue(
 	if buttons and len(text) > BUTTON_TEXT_MAX:  # Zalo từ chối vĩnh viễn: không xếp, để nơi gọi đi đường khác
 		_log("tin_kem_nut_qua_dai", identity, code)
 		return None
+	text, choices = with_choice_list(text, buttons)
 	if blocked_reason(identity):
 		return None
 	channel = channel_of(identity)
@@ -179,8 +180,43 @@ def _queue(
 		update_modified=False,
 	)
 	frappe.db.set_value(IDENTITY, identity, "script_last_bot_at", now_datetime(), update_modified=False)
+	_remember_choices(identity, choices)
 	frappe.db.commit()  # một tin = một đơn vị việc; job gửi chạy sau commit
 	return name
+
+
+CHOICE_MIN = 2  # từ 2 nút trở lên mới kèm danh sách lựa chọn trong phần chữ
+CHOICE_HINT_NUMBERED = "(Anh/chị bấm nút, hoặc gõ số tương ứng để chọn.)"
+CHOICE_HINT_PLAIN = "(Anh/chị bấm nút, hoặc gõ lại đúng lựa chọn.)"
+
+
+def with_choice_list(text: str, buttons: list[dict]) -> tuple[str, dict | None]:
+	"""(phần chữ kèm danh sách lựa chọn, dữ liệu lựa chọn để hiểu câu khách gõ) — thuần.
+
+	Zalo trên máy tính không hiện nút: lặp các nút thành danh sách trong phần chữ. Đánh số 1..n để khách gõ số;
+	nhãn nút đã chứa chữ số (vd "2–5", "Dưới 500") thì KHÔNG đánh số (gõ "3" sẽ không rõ là thứ tự hay số lượng),
+	chỉ liệt kê để khách gõ lại nhãn. Quá giới hạn độ dài của tin kèm nút thì giữ nguyên phần chữ.
+	"""
+	if len(buttons or []) < CHOICE_MIN:
+		return text, None
+	labels = [b["label"] for b in buttons]
+	numbered = not any(ch.isdigit() for label in labels for ch in label)
+	lines = [f"{i}. {label}" if numbered else f"• {label}" for i, label in enumerate(labels, 1)]
+	hint = CHOICE_HINT_NUMBERED if numbered else CHOICE_HINT_PLAIN
+	listed = f"{text}\n\n" + "\n".join(lines) + f"\n{hint}"
+	if len(listed) > BUTTON_TEXT_MAX:
+		return text, None
+	return listed, {"numbered": numbered, "items": [[b["label"], b["target"]] for b in buttons]}
+
+
+def _remember_choices(identity: str, choices: dict | None) -> None:
+	"""Ghi (hoặc xóa) lựa chọn của tin vừa xếp vào `script_state.choices`. Không commit, không ném lỗi."""
+	try:
+		from omni_crm.script import state
+
+		state.update_state(identity, choices=choices)
+	except Exception:
+		_log("khong_ghi_duoc_lua_chon", identity, "")
 
 
 def send_time_check(row: Any) -> tuple[bool, str]:

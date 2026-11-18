@@ -190,7 +190,7 @@ class TestSendButtons(K2Case):
 		self.assertEqual(
 			body["message"],
 			{
-				"text": "Chọn dịch vụ",
+				"text": "Chọn dịch vụ\n\n1. Vật tư\n2. SPD\n(Anh/chị bấm nút, hoặc gõ số tương ứng để chọn.)",
 				"attachment": {
 					"type": "template",
 					"payload": {
