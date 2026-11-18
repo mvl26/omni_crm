@@ -242,7 +242,7 @@ def _run(ctx: RouteContext, code: str | None, extra: dict | None, depth: int) ->
 		repeat = _repeat_count(ctx, code)
 		if repeat >= MAX_RESEND:
 			return False
-		if not send.send_node(ctx.identity, code, values):
+		if not send.send_node(ctx.identity, code, values, prefix=_ack_prefix(ctx, code, values)):
 			return False
 		router._mark(ctx.batch_id)  # đã có tin gửi khách: luồng Reply cũ không được trả lời thêm
 		state.set_node(ctx.identity, code, node["step"] or None)
@@ -251,6 +251,16 @@ def _run(ctx: RouteContext, code: str | None, extra: dict | None, depth: int) ->
 		return False
 	did = run_actions(ctx, cmds, node, depth)
 	return has_text or did
+
+
+def _ack_prefix(ctx: RouteContext, code: str, values: dict) -> str:
+	"""Câu "Miyano xác nhận thông tin…" ghép lên đầu tin sắp gửi, nếu khách vừa trả lời một câu hỏi trong lượt này."""
+	try:
+		from omni_crm.script.flows import collect
+
+		return "" if code == collect.ACK_NODE else collect.take_ack(ctx, values)
+	except Exception:
+		return ""
 
 
 def _repeat_count(ctx: RouteContext, code: str) -> int:

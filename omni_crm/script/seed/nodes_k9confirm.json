@@ -1,0 +1,15 @@
+[
+	{
+		"code": "XACNHAN_THONGTIN",
+		"title": "Xác nhận thông tin khách vừa gửi (ghép trước câu hỏi kế tiếp)",
+		"step": "3",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Dạ, Miyano xác nhận thông tin anh/chị {ten} vừa gửi: {thong_tin}.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 18/11/2026",
+		"notes": "Không gửi riêng: được ghép lên đầu tin kế tiếp của bot sau mỗi câu trả lời ở bước thu thông tin. {thong_tin} do hệ thống ghép từ câu trả lời đã lọc (ngắn, không link, không số tiền). Tắt ô này là tắt việc xác nhận."
+	}
+]

@@ -107,8 +107,13 @@ def blocked_reason(identity: str | None) -> str | None:
 	return labels.get(block_code(identity))
 
 
-def send_node(identity: str, code: str, ctx: dict | None = None, *, purpose: str = "reply") -> str | None:
-	"""Xếp tin của ô kịch bản `code` cho định danh; trả tên Omni Outbound Message hoặc None nếu không gửi."""
+def send_node(
+	identity: str, code: str, ctx: dict | None = None, *, purpose: str = "reply", prefix: str = ""
+) -> str | None:
+	"""Xếp tin của ô kịch bản `code` cho định danh; trả tên Omni Outbound Message hoặc None nếu không gửi.
+
+	`prefix`: câu ghép lên đầu tin (vd câu xác nhận thông tin khách vừa gửi); quá dài so với giới hạn thì bỏ.
+	"""
 	if not switch.enabled_for(identity):
 		return None
 	node = store.get_node(code)
@@ -116,6 +121,8 @@ def send_node(identity: str, code: str, ctx: dict | None = None, *, purpose: str
 	if not rendered:
 		return None
 	text, buttons = rendered
+	if prefix and len(prefix) + len(text) + 2 <= BUTTON_TEXT_MAX // 2:
+		text = f"{prefix}\n\n{text}"
 	return _queue(identity, text, buttons, node["code"], purpose, node_channel=node.get("channel"))
 
 

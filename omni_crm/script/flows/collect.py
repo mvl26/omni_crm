@@ -149,6 +149,63 @@ def after_skip(ctx: RouteContext, field: str, node: dict, rest: list) -> bool | 
 	return True
 
 
+ACK_KEY = "_ack"  # ctx.state: [(field, value)] khách vừa trả lời trong lượt này, chờ xác nhận lại ở tin kế tiếp
+ACK_NODE = "XACNHAN_THONGTIN"
+ACK_LABELS = {
+	"items": "mặt hàng",
+	"quantity": "số lượng",
+	"need_by": "thời gian cần hàng",
+	"substitute": "hãng thay thế",
+	"sc_items": "số mặt hàng đang quản lý",
+	"sc_users": "số người dùng",
+	"sc_sites": "số cơ sở/kho",
+	"spd_sites": "số cơ sở y tế",
+	"spd_items": "số mặt hàng",
+	"tai_lieu": "tài liệu cần nhận",
+	"name_org": "tên và đơn vị",
+	"adjust": "nội dung cần điều chỉnh",
+}  # trường không có ở đây (vd spd_value: khoảng giá trị tiền) thì không xác nhận lại
+ACK_MAX_VALUE = 80
+ACK_UNSAFE = re.compile(r"https?://|www\.|[<>{}\[\]|\\`$#@]", re.I)
+ACK_MONEY = re.compile(r"\d[\d.,]*\s*(đ|₫|vnd|vnđ|đồng|dong|nghìn|ngàn|k|triệu|trieu|tr|tỷ|tỉ|usd|\$)(?![a-zà-ỹ])", re.I)
+
+
+def ack_value(value: str | None) -> str:
+	"""Câu trả lời của khách đủ an toàn để nhắc lại trong tin bot (thuần): ngắn, một dòng, không link, không ký tự
+	lạ, không số tiền; không đạt thì trả chuỗi rỗng (bot không nhắc lại phần đó)."""
+	text = " ".join(str(value or "").split()).strip(" .;,")
+	if not text or len(text) > ACK_MAX_VALUE or ACK_UNSAFE.search(text) or ACK_MONEY.search(text):
+		return ""
+	try:
+		from omni_crm.bot import guards
+
+		if guards.guard_injection(text)[0]:  # câu giống lệnh chèn ("bỏ qua hướng dẫn…"): không nhắc lại
+			return ""
+	except Exception:
+		return ""
+	return text
+
+
+def ack_text(pairs: list) -> str:
+	"""Phần `{thong_tin}` của câu xác nhận: "mặt hàng bơm kim tiêm; số lượng 30 cái" (thuần); không có gì thì rỗng."""
+	seen: dict = {}
+	for field, value in pairs or []:
+		label, safe = ACK_LABELS.get(field), ack_value(value)
+		if label and safe:
+			seen[field] = f"{_(label)} {safe}"
+	return "; ".join(seen.values())
+
+
+def take_ack(ctx: RouteContext, values: dict) -> str:
+	"""Câu xác nhận thông tin khách vừa trả lời trong lượt (lấy từ ô `XACNHAN_THONGTIN`) rồi xoá hàng chờ; không có thì rỗng."""
+	pairs = ctx.state.pop(ACK_KEY, None)
+	summary = ack_text(pairs)
+	if not summary:
+		return ""
+	rendered = store.render(store.get_node(ACK_NODE), {**values, "identity": ctx.identity, "thong_tin": summary})
+	return rendered[0] if rendered else ""
+
+
 def apply_prefill(ctx: RouteContext) -> None:
 	"""Ghi thông tin khách đã nêu trong tin (`ctx.state[PREFILL_KEY]`) thành câu trả lời của nhánh vừa mở."""
 	for field, value in (ctx.state.get(PREFILL_KEY) or {}).items():
@@ -174,6 +231,8 @@ def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) 
 	st = engine.script_state(ctx)
 	answers = store.as_dict(st.get("answers"))
 	answers[field] = (value or "").strip()[:MAX_ANSWER]
+	if not (typed and field == "tai_lieu"):  # tên tài liệu khách tự gõ: giữ quy tắc không nhắc lại nguyên văn
+		ctx.state.setdefault(ACK_KEY, []).append((field, answers[field]))
 	values: dict = {"answers": answers}
 	if field in MIRROR_KEYS:  # flows/quote.py (K7) đọc câu trả lời báo giá ở khóa cấp trên của script_state
 		values[field] = answers[field]
