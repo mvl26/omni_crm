@@ -121,12 +121,12 @@ def set_no_bot_followup(lead: str, value: int | str | bool = 1) -> dict:
 
 
 DEMO_LENGTH_MINUTES = 30  # = flows/demo.DURATION
-CALENDAR_MAX_DAYS = 31
+CALENDAR_MAX_DAYS = 45  # lưới tháng: tối đa 6 tuần = 42 ngày
 
 
 @frappe.whitelist()
 def demo_calendar(start: str | None = None, days: int | str = 7) -> dict:
-	"""Lịch demo trong `days` ngày từ `start` (mặc định thứ Hai tuần này) cho khung lịch ở trang danh sách Lead.
+	"""Lịch demo trong `days` ngày từ `start` (mặc định thứ Hai tuần này) cho trang Lịch demo.
 
 	`items`: lịch của các Lead người dùng được đọc (có tên khách). `busy`: mọi khung đã có người đặt, chỉ có giờ
 	(không lộ khách của người khác) để nhìn là biết khung nào không còn trống.

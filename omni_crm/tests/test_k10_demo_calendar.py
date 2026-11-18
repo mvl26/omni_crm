@@ -1,4 +1,4 @@
-"""API lịch demo cho khung lịch ở trang danh sách Lead."""
+"""API lịch demo cho trang Lịch demo."""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -30,7 +30,7 @@ class TestDemoCalendar(FrappeTestCase):
 	def test_other_week_is_empty_and_days_are_capped(self):
 		got = api.demo_calendar("2031-03-10", 7)
 		self.assertFalse([i for i in got["items"] if i["lead"] == self.lead.name])
-		self.assertEqual(api.demo_calendar("2031-03-01", 999)["end"], "2031-04-01")
+		self.assertEqual(api.demo_calendar("2031-03-01", 999)["end"], "2031-04-15")
 
 	def test_default_start_is_monday(self):
 		from frappe.utils import getdate
