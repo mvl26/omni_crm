@@ -1,0 +1,384 @@
+diff --git a/frontend/src/components/DemoCalendar.vue b/frontend/src/components/DemoCalendar.vue
+new file mode 100644
+index 0000000..7187876
+--- /dev/null
++++ b/frontend/src/components/DemoCalendar.vue
+@@ -0,0 +1,358 @@
++<template>
++  <div v-if="available" class="omni-demo-cal" :class="{ 'omni-demo-cal--closed': !open }">
++    <button class="omni-demo-cal__head" type="button" @click="toggle">
++      <span class="omni-demo-cal__title">Lịch demo</span>
++      <span v-if="weekCount" class="omni-demo-cal__badge">{{ weekCount }}</span>
++      <span class="omni-demo-cal__chev">{{ open ? '▾' : '▴' }}</span>
++    </button>
++    <div v-if="open" class="omni-demo-cal__body">
++      <div class="omni-demo-cal__nav">
++        <button type="button" title="Tuần trước" @click="shift(-7)">‹</button>
++        <button type="button" class="omni-demo-cal__today" @click="goToday">
++          {{ rangeLabel }}
++        </button>
++        <button type="button" title="Tuần sau" @click="shift(7)">›</button>
++      </div>
++      <div class="omni-demo-cal__grid">
++        <div class="omni-demo-cal__corner"></div>
++        <div
++          v-for="d in days"
++          :key="d.key"
++          class="omni-demo-cal__day"
++          :class="{ 'omni-demo-cal__day--today': d.key === todayKey }"
++        >
++          {{ d.label }}
++        </div>
++        <template v-for="t in times" :key="t">
++          <div class="omni-demo-cal__time">{{ t.endsWith(':00') ? t : '' }}</div>
++          <div
++            v-for="d in days"
++            :key="d.key + t"
++            class="omni-demo-cal__cell"
++            :class="cellClass(d.key, t)"
++            :title="cellTitle(d.key, t)"
++            @click="openLead(d.key, t)"
++          ></div>
++        </template>
++      </div>
++      <div class="omni-demo-cal__legend">
++        <span><i class="omni-demo-cal__dot omni-demo-cal__dot--mine"></i>Đã đặt</span>
++        <span><i class="omni-demo-cal__dot omni-demo-cal__dot--busy"></i>Đã kín (khách khác)</span>
++      </div>
++      <div class="omni-demo-cal__list">
++        <div v-if="loading" class="omni-demo-cal__empty">Đang tải…</div>
++        <div v-else-if="!items.length" class="omni-demo-cal__empty">
++          Tuần này chưa có lịch demo.
++        </div>
++        <a
++          v-for="it in items"
++          v-else
++          :key="it.lead + it.start"
++          class="omni-demo-cal__item"
++          :href="'/crm/leads/' + it.lead"
++          @click.prevent="go(it.lead)"
++        >
++          <b>{{ itemWhen(it) }}</b>
++          <span>{{ it.title }}</span>
++          <small>{{ itemMeta(it) }}</small>
++        </a>
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import { call } from 'frappe-ui'
++import { useRouter } from 'vue-router'
++import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
++
++const METHOD = 'omni_crm.api.script.demo_calendar'
++const STORE_KEY = 'omni_demo_calendar_open'
++const DAY_NAMES = ['T2', 'T3', 'T4', 'T5', 'T6']
++const REFRESH_MS = 60000
++
++const router = useRouter()
++const available = ref(true)
++const open = ref(readOpen())
++const loading = ref(false)
++const monday = ref(mondayOf(new Date()))
++const items = ref([])
++const busy = ref([])
++let timer = null
++
++function readOpen() {
++  try {
++    return localStorage.getItem(STORE_KEY) !== '0'
++  } catch (e) {
++    return true
++  }
++}
++function pad(n) {
++  return String(n).padStart(2, '0')
++}
++function keyOf(d) {
++  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
++}
++function mondayOf(d) {
++  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate())
++  out.setDate(out.getDate() - ((out.getDay() + 6) % 7))
++  return out
++}
++function addDays(d, n) {
++  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate())
++  out.setDate(out.getDate() + n)
++  return out
++}
++
++const todayKey = keyOf(new Date())
++const days = computed(() =>
++  DAY_NAMES.map((name, i) => {
++    const d = addDays(monday.value, i)
++    return { key: keyOf(d), label: `${name} ${d.getDate()}/${d.getMonth() + 1}` }
++  }),
++)
++// 8:00 -> 17:30, mỗi khung 30 phút (giờ nghỉ trưa vẫn hiện để lưới đều)
++const times = computed(() => {
++  const out = []
++  for (let m = 8 * 60; m < 17 * 60 + 30; m += 30) {
++    out.push(`${pad(Math.floor(m / 60))}:${pad(m % 60)}`)
++  }
++  return out
++})
++const rangeLabel = computed(() => {
++  const a = monday.value
++  const b = addDays(a, 4)
++  return `${a.getDate()}/${a.getMonth() + 1} – ${b.getDate()}/${b.getMonth() + 1}`
++})
++const byStart = computed(() => {
++  const map = {}
++  for (const it of items.value) map[it.start] = it
++  return map
++})
++const busySet = computed(() => new Set(busy.value))
++const weekCount = computed(() => busy.value.length)
++
++function cellClass(day, time) {
++  const k = `${day} ${time}`
++  if (byStart.value[k]) return 'omni-demo-cal__cell--mine'
++  if (busySet.value.has(k)) return 'omni-demo-cal__cell--busy'
++  return ''
++}
++function cellTitle(day, time) {
++  const it = byStart.value[`${day} ${time}`]
++  if (it) return `${time} · ${it.title}${it.mode ? ' · ' + it.mode : ''}`
++  if (busySet.value.has(`${day} ${time}`)) return `${time} · Đã có lịch demo`
++  return ''
++}
++function openLead(day, time) {
++  const it = byStart.value[`${day} ${time}`]
++  if (it) go(it.lead)
++}
++function go(lead) {
++  router.push({ name: 'Lead', params: { leadId: lead } })
++}
++function itemWhen(it) {
++  const [date, time] = it.start.split(' ')
++  const [, m, d] = date.split('-')
++  return `${Number(d)}/${Number(m)} ${time}`
++}
++function itemMeta(it) {
++  const parts = []
++  if (it.mode) parts.push(it.mode)
++  if (it.attendees) parts.push(`${it.attendees} người`)
++  return parts.join(' · ')
++}
++
++async function load() {
++  loading.value = true
++  try {
++    const res = await call(METHOD, { start: keyOf(monday.value), days: 7 })
++    items.value = res?.items || []
++    busy.value = res?.busy || []
++  } catch (e) {
++    // app omni_crm chưa có API này (hoặc không có quyền): ẩn khung, không báo lỗi cho người dùng
++    available.value = false
++  } finally {
++    loading.value = false
++  }
++}
++function shift(n) {
++  monday.value = addDays(monday.value, n)
++  load()
++}
++function goToday() {
++  monday.value = mondayOf(new Date())
++  load()
++}
++function toggle() {
++  open.value = !open.value
++  try {
++    localStorage.setItem(STORE_KEY, open.value ? '1' : '0')
++  } catch (e) {
++    /* không lưu được cũng không sao */
++  }
++}
++
++onMounted(() => {
++  load()
++  timer = setInterval(() => {
++    if (open.value && !document.hidden) load()
++  }, REFRESH_MS)
++})
++onBeforeUnmount(() => {
++  if (timer) clearInterval(timer)
++})
++</script>
++
++<style scoped>
++.omni-demo-cal {
++  --omni-blue: #0b5cad;
++  position: fixed;
++  right: 16px;
++  bottom: 16px;
++  z-index: 20;
++  width: 348px;
++  max-width: calc(100vw - 32px);
++  background: var(--surface-white, #fff);
++  color: var(--ink-gray-9, #171717);
++  border: 1px solid var(--outline-gray-2, #e2e2e2);
++  border-radius: 12px;
++  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
++  font-size: 12px;
++  overflow: hidden;
++}
++.omni-demo-cal--closed {
++  width: 168px;
++}
++.omni-demo-cal__head {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  width: 100%;
++  padding: 9px 12px;
++  background: var(--omni-blue);
++  color: #fff;
++  font-weight: 600;
++  font-size: 13px;
++  text-align: left;
++}
++.omni-demo-cal__title {
++  flex: 1;
++}
++.omni-demo-cal__badge {
++  min-width: 20px;
++  padding: 0 6px;
++  border-radius: 10px;
++  background: #fff;
++  color: var(--omni-blue);
++  font-size: 11px;
++  text-align: center;
++}
++.omni-demo-cal__body {
++  padding: 8px 10px 10px;
++}
++.omni-demo-cal__nav {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 6px;
++}
++.omni-demo-cal__nav button {
++  padding: 2px 10px;
++  border-radius: 6px;
++  font-size: 14px;
++}
++.omni-demo-cal__nav button:hover {
++  background: var(--surface-gray-2, #f3f3f3);
++}
++.omni-demo-cal__today {
++  font-weight: 600;
++  font-size: 12px !important;
++}
++.omni-demo-cal__grid {
++  display: grid;
++  grid-template-columns: 34px repeat(5, 1fr);
++  gap: 1px;
++}
++.omni-demo-cal__day {
++  padding-bottom: 3px;
++  text-align: center;
++  font-size: 11px;
++  color: var(--ink-gray-6, #6b6b6b);
++}
++.omni-demo-cal__day--today {
++  color: var(--omni-blue);
++  font-weight: 700;
++}
++.omni-demo-cal__time {
++  height: 11px;
++  font-size: 9px;
++  line-height: 11px;
++  color: var(--ink-gray-5, #8a8a8a);
++}
++.omni-demo-cal__cell {
++  height: 11px;
++  border-radius: 2px;
++  background: var(--surface-gray-2, #f3f3f3);
++}
++.omni-demo-cal__cell--mine {
++  background: var(--omni-blue);
++  cursor: pointer;
++}
++.omni-demo-cal__cell--busy {
++  background: #9db9d6;
++}
++.omni-demo-cal__legend {
++  display: flex;
++  gap: 12px;
++  margin: 6px 0;
++  font-size: 10px;
++  color: var(--ink-gray-6, #6b6b6b);
++}
++.omni-demo-cal__dot {
++  display: inline-block;
++  width: 8px;
++  height: 8px;
++  margin-right: 4px;
++  border-radius: 2px;
++}
++.omni-demo-cal__dot--mine {
++  background: var(--omni-blue);
++}
++.omni-demo-cal__dot--busy {
++  background: #9db9d6;
++}
++.omni-demo-cal__list {
++  max-height: 132px;
++  overflow-y: auto;
++  border-top: 1px solid var(--outline-gray-1, #ededed);
++  padding-top: 6px;
++}
++.omni-demo-cal__empty {
++  padding: 6px 0;
++  color: var(--ink-gray-5, #8a8a8a);
++}
++.omni-demo-cal__item {
++  display: grid;
++  grid-template-columns: 78px 1fr;
++  column-gap: 8px;
++  padding: 4px 4px;
++  border-radius: 6px;
++}
++.omni-demo-cal__item:hover {
++  background: var(--surface-gray-2, #f3f3f3);
++}
++.omni-demo-cal__item b {
++  color: var(--omni-blue);
++  font-weight: 600;
++}
++.omni-demo-cal__item span {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++.omni-demo-cal__item small {
++  grid-column: 2;
++  color: var(--ink-gray-5, #8a8a8a);
++}
++</style>
+diff --git a/frontend/src/pages/Leads.vue b/frontend/src/pages/Leads.vue
+index 80f3ef5..6564f52 100644
+--- a/frontend/src/pages/Leads.vue
++++ b/frontend/src/pages/Leads.vue
+@@ -260,6 +260,7 @@
+     name="Leads"
+     :icon="LeadsIcon"
+   />
++  <DemoCalendar />
+   <LeadModal
+     v-if="showLeadModal"
+     v-model="showLeadModal"
+@@ -283,6 +284,7 @@ import LeadsListView from '@/components/ListViews/LeadsListView.vue'
+ import EmptyState from '@/components/ListViews/EmptyState.vue'
+ import KanbanView from '@/components/Kanban/KanbanView.vue'
+ import LeadModal from '@/components/Modals/LeadModal.vue'
++import DemoCalendar from '@/components/DemoCalendar.vue'
+ import ViewControls from '@/components/ViewControls.vue'
+ import { useDoctypeModal } from '@/composables/doctypeModal'
+ import { getMeta } from '@/stores/meta'

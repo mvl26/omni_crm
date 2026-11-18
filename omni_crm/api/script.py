@@ -118,3 +118,59 @@ def set_no_bot_followup(lead: str, value: int | str | bool = 1) -> dict:
 	"""Bật/tắt "không cho bot nhắn lại" cho Lead (bật thì hủy tin hẹn giờ đang chờ)."""
 	lead = inbox.check_lead_write(lead)
 	return lead_ui.set_no_bot_followup(lead, value)
+
+
+DEMO_LENGTH_MINUTES = 30  # = flows/demo.DURATION
+CALENDAR_MAX_DAYS = 31
+
+
+@frappe.whitelist()
+def demo_calendar(start: str | None = None, days: int | str = 7) -> dict:
+	"""Lịch demo trong `days` ngày từ `start` (mặc định thứ Hai tuần này) cho khung lịch ở trang danh sách Lead.
+
+	`items`: lịch của các Lead người dùng được đọc (có tên khách). `busy`: mọi khung đã có người đặt, chỉ có giờ
+	(không lộ khách của người khác) để nhìn là biết khung nào không còn trống.
+	"""
+	from datetime import timedelta
+
+	from frappe.utils import add_days, get_datetime, getdate, nowdate
+
+	if not frappe.has_permission(LEAD, "read"):
+		frappe.throw(_("Bạn không có quyền xem Lead"), frappe.PermissionError)
+	first = getdate(start or nowdate())
+	if not start:
+		first = add_days(first, -first.weekday())
+	span = min(max(cint(days) or 7, 1), CALENDAR_MAX_DAYS)
+	last = add_days(first, span)
+	window = {"omni_demo_at": ["between", [f"{first} 00:00:00", f"{add_days(last, -1)} 23:59:59"]]}
+	length = timedelta(minutes=DEMO_LENGTH_MINUTES)
+
+	def span_of(at) -> dict:
+		begin = get_datetime(at)
+		return {"start": begin.strftime("%Y-%m-%d %H:%M"), "end": (begin + length).strftime("%Y-%m-%d %H:%M")}
+
+	rows = frappe.get_list(
+		LEAD,
+		filters=window,
+		fields=["name", "lead_name", "organization", "omni_demo_at", "omni_demo_mode", "omni_demo_attendees"],
+		order_by="omni_demo_at asc",
+		limit_page_length=500,
+	)
+	items = [
+		{
+			**span_of(r.omni_demo_at),
+			"lead": r.name,
+			"title": r.organization or r.lead_name or r.name,
+			"mode": r.omni_demo_mode or "",
+			"attendees": cint(r.omni_demo_attendees),
+		}
+		for r in rows
+	]
+	taken = frappe.get_all(LEAD, filters=window, pluck="omni_demo_at", limit_page_length=500)
+	return {
+		"start": str(first),
+		"end": str(last),
+		"slot_minutes": DEMO_LENGTH_MINUTES,
+		"items": items,
+		"busy": sorted({span_of(at)["start"] for at in taken}),
+	}
