@@ -132,7 +132,8 @@
   "s3_access_key",
   "s3_secret_key",
   "s3_region",
-  "s3_verify_tls"
+  "s3_verify_tls",
+  "s3_ca_bundle"
  ],
  "fields": [
   {
@@ -907,7 +908,13 @@
    "fieldtype": "Check",
    "label": "Kiểm chứng chỉ TLS",
    "default": "1",
-   "description": "Chỉ tắt khi MinIO dùng chứng chỉ tự ký trong mạng nội bộ."
+   "description": "Luôn bật trên production. MinIO dùng chứng chỉ của CA nội bộ thì điền ô Tệp CA bên dưới, không tắt ô này."
+  },
+  {
+   "fieldname": "s3_ca_bundle",
+   "fieldtype": "Data",
+   "label": "Tệp CA trên máy chủ CRM (chứng chỉ nội bộ)",
+   "description": "Chỉ điền khi MinIO dùng chứng chỉ do CA nội bộ cấp: đường dẫn tệp PEM của CA trên máy chủ CRM, ví dụ /etc/ssl/miyano/minio-ca.crt. Chứng chỉ công khai (Let's Encrypt) thì để trống."
   }
  ],
  "permissions": [
@@ -927,5 +934,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "modified": "2026-11-17 16:00:00.000000"
+ "modified": "2026-11-18 12:00:00.000000"
 }

@@ -40,6 +40,7 @@ KEYS = (
 	"s3_access_key",
 	"s3_region",
 	"s3_verify_tls",
+	"s3_ca_bundle",
 )
 
 
@@ -218,12 +219,81 @@ class TestDownloadAndCheck(S3Case):
 		frappe.set_user("Administrator")
 
 
+class TestPullBack(S3Case):
+	"""Quay lui: kéo ảnh từ S3 về đĩa máy chủ CRM, giữ object trên S3."""
+
+	def test_dry_run_counts_only_and_refuses_while_enabled(self):
+		doc, f, local = self._post_with_image()
+		self.assertEqual(s3_media.pull_back(post=doc.name), {"files": 1, "pulled": 0, "errors": []})
+		self.assertEqual(frappe.db.get_value(POST, doc.name, "image"), s3_media.download_url(f.name))
+		with self.assertRaises(s3_media.S3Error):
+			s3_media.pull_back(dry_run=0, post=doc.name)  # còn bật lưu S3: từ chối
+
+	def test_pull_back_restores_disk_file_and_post_image(self):
+		doc, f, local = self._post_with_image()
+		key = f.get(s3_media.KEY_FIELD)
+		set_settings(s3_media_enabled=0)
+		frappe.db.commit()
+		self.assertEqual(
+			s3_media.pull_back(dry_run=0, post=doc.name), {"files": 1, "pulled": 1, "errors": []}
+		)
+		f.reload()
+		self.assertTrue(f.file_url.startswith("/private/files/td30"))
+		self.assertFalse(f.get(s3_media.KEY_FIELD))
+		with open(f.get_full_path(), "rb") as fh:
+			self.assertEqual(fh.read(), PNG)
+		self.assertEqual(frappe.db.get_value(POST, doc.name, "image"), f.file_url)
+		self.assertIn(key, self.s3.objects)  # object giữ lại, xóa tay sau khi kiểm
+		self.assertEqual(media.read_image(doc.name, f.file_url)[1], PNG)  # job đăng đọc từ đĩa
+		self.assertEqual(s3_media.pull_back(dry_run=0, post=doc.name)["files"], 0)  # chạy lại: không còn gì
+
+	def test_storage_down_reports_error_and_changes_nothing(self):
+		doc, f, local = self._post_with_image()
+		set_settings(s3_media_enabled=0)
+		frappe.db.commit()
+		self.s3.down = True
+		result = s3_media.pull_back(dry_run=0, post=doc.name)
+		self.assertEqual((result["files"], result["pulled"], len(result["errors"])), (1, 0, 1))
+		self.assertIn(f.name, result["errors"][0])
+		self.assertEqual(frappe.db.get_value("File", f.name, "file_url"), s3_media.download_url(f.name))
+
+
 class TestSettingsDefaults(FrappeTestCase):
 	def test_verify_tls_defaults_on_until_saved_off(self):
 		self.assertEqual(
 			[s3_media.verify_tls(v) for v in (None, "", "0", 0, "1", 1)],
 			[True, True, False, False, True, True],
 		)
+
+	def test_tls_verify_param_ca_bundle(self):
+		ca = frappe.get_site_path("private", "td30-ca.pem")
+		with open(ca, "w") as fh:
+			fh.write("-----BEGIN CERTIFICATE-----\n")
+		self.addCleanup(os.remove, ca)
+		self.assertIs(s3_media.tls_verify_param(None, ""), True)
+		self.assertIs(s3_media.tls_verify_param("1", "  "), True)
+		self.assertIs(s3_media.tls_verify_param("0", ca), False)
+		self.assertEqual(s3_media.tls_verify_param("1", f" {ca} "), ca)
+		with self.assertRaises(s3_media.S3Error):
+			s3_media.tls_verify_param("1", "/khong/co/ca.pem")
+
+	def test_client_passes_ca_bundle_and_missing_ca_is_clear_error(self):
+		snap = snapshot_settings(KEYS)
+		self.addCleanup(restore_settings, snap)
+		ca = frappe.get_site_path("private", "td30-ca.pem")
+		with open(ca, "w") as fh:
+			fh.write("-----BEGIN CERTIFICATE-----\n")
+		self.addCleanup(os.remove, ca)
+		set_settings(
+			s3_endpoint_url="https://minio.lan:9000", s3_bucket="crm-media", s3_verify_tls=1, s3_ca_bundle=ca
+		)
+		with mock.patch("boto3.client") as client:
+			s3_media._client()
+		self.assertEqual(client.call_args.kwargs["verify"], ca)
+		set_settings(s3_ca_bundle="/khong/co/ca.pem")
+		with self.assertRaises(s3_media.S3Error) as cm:
+			s3_media.put_object("x", b"x", "text/plain")
+		self.assertIn("/khong/co/ca.pem", str(cm.exception))
 
 	def test_check_needs_endpoint_and_bucket(self):
 		snap = snapshot_settings(KEYS)
@@ -263,7 +333,9 @@ class TestS3Real(FrappeTestCase):
 			s3_bucket=os.environ.get("OMNI_S3_TEST_BUCKET", "crm-media"),
 			s3_prefix="td30-real/",
 			s3_access_key=os.environ.get("OMNI_S3_TEST_KEY", "test"),
-			s3_verify_tls=0,
+			# OMNI_S3_TEST_CA: tệp CA nội bộ -> bật kiểm TLS như production; không có thì tắt kiểm (máy thử http)
+			s3_verify_tls=1 if os.environ.get("OMNI_S3_TEST_CA") else 0,
+			s3_ca_bundle=os.environ.get("OMNI_S3_TEST_CA", ""),
 		)
 		set_encrypted_password(
 			"Omni Settings", "Omni Settings", os.environ.get("OMNI_S3_TEST_SECRET", "test"), "s3_secret_key"
@@ -288,3 +360,18 @@ class TestS3Real(FrappeTestCase):
 		frappe.db.commit()
 		with self.assertRaises(s3_media.S3Error):
 			s3_media.get_object(key)
+
+	def test_pull_back_round_trip(self):
+		f = upload()
+		make_post("td30-b01", image=f.file_url, publish_mode="Đăng tay")
+		frappe.db.commit()
+		key = frappe.db.get_value("File", f.name, s3_media.KEY_FIELD)
+		self.assertTrue(key)
+		set_settings(s3_media_enabled=0)
+		frappe.db.commit()
+		self.assertEqual(s3_media.pull_back(dry_run=0, post="td30-b01")["pulled"], 1)
+		url = frappe.db.get_value("File", f.name, "file_url")
+		self.assertEqual(frappe.db.get_value(POST, "td30-b01", "image"), url)
+		self.assertEqual(media.read_image("td30-b01", url)[1], PNG)
+		self.assertEqual(s3_media.get_object(key)[0], PNG)  # object vẫn còn trên S3
+		s3_media.delete_object(key)

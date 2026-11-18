@@ -53,6 +53,19 @@ def is_download_url(url: str | None) -> bool:
 	return str(url or "").startswith(DOWNLOAD_PREFIX)
 
 
+def tls_verify_param(verify_value, ca_bundle) -> bool | str:
+	"""Tham số `verify` của boto3: False khi tắt kiểm TLS; đường dẫn tệp CA khi MinIO dùng chứng chỉ của CA nội bộ
+	(boto3 dùng bộ CA riêng, không đọc kho chứng chỉ của hệ điều hành); True (bộ CA công khai) khi không điền."""
+	if not verify_tls(verify_value):
+		return False
+	path = str(ca_bundle or "").strip()
+	if not path:
+		return True
+	if not os.path.isfile(path):
+		raise S3Error(_("Không thấy tệp CA {0} trên máy chủ CRM").format(path))
+	return path
+
+
 def _settings():
 	return frappe.get_single("Omni Settings")
 
@@ -69,7 +82,7 @@ def _client():
 		aws_access_key_id=(s.s3_access_key or "").strip(),
 		aws_secret_access_key=s.get_password("s3_secret_key", raise_exception=False) or "",
 		region_name=(s.s3_region or DEFAULT_REGION).strip(),
-		verify=verify_tls(s.get("s3_verify_tls")),
+		verify=tls_verify_param(s.get("s3_verify_tls"), s.get("s3_ca_bundle")),
 		config=Config(
 			signature_version="s3v4",
 			s3={"addressing_style": "path"},
@@ -86,6 +99,8 @@ def _bucket() -> str:
 
 def _wrap(action: str, exc: Exception) -> S3Error:
 	"""Lỗi boto3/botocore -> S3Error gọn: mã lỗi S3 hoặc tên lớp lỗi (không kèm secret)."""
+	if isinstance(exc, S3Error):
+		return exc  # lỗi cấu hình đã có thông điệp rõ (ví dụ thiếu tệp CA)
 	code = getattr(exc, "response", {}).get("Error", {}).get("Code") if hasattr(exc, "response") else None
 	return S3Error(_("Kho ảnh S3: {0} không được ({1})").format(action, code or type(exc).__name__))
 
@@ -204,6 +219,64 @@ def push_pending() -> None:
 			frappe.db.rollback()
 			frappe.log_error(title="Omni: chưa đẩy được ảnh bài đăng lên S3", message=f"post={row.name}")
 			return  # kho đang lỗi: dừng lượt này
+
+
+def pull_back(dry_run: int | bool = 1, limit: int = 0, post: str | None = None) -> dict:
+	"""Quay lui (ADR 0030): kéo ảnh bài đăng từ kho S3 về đĩa máy chủ CRM, trả `file_url` cũ dạng /private/files.
+
+	Dùng khi thôi dùng MinIO hoặc MinIO sắp ngừng: TẮT `s3_media_enabled` trước, rồi chạy
+	`bench --site <site> execute omni_crm.marketing.s3_media.pull_back --kwargs "{'dry_run': 0}"`.
+	Mặc định chỉ đếm (dry_run). `post`: chỉ một bài (thử trước một bài). Object trên S3 được GIỮ lại (xóa tay sau khi
+	kiểm). Lỗi một tệp thì ghi lại, làm tệp khác.
+	"""
+	# get_file_name của File luôn thêm hậu tố ngẫu nhiên
+	from frappe.core.doctype.file.utils import get_content_hash, get_file_name
+
+	filters = {KEY_FIELD: ["is", "set"], "attached_to_doctype": POST}
+	if post:
+		filters["attached_to_name"] = post
+	files = frappe.get_all(
+		"File",
+		filters=filters,
+		fields=["name", "file_name", "file_url", "attached_to_name", KEY_FIELD],
+		order_by="creation asc",
+		limit_page_length=cint(limit) or 0,
+	)
+	result = {"files": len(files), "pulled": 0, "errors": []}
+	if cint(dry_run):
+		return result
+	if enabled():
+		raise S3Error(_('Tắt "Lưu ảnh bài đăng trên kho S3" trước khi kéo ảnh về đĩa'))
+	for row in files:
+		try:
+			body, _ctype = get_object(row.get(KEY_FIELD))
+			name = get_file_name(row.file_name or f"{row.name}.bin", frappe.generate_hash(length=6))
+			path = frappe.get_site_path("private", "files", name)
+			while os.path.exists(path):  # không ghi đè tệp đang có trên đĩa
+				name = get_file_name(row.file_name or f"{row.name}.bin", frappe.generate_hash(length=6))
+				path = frappe.get_site_path("private", "files", name)
+			with open(path, "wb") as fh:
+				fh.write(body)
+			local_url = f"/private/files/{name}"
+			frappe.db.set_value(
+				"File",
+				row.name,
+				{
+					"file_url": local_url,
+					KEY_FIELD: None,
+					"content_hash": get_content_hash(body),
+					"is_private": 1,
+				},
+				update_modified=False,
+			)
+			if frappe.db.get_value(POST, row.attached_to_name, "image") == row.file_url:
+				frappe.db.set_value(POST, row.attached_to_name, "image", local_url, update_modified=False)
+			frappe.db.commit()
+			result["pulled"] += 1
+		except Exception as e:
+			frappe.db.rollback()
+			result["errors"].append(f"{row.name}: {e if isinstance(e, S3Error) else type(e).__name__}")
+	return result
 
 
 def on_file_delete(doc, method=None) -> None:

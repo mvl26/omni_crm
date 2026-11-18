@@ -31,7 +31,7 @@
 
 Chọn A1, B1, C2.
 
-- Omni Settings, mục "Kho ảnh S3 (MinIO, ADR 0030)": `s3_media_enabled` (mặc định 0), `s3_endpoint_url`, `s3_bucket`, `s3_region` (`us-east-1`), `s3_access_key`, `s3_secret_key` (Password), `s3_prefix` (`omni-content-post/`), `s3_verify_tls` (1). Nút "Kiểm kho ảnh S3" (Omni Admin) ghi, đọc, xóa một object thử.
+- Omni Settings, mục "Kho ảnh S3 (MinIO, ADR 0030)": `s3_media_enabled` (mặc định 0), `s3_endpoint_url`, `s3_bucket`, `s3_region` (`us-east-1`), `s3_access_key`, `s3_secret_key` (Password), `s3_prefix` (`omni-content-post/`), `s3_verify_tls` (1), `s3_ca_bundle` (tệp CA nội bộ trên máy chủ CRM, bổ sung 18/11/2026: boto3 không đọc kho chứng chỉ của hệ điều hành nên chứng chỉ do CA nội bộ cấp cần đường dẫn này thay vì tắt kiểm TLS). Nút "Kiểm kho ảnh S3" (Omni Admin) ghi, đọc, xóa một object thử.
 - Client boto3: chữ ký s3v4, địa chỉ kiểu path (MinIO), timeout kết nối 5 giây, đọc 30 giây, thử lại 2 lần. Không gửi tham số mã hóa phía máy chủ (Free trả 405).
 - Khóa object: `<prefix><mã bài>/<tên File><đuôi tệp>`. Custom Field `File.omni_s3_key` (chỉ đọc) giữ khóa.
 - Sau khi đẩy được: `File.file_url` và `Omni Content Post.image` đổi sang đường tải qua CRM. Bản trên đĩa bị xóa nếu không File nào khác dùng chung. Xóa File thì xóa object (`after_delete`).
@@ -50,4 +50,5 @@ Chọn A1, B1, C2.
 - MinIO phải được sao lưu riêng (bản Free một node): máy MinIO hỏng thì mất ảnh đã chuyển đi, nội dung bài vẫn còn trong CSDL.
 - Bản Free không mã hóa lúc lưu: ảnh bài đăng là ảnh công khai nên chấp nhận được. Không dùng kho này cho tệp có dữ liệu khách khi chưa có mã hóa ổ đĩa (bản đánh giá trang 12).
 - Sửa File có `file_url` dạng `/api/method/...` trong Desk sẽ bị Frappe báo "URL must start with http". Không sửa File của ảnh đã chuyển: muốn đổi ảnh thì tải ảnh mới vào bài.
-- Chưa thử với AIStor thật. Đã thử với máy chủ S3 giả lập (moto); khác biệt riêng của MinIO (path-style, TLS nội bộ) chỉ biết khi IT dựng máy.
+- Quay lui (bổ sung 18/11/2026): tắt `s3_media_enabled` rồi chạy `marketing.s3_media.pull_back` (mặc định chỉ đếm; `dry_run=0` để kéo, `post=` để thử một bài). Ảnh về `/private/files`, bài trỏ lại ảnh trên đĩa, object trên S3 được giữ để xóa tay sau khi kiểm.
+- Chưa thử với AIStor thật. Đã thử với máy chủ S3 giả lập (moto) qua boto3 thật, cả qua HTTPS với chứng chỉ do một CA thử cấp (đúng CA thì được, CA khác hoặc bỏ trống thì báo SSLError). Hướng dẫn dựng MinIO chuẩn production: `spd/docs/26`.

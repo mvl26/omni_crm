@@ -854,10 +854,10 @@ index 0000000..2281076
 +</script>
 diff --git a/frontend/src/components/Settings/MarketingPublishSettings.vue b/frontend/src/components/Settings/MarketingPublishSettings.vue
 new file mode 100644
-index 0000000..88d183c
+index 0000000..7502419
 --- /dev/null
 +++ b/frontend/src/components/Settings/MarketingPublishSettings.vue
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,184 @@
 +<template>
 +  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
 +    <div class="flex items-start justify-between gap-3 px-2">
@@ -965,10 +965,18 @@ index 0000000..88d183c
 +        <div class="flex items-center justify-between gap-4">
 +          <div class="flex flex-col">
 +            <div class="text-p-base font-medium text-ink-gray-7">{{ __('Kiểm chứng chỉ TLS') }}</div>
-+            <div class="text-p-sm text-ink-gray-5">{{ __('Chỉ tắt khi MinIO dùng chứng chỉ tự ký trong mạng nội bộ.') }}</div>
++            <div class="text-p-sm text-ink-gray-5">
++              {{ __('Luôn bật trên production. MinIO dùng chứng chỉ của CA nội bộ thì điền tệp CA bên dưới, không tắt ô này.') }}
++            </div>
 +          </div>
 +          <Switch v-model="form.s3_verify_tls" size="sm" />
 +        </div>
++        <FormControl
++          v-model="form.s3_ca_bundle"
++          :label="__('Tệp CA trên máy chủ CRM (chứng chỉ nội bộ)')"
++          :placeholder="'/etc/ssl/miyano/minio-ca.crt'"
++          :description="__('Đường dẫn tệp .crt của CA đã ký chứng chỉ MinIO. Để trống khi MinIO dùng chứng chỉ công khai.')"
++        />
 +      </section>
 +    </div>
 +  </div>

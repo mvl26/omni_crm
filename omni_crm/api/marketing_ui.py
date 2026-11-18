@@ -89,6 +89,7 @@ SETTINGS_FIELDS = (
 	"s3_access_key",
 	"s3_region",
 	"s3_verify_tls",
+	"s3_ca_bundle",
 )
 CHECK_FIELDS = {"content_publish_enabled", "content_metrics_enabled", "s3_media_enabled", "s3_verify_tls"}
 
