@@ -150,8 +150,17 @@ class TestAckFlow(FlowCase):
 		self.classify.assert_not_called()
 		self.assertEqual(self.sent()[-1], "DA_VANG")
 
-	def test_ok_at_a_choice_question_repeats_the_question(self):
+	def test_ok_at_a_menu_gets_a_short_reply_not_the_whole_menu_again(self):
 		self.greeted()
 		self.tap("MENU_SPD")
 		self.turn("ok em")
-		self.assertEqual(self.sent(), ["MENU_SPD", "MENU_SPD"])
+		self.assertEqual(self.sent(), ["MENU_SPD", "DA_VANG"])
+
+	def test_ok_means_yes_when_the_question_has_a_yes_button(self):
+		self.greeted()
+		self.tap("MENU_PHANMEM")
+		self.tap("BAOGIA_PHANMEM")
+		before = len(self.sent())
+		self.turn("ok em")
+		after = self.sent()[before:]
+		self.assertTrue(after and after[-1] not in ("DA_VANG", "REASK_CHUARO", "BAOGIA_PHANMEM"), after)

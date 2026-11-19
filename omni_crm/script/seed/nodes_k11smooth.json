@@ -37,5 +37,31 @@
 		"action": "",
 		"source_ref": "Yêu cầu 19/11/2026",
 		"notes": "Gửi khi khách đã từng nhắn chỉ gõ ok / vâng / cảm ơn và bot không còn câu hỏi nào đang chờ chọn. Tắt ô này thì bot quay về câu hỏi lại như cũ."
+	},
+	{
+		"code": "DA_VANG_NGAN",
+		"title": "Câu dẫn \"Dạ vâng ạ.\" trước khi hỏi lại câu đang dở",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ vâng ạ.",
+		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở khi khách chỉ gõ ok / vâng giữa chừng."
+	},
+	{
+		"code": "HOI_TIEP_CAUDO",
+		"title": "Câu dẫn khi quay lại câu đang hỏi dở",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, Miyano xin phép hỏi tiếp câu đang dở ạ.",
+		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở sau khi bot trả lời câu hỏi chen ngang, hoặc khi khách gửi sticker / dấu hỏi giữa chừng."
 	}
 ]

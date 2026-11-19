@@ -47,6 +47,7 @@ DECLINE = re.compile(
 	r"^\s*(dạ[\s,]+)?(không|khong|ko|hông|hong|k|thôi|thoi|bỏ qua|bo qua|để sau|de sau|no)(\s|[.,!]|$)", re.I
 )
 DECLINE_MAX_LEN = 60
+EMAIL_LIKE = re.compile(r"@|[\w-]\.[a-z]{2,}\b", re.I)  # khách có vẻ đang gõ một địa chỉ email (kể cả gõ thiếu @)
 # Khách đề nghị giảm giá / chiết khấu / giá dự thầu (3.3.1): luôn chuyển nhân viên
 DISCOUNT = re.compile(
 	r"giảm giá|giam gia|chiết khấu|chiet khau|giá dự thầu|gia du thau|bớt giá|discount", re.I
@@ -347,7 +348,8 @@ def _contact(ctx: RouteContext, st: dict, field: str, node: dict, text: str) -> 
 		return False  # khách hỏi việc khác: để bộ phân loại xử lý, câu đang hỏi vẫn giữ để hỏi tiếp sau
 	if cint(st.get("wrong")) < 1:  # 3.4: hỏi lại nhẹ nhàng đúng 1 lần
 		state.update_state(ctx.identity, wrong=1)
-		if not engine.run_node(ctx, NODE_BAD[field]):
+		attempt = bool(EMAIL_LIKE.search(text)) if field == "email" else any(ch.isdigit() for ch in text)
+		if not (attempt and engine.run_node(ctx, NODE_BAD[field])):  # không phải gõ sai: hỏi lại chính câu đó
 			engine.run_node(ctx, node.get("code") or "")
 		_restore_flow(ctx, st, wrong=1)
 		return True

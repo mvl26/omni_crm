@@ -32,6 +32,8 @@ NODE_GREETING = "GREETING"
 NODE_REASK = "REASK_CHUARO"
 NODE_REASK_CHOICE = "REASK_LUACHON"  # câu dẫn khi hỏi lại đúng câu đang hỏi
 NODE_HELLO_AGAIN = "CHAO_LAI"  # câu dẫn khi khách cũ chỉ chào
+NODE_YES = "DA_VANG_NGAN"  # câu dẫn "Dạ vâng ạ." trước khi hỏi lại câu đang dở
+NODE_BACK = "HOI_TIEP_CAUDO"  # câu dẫn khi quay lại câu đang hỏi dở
 NODE_OK = "DA_VANG"  # đáp lại "ok", "vâng", "cảm ơn"
 NODE_HANDOFF = "GAP_NHANVIEN"
 NODE_KB_NONE = "KB_CHUYENVIEN"
@@ -122,6 +124,8 @@ def on_text(ctx: RouteContext) -> None:
 			on_button(ctx)
 		return
 	handler = engine._state_handlers.get(flow)
+	if handler is not None and _side_talk(ctx, text, st):
+		return
 	if handler is not None and handler(ctx):
 		return
 	if ctx.attachments:
@@ -151,7 +155,7 @@ def on_text(ctx: RouteContext) -> None:
 		return
 	if not first and _ack_only(text):  # "ok", "vâng", "cảm ơn": đáp lời, không hỏi AI, không nói "chưa rõ ý"
 		state.reset_reask(ctx.identity)
-		if not _resend_current(ctx, NODE_REASK_CHOICE) and not engine.run_node(ctx, NODE_OK):
+		if not _tap_affirmative(ctx) and not engine.run_node(ctx, NODE_OK):
 			reask(ctx)
 		return
 	code, _confidence = classify_text(ctx)
@@ -162,7 +166,9 @@ def on_text(ctx: RouteContext) -> None:
 		state.reset_reask(ctx.identity)
 		if not _resend_current(ctx, NODE_HELLO_AGAIN):
 			ctx.state[engine.LEAD_IN_KEY] = _plain(ctx, NODE_HELLO_AGAIN)
-			engine.run_node(ctx, MENU_CODE)
+			if not engine.run_node(ctx, MENU_CODE):  # đã gửi lặp quá số lần cho phép: đi đường hỏi lại / chuyển người
+				ctx.state.pop(engine.LEAD_IN_KEY, None)
+				reask(ctx)
 		return
 	route(ctx, _refine(ctx, code))
 
@@ -182,7 +188,7 @@ def _typed_button(ctx: RouteContext, text: str) -> str | None:
 		return None
 	node = store.get_node(ctx.state.get("script_node"))
 	typed = _fold(text)
-	for b in (node or {}).get("buttons") or []:
+	for b in _shown_buttons(ctx, node):
 		if typed and typed == _fold(b.get("label")):
 			return store.normalize_code(b.get("target"))
 	return None
@@ -259,6 +265,8 @@ def route(ctx: RouteContext, code: str) -> None:
 		auto_handoff(ctx, "REASON_COMPLAINT")
 	elif _quote_with_details(ctx, code):
 		return
+	elif code in SIDE_REPLY and _resend_current(ctx, SIDE_REPLY[code]):
+		state.reset_reask(ctx.identity)  # đáp câu hỏi chen ngang rồi hỏi lại đúng câu đang dở
 	elif code in DIRECT:
 		state.reset_reask(ctx.identity)
 		go(ctx, DIRECT[code])
@@ -354,6 +362,114 @@ def _ack_only(text: str) -> bool:
 		return False
 
 
+SIDE_REPLY = {"BOT_HOI": "C3_BOT", "Y_KHOA": "C3_YKHOA", "KHONG_LIENQUAN": "C3_KHONGLIENQUAN"}
+SIDE_LEAVE = ("MENU_VATTU", "MENU_PHANMEM", "MENU_SPD", "MENU_KHAC", "CAN_NGUOI", "MENU")
+QUESTION = re.compile(
+	r"\?|\b(?:gi|sao|the nao|nhu nao|khi nao|bao gio|bao lau|bao nhieu|o dau|la ai|ai vay)\b"
+	r"|\b(?:khong|chua|ha|nhi)$"
+)
+AFFIRMATIVE = ("duoc", "dung", "dong y", "co")
+DEMO_PENDING = {"attendees": "DEMO_SONGUOI", "time": "DEMO_GIOKHAC", "email": "DEMO_HOI_EMAIL"}
+
+
+def _shown_buttons(ctx: RouteContext, node: dict | None) -> list[dict]:
+	"""Các nút của ô mà khách thật sự nhìn thấy (nút dẫn tới ô `Tắt` đã bị ẩn khi gửi)."""
+	buttons = [
+		{"label": b.get("label") or "", "target": store.normalize_code(b.get("target"))}
+		for b in (node or {}).get("buttons") or []
+	]
+	try:
+		return store._usable_buttons([b for b in buttons if b["target"]], ctx.identity)
+	except Exception:
+		return []
+
+
+def _pending_question(ctx: RouteContext) -> str | None:
+	"""Mã ô của câu bot đang hỏi dở và chờ khách gõ trả lời (thu thông tin, số người / giờ / email demo); không có → None."""
+	st = engine.script_state(ctx)
+	flow = (st.get("flow") or "").lower()
+	if flow == "collect" and st.get("field"):
+		return str(st.get("node") or "") or None
+	if flow == "demo":
+		return DEMO_PENDING.get(str(st.get("demo_wait") or ""))
+	return None
+
+
+def _ask_again(ctx: RouteContext, code: str, lead_in: str) -> bool:
+	"""Gửi lại câu đang hỏi dở kèm câu dẫn, giữ nguyên trạng thái đang hỏi. True nếu đã gửi."""
+	node = store.get_node(code)
+	if not node:
+		return False
+	values = engine.variables(ctx)
+	repeat = engine._repeat_count(ctx, code)
+	if engine.missing_vars(node["text"], values) or repeat >= engine.MAX_RESEND:
+		return False
+	if not send.send_node(ctx.identity, code, values, prefix=_plain(ctx, lead_in) if lead_in else ""):
+		return False
+	state.update_state(ctx.identity, resend=repeat or None)
+	router._mark(ctx.batch_id)
+	return True
+
+
+def _tap_affirmative(ctx: RouteContext) -> bool:
+	"""Khách gõ "ok", "vâng" khi câu đang hỏi có nút đồng ý ("Được", "Đúng"): coi như bấm nút đó."""
+	node = store.get_node(_pending_question(ctx) or ctx.state.get("script_node"))
+	for b in _shown_buttons(ctx, node):
+		if _fold(b["label"]) in AFFIRMATIVE:
+			ctx.payload_code = b["target"]
+			handler = _foreign_handler(b["target"])
+			if handler is not None:
+				handler(ctx)
+			else:
+				on_button(ctx)
+			return True
+	return False
+
+
+def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
+	"""Bot đang hỏi dở mà khách chào, ừ, gửi sticker hay hỏi chen ngang: KHÔNG ghi câu đó làm câu trả lời; đáp lời rồi
+	hỏi lại đúng câu đang dở. Khách nói rõ ý khác (dịch vụ khác, cần người) thì rời câu hỏi. True nếu đã xử lý."""
+	pending = _pending_question(ctx)
+	if not pending:
+		return False
+	if not text:
+		return False if ctx.attachments else _ask_again(ctx, pending, NODE_BACK)
+	try:
+		from omni_crm.script import classify
+		from omni_crm.script.flows import collect
+	except Exception:
+		return False
+	if classify.is_greeting_only(text):
+		return _ask_again(ctx, pending, NODE_HELLO_AGAIN)
+	if classify.is_ack_only(text):
+		return _tap_affirmative(ctx) or _ask_again(ctx, pending, NODE_YES)
+	if not any(ch.isalnum() for ch in text):  # "?", "👍": không có gì để ghi
+		return _ask_again(ctx, pending, NODE_BACK)
+	hit = classify.classify_by_rules(text, ctx.state)
+	code = hit[0] if hit else None
+	if code in collect.LEAVE_CODES or code in ("BAOGIA", classify.INJECTION_CODE):
+		return False  # luồng đang hỏi tự xử lý (rời câu hỏi / xin giá khi đang báo giá / câu chèn lệnh: ghi cho nhân viên, không đáp)
+	if code is None or code == UNCLEAR:
+		declining = len(text) <= collect.DECLINE_MAX_LEN and collect.DECLINE.search(text)
+		if declining or "@" in text or not QUESTION.search(_fold(text)):
+			return False  # câu trả lời bình thường (kể cả từ chối "không ạ")
+		code, _conf = classify_text(ctx)
+	if code in SIDE_REPLY:
+		return _ask_again(ctx, pending, SIDE_REPLY[code])
+	if code == "KB_HOI":
+		state.reset_reask(ctx.identity)
+		answer_kb(ctx)
+		return True
+	if code in SIDE_LEAVE and (st.get("field") or "") not in collect.CONTACT_FIELDS:
+		# (ở câu xin email / số điện thoại, luồng thu thông tin tự xử lý: trả lời ý khác nhưng vẫn giữ câu đang hỏi)
+		collect._clear_flow(ctx)
+		state.update_state(ctx.identity, demo_wait=None)
+		state.reset_reask(ctx.identity)
+		route(ctx, code)
+		return True
+	return False
+
+
 def _plain(ctx: RouteContext, code: str) -> str:
 	"""Phần chữ đã điền biến của một ô chỉ dùng làm câu dẫn; ô tắt / thiếu thì rỗng."""
 	try:
@@ -368,16 +484,15 @@ def _resend_current(ctx: RouteContext, lead_in: str) -> bool:
 	không bị đẩy về menu chính giữa chừng. Không chạy lại lệnh của ô. True nếu đã gửi."""
 	code = str(ctx.state.get("script_node") or "")
 	node = store.get_node(code)
-	items = (engine.script_state(ctx).get("choices") or {}).get("items") or []
-	if not node or code in TOP_NODES or not items:
+	if not node or code in TOP_NODES or not node.get("buttons"):
 		return False
-	if [b.get("label") for b in node.get("buttons") or []] != [i[0] for i in items]:
-		return False  # lựa chọn của tin gần nhất không phải của ô này (vd khung giờ demo tính động)
+	if any("{" in (b.get("label") or "") for b in node["buttons"]):
+		return False  # nút tính động (vd khung giờ demo): không gửi lại bằng đường này
 	values = engine.variables(ctx)
 	repeat = engine._repeat_count(ctx, code)
 	if engine.missing_vars(node["text"], values) or repeat >= engine.MAX_RESEND:
 		return False
-	if not send.send_node(ctx.identity, code, values, prefix=_plain(ctx, lead_in)):
+	if not send.send_node(ctx.identity, code, values, prefix=_plain(ctx, lead_in) if lead_in else ""):
 		return False
 	state.update_state(ctx.identity, resend=repeat or None)
 	router._mark(ctx.batch_id)
@@ -492,9 +607,11 @@ def answer_kb(ctx: RouteContext) -> None:
 	res = kb_draft(ctx)
 	if res and res["action"] == "Reply" and (res["text"] or "").strip():
 		if _kb_auto_send(ctx, res):
+			pending = _pending_question(ctx)
 			if send.send_text(ctx.identity, res["text"], code=KB_CODE):
 				router._mark(ctx.batch_id)
-				engine.run_node(ctx, engine.service_code(ctx, "HOITIEP") or MENU_CODE)
+				if not (pending and _ask_again(ctx, pending, NODE_BACK)):
+					engine.run_node(ctx, engine.service_code(ctx, "HOITIEP") or MENU_CODE)
 				return
 		elif not _shadow_only(res["group"]) and _to_sale_draft(ctx, res["name"]):
 			return  # luồng nháp sẵn có: nhân viên duyệt rồi gửi

@@ -677,6 +677,26 @@ def _after_attendees(ctx: RouteContext) -> None:
 	confirm(ctx)
 
 
+_SKIP_COUNT = re.compile(r"chưa biết|chưa rõ|chưa chắc|không rõ|không biết|bỏ qua|để sau|tính sau", re.I)
+_DROP_DEMO = re.compile(r"không (?:muốn|cần|xem|demo)|thôi|hủy|huỷ|khỏi|để khi khác|dừng", re.I)
+_LEAVE_CODES = ("GAP_NHANVIEN", "CAN_NGUOI", "HUY_DANGKY", "XOA_DULIEU", "PHAN_NAN")
+
+
+def _leaves_demo(ctx: RouteContext) -> bool:
+	"""Ở bước hỏi số người mà khách đổi ý hoặc nói rõ ý khác: bỏ khung đang chọn dở (chưa đặt gì), trả True."""
+	text = ctx.text or ""
+	try:
+		from omni_crm.script import classify
+
+		hit = classify.classify_by_rules(text)
+	except Exception:
+		hit = None
+	if not (hit and hit[0] in _LEAVE_CODES) and not _DROP_DEMO.search(text):
+		return False
+	state.update_state(ctx.identity, flow=None, demo_wait=None, demo_at=None, demo_att_asked=None)
+	return True
+
+
 def on_text(ctx: RouteContext) -> bool:
 	"""Tin gõ khi khách đang ở giữa luồng demo (giờ khác / số người / email). True nếu đã xử lý."""
 	st = _st(ctx.identity)
@@ -699,7 +719,14 @@ def on_text(ctx: RouteContext) -> bool:
 	elif wait == "attendees":
 		m = re.search(r"\d{1,4}", ctx.text or "")
 		count = int(m.group()) if m and 0 < int(m.group()) <= MAX_ATTENDEES else None
-		state.update_state(ctx.identity, demo_attendees=count)
+		if count is None and not _SKIP_COUNT.search(ctx.text or ""):
+			if _leaves_demo(ctx):
+				return False  # khách đổi ý / muốn gặp người / dừng nhắn: KHÔNG chốt lịch, để bộ hiểu ý xử lý
+			if not st.get("demo_att_asked"):  # câu không có số: hỏi lại đúng một lần rồi mới chốt
+				state.update_state(ctx.identity, demo_att_asked=1)
+				if _send(ctx, NODE_ATTENDEES):
+					return True
+		state.update_state(ctx.identity, demo_attendees=count, demo_att_asked=None)
 		_after_attendees(ctx)
 	elif wait == "email":
 		email = validate.find_email(ctx.text)

@@ -511,7 +511,8 @@ add("f9_mid_demo_format_name", [*SPD_D, "em tên gì"], [has("C3_BOT"), ends("DE
 add("f9_mid_demo_format_gibberish_then_answer", [*SPD_D, "asdfgh", "online"], [ends("DEMO_HINHTHUC", at=-2), nodes("DEMO_KHUNGGIO")], ai=rand_ai("gibberish")[1])
 add("f9_mid_demo_format_switch_topic", [*SPD_D, "ben em co ban gang tay khong"], [nodes("MENU_VATTU")], ai=rand_ai("noaccent")[1])
 add("f9_mid_demo_slots_name", [*SLOTS, "em tên gì"], [has("C3_BOT"), ends("DEMO_KHUNGGIO")], R_BACK, ai=rand_ai("name")[1])
-add("f9_mid_menu_weather", [*SPD, "hôm nay trời đẹp nhỉ em"], [nodes(*OFF_TOPIC)], ai=rand_ai("weather")[1])
+# 19/11: hỏi ngoài lề khi đang ở menu dịch vụ -> câu từ chối ghép trước, rồi hỏi lại đúng menu đang đứng (không về menu chính)
+add("f9_mid_menu_weather", [*SPD, "hôm nay trời đẹp nhỉ em"], [nodes("MENU_SPD"), says("chỉ hỗ trợ")], ai=rand_ai("weather")[1])
 add("f9_mid_menu_gibberish", [*SPD, "asdfgh"], [ends("MENU_SPD"), reasked()], ai=rand_ai("gibberish")[1])
 add("f9_mid_menu_noaccent", [*SPD, "ben em co ban gang tay khong"], [nodes("MENU_VATTU")], ai=rand_ai("noaccent")[1])
 
@@ -522,6 +523,60 @@ class TestK11Conversations(ConversationCase):
 
 def _reraise(error):
 	raise error
+
+
+# Kịch bản từng là chỗ vụng (xfail) và đã được sửa: lý do xfail chung của nhóm không còn áp cho các tên này.
+FIXED = frozenset(
+	{
+		"f1_alo_x4",
+		"f1_mid_attendees_0",
+		"f1_mid_attendees_1",
+		"f1_mid_attendees_2",
+		"f1_mid_email_0",
+		"f1_mid_email_1",
+		"f1_mid_email_2",
+		"f1_mid_items_0",
+		"f1_mid_items_1",
+		"f1_mid_items_2",
+		"f2_vattu_hidden_label",
+		"f2_vt_substitute_ok",
+		"f4_vt_phone_at_email_step",
+		"f4_vt_sticker_for_items",
+		"f6_changed_mind_mid_demo_attendees",
+		"f6_human_mid_demo_attendees",
+		"f6_kb_mid_other_time",
+		"f6_kb_mid_quote_email_returns",
+		"f6_kb_mid_quote_items",
+		"f6_stop_mid_demo_attendees",
+		"f6_switch_mid_demo_attendees",
+		"f6_switch_service_mid_quote",
+		"f8_mid_attendees_qmark",
+		"f8_mid_attendees_sticker",
+		"f8_mid_attendees_thumb",
+		"f8_mid_email_qmark",
+		"f8_mid_email_sticker",
+		"f8_mid_email_thumb",
+		"f8_mid_items_qmark",
+		"f8_mid_items_sticker",
+		"f8_mid_items_thumb",
+		"f9_mid_attendees_gibberish",
+		"f9_mid_attendees_name",
+		"f9_mid_attendees_noaccent",
+		"f9_mid_attendees_ship",
+		"f9_mid_attendees_weather",
+		"f9_mid_demo_format_weather",
+		"f9_mid_demo_format_weather_then_answer",
+		"f9_mid_email_gibberish",
+		"f9_mid_email_name",
+		"f9_mid_email_weather",
+		"f9_mid_items_name",
+		"f9_mid_items_noaccent",
+		"f9_mid_items_ship",
+		"f9_mid_quantity_name",
+		"f9_mid_quantity_noaccent",
+		"f9_mid_quantity_ship",
+	}
+)
 
 
 def _make(spec):
@@ -544,8 +599,9 @@ def _make(spec):
 				self.addCleanup(_reraise, error)
 				return
 
-	test.__doc__ = spec["xfail"] or None
-	return unittest.expectedFailure(test) if spec["xfail"] else test
+	xfail = None if spec["name"] in FIXED else spec["xfail"]
+	test.__doc__ = xfail or None
+	return unittest.expectedFailure(test) if xfail else test
 
 
 for _spec in S:
