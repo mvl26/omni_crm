@@ -109,6 +109,7 @@ _TAIL_FILLERS = frozenset(
 _GREET_WORDS = frozenset(
 	"da alo hi hii hello helo hey chao xin ad admin shop oi em ban anh chi miyano a".split()
 )
+_GREET_CORE = frozenset("alo hi hii hello helo hey chao oi".split())
 GREETINGS = frozenset(
 	{
 		"alo",
@@ -234,6 +235,14 @@ def _core(clause: str) -> str:
 
 def _is_greeting(clause: str) -> bool:
 	return clause in GREETINGS or all(w in _GREET_WORDS for w in clause.split())
+
+
+def is_greeting_only(text: str | None) -> bool:
+	"""Tin chỉ gồm lời chào / gọi ("Alo em ơi", "hi shop"), không có ý nào khác — thuần."""
+	clauses = _clauses(text) if isinstance(text, str) else []
+	if not clauses or not all(_is_greeting(c) for c in clauses):
+		return False
+	return any(w in _GREET_CORE for c in clauses for w in c.split())  # "a", "dạ" trơ trọi không phải lời chào
 
 
 def _rule_for_clause(clause: str) -> str | None:

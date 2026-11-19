@@ -1,0 +1,28 @@
+[
+	{
+		"code": "REASK_LUACHON",
+		"title": "Câu dẫn khi hỏi lại đúng câu đang hỏi (khách gõ chưa rõ lựa chọn)",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Dạ, Miyano chưa rõ lựa chọn của anh/chị, anh/chị chọn lại giúp Miyano ạ.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"notes": "Không gửi riêng: ghép lên đầu câu hỏi đang hỏi dở khi bot chưa hiểu câu khách gõ, thay cho việc đưa khách về menu chính. Tắt ô này thì bot gửi lại câu hỏi mà không có câu dẫn."
+	},
+	{
+		"code": "CHAO_LAI",
+		"title": "Câu dẫn khi khách cũ chỉ chào (Alo, hi, em ơi)",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Dạ, Miyano chào anh/chị {ten} ạ.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách đã từng nhắn chỉ gõ lời chào."
+	}
+]

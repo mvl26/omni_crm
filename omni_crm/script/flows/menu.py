@@ -7,6 +7,8 @@ Câu gửi khách đều lấy từ Omni Script Node qua `engine.run_node`; câu
 
 from __future__ import annotations
 
+import re
+
 import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
@@ -28,6 +30,8 @@ IDENTITY = "Omni Identity"
 
 NODE_GREETING = "GREETING"
 NODE_REASK = "REASK_CHUARO"
+NODE_REASK_CHOICE = "REASK_LUACHON"  # câu dẫn khi hỏi lại đúng câu đang hỏi
+NODE_HELLO_AGAIN = "CHAO_LAI"  # câu dẫn khi khách cũ chỉ chào
 NODE_HANDOFF = "GAP_NHANVIEN"
 NODE_KB_NONE = "KB_CHUYENVIEN"
 NODE_FILE_RECEIVED = "DANHMUC_VATTU_DANHAN"
@@ -54,6 +58,7 @@ BY_SERVICE = {
 	"TAILIEU": ("TAILIEU", MENU_CODE),
 	"DEMO": ("DEMO", MENU_CODE),
 }
+TOP_NODES = (MENU_CODE, NODE_GREETING, NODE_REASK)
 THEN_MENU = {
 	"Y_KHOA": "C3_YKHOA",
 	"KHONG_LIENQUAN": "C3_KHONGLIENQUAN",
@@ -147,7 +152,13 @@ def on_text(ctx: RouteContext) -> None:
 	if first and code == UNCLEAR:  # "Alo", "hi": chào như khách mới mở khung chat
 		greet(ctx)
 		return
-	route(ctx, code)
+	if code == UNCLEAR and _greeting_only(text):  # khách cũ gọi "Alo em ơi": chào lại, không nói "chưa rõ ý"
+		state.reset_reask(ctx.identity)
+		if not _resend_current(ctx, NODE_HELLO_AGAIN):
+			ctx.state[engine.LEAD_IN_KEY] = _plain(ctx, NODE_HELLO_AGAIN)
+			engine.run_node(ctx, MENU_CODE)
+		return
+	route(ctx, _refine(ctx, code))
 
 
 def _fold(text: str | None) -> str:
@@ -248,7 +259,7 @@ def route(ctx: RouteContext, code: str) -> None:
 	elif code in BY_SERVICE:
 		base, without_service = BY_SERVICE[code]
 		state.reset_reask(ctx.identity)
-		go(ctx, engine.service_code(ctx, base) or without_service)
+		go(ctx, _detail_service_node(ctx, base) or engine.service_code(ctx, base) or without_service)
 	elif code in THEN_MENU:
 		state.reset_reask(ctx.identity)
 		if not engine.run_node(ctx, THEN_MENU[code]):
@@ -293,6 +304,68 @@ def _quote_with_details(ctx: RouteContext, code: str) -> bool:
 		ctx.state[collect.PREFILL_KEY] = dict(slots)
 	state.reset_reask(ctx.identity)
 	go(ctx, target)
+	return True
+
+
+DEMO_WORDS = re.compile(r"\b(?:demo|dung thu|xem thu|trai nghiem)\b")
+NOT_BOOKING = re.compile(r"\b(?:khong|chua|huy|doi|hoan|doi lich)\b")
+MENU_SERVICE = {"MENU_VATTU": "VATTU", "MENU_PHANMEM": "PHANMEM", "MENU_SPD": "SPD"}
+
+
+def _refine(ctx: RouteContext, code: str) -> str:
+	"""Khách nêu dịch vụ VÀ muốn xem demo trong cùng một tin ("bên mình có phần mềm SPD, anh muốn đặt lịch demo"):
+	đi thẳng đặt demo của dịch vụ đó thay vì mở menu dịch vụ rồi bắt khách bấm lại."""
+	service = MENU_SERVICE.get(code)
+	folded = _fold(ctx.text)
+	if not service or not DEMO_WORDS.search(folded) or NOT_BOOKING.search(folded):
+		return code
+	ctx.state[DETAIL_KEY] = {**(ctx.state.get(DETAIL_KEY) or {}), "service": service}
+	return "DEMO"
+
+
+def _detail_service_node(ctx: RouteContext, base: str) -> str | None:
+	"""Ô `<base>_<dịch vụ khách nhắc trong tin>` nếu có; không rõ dịch vụ hoặc không có ô thì None."""
+	service = (ctx.state.get(DETAIL_KEY) or {}).get("service") or ""
+	target = f"{base}_{service}" if service in QUOTE_SERVICE_NODE else ""
+	return target if target and store.get_node(target) else None
+
+
+def _greeting_only(text: str) -> bool:
+	try:
+		from omni_crm.script import classify
+
+		return bool(classify.is_greeting_only(text))
+	except Exception:
+		return False
+
+
+def _plain(ctx: RouteContext, code: str) -> str:
+	"""Phần chữ đã điền biến của một ô chỉ dùng làm câu dẫn; ô tắt / thiếu thì rỗng."""
+	try:
+		rendered = store.render(store.get_node(code), {**engine.variables(ctx), "identity": ctx.identity})
+	except Exception:
+		return ""
+	return rendered[0] if rendered else ""
+
+
+def _resend_current(ctx: RouteContext, lead_in: str) -> bool:
+	"""Khách đang đứng ở một câu hỏi có lựa chọn (không phải menu chính): gửi lại ĐÚNG câu đó kèm câu dẫn, để khách
+	không bị đẩy về menu chính giữa chừng. Không chạy lại lệnh của ô. True nếu đã gửi."""
+	code = str(ctx.state.get("script_node") or "")
+	node = store.get_node(code)
+	items = (engine.script_state(ctx).get("choices") or {}).get("items") or []
+	if not node or code in TOP_NODES or not items:
+		return False
+	if [b.get("label") for b in node.get("buttons") or []] != [i[0] for i in items]:
+		return False  # lựa chọn của tin gần nhất không phải của ô này (vd khung giờ demo tính động)
+	values = engine.variables(ctx)
+	repeat = engine._repeat_count(ctx, code)
+	if engine.missing_vars(node["text"], values) or repeat >= engine.MAX_RESEND:
+		return False
+	if not send.send_node(ctx.identity, code, values, prefix=_plain(ctx, lead_in)):
+		return False
+	state.update_state(ctx.identity, resend=repeat or None)
+	router._mark(ctx.batch_id)
 	return True
 
 
@@ -348,6 +421,8 @@ def reask(ctx: RouteContext) -> None:
 	if state.bump_reask(ctx.identity) > MAX_REASK:
 		state.reset_reask(ctx.identity)
 		auto_handoff(ctx, "REASON_MISUNDERSTOOD")
+		return
+	if _resend_current(ctx, NODE_REASK_CHOICE):
 		return
 	if not engine.run_node(ctx, NODE_REASK):
 		engine.run_node(ctx, MENU_CODE)

@@ -39,6 +39,7 @@ SUFFIX = {
 	"SPD": "SPD",
 }  # mã dịch vụ -> hậu tố mã ô (VARIABLES mục 3)
 DEFAULT_PRIVACY_URL = "miyano.com.vn/chinh-sach-bao-mat"  # URL nguyên văn kịch bản 3.4
+LEAD_IN_KEY = "_lead_in"  # câu dẫn (đã soạn từ ô kịch bản) ghép lên đầu tin kế tiếp của lượt
 OPTIONAL_VARS = {"ten"}  # biến được phép trống khi gửi
 QUOTE_NO_SERVICE = "BAOGIA_HOISANPHAM"
 FORCED_ASK = ("NL_DOIEMAIL", "NL_BG_DOIEMAIL")  # "Đổi email khác": luôn hỏi (= collect.FORCED_NODES)
@@ -242,7 +243,8 @@ def _run(ctx: RouteContext, code: str | None, extra: dict | None, depth: int) ->
 		repeat = _repeat_count(ctx, code)
 		if repeat >= MAX_RESEND:
 			return False
-		if not send.send_node(ctx.identity, code, values, prefix=_ack_prefix(ctx, code, values)):
+		prefix = ctx.state.pop(LEAD_IN_KEY, "") or _ack_prefix(ctx, code, values)
+		if not send.send_node(ctx.identity, code, values, prefix=prefix):
 			return False
 		router._mark(ctx.batch_id)  # đã có tin gửi khách: luồng Reply cũ không được trả lời thêm
 		state.set_node(ctx.identity, code, node["step"] or None)

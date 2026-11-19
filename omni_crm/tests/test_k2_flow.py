@@ -253,7 +253,7 @@ class TestMenu(FlowCase):
 		self.assertTrue(frappe.db.get_value("Omni Identity", self.ident1, "script_greeted_at"))
 		self.turn("", event_type="follow")
 		self.say("hi")
-		self.assertEqual(self.sent(), ["GREETING", "REASK_CHUARO"])  # khách cũ không chào lại
+		self.assertEqual(self.sent(), ["GREETING", "MENU_CHINH"])  # khách cũ: chào ngắn + menu, không gửi lại tin chào dài
 
 	def test_first_message_greeting_or_concrete_question(self):
 		self.greeted(False)
@@ -289,8 +289,9 @@ class TestMenu(FlowCase):
 			("Cho gặp nhân viên", "GAP_NHANVIEN", [], 1),
 			("gọi cho tôi", "GAP_NHANVIEN", [], 1),
 			("bạn là bot à?", "BOT_HOI", ["C3_BOT"], 0),  # theo C.3 (CLASSIFY_CODES mâu thuẫn 1)
-			("Alo", "CHUA_RO", ["REASK_CHUARO"], 0),
-			("hi", "CHUA_RO", ["REASK_CHUARO"], 0),
+			("Alo", "CHUA_RO", ["MENU_CHINH"], 0),  # 19/11: khách cũ chỉ chào thì chào lại kèm menu, không nói "chưa rõ ý"
+			("hi", "CHUA_RO", ["MENU_CHINH"], 0),
+			("abc xyz", "CHUA_RO", ["REASK_CHUARO"], 0),
 		]
 		for text, code, nodes, handoffs in rows:
 			with self.subTest(text=text):

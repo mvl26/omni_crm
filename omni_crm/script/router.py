@@ -147,7 +147,47 @@ def typed_choice(text: str | None, st: dict | None) -> str | None:
 		target = items[index][1] if 0 <= index < len(items) else None
 	else:
 		target = next((t for label, t in items if str(label).strip().lower() == raw.rstrip(".")), None)
+		pending = ((st or {}).get("script_state") or {}).get("field")  # đang chờ câu trả lời gõ tự do: không đoán
+		if not target and choices.get("numbered") and not pending:
+			target = _loose_choice(raw, items)
 	return payload_code(f"#{target}") if target else None
+
+
+LOOSE_MAX_WORDS = 6
+# có từ phủ định / từ để hỏi: không phải câu chọn, để bộ hiểu ý xử lý
+LOOSE_SKIP = frozenset("khong chua dung khoi huy doi hoan nao gi sao bao nhieu khi".split())
+LOOSE_FILLERS = frozenset(
+	"anh chi toi minh muon can cho xin qua cua cac nhung mot giup nhe voi lam chon lay".split()
+)
+
+
+def _loose_choice(raw: str, items: list) -> str | None:
+	"""Khách gõ gần đúng một lựa chọn ("Online", "anh muốn demo online" cho nút "Online qua Teams") — thuần.
+
+	Chỉ nhận khi câu ngắn, không có từ phủ định / từ để hỏi, chứa từ riêng của ĐÚNG MỘT lựa chọn và nhiều nhất một
+	từ lạ ngoài các lựa chọn; còn lại trả None để đi đường hiểu ý như cũ.
+	"""
+	if "?" in raw:
+		return None
+	try:
+		from omni_crm.script import classify
+
+		fold = classify.fold
+	except Exception:
+		return None
+
+	def words(text) -> list[str]:
+		return [w for w in fold(str(text)).split() if len(w) >= 3 and w.isalpha()]
+
+	typed = fold(raw).split()
+	if not typed or len(typed) > LOOSE_MAX_WORDS or LOOSE_SKIP.intersection(typed):
+		return None
+	content = {w for w in words(raw) if w not in LOOSE_FILLERS}
+	labels = [(set(words(label)) - LOOSE_FILLERS, target) for label, target in items]
+	every = [w for tokens, _t in labels for w in tokens]
+	hits = [t for tokens, t in labels if any(every.count(w) == 1 and w in content for w in tokens)]
+	foreign = [w for w in content if w not in every]
+	return hits[0] if len(hits) == 1 and len(foreign) <= 1 else None
 
 
 def _code_of(last, st: dict) -> str | None:
