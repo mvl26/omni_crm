@@ -24,5 +24,18 @@
 		"action": "",
 		"source_ref": "Yêu cầu 19/11/2026",
 		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách đã từng nhắn chỉ gõ lời chào."
+	},
+	{
+		"code": "DA_VANG",
+		"title": "Đáp lại khi khách chỉ nói ok / vâng / cảm ơn",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Dạ vâng ạ. Anh/chị cần Miyano hỗ trợ thêm gì cứ nhắn giúp Miyano nhé.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"notes": "Gửi khi khách đã từng nhắn chỉ gõ ok / vâng / cảm ơn và bot không còn câu hỏi nào đang chờ chọn. Tắt ô này thì bot quay về câu hỏi lại như cũ."
 	}
 ]

@@ -237,6 +237,22 @@ def _is_greeting(clause: str) -> bool:
 	return clause in GREETINGS or all(w in _GREET_WORDS for w in clause.split())
 
 
+_ACK_CORE = frozenset("ok oki okie okay oke okela vang uh uhm uk thanks thank tks".split())
+_ACK_WORDS = _ACK_CORE | frozenset(
+	"da u um duoc roi cam on you nhe nha a ah em ban anh chi miyano nhieu tot hay lam shop ad".split()
+)
+ACK_MAX_WORDS = 6
+
+
+def is_ack_only(text: str | None) -> bool:
+	"""Tin chỉ là lời ừ / cảm ơn ("ok em", "vâng", "cảm ơn nhé"), không có ý nào khác — thuần."""
+	words = fold(text).split() if isinstance(text, str) else []
+	if not words or len(words) > ACK_MAX_WORDS or not all(w in _ACK_WORDS for w in words):
+		return False
+	joined = " ".join(words)
+	return bool(_ACK_CORE.intersection(words)) or "cam on" in joined or "duoc roi" in joined
+
+
 def is_greeting_only(text: str | None) -> bool:
 	"""Tin chỉ gồm lời chào / gọi ("Alo em ơi", "hi shop"), không có ý nào khác — thuần."""
 	clauses = _clauses(text) if isinstance(text, str) else []

@@ -101,3 +101,57 @@ class TestSmoothFlow(FlowCase):
 		self.classify.assert_not_called()
 		self.assertEqual(self.sstate().get("demo_mode"), "Online qua Teams")
 		self.assertNotIn(self.sent()[-1], ("REASK_CHUARO", "DEMO_HINHTHUC", "MENU_CHINH"))
+
+	def test_typed_time_at_slot_list_is_read_as_a_time(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")
+		self.tap("DEMO_HT_ONLINE")
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+		self.turn("3 giờ chiều ngày thứ 5 tuần sau")
+		self.classify.assert_not_called()
+		self.assertIn(self.sent()[-1], ("DEMO_SONGUOI", "DEMO_GIOBAN"))
+
+	def test_other_text_at_slot_list_still_understood(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")
+		self.tap("DEMO_HT_ONLINE")
+		self.codes["bên em là bot à"] = ("BOT_HOI", 1.0)
+		self.turn("bên em là bot à")
+		self.assertEqual(self.sent()[-1], "C3_BOT")
+
+
+class TestTypedTimeAndAck(FrappeTestCase):
+	def test_parse_customer_phrase(self):
+		from datetime import datetime
+
+		now = datetime(2026, 11, 19, 14, 35)  # thứ Năm
+		self.assertEqual(demo.parse_time("3 giờ chiều ngày thứ 5 tuần sau", now), datetime(2026, 11, 26, 15, 0))
+
+	def test_question_is_not_confirmed_as_information(self):
+		from omni_crm.script.flows import collect
+
+		self.assertEqual(collect.ack_value("Bên mình có thể giao sớm nhất vào khi nào"), "")
+		self.assertEqual(collect.ack_value("trong tuần sau"), "trong tuần sau")
+
+	def test_ack_only(self):
+		for text in ("ok", "Oki em", "vâng ạ", "cảm ơn em nhé", "được rồi", "Thanks"):
+			self.assertTrue(cl.is_ack_only(text), text)
+		for text in ("ok gửi anh báo giá", "không cảm ơn", "a", "dạ", "em", ""):
+			self.assertFalse(cl.is_ack_only(text), text)
+
+
+class TestAckFlow(FlowCase):
+	def test_ok_after_a_closed_step_gets_a_short_reply(self):
+		self.greeted()
+		self.tap("KHONG_CAMON")
+		self.turn("Oki")
+		self.classify.assert_not_called()
+		self.assertEqual(self.sent()[-1], "DA_VANG")
+
+	def test_ok_at_a_choice_question_repeats_the_question(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.turn("ok em")
+		self.assertEqual(self.sent(), ["MENU_SPD", "MENU_SPD"])

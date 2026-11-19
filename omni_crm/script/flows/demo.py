@@ -27,6 +27,7 @@ from omni_crm.script.router import RouteContext
 LEAD = "CRM Lead"
 EVENT = "Event"
 FLOW = "demo"
+WAIT_SLOTS = "slots"  # đã gửi danh sách khung giờ, chờ khách bấm hoặc gõ giờ
 DEMO_SERVICES = ("SUPPLYCORE", "SPD")
 SLOT_COUNT = 3
 SLOT_DAYS = 3  # 3 ngày làm việc tới
@@ -587,7 +588,10 @@ def propose(ctx: RouteContext) -> bool:
 	if not sent:
 		_handoff(ctx, _("Không gửi được danh sách khung giờ demo"))
 		return False
-	state.update_state(ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(now))
+	# khách có thể GÕ giờ mình muốn thay vì bấm một khung: tin gõ kế tiếp được đọc như ngày giờ (`on_text`)
+	state.update_state(
+		ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(now), flow=FLOW, demo_wait=WAIT_SLOTS
+	)
 	return True
 
 
@@ -611,7 +615,9 @@ def _offer_nearest(ctx: RouteContext, after: datetime) -> None:
 	if not sent:
 		propose(ctx)
 		return
-	state.update_state(ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(_now()))
+	state.update_state(
+		ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(_now()), flow=FLOW, demo_wait=WAIT_SLOTS
+	)
 
 
 def confirm(ctx: RouteContext) -> None:
@@ -677,6 +683,10 @@ def on_text(ctx: RouteContext) -> bool:
 	wait = st.get("demo_wait")
 	if not wait:
 		return False
+	if wait == WAIT_SLOTS:  # đang chờ khách chọn khung: gõ được ngày giờ thì nhận, không thì để bộ hiểu ý xử lý
+		if not parse_time(ctx.text, _now()):
+			return False
+		wait = "time"
 	scheduler.on_inbound(ctx.identity, ctx.lead)
 	if wait == "time":
 		start = parse_time(ctx.text, _now())

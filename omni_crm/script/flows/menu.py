@@ -32,6 +32,7 @@ NODE_GREETING = "GREETING"
 NODE_REASK = "REASK_CHUARO"
 NODE_REASK_CHOICE = "REASK_LUACHON"  # câu dẫn khi hỏi lại đúng câu đang hỏi
 NODE_HELLO_AGAIN = "CHAO_LAI"  # câu dẫn khi khách cũ chỉ chào
+NODE_OK = "DA_VANG"  # đáp lại "ok", "vâng", "cảm ơn"
 NODE_HANDOFF = "GAP_NHANVIEN"
 NODE_KB_NONE = "KB_CHUYENVIEN"
 NODE_FILE_RECEIVED = "DANHMUC_VATTU_DANHAN"
@@ -147,6 +148,11 @@ def on_text(ctx: RouteContext) -> None:
 		go(ctx, NODE_STOP)
 		return
 	if _typed_document(ctx, text):
+		return
+	if not first and _ack_only(text):  # "ok", "vâng", "cảm ơn": đáp lời, không hỏi AI, không nói "chưa rõ ý"
+		state.reset_reask(ctx.identity)
+		if not _resend_current(ctx, NODE_REASK_CHOICE) and not engine.run_node(ctx, NODE_OK):
+			reask(ctx)
 		return
 	code, _confidence = classify_text(ctx)
 	if first and code == UNCLEAR:  # "Alo", "hi": chào như khách mới mở khung chat
@@ -335,6 +341,15 @@ def _greeting_only(text: str) -> bool:
 		from omni_crm.script import classify
 
 		return bool(classify.is_greeting_only(text))
+	except Exception:
+		return False
+
+
+def _ack_only(text: str) -> bool:
+	try:
+		from omni_crm.script import classify
+
+		return bool(classify.is_ack_only(text))
 	except Exception:
 		return False
 
