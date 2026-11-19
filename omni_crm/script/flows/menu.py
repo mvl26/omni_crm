@@ -147,6 +147,12 @@ def on_text(ctx: RouteContext) -> None:
 		state.reset_reask(ctx.identity)
 		engine.run_button(ctx, NODE_NO_THANKS)
 		return
+	if not flow and _polite_decline(text):  # "không cần": cảm ơn rồi thôi, KHÔNG đánh dấu dừng nhắn
+		state.reset_reask(ctx.identity)
+		if engine.run_button(ctx, NODE_NO_THANKS):
+			return
+	if not flow and _demo_change(ctx, text):
+		return
 	if _is_stop_phrase(text):  # C.4: câu dừng nhắn rõ ràng thì không cần hỏi AI
 		state.reset_reask(ctx.identity)
 		go(ctx, NODE_STOP)
@@ -351,6 +357,34 @@ def _greeting_only(text: str) -> bool:
 		return bool(classify.is_greeting_only(text))
 	except Exception:
 		return False
+
+
+def _polite_decline(text: str) -> bool:
+	try:
+		from omni_crm.script import classify
+
+		return bool(classify.is_polite_decline(text))
+	except Exception:
+		return False
+
+
+DEMO_MOVE = re.compile(
+	r"\b(?:doi|chuyen|hoan|lui|dich)\b.*\b(?:demo|lich)\b|\b(?:demo|lich)\b.*\b(?:sang|qua) (?:ngay|tuan|hom|thu)\b"
+)
+DEMO_CANCEL = re.compile(r"\b(?:huy|bo|khong (?:tham gia|du|xem) (?:duoc )?)\b.*\b(?:demo|lich)\b")
+
+
+def _demo_change(ctx: RouteContext, text: str) -> bool:
+	"""Khách đã có lịch demo gõ "đổi lịch demo…" / "hủy lịch demo…": đi đúng nút Đổi lịch / Huỷ lịch. True nếu đã xử lý."""
+	if not ctx.lead or not frappe.db.get_value(LEAD, ctx.lead, "omni_demo_at"):
+		return False
+	folded = _fold(text)
+	code = "DEMO_HUY" if DEMO_CANCEL.search(folded) else "DEMO_DOILICH" if DEMO_MOVE.search(folded) else ""
+	if not code or _foreign_handler(code) is None:
+		return False
+	state.reset_reask(ctx.identity)
+	go(ctx, code)
+	return True
 
 
 def _ack_only(text: str) -> bool:

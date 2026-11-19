@@ -39,6 +39,7 @@ NODE_CLOSING = "GAP_NV_CAUKET"
 NODE_BAD_PHONE = "SAI_SDT"
 NODE_STOP = "C4_HUYDANGKY"
 NODE_DELETE_DATA = "C4_XOADULIEU"
+NODE_DELETE_ACK = "C4_XOADULIEU_GHINHAN"
 SERVICE_BUTTONS = {
 	"GAP_NV_VATTU": "VATTU",
 	"GAP_NV_PHANMEM": "SUPPLYCORE",
@@ -748,8 +749,8 @@ def on_stop(ctx: RouteContext) -> None:
 def request_data_deletion(ctx: RouteContext, send_text: bool = True) -> str | None:
 	"""Khách yêu cầu xoá dữ liệu (C.4): gửi ô hướng dẫn (đang Tắt khi chưa có link → không gửi) và tạo việc cho
 	người phụ trách tuân thủ (`TUAN_THU`). Trả tên việc."""
-	if send_text:
-		_send(ctx, NODE_DELETE_DATA)
+	if send_text and not _send(ctx, NODE_DELETE_DATA):
+		_send(ctx, NODE_DELETE_ACK)  # ô hướng dẫn đang Tắt (chưa có link): vẫn báo khách là đã ghi nhận
 	if not ctx.lead:
 		tasks.warn_no_lead(ctx.identity, _("Khách yêu cầu xoá dữ liệu"))
 		return None

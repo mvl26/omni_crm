@@ -696,7 +696,8 @@ class TestStop(K3Case):
 		self.rows = [{"service": "TUAN_THU", "primary_user": SALE2, "backup_user": None}]
 		self.assertTrue(router.handle_batch(self.inbound("#C4_XOADULIEU")))
 		if frappe.db.get_value(NODE, "C4_XOADULIEU", "status") == "Tắt":
-			self.assertEqual(self.sent(), [])
+			# 19/11: ô hướng dẫn đang Tắt thì khách vẫn nhận câu ghi nhận (không im lặng)
+			self.assertEqual([r["script_node"] for r in self.sent()], ["C4_XOADULIEU_GHINHAN"])
 		found = self.lead_tasks()
 		self.assertEqual(len(found), 1)
 		self.assertEqual(found[0].assigned_to, SALE2)

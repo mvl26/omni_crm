@@ -148,7 +148,8 @@ def typed_choice(text: str | None, st: dict | None) -> str | None:
 	else:
 		target = next((t for label, t in items if str(label).strip().lower() == raw.rstrip(".")), None)
 		pending = ((st or {}).get("script_state") or {}).get("field")  # đang chờ câu trả lời gõ tự do: không đoán
-		if not target and choices.get("numbered") and not pending:
+		digits = any(ch.isdigit() for label, _t in items for ch in str(label))  # khung giờ: luồng demo tự đọc ngày giờ
+		if not target and choices.get("numbered") and not pending and not digits:
 			target = _loose_choice(raw, items)
 	return payload_code(f"#{target}") if target else None
 

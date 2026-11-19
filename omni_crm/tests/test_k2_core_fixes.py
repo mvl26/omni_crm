@@ -248,8 +248,11 @@ class TestRouterStops(FixCase):
 
 class TestClassifierRules(FixCase):
 	def test_bare_khong_can_depends_on_pending_question(self):
-		self.assertEqual(classify.classify_by_rules("Dạ không cần ạ")[0], "HUY_DANGKY")
-		self.assertEqual(classify.classify_by_rules("không cần", {"script_node": ""})[0], "HUY_DANGKY")
+		# 19/11 (người phụ trách quyết): "không cần" là lời từ chối lịch sự, không còn là yêu cầu dừng nhắn
+		for text in ("Dạ không cần ạ", "không cần", "ko cần", "k cần ạ", "dạ mình không cần nữa", "thôi không cần đâu em"):
+			self.assertIsNone(classify.classify_by_rules(text, {"script_node": ""}), text)
+			self.assertTrue(classify.is_polite_decline(text), text)
+		self.assertFalse(classify.is_polite_decline("không cần gấp, gửi báo giá giúp"))
 		self.assertIsNone(classify.classify_by_rules("không cần", {"script_node": "TL_HOI_EMAIL"}))
 		for text in ("stop", "đừng nhắn tin nữa"):  # yêu cầu dừng rõ ràng: vẫn nhận kể cả khi bot đang hỏi
 			self.assertEqual(

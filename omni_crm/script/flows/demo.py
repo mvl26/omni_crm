@@ -40,6 +40,9 @@ NODE_FORMAT = "DEMO_HINHTHUC"
 NODE_SLOTS = "DEMO_KHUNGGIO"
 NODE_OTHER_TIME = "DEMO_GIOKHAC"
 NODE_BUSY = "DEMO_GIOBAN"
+NODE_OUTSIDE = "DEMO_NGOAIGIO"  # giờ khách muốn là ngày nghỉ / ngoài giờ / giờ nghỉ trưa
+NODE_TIME_AGAIN = "DEMO_GIOKHAC_LAI"  # khách mới nêu ngày hoặc giờ: xin đủ cả hai
+NODE_HAS_BOOKING = "DEMO_DACOLICH"  # khách đã có lịch demo mà mở đặt lịch lần nữa
 NODE_ATTENDEES = "DEMO_SONGUOI"
 NODE_ASK_EMAIL = "DEMO_HOI_EMAIL"
 NODE_CONFIRM = (
@@ -59,6 +62,8 @@ STATE_KEYS = (
 	"demo_attendees",
 	"demo_wait",
 	"demo_email_asked",
+	"demo_att_asked",
+	"demo_time_asked",
 )
 MIN_AHEAD = timedelta(hours=2)  # không nhận lịch bắt đầu trong vòng 2 giờ tới
 MAX_AHEAD = timedelta(days=45)  # không nhận lịch xa hơn 45 ngày
@@ -190,6 +195,16 @@ def is_free(
 	if at.time() < LUNCH[1] and (at + DURATION).time() > LUNCH[0]:
 		return False  # chạm giờ nghỉ trưa
 	return not busy_ranges(user, at, at + DURATION, lead)
+
+
+def outside_hours(at: datetime, cfg: timeutil.Config | None = None) -> bool:
+	"""Giờ khách muốn rơi vào ngày nghỉ, ngoài giờ làm việc hoặc giờ nghỉ trưa (khác với "đã kín lịch")."""
+	cfg = cfg if cfg is not None else timeutil.load_config()
+	if not _demo_day(at.date(), cfg):
+		return True
+	if not (timeutil.in_hours(at, cfg) and timeutil.in_hours(at + DURATION, cfg)):
+		return True
+	return at.time() < LUNCH[1] and (at + DURATION).time() > LUNCH[0]
 
 
 def _free_in(slots: list[datetime], busy: list[tuple]) -> list[datetime]:
@@ -611,7 +626,8 @@ def _offer_nearest(ctx: RouteContext, after: datetime) -> None:
 		_handoff(ctx, _("Khách muốn demo vào giờ đã kín lịch, không tìm được khung thay thế"))
 		return
 	state.update_state(ctx.identity, demo_slots=[_iso(nearest)], demo_at=None, flow=None, demo_wait=None)
-	sent = _send(ctx, NODE_BUSY, {"khung_1": slot_label(nearest)})
+	labels = {"khung_1": slot_label(nearest)}
+	sent = (_send(ctx, NODE_OUTSIDE, labels) if outside_hours(after) else None) or _send(ctx, NODE_BUSY, labels)
 	if not sent:
 		propose(ctx)
 		return
@@ -677,9 +693,56 @@ def _after_attendees(ctx: RouteContext) -> None:
 	confirm(ctx)
 
 
+_ANYTIME = re.compile(r"(?:lúc|giờ|ngày|hôm|khi) nào cũng được|(?:tùy|tuỳ) (?:em|bạn|bên em|miyano)")
 _SKIP_COUNT = re.compile(r"chưa biết|chưa rõ|chưa chắc|không rõ|không biết|bỏ qua|để sau|tính sau", re.I)
 _DROP_DEMO = re.compile(r"không (?:muốn|cần|xem|demo)|thôi|hủy|huỷ|khỏi|để khi khác|dừng", re.I)
 _LEAVE_CODES = ("GAP_NHANVIEN", "CAN_NGUOI", "HUY_DANGKY", "XOA_DULIEU", "PHAN_NAN")
+
+
+_ORDINALS = (
+	(re.compile(r"^(?:số |khung |cái |lựa chọn )?(?:thứ )?(?:1|một|nhất|đầu tiên|đầu)$"), 0),
+	(re.compile(r"^(?:số |khung |cái |lựa chọn )?(?:thứ )?(?:2|hai|nhì)$"), 1),
+	(re.compile(r"^(?:số |khung |cái |lựa chọn )?(?:thứ )?(?:3|ba)$"), 2),
+)
+_HOUR_ONLY = re.compile(r"^(?:lúc )?(\d{1,2})\s*(?:h|giờ|:)\s*(\d{1,2})?\s*(sáng|chiều)?$")
+
+
+def _typed_slot(text: str | None, st: dict) -> datetime | None:
+	"""Khung khách chọn bằng cách gõ thứ tự ("khung đầu tiên", "cái thứ 2") hoặc chỉ gõ giờ trùng đúng MỘT khung đã đề xuất."""
+	raw = " ".join(unicodedata.normalize("NFC", cstr(text)).lower().split()).strip(" .!,")
+	slots = [get_datetime(s) for s in st.get("demo_slots") or []]
+	if not raw or not slots:
+		return None
+	for pattern, index in _ORDINALS:
+		if pattern.match(raw):
+			return slots[index] if index < len(slots) else None
+	m = _HOUR_ONLY.match(raw)
+	if not m:
+		return None
+	hour, minute = int(m.group(1)), int(m.group(2) or 0)
+	if m.group(3) == "chiều" and hour < 12:
+		hour += 12
+	same = [s for s in slots if (s.hour, s.minute) == (hour, minute)]
+	return same[0] if len(same) == 1 else None
+
+
+def _small_talk(text: str | None) -> bool:
+	raw = cstr(text).strip()
+	if not any(ch.isalnum() for ch in raw):
+		return True
+	try:
+		from omni_crm.script import classify
+
+		return bool(classify.is_greeting_only(raw) or classify.is_ack_only(raw))
+	except Exception:
+		return False
+
+
+def _has_booking(ctx: RouteContext) -> datetime | None:
+	"""Lịch demo còn hiệu lực (ở tương lai) của Lead, nếu có."""
+	at = ctx.lead and frappe.db.get_value(LEAD, ctx.lead, "omni_demo_at")
+	at = get_datetime(at) if at else None
+	return at if at and at > _now() else None
 
 
 def _leaves_demo(ctx: RouteContext) -> bool:
@@ -703,13 +766,32 @@ def on_text(ctx: RouteContext) -> bool:
 	wait = st.get("demo_wait")
 	if not wait:
 		return False
-	if wait == WAIT_SLOTS:  # đang chờ khách chọn khung: gõ được ngày giờ thì nhận, không thì để bộ hiểu ý xử lý
+	if wait == WAIT_SLOTS:  # đang chờ khách chọn khung: đọc được ý chọn / ngày giờ thì nhận, không thì để bộ hiểu ý xử lý
+		picked = _typed_slot(ctx.text, st)
+		if picked:
+			scheduler.on_inbound(ctx.identity, ctx.lead)
+			choose(ctx, picked)
+			return True
 		if not parse_time(ctx.text, _now()):
+			if _small_talk(ctx.text):  # chào / ok / sticker: gửi lại danh sách khung giờ, không về menu chính
+				propose(ctx)
+				return True
+			if _parse_day(" " + cstr(ctx.text).lower() + " ", _now().date())[0]:  # mới nêu ngày: xin thêm giờ
+				state.update_state(ctx.identity, flow=FLOW, demo_wait="time", demo_time_asked=1)
+				return bool(_send(ctx, NODE_TIME_AGAIN) or _send(ctx, NODE_OTHER_TIME))
 			return False
 		wait = "time"
 	scheduler.on_inbound(ctx.identity, ctx.lead)
 	if wait == "time":
 		start = parse_time(ctx.text, _now())
+		if not start and _ANYTIME.search(cstr(ctx.text).lower()):  # "lúc nào cũng được": đề xuất lại các khung trống
+			propose(ctx)
+			return True
+		if not start and not st.get("demo_time_asked"):  # chưa đọc được: xin lại đủ ngày và giờ đúng một lần
+			state.update_state(ctx.identity, demo_time_asked=1)
+			if _send(ctx, NODE_TIME_AGAIN):
+				return True
+		state.update_state(ctx.identity, demo_time_asked=None)
 		if not start:
 			_handoff(ctx, _("Khách gõ giờ demo mà bot không đọc được"))
 		elif not in_booking_range(start, _now()):
@@ -843,12 +925,32 @@ _ROUTES = {
 }
 
 
+# các nút mở / đi tiếp một lượt đặt lịch: khách đã có lịch thì nhắc lịch đang có trước
+BOOKING_ENTRY = (
+	"DAT_DEMO",
+	"DEMO_PHANMEM",
+	"DEMO_SPD",
+	"DEMO_HT_ONLINE",
+	"DEMO_HT_TRUCTIEP",
+	"DEMO_KHUNG_1",
+	"DEMO_KHUNG_2",
+	"DEMO_KHUNG_3",
+	"DEMO_GIOKHAC",
+)
+
+
 def handle(ctx: RouteContext) -> None:
 	"""Handler router cho mọi nút `DEMO_*` và `DAT_DEMO`."""
 	code = ctx.payload_code or ""
 	scheduler.on_inbound(ctx.identity, ctx.lead)
 	if code == "DAT_DEMO" and _service(ctx) == "VATTU":
 		code = NODE_NO_DEMO  # Vật tư không có demo: mời gửi danh mục (2.5)
+	booked = _has_booking(ctx) if code in BOOKING_ENTRY else None
+	if booked:
+		# đã có lịch: không lặng lẽ mở đặt lịch mới rồi ghi đè; nhắc lịch đang có và hỏi khách muốn đổi hay huỷ
+		mode = frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")
+		if _send(ctx, NODE_HAS_BOOKING, scheduler.demo_variables(booked, mode)):
+			return
 	fn = _ROUTES.get(code)
 	if fn:
 		fn(ctx)

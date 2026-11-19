@@ -63,5 +63,79 @@
 		"source_ref": "Yêu cầu 19/11/2026",
 		"text": "Dạ, Miyano xin phép hỏi tiếp câu đang dở ạ.",
 		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở sau khi bot trả lời câu hỏi chen ngang, hoặc khi khách gửi sticker / dấu hỏi giữa chừng."
+	},
+	{
+		"code": "DEMO_NGOAIGIO",
+		"title": "Demo – giờ khách muốn là ngày nghỉ / ngoài giờ làm việc",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, Miyano nhận lịch demo từ thứ Hai đến thứ Sáu, trong giờ làm việc ạ. Miyano đề xuất khung gần nhất là {khung_1}, anh/chị thấy có phù hợp không ạ?",
+		"buttons": [
+			{
+				"label": "Đồng ý",
+				"target": "DEMO_KHUNG_1"
+			},
+			{
+				"label": "Giờ khác",
+				"target": "DEMO_GIOKHAC"
+			}
+		],
+		"action": "demo:slots",
+		"notes": "Thay cho câu 'đã kín lịch' khi giờ khách gõ rơi vào thứ Bảy, Chủ nhật, ngoài giờ hoặc giờ nghỉ trưa."
+	},
+	{
+		"code": "DEMO_GIOKHAC_LAI",
+		"title": "Demo – xin lại đủ ngày và giờ",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, anh/chị cho Miyano xin cả ngày và giờ cụ thể ạ, ví dụ: 14h thứ Năm tuần sau.",
+		"buttons": [],
+		"action": "",
+		"notes": "Gửi một lần khi khách mới nêu ngày ('sáng mai') hoặc bot chưa đọc được giờ; lần sau vẫn chưa đọc được thì chuyển nhân viên."
+	},
+	{
+		"code": "DEMO_DACOLICH",
+		"title": "Demo – khách đã có lịch mà mở đặt lịch lần nữa",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, anh/chị đang có lịch demo vào {thu_ngay}, {gio_bat_dau}. Anh/chị muốn đổi hay huỷ lịch này ạ?",
+		"buttons": [
+			{
+				"label": "Đổi lịch",
+				"target": "DEMO_DOILICH"
+			},
+			{
+				"label": "Huỷ lịch",
+				"target": "DEMO_HUY"
+			},
+			{
+				"label": "Giữ lịch này",
+				"target": "KHONG_CAMON"
+			}
+		],
+		"action": "",
+		"notes": "Tránh việc bấm lại nút cũ làm lịch đã chốt bị thay mà khách không biết."
+	},
+	{
+		"code": "C4_XOADULIEU_GHINHAN",
+		"title": "Ghi nhận yêu cầu xoá dữ liệu (khi ô hướng dẫn C4_XOADULIEU đang Tắt)",
+		"step": "C",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, Miyano đã ghi nhận yêu cầu xoá dữ liệu của anh/chị. Bộ phận phụ trách sẽ liên hệ hỗ trợ anh/chị ạ.",
+		"buttons": [],
+		"action": "",
+		"notes": "Chỉ gửi khi C4_XOADULIEU không gửi được (chưa có link hướng dẫn). Việc cho người phụ trách tuân thủ vẫn được tạo như cũ."
 	}
 ]

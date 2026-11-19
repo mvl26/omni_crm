@@ -91,9 +91,6 @@ class TestRules(ClassifyCase):
 			],
 			"BOT_HOI": ["ban la bot a", "Đây là chatbot hả", "bot hay người vậy", "are you a bot?"],
 			"HUY_DANGKY": [
-				"ko cần",
-				"k cần ạ",
-				"dạ mình không cần nữa",
 				"Đừng nhắn tin cho tôi nữa",
 				"đừng gửi nữa",
 				"huỷ đăng ký",

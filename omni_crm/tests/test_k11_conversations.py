@@ -331,8 +331,10 @@ for i, t in enumerate(["thứ bảy 9h", "chủ nhật 10h", "thứ sáu 20h", "
 	add(f"f5_other_time_not_working_{i}", [*OTHER, t], [not_says("kín lịch"), no_handoff()], R_FULL)
 add("f5_other_time_no_hour", [*OTHER, "sáng mai"], [no_handoff(), clear()], "D6: gõ ngày không kèm giờ ('sáng mai') -> chuyển nhân viên và tạm dừng bot, không hỏi lại giờ")
 add("f5_other_time_too_soon", [*OTHER, "hôm nay 11h"], [handoff(), no_booking])
-add("f5_other_time_past", [*OTHER, "9h hôm qua"], [handoff(), no_booking])
-add("f5_other_time_anytime", [*OTHER, "lúc nào cũng được"], [handoff(), no_booking])
+# 19/11: chưa đọc được giờ -> xin lại đủ ngày giờ một lần (lần sau mới chuyển nhân viên); "lúc nào cũng được" -> đề xuất lại khung
+add("f5_other_time_past", [*OTHER, "9h hôm qua"], [ends("DEMO_GIOKHAC_LAI"), no_booking])
+add("f5_other_time_past_twice", [*OTHER, "9h hôm qua", "9h hôm qua"], [handoff(), no_booking])
+add("f5_other_time_anytime", [*OTHER, "lúc nào cũng được"], [ends("DEMO_KHUNGGIO"), no_booking])
 add("f5_retap_slot_after_booking", [*BOOKED, ("age",), "#DEMO_KHUNG_2"], [lacks("DEMO_KHUNGGIO")], R_REBOOK)
 add("f5_retap_format_after_booking", [*BOOKED, "#DEMO_HT_TRUCTIEP"], [lacks("DEMO_KHUNGGIO")], R_REBOOK)
 add("f5_retap_demo_button_after_booking", [*BOOKED, "#DEMO_SPD"], [lacks("DEMO_HINHTHUC")], R_REBOOK)
@@ -528,6 +530,29 @@ def _reraise(error):
 # Kịch bản từng là chỗ vụng (xfail) và đã được sửa: lý do xfail chung của nhóm không còn áp cho các tên này.
 FIXED = frozenset(
 	{
+		"f1_mid_demo_slots_0",
+		"f5_cancel_typed",
+		"f5_other_time_no_hour",
+		"f5_other_time_not_working_0",
+		"f5_other_time_not_working_1",
+		"f5_other_time_not_working_2",
+		"f5_other_time_not_working_3",
+		"f5_reschedule_typed",
+		"f5_retap_demo_button_after_booking",
+		"f5_retap_format_after_booking",
+		"f5_retap_slot_after_booking",
+		"f5_slots_typed_0",
+		"f5_slots_typed_1",
+		"f5_slots_typed_2",
+		"f5_slots_typed_3",
+		"f5_slots_typed_4",
+		"f5_slots_typed_5",
+		"f5_type_slot_number",
+		"f7_delete_data",
+		"f7_delete_data_en",
+		"f7_polite_decline_idle_0",
+		"f7_polite_decline_idle_1",
+		"f9_mid_demo_slots_weather",
 		"f1_alo_x4",
 		"f1_mid_attendees_0",
 		"f1_mid_attendees_1",

@@ -164,3 +164,62 @@ class TestAckFlow(FlowCase):
 		self.turn("ok em")
 		after = self.sent()[before:]
 		self.assertTrue(after and after[-1] not in ("DA_VANG", "REASK_CHUARO", "BAOGIA_PHANMEM"), after)
+
+
+class TestBatchB(FlowCase):
+	def setUp(self):
+		super().setUp()
+		self.set_switch(enabled=0, tests=self.ident1)
+		p = mock.patch.object(demo, "demo_user", return_value=None)
+		p.start()
+		self.addCleanup(p.stop)
+
+	def _to_slots(self):
+		self.greeted()
+		for code in ("MENU_SPD", "DEMO_SPD", "DEMO_HT_ONLINE"):
+			self.tap(code)
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+
+	def test_polite_decline_is_not_do_not_contact(self):
+		import frappe
+
+		self.greeted()
+		self.turn("thôi không cần đâu em")
+		self.assertEqual(self.sent(), ["KHONG_CAMON"])
+		self.assertFalse(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"))
+
+	def test_slot_list_is_numbered_and_number_picks_a_slot(self):
+		self._to_slots()
+		listed = [t for t in self.texts() if "đề xuất các khung giờ" in t][0]
+		self.assertIn("\n1. ", listed)
+		self.turn("2")
+		self.assertEqual(self.sent()[-1], "DEMO_SONGUOI")
+		self.assertEqual(self.sstate()["demo_at"], self.sstate()["demo_slots"][1])
+
+	def test_ordinal_words_pick_a_slot(self):
+		self._to_slots()
+		self.turn("khung đầu tiên")
+		self.assertEqual(self.sstate().get("demo_at"), self.sstate()["demo_slots"][0])
+
+	def test_day_without_time_asks_for_the_time(self):
+		self._to_slots()
+		self.turn("sáng thứ hai tuần sau")
+		self.assertEqual(self.sent()[-1], "DEMO_GIOKHAC_LAI")
+		self.assertEqual(self.sstate().get("demo_wait"), "time")
+
+	def test_greeting_at_slot_list_resends_slots(self):
+		self._to_slots()
+		self.turn("alo em")
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+
+	def test_weekend_is_not_called_fully_booked(self):
+		self._to_slots()
+		self.tap("DEMO_GIOKHAC")
+		self.turn("thứ bảy tuần sau 9h")
+		self.assertEqual(self.sent()[-1], "DEMO_NGOAIGIO")
+
+	def test_delete_data_request_is_acknowledged(self):
+		self.greeted()
+		self.codes["xóa dữ liệu của tôi đi"] = ("XOA_DULIEU", 1.0)
+		self.turn("xóa dữ liệu của tôi đi")
+		self.assertIn("C4_XOADULIEU_GHINHAN", self.sent())

@@ -308,9 +308,11 @@ class TestFlow(DemoCase):
 		self.assertEqual(self.nodes_sent()[-1], "DEMO_SONGUOI")
 
 		demo.handle(self.ctx("DEMO_GIOKHAC"))
-		self.assertTrue(
-			demo.on_text(self.ctx(text="hôm nào anh rảnh thì báo"))
-		)  # không đọc được -> nhân viên
+		self.assertTrue(demo.on_text(self.ctx(text="hôm nào anh rảnh thì báo")))
+		# 19/11: chưa đọc được -> xin lại đủ ngày giờ đúng MỘT lần, lần sau mới chuyển nhân viên
+		self.assertEqual(self.nodes_sent()[-1], "DEMO_GIOKHAC_LAI")
+		self.handoff.start.assert_not_called()
+		self.assertTrue(demo.on_text(self.ctx(text="hôm nào anh rảnh thì báo")))
 		self.handoff.start.assert_called_once()
 		self.assertNotIn("demo_wait", self.st())
 

@@ -22,7 +22,7 @@ Mã nút (khách bấm, text bắt đầu `#`) không đi qua AI. Tệp đính k
 | `Y_KHOA` | Hỏi tư vấn y khoa | Nhóm: thuốc, bệnh, cách dùng cho bệnh nhân | C.3 | `C3_YKHOA` rồi `MENU_CHINH` (không chuyển người) |
 | `KHONG_LIENQUAN` | Không liên quan, trêu đùa, đòi bot đổi vai | Nhóm: không liên quan, trêu đùa, đòi bot đổi vai | C.3 | `C3_KHONGLIENQUAN` rồi `MENU_CHINH` |
 | `SPAM` | Quảng cáo, lừa đảo, link lạ | Nhóm: quảng cáo, lừa đảo, link lạ | C.3 | `C3_SPAM` (không trả lời, không tạo Lead) |
-| `HUY_DANGKY` | Yêu cầu dừng nhắn | “không cần”, “đừng nhắn nữa”, “hủy đăng ký” | C.4 | `C4_HUYDANGKY` (xem Mâu thuẫn 2) |
+| `HUY_DANGKY` | Yêu cầu dừng nhắn | “đừng nhắn nữa”, “hủy đăng ký” | C.4 | `C4_HUYDANGKY` (xem Mâu thuẫn 2) |
 | `XOA_DULIEU` | Yêu cầu xoá dữ liệu | Nhóm: khách yêu cầu xoá dữ liệu | C.4 | `C4_XOADULIEU` (đang Tắt → chuyển `TUAN_THU`) |
 | `MENU` | Muốn quay lại menu chính | “menu” | 1.5 | `MENU_CHINH` |
 | `CHUA_RO` | Không hiểu được ý | “Alo”, “hi”, sticker, câu không rõ; tin ghi âm, sticker, ảnh không rõ nội dung | 1.2, C.3 | `REASK_CHUARO`, tối đa 2 lần, lần 3 → `GAP_NHANVIEN` |
@@ -40,3 +40,5 @@ Mã nút (khách bấm, text bắt đầu `#`) không đi qua AI. Tệp đính k
 1. **“bạn là bot à?”** – Bảng 1.2 ghi: “Cho gặp nhân viên”, “gọi cho tôi”, “bạn là bot à?” | GAP_NHANVIEN | Mục 1.4. Bảng C.3 ghi: “Bạn là bot à?” | “Dạ, đây là trợ lý AI của Miyano Việt Nam. Anh/chị muốn trao đổi với nhân viên thì Miyano kết nối ngay ạ.” + nút [Gặp nhân viên]. → Mã riêng `BOT_HOI`, theo **C.3** (cụ thể hơn, không chuyển người ngay).
 2. **“không cần”** – C.4 ghi: Khách nói “không cần”, “đừng nhắn nữa”, “hủy đăng ký” → dừng hẳn, đánh dấu “Không liên hệ”. Nhưng 3.2 có nút [Không, cảm ơn] là lời kết lịch sự (`KHONG_CAMON`), không dừng hẳn. → Bấm nút [Không, cảm ơn] đi theo mã nút (không qua AI). Gõ “không cần” → `HUY_DANGKY` theo **C.4**. Khi khách đang trả lời câu hỏi có/không (ví dụ “Anh/chị còn cần Miyano hỗ trợ gì thêm không ạ?”), nên chốt lại có coi là dừng hẳn không.
 3. **Báo giá chưa rõ dịch vụ** – 1.2: “Dạ, anh/chị muốn Miyano báo giá cho dịch vụ nào ạ?” + 3 nút dịch vụ. 3.3 (0): “Dạ, anh/chị đang cần Miyano báo giá cho sản phẩm nào ạ?” [Vật tư y tế] [Phần mềm SupplyCore] [Hệ thống SPD]. → Mã `BAOGIA` gõ ở Bước 1 → `BAOGIA_CHUARO` (1.2). `BAOGIA_HOISANPHAM` dùng cho nút "Sản phẩm khác" và nút xin báo giá chung.
+
+**Cập nhật 19/11/2026 (người phụ trách quyết):** “không cần”, “thôi không cần đâu em” là lời từ chối lịch sự → gửi `KHONG_CAMON`, KHÔNG đánh dấu “Không liên hệ”. Chỉ dừng hẳn khi khách nói rõ (“đừng nhắn nữa”, “hủy đăng ký”, “stop”). Thay cho cách hiểu C.4 ở Mâu thuẫn 2.

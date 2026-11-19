@@ -140,7 +140,11 @@ GREETINGS = frozenset(
 )
 MENU_EXACT = frozenset({"menu", "menu chinh", "ve menu", "quay lai menu", "quay ve menu", "xem menu"})
 # "không cần" chỉ nhận khi là CẢ câu (C.4); "không cần gấp, gửi báo giá giúp" không phải yêu cầu dừng.
-STOP_EXACT = frozenset({"khong can", "stop", "unsubscribe", "huy dang ky"})
+# 19/11 (người phụ trách quyết): "không cần" là lời từ chối lịch sự, KHÔNG phải yêu cầu dừng nhắn (xem `is_polite_decline`).
+STOP_EXACT = frozenset({"stop", "unsubscribe", "huy dang ky"})
+DECLINE_EXACT = frozenset(
+	{"khong can", "khong can nua", "thoi khong can", "thoi khong can nua", "khong cam on", "thoi cam on", "khong can dau"}
+)
 # "không cần" trơ trọi khi bot đang đứng ở một ô (đang hỏi dở) có thể chỉ là trả lời câu hỏi: không coi là dừng.
 STOP_NEEDS_IDLE = frozenset({"khong can"})
 # "hủy đăng ký demo / lịch / đơn ..." là hủy một việc cụ thể, không phải dừng nhận tin.
@@ -251,6 +255,13 @@ def is_ack_only(text: str | None) -> bool:
 		return False
 	joined = " ".join(words)
 	return bool(_ACK_CORE.intersection(words)) or "cam on" in joined or "duoc roi" in joined
+
+
+def is_polite_decline(text: str | None) -> bool:
+	"""Cả tin chỉ là lời từ chối lịch sự ("không cần", "thôi không cần đâu em") — thuần."""
+	if not isinstance(text, str):
+		return False
+	return _core(" ".join(_clauses(text))) in DECLINE_EXACT
 
 
 def is_greeting_only(text: str | None) -> bool:

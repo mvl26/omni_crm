@@ -193,6 +193,7 @@ def _queue(
 
 
 CHOICE_MIN = 2  # từ 2 nút trở lên mới kèm danh sách lựa chọn trong phần chữ
+SLOT_TARGETS = ("DEMO_KHUNG_", "DEMO_GIOKHAC")
 CHOICE_HINT_NUMBERED = "(Anh/chị bấm nút, hoặc gõ số tương ứng để chọn.)"
 CHOICE_HINT_PLAIN = "(Anh/chị bấm nút, hoặc gõ lại đúng lựa chọn.)"
 
@@ -207,7 +208,9 @@ def with_choice_list(text: str, buttons: list[dict]) -> tuple[str, dict | None]:
 	if len(buttons or []) < CHOICE_MIN:
 		return text, None
 	labels = [b["label"] for b in buttons]
-	numbered = not any(ch.isdigit() for label in labels for ch in label)
+	numbered = not any(ch.isdigit() for label in labels for ch in label) or all(
+		str(b.get("target") or "").startswith(SLOT_TARGETS) for b in buttons
+	)  # khung giờ demo: nhãn có chữ số nhưng gõ "2" chỉ có thể là thứ tự
 	lines = [f"{i}. {label}" if numbered else f"• {label}" for i, label in enumerate(labels, 1)]
 	hint = CHOICE_HINT_NUMBERED if numbered else CHOICE_HINT_PLAIN
 	listed = f"{text}\n\n" + "\n".join(lines) + f"\n{hint}"
