@@ -340,3 +340,13 @@ fixtures = [
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
+
+# Bộ não cải tiến của bot kịch bản (ADR 0033). Khai báo ở cuối tệp, tách khỏi hai khối lớn phía trên để không đụng
+# các thay đổi đang dở của luồng khác trong cùng tệp.
+scheduler_events["cron"]["40 1 * * *"] = [
+	"omni_crm.script.brain.review"  # mỗi đêm rà hội thoại hôm qua, ghi đề xuất CHỜ DUYỆT
+]
+doc_events["Omni Script Node"] = {
+	"on_update": "omni_crm.script.brain.on_node_change",  # kịch bản đổi -> cập nhật tài liệu trong Kho tri thức
+	"on_trash": "omni_crm.script.brain.on_node_change",
+}

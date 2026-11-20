@@ -63,6 +63,9 @@ def missing_vars(text: str | None, ctx: dict | None) -> list[str]:
 	]
 
 
+NO_SEND_PREFIXES = ("DX_", "TUVUNG_")  # = brain.PROPOSAL_PREFIX và các ô từ vựng (ADR 0033)
+
+
 def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]] | None:
 	"""(text, buttons) đã điền biến; None nếu ô không có, `Tắt`, nội dung trống, thiếu biến bắt buộc, hoặc `Cần duyệt` mà không phải danh sách thử.
 	Nút dẫn tới ô `Tắt` (hay `Cần duyệt` với khách ngoài danh sách thử) bị bỏ; hết nút thì vẫn gửi phần chữ.
@@ -71,6 +74,8 @@ def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]]
 	"""
 	if not node:
 		return None
+	if str(node.get("code") or "").startswith(NO_SEND_PREFIXES):
+		return None  # ô nội bộ của bộ não cải tiến (đề xuất, từ vựng): không bao giờ là tin gửi khách
 	status = node.get("status") or ACTIVE
 	if status == OFF:
 		return None

@@ -421,6 +421,15 @@ RULE_NEEDS_DETAIL = ("BAOGIA", "MENU_VATTU")  # luật trúng nhưng tin dài: v
 RULE_DETAIL_MIN_WORDS = 4
 
 
+def _learned(text: str) -> str | None:
+	try:
+		from omni_crm.script import brain
+
+		return brain.learned_code(text)
+	except Exception:
+		return None
+
+
 def classify_detail(
 	text: str,
 	state: dict | None = None,
@@ -442,6 +451,10 @@ def classify_detail(
 		)
 		if hit is not None and not wants_detail:
 			return _detail(*hit)
+		if hit is None:
+			learned = _learned(text)  # cách nói đã được người phụ trách duyệt (ADR 0033): không cần hỏi AI
+			if learned:
+				return _detail(learned, RULE_CONFIDENCE)
 		got = _classify_ai(text, state, lead, identity, batch_id)
 		if hit is not None:  # luật đã quyết mã: AI chỉ bổ sung dịch vụ và thông tin đã nêu
 			return _detail(hit[0], hit[1], got.get("service", ""), got.get("slots"))
