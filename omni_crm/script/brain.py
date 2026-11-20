@@ -1,4 +1,4 @@
-"""Bộ não cải tiến của bot kịch bản (ADR 0033): tự rà hội thoại, soạn ĐỀ XUẤT chờ người duyệt, không tự áp dụng.
+"""Bộ não cải tiến của bot kịch bản (ADR 0034): tự rà hội thoại, soạn ĐỀ XUẤT chờ người duyệt, không tự áp dụng.
 
 Ba việc:
 1. `sync_document()`: xuất toàn bộ Omni Script Node thành MỘT tài liệu trong Kho tri thức (`Omni KB Document`, danh mục

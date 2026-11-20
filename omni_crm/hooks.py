@@ -214,6 +214,13 @@ scheduler_events = {
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
 }
 
+# Bộ não cải tiến của bot kịch bản (ADR 0034). Khai báo tách khỏi hai khối lớn phía trên và khỏi cuối tệp để
+# không đụng các thay đổi đang dở của luồng khác trong cùng tệp.
+scheduler_events["cron"]["40 1 * * *"] = [
+	"omni_crm.script.brain.review"  # mỗi đêm rà hội thoại hôm qua, ghi đề xuất CHỜ DUYỆT
+]
+
+
 # Fixtures
 # --------
 doc_events = {
@@ -253,6 +260,11 @@ doc_events["CRM Lead"]["on_update"] = [
 	doc_events["CRM Lead"]["on_update"],
 	"omni_crm.script.lead_ui.on_lead_fields_changed",
 ]
+# Bộ não cải tiến (ADR 0034): kịch bản đổi thì cập nhật tài liệu kịch bản trong Kho tri thức.
+doc_events["Omni Script Node"] = {
+	"on_update": "omni_crm.script.brain.on_node_change",  # kịch bản đổi -> cập nhật tài liệu trong Kho tri thức
+	"on_trash": "omni_crm.script.brain.on_node_change",
+}
 fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},
 	{"dt": "Custom Field", "filters": [["module", "=", "Omni CRM"]]},
@@ -340,13 +352,3 @@ fixtures = [
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-
-# Bộ não cải tiến của bot kịch bản (ADR 0033). Khai báo ở cuối tệp, tách khỏi hai khối lớn phía trên để không đụng
-# các thay đổi đang dở của luồng khác trong cùng tệp.
-scheduler_events["cron"]["40 1 * * *"] = [
-	"omni_crm.script.brain.review"  # mỗi đêm rà hội thoại hôm qua, ghi đề xuất CHỜ DUYỆT
-]
-doc_events["Omni Script Node"] = {
-	"on_update": "omni_crm.script.brain.on_node_change",  # kịch bản đổi -> cập nhật tài liệu trong Kho tri thức
-	"on_trash": "omni_crm.script.brain.on_node_change",
-}

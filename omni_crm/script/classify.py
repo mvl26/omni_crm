@@ -452,7 +452,7 @@ def classify_detail(
 		if hit is not None and not wants_detail:
 			return _detail(*hit)
 		if hit is None:
-			learned = _learned(text)  # cách nói đã được người phụ trách duyệt (ADR 0033): không cần hỏi AI
+			learned = _learned(text)  # cách nói đã được người phụ trách duyệt (ADR 0034): không cần hỏi AI
 			if learned:
 				return _detail(learned, RULE_CONFIDENCE)
 		got = _classify_ai(text, state, lead, identity, batch_id)

@@ -1,4 +1,4 @@
-"""Bộ não cải tiến của bot kịch bản (ADR 0033): xuất kịch bản thành tài liệu, rà hội thoại, đề xuất chờ duyệt."""
+"""Bộ não cải tiến của bot kịch bản (ADR 0034): xuất kịch bản thành tài liệu, rà hội thoại, đề xuất chờ duyệt."""
 
 from datetime import timedelta
 from unittest import mock

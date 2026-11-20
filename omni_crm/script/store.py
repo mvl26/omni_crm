@@ -63,7 +63,7 @@ def missing_vars(text: str | None, ctx: dict | None) -> list[str]:
 	]
 
 
-NO_SEND_PREFIXES = ("DX_", "TUVUNG_")  # = brain.PROPOSAL_PREFIX và các ô từ vựng (ADR 0033)
+NO_SEND_PREFIXES = ("DX_", "TUVUNG_")  # = brain.PROPOSAL_PREFIX và các ô từ vựng (ADR 0034)
 
 
 def render(node: dict | None, ctx: dict | None = None) -> tuple[str, list[dict]] | None:

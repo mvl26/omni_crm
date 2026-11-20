@@ -1,4 +1,4 @@
-# ADR 0033 — Bộ não cải tiến của bot kịch bản: tự rà hội thoại, đề xuất chờ duyệt
+# ADR 0034 — Bộ não cải tiến của bot kịch bản: tự rà hội thoại, đề xuất chờ duyệt
 
 Ngày: 2026-11-20 · Trạng thái: Chấp nhận (người phụ trách yêu cầu 20/11; chọn "phải duyệt", không tự áp dụng) ·
 Liên quan: ADR 0029, 0030, 0032, docs/08 mục 7

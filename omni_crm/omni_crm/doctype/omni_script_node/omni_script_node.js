@@ -1,4 +1,4 @@
-// Nút duyệt đề xuất của bộ não cải tiến (ADR 0033). Chỉ hiện ở ô đề xuất (mã DX_…) và ô từ vựng chờ duyệt.
+// Nút duyệt đề xuất của bộ não cải tiến (ADR 0034). Chỉ hiện ở ô đề xuất (mã DX_…) và ô từ vựng chờ duyệt.
 frappe.ui.form.on("Omni Script Node", {
 	refresh(frm) {
 		if (frm.is_new()) return;
