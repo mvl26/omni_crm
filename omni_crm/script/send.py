@@ -126,6 +126,38 @@ def send_node(
 	return _queue(identity, text, buttons, node["code"], purpose, node_channel=node.get("channel"))
 
 
+def staff_replied_after(lead: str | None, after) -> bool:
+	"""Có NGƯỜI (nhân viên) trả lời khách sau mốc `after` không. Zalo gửi "echo" cho mọi tin OA gửi đi, kể cả tin của
+	chính bot (câu báo chờ, câu kịch bản); `reply.sale_replies_after` coi mọi echo là nhân viên. Ở đây echo trùng mã với
+	một tin bot đã gửi thì KHÔNG tính (lỗi 20/11: câu "đang suy nghĩ" làm bot tưởng nhân viên đã trả lời, bỏ câu Kho tri thức)."""
+	if not lead or not after:
+		return False
+	from omni_crm.bot import reply  # import trễ: reply gọi router
+
+	turns = reply.sale_replies_after(lead, after)
+	if not turns:
+		return False
+	echo_refs = [t.get("ref") for t in turns if t.get("kind") == "oa_echo" and t.get("ref")]
+	ids = {}
+	if echo_refs:
+		ids = {
+			r.name: r.external_message_id
+			for r in frappe.get_all(
+				"Omni Inbound Message", filters={"name": ["in", echo_refs]}, fields=["name", "external_message_id"]
+			)
+		}
+	own = set()
+	if any(ids.values()):
+		own = set(
+			frappe.get_all(
+				OUTBOUND,
+				filters={"external_message_id": ["in", [v for v in ids.values() if v]], "source": "Bot"},
+				pluck="external_message_id",
+			)
+		)
+	return any(not (t.get("kind") == "oa_echo" and ids.get(t.get("ref")) in own) for t in turns)
+
+
 THINKING_CONF = "omni_script_thinking"  # site_config: 1 = gửi câu "đang suy nghĩ" khi bot phải nhờ AI (mặc định tắt)
 NODE_THINKING = "DANG_SUYNGHI"
 

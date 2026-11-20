@@ -18,7 +18,7 @@ from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
 from omni_crm.crm_bridge import lead as lead_bridge
-from omni_crm.script import engine, state, store, timeutil, validate
+from omni_crm.script import engine, router, send, state, store, timeutil, validate
 from omni_crm.script.router import RouteContext
 
 FLOW = "collect"
@@ -260,6 +260,107 @@ _FILLERS = frozenset(
 )
 
 
+# --- Luật 1 và 3 (yêu cầu 20/11): ô thông tin chỉ nhận GIÁ TRỊ đã trích và đúng kiểu, không ghi nguyên văn câu nói ---
+# Câu nói / câu hỏi của khách chứ không phải một giá trị: "Anh vừa nói bên trên thây", "Em vẫn k hiểu", "sao không trả lời"
+TALK = re.compile(
+	r"(?:^|\s)(?:anh|chị|em|tôi|mình|tui|a|e|c)\s+(?:vừa|đã|vẫn|nói|hỏi|bảo|không|k|ko|chưa|đang|thấy|muốn hỏi|muốn biết)(?![\wÀ-ỹ])"
+	r"|(?:không|k|ko|chưa|chẳng)\s+hiểu|bên trên|ở trên|như trên|lúc nãy|sao\s+(?:không|k|ko|chưa)"
+	r"|khi nào|bao giờ|bao lâu|thế nào|như nào|\?",
+	re.I,
+)
+TIME_VALUE = re.compile(r"\d|tuần|tháng|ngày|thứ|mai|nay|gấp|quý|cuối|đầu|sớm|gói thầu|càng", re.I)
+NUMBER_WORD = re.compile(r"(?<![\wÀ-ỹ])(?:một|hai|ba|bốn|năm|sáu|bảy|tám|chín|mười|chục|trăm|nghìn|ngàn|vài|dăm)(?![\wÀ-ỹ])", re.I)
+SKIP_VALUE = re.compile(r"chưa (?:biết|rõ|chắc|có|tính)|không (?:rõ|biết|nhớ)|tính sau|để sau|tuỳ|tùy", re.I)
+LOW_ANSWER_CONF = 0.7  # luật 3: AI coi là câu trả lời nhưng chưa chắc thì không ghi
+MAX_NOT_RECORDED = 2  # hỏi lại tối đa 2 lần, lần thứ ba mời gặp nhân viên
+NODE_NOT_RECORDED = "CHUA_GHI_DUOC"
+FREE_FIELDS = ("name_org",)  # tên – đơn vị: chữ tự do, không kiểm kiểu
+
+
+SEE_FILE = re.compile(r"(?:theo|như|trong|xem)\s+(?:file|tệp|danh mục|bảng|ảnh)", re.I)
+_QTY_FILLERS = frozenset(
+	"anh chi em toi minh ben can lay mua dat khoang tam chung la cho them nhe nha a da vang thi cai va voi moi loai thoi".split()
+)
+
+
+def _only_quantities(text: str) -> bool:
+	"""Tin chỉ gồm số lượng, đơn vị và từ nối (không kèm nội dung khác) — thuần."""
+	rest = QUANTITY.sub(" ", text)
+	try:
+		from omni_crm.script import classify
+
+		words = classify.fold(rest).split()
+	except Exception:
+		return False
+	left = [w for w in words if w not in _QTY_FILLERS and not w.isdigit() and not NUMBER_WORD.search(w)]
+	return len(left) <= 2
+
+
+def not_recorded(ctx: RouteContext) -> bool:
+	"""Như `_not_recorded` nhưng tự đọc trạng thái đang hỏi (dùng từ `menu._side_talk`). False nếu không có câu đang hỏi."""
+	st = engine.script_state(ctx)
+	node = store.get_node(st.get("node")) or {}
+	if (st.get("flow") or "") != FLOW or not st.get("field") or not node:
+		return False
+	return _not_recorded(ctx, st, node)
+
+
+def slot_value(ctx: RouteContext, field: str, text: str) -> str | None:
+	"""Giá trị hợp lệ để ghi vào ô `field` từ tin khách gõ, hoặc None nếu tin không phải một giá trị của ô đó.
+
+	Ưu tiên giá trị AI đã trích (nguyên văn một đoạn của tin). Không có thì kiểm kiểu: mặt hàng không được là một câu
+	nói / câu hỏi; số lượng phải có con số; thời gian phải có mốc thời gian. AI coi là câu trả lời mà độ chắc chắn
+	dưới 0,7 thì chỉ nhận khi kiểu rõ ràng (có số, có mốc thời gian)."""
+	detail = ctx.state.get("_classify_detail") or {}
+	detail = detail if detail.get("batch_id") == ctx.batch_id else {}
+	extracted = str((detail.get("slots") or {}).get(field) or "").strip()
+	if extracted:
+		return extracted
+	if field in FREE_FIELDS:
+		return text
+	if len(text.split()) <= 5 and (DECLINE.search(text) or SKIP_VALUE.search(text)):
+		return text  # khách chủ động bỏ qua câu này ("bỏ qua", "chưa biết", "để sau"): ghi đúng như vậy cho nhân viên
+	talk = bool(TALK.search(text))
+	unsure = detail.get("relation") == "TRA_LOI" and float(detail.get("confidence") or 0) < LOW_ANSWER_CONF
+	if field in ("items", "quantity") and SEE_FILE.search(text) and not talk:
+		return text  # "theo file", "như danh mục đã gửi": khách chỉ tới tệp đã gửi
+	if field == "quantity":
+		found = [m.group(0).strip() for m in QUANTITY.finditer(text)]
+		numeric = any(ch.isdigit() for ch in text) or bool(NUMBER_WORD.search(text))
+		if numeric and not talk and _only_quantities(text):
+			return text  # cả tin chỉ nói về số lượng ("200 hộp và 5000 cái", "khoảng vài chục hộp")
+		if found:
+			return ", ".join(found)  # câu dài có nêu số lượng: chỉ lấy phần số lượng
+		return text if numeric and not talk else None
+	if field == DELIVERY_FIELD:
+		return text if TIME_VALUE.search(text) and not TALK.search(ACK_TAIL.sub("", text)) else None
+	if talk or unsure:
+		return None
+	return text
+
+
+def _not_recorded(ctx: RouteContext, st: dict, node: dict) -> bool:
+	"""Tin khách không phải giá trị của ô đang hỏi: KHÔNG ghi, hỏi lại đúng câu đó (tối đa 2 lần), lần thứ ba mời
+	gặp nhân viên. Luôn có một tin gửi khách."""
+	from omni_crm.script.flows import menu
+
+	tries = cint(st.get("not_recorded")) + 1
+	if tries <= MAX_NOT_RECORDED:
+		lead_in = store.render(store.get_node(NODE_NOT_RECORDED), {**engine.variables(ctx), "identity": ctx.identity})
+		sent = send.send_node(
+			ctx.identity, node.get("code") or "", engine.variables(ctx), prefix=lead_in[0] if lead_in else ""
+		)
+		if sent:
+			router._mark(ctx.batch_id)
+			_restore_flow(ctx, st, wrong=cint(st.get("wrong")))
+			state.update_state(ctx.identity, not_recorded=tries)
+			return True
+	_clear_flow(ctx)
+	state.update_state(ctx.identity, not_recorded=None)
+	menu.auto_handoff(ctx, "REASON_MISUNDERSTOOD")
+	return True
+
+
 QUANTITY = re.compile(
 	r"\d[\d.,]*\s*(?:hộp|cái|chiếc|thùng|bộ|gói|lọ|chai|túi|cuộn|đôi|kg|lít|tấm|vỉ|ống|bịch|cây|tuýp|kiện|can|bao)(?![\wÀ-ỹ])",
 	re.I,
@@ -324,7 +425,7 @@ def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) 
 	if field == "name_org":
 		values.update(_name_org(ctx, answers[field]))
 	if st.get("flow") == FLOW and st.get("field") == field:
-		values.update(flow=None, field=None, node=None, pending=None, wrong=None, force=None)
+		values.update(flow=None, field=None, node=None, pending=None, wrong=None, force=None, not_recorded=None)
 	state.update_state(ctx.identity, **values)
 
 
@@ -400,6 +501,10 @@ def on_text(ctx: RouteContext) -> bool:
 			engine.run_node(ctx, node.get("code") or "")
 			_restore_flow(ctx, st, wrong=1)
 			return True
+		if text and not ctx.attachments:
+			value = slot_value(ctx, field, text)
+			if value is None:  # không phải giá trị của ô này (câu nói, câu hỏi, AI chưa chắc): KHÔNG ghi, hỏi lại
+				return _not_recorded(ctx, st, node)
 		save_answer(ctx, field, value, typed=True)
 		for extra, extra_value in extras.items():
 			save_answer(ctx, extra, extra_value, typed=True)

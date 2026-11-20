@@ -386,7 +386,7 @@ def _sale_replied(ctx: RouteContext) -> bool:
 		"received_at",
 		order_by="received_at desc",
 	)
-	return bool(last_at) and bool(reply.sale_replies_after(ctx.lead, last_at))
+	return bool(last_at) and send.staff_replied_after(ctx.lead, last_at)
 
 
 def _expire_stale_drafts(lead: str | None) -> None:

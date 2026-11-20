@@ -237,5 +237,40 @@
 		"action": "",
 		"source_ref": "Yêu cầu 20/11/2026",
 		"notes": "Gửi ngay khi khách gõ một câu mà bot phải nhờ AI (mất vài giây). Bấm nút / gõ số được trả lời tức thì nên không gửi câu này. Bật bằng site_config omni_script_thinking = 1; tắt ô này cũng là tắt."
+	},
+	{
+		"code": "CHUA_GHI_DUOC",
+		"title": "Câu dẫn khi tin khách không phải thông tin của câu đang hỏi (không ghi, hỏi lại)",
+		"step": "3",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 1)",
+		"text": "Dạ, Miyano xin lỗi, Miyano chưa ghi được thông tin này.",
+		"buttons": [],
+		"action": "",
+		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi khi tin khách không phải giá trị của ô đó (một câu nói, câu hỏi, hoặc AI chưa chắc). Hỏi lại tối đa 2 lần, lần thứ ba mời gặp nhân viên."
+	},
+	{
+		"code": "GAP_NV_XACNHAN",
+		"title": "Hỏi xác nhận trước khi chuyển nhân viên (khi bot chưa chắc khách cần người)",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 1)",
+		"text": "Dạ, anh/chị muốn Miyano chuyển cho nhân viên tư vấn hỗ trợ trực tiếp không ạ?",
+		"buttons": [
+			{
+				"label": "Gặp nhân viên",
+				"target": "GAP_NHANVIEN"
+			},
+			{
+				"label": "Không cần",
+				"target": "KHONG_CAMON"
+			}
+		],
+		"action": "",
+		"notes": "Gửi khi AI đoán khách cần người với độ chắc chắn dưới 0,9 và khách không nói rõ. Khách nói rõ ('cho gặp nhân viên') thì chuyển ngay, không hỏi."
 	}
 ]

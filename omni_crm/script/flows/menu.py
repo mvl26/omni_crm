@@ -395,6 +395,13 @@ def route(ctx: RouteContext, code: str) -> None:
 		if not _show_booking(ctx) and not engine.run_button(ctx, NODE_NO_THANKS):
 			reask(ctx)
 		return
+	if code in ("GAP_NHANVIEN", "CAN_NGUOI") and _unsure_handoff(ctx, code):
+		# Luật 7: chuyển người (bot sẽ tạm dừng) chỉ làm ngay khi khách nói rõ hoặc AI rất chắc; còn lại hỏi một câu.
+		state.reset_reask(ctx.identity)
+		if code == "CAN_NGUOI":
+			_log_unanswered(ctx, "", {})  # câu khách hỏi vẫn được ghi lại cho chuyên viên
+		if engine.run_node(ctx, NODE_CONFIRM_HANDOFF):
+			return
 	if code == "PHAN_NAN":  # C.2: khách phàn nàn thì tự chuyển nhân viên
 		state.reset_reask(ctx.identity)
 		auto_handoff(ctx, "REASON_COMPLAINT")
@@ -636,6 +643,16 @@ def _polite_decline(text: str) -> bool:
 		return bool(classify.is_polite_decline(text))
 	except Exception:
 		return False
+
+
+HANDOFF_CONF = 0.9
+NODE_CONFIRM_HANDOFF = "GAP_NV_XACNHAN"
+
+
+def _unsure_handoff(ctx: RouteContext, code: str) -> bool:
+	"""AI đoán khách cần người với độ chắc chắn dưới 0,9 và khách không nói rõ (luật cố định không trúng)."""
+	_code, conf = ctx.state.get(CLASSIFIED_KEY) or (code, 1.0)
+	return float(conf or 0) < HANDOFF_CONF and not _explicit_request(ctx, code) and bool(store.get_node(NODE_CONFIRM_HANDOFF))
 
 
 def _explicit_request(ctx: RouteContext, code: str) -> bool:
@@ -961,8 +978,8 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 		plain = not asking and code in ANSWER_CODES and (slots or code != UNCLEAR or len(text.split()) > 1)
 		if field in AI_CHECKED and plain:
 			return False  # AI coi là câu trả lời (nêu mặt hàng / nhu cầu mua)
-		if field in AI_CHECKED and code == UNCLEAR:  # "asdfgh": hỏi lại một lần, lần sau ghi nguyên văn cho nhân viên
-			return _ask_again(ctx, pending, NODE_REASK_CHOICE)
+		if field in AI_CHECKED and code == UNCLEAR:  # "asdfgh": KHÔNG ghi; hỏi lại (tối đa 2 lần), lần ba mời nhân viên
+			return collect.not_recorded(ctx) or _ask_again(ctx, pending, NODE_REASK_CHOICE)
 		if field in AI_CHECKED and code in OTHER_INTENT:
 			# khách nói sang việc khác hẳn ("Anh muốn demo spd", "Demo cơ mà không phải mua hàng"): KHÔNG ghi làm
 			# câu trả lời; rời câu đang hỏi và làm theo ý khách
@@ -1153,8 +1170,8 @@ def _kb_auto_send(ctx: RouteContext, res: dict) -> bool:
 		if not bot_handoff.bot_active_now(now_datetime()):
 			return False
 		last = (reply._batch_messages(ctx.batch_id) or [None])[-1]
-		if last and reply.sale_replies_after(ctx.lead, last.received_at):
-			return False  # nhân viên đã trả lời sau tin này
+		if last and send.staff_replied_after(ctx.lead, last.received_at):
+			return False  # nhân viên đã trả lời sau tin này (echo của chính tin bot không tính)
 	except Exception as e:
 		frappe.logger("omni").info("omni script: không kiểm được điều kiện tự gửi (%s)", type(e).__name__)
 		return False
