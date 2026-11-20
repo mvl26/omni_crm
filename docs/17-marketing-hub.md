@@ -13,6 +13,8 @@ Quyết định kiến trúc: ADR 0028. Khảo sát: `docs/marketing_hub_plan.md
 | `Omni Publish Log` | `target`, `attempt_no`, `outcome` (success / error / dry_run), `http_status`, `started_at`, `finished_at`, `error_type`, `message` |
 | `Omni Campaign` (thêm) | `objective`, `audience`, `key_message`, `landing_page`; trạng thái thêm `Đã hủy`, `Có lỗi`; `utm_campaign` unique, tự sinh `slug-mmyy` khi tạo bài đầu tiên |
 | CRM Lead (thêm) | `omni_content_item` (Bài đăng nguồn), `omni_funnel_stage` |
+| `Omni Media Storage` (Single, ADR 0033) | `enabled` (0), `endpoint_url`, `bucket` (crm-media), `prefix` (omni-content-item/), `region`, `access_key`, `secret_key` (Password), `verify_tls` (1), `ca_bundle` |
+| File (thêm, ADR 0033) | `omni_s3_key`: khóa object của ảnh bài đã chuyển sang kho S3 |
 
 ## Vai trò
 
@@ -41,6 +43,15 @@ Trang đích luôn chuẩn hóa thành thư mục có `/` cuối, vì nginx bỏ
 - `hub_disabled`: ẩn Marketing Hub.
 - `dry_run`: không gọi API đăng bài. Chưa lưu cấu hình thì coi là bật. `Omni Settings.sandbox_mode` cũng tính.
 - `monthly_ai_budget` (USD/tháng): 0 = tắt mọi lời gọi AI marketing.
+
+## Kho ảnh S3 (ADR 0033)
+
+- Bật `Omni Media Storage.enabled`: lưu bài thì ảnh `/files/` của bài (ảnh bìa, ảnh thêm) chuyển sang MinIO; job phút 47
+  mỗi giờ chuyển ảnh còn lại (bỏ qua bài đang đăng hoặc sắp đăng trong 10 phút). Ô ảnh đổi sang
+  `/omni-media/<File>-<chữ ký>.<đuôi>`; CRM phát ảnh ở đó cho khách không đăng nhập (Facebook/Zalo tải như `/files/`).
+- Chỉ chuyển ảnh JPG, PNG, GIF, WebP; SVG và loại khác ở lại `/files/`. Ảnh riêng tư không chuyển. Tắt công tắc: ảnh mới ở lại đĩa, ảnh đã chuyển vẫn đọc từ MinIO.
+- Quay lui: tắt công tắc rồi `bench --site <site> execute omni_crm.marketing.s3_media.pull_back --kwargs "{'dry_run': 0}"`.
+- Đếm: `bench --site <site> execute omni_crm.marketing.s3_media.pending_count`.
 
 ## AI (Prompt 4, ADR 0029)
 

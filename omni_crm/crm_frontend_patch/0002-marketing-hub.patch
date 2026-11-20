@@ -1017,17 +1017,33 @@ index 3efc194..ac1fc77 100644
  
 diff --git a/frontend/src/composables/marketing.js b/frontend/src/composables/marketing.js
 new file mode 100644
-index 0000000..9b2075d
+index 0000000..39a07de
 --- /dev/null
 +++ b/frontend/src/composables/marketing.js
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,105 @@
 +// Marketing Hub (omni_crm, V3-10 Prompt 3): tiện ích dùng chung cho các trang Marketing.
-+import { call } from 'frappe-ui'
++import { call, frappeRequest, toast } from 'frappe-ui'
++import { serverMessageList } from '@/utils/serverMessages'
 +
 +export const API = 'omni_crm.marketing.api.'
 +
 +export function api(method, params = {}) {
 +  return call(API + method, params)
++}
++
++// Cảnh báo máy chủ gửi kèm khi gọi THÀNH CÔNG (frappe.msgprint), ví dụ kho ảnh S3 chưa ghi được ảnh (ADR 0033).
++// call() của frappe-ui chỉ đọc _server_messages khi lỗi, nên trang Marketing không thấy các cảnh báo này như Desk.
++export function showServerMessages(raw = []) {
++  for (const m of serverMessageList(raw)) {
++    if (m.indicator === 'red') toast.error(m.message)
++    else if (m.indicator === 'green') toast.success(m.message)
++    else toast.warning(m.message)
++  }
++}
++
++// Như call() (cùng kết quả, cùng lỗi e.messages), thêm: hiện cảnh báo máy chủ gửi kèm khi thành công.
++export function callShowMessages(method, params = {}) {
++  return frappeRequest({ url: method, params, onServerMessages: showServerMessages })
 +}
 +
 +// Màu trạng thái bài (Omni Content Item) và nền tảng (Omni Content Target)
@@ -1897,10 +1913,10 @@ index 0000000..2116327
 +</script>
 diff --git a/frontend/src/pages/marketing/MarketingPost.vue b/frontend/src/pages/marketing/MarketingPost.vue
 new file mode 100644
-index 0000000..1329058
+index 0000000..432cc7f
 --- /dev/null
 +++ b/frontend/src/pages/marketing/MarketingPost.vue
-@@ -0,0 +1,431 @@
+@@ -0,0 +1,432 @@
 +<template>
 +  <div class="flex h-full flex-col overflow-hidden">
 +    <LayoutHeader>
@@ -2151,6 +2167,7 @@ index 0000000..1329058
 +  fromInputDateTime,
 +  scoreClass,
 +  errorText,
++  callShowMessages,
 +} from '@/composables/marketing'
 +
 +const props = defineProps({ name: { type: String, required: true } })
@@ -2207,7 +2224,7 @@ index 0000000..1329058
 +    FIELDS.forEach((f) => {
 +      if ((form[f] || '') !== (item.value[f] || '')) values[f] = form[f] || null
 +    })
-+    await call('frappe.client.set_value', { doctype: 'Omni Content Item', name: props.name, fieldname: values })
++    await callShowMessages('frappe.client.set_value', { doctype: 'Omni Content Item', name: props.name, fieldname: values })
 +    toast.success('Đã lưu')
 +    detail.reload()
 +  })
@@ -2234,7 +2251,7 @@ index 0000000..1329058
 +  const doc = await call('frappe.client.get', { doctype: 'Omni Content Item', name: props.name })
 +  doc.media = media
 +  doc.media_items = rows
-+  await call('frappe.client.save', { doc })
++  await callShowMessages('frappe.client.save', { doc })
 +  detail.reload()
 +}
 +
@@ -2571,3 +2588,74 @@ index 3ae5d43..6547151 100644
    {
      path: '/welcome',
      name: 'Welcome',
+diff --git a/frontend/src/utils/serverMessages.js b/frontend/src/utils/serverMessages.js
+new file mode 100644
+index 0000000..cbed91c
+--- /dev/null
++++ b/frontend/src/utils/serverMessages.js
+@@ -0,0 +1,20 @@
++// Đọc cảnh báo máy chủ gửi kèm (_server_messages của Frappe) thành danh sách gọn (ADR 0033, việc V2).
++// `raw`: mảng chuỗi JSON như frappeRequest đưa cho onServerMessages. Trả [{ message, indicator }], bỏ thẻ HTML.
++export function serverMessageList(raw = []) {
++  const out = []
++  for (const item of raw || []) {
++    let m = item
++    if (typeof m === 'string') {
++      try {
++        m = JSON.parse(m)
++      } catch {
++        m = { message: m }
++      }
++    }
++    const text = String(m?.message ?? '')
++      .replace(/<[^>]*>/g, '')
++      .trim()
++    if (text) out.push({ message: text, indicator: m?.indicator || '' })
++  }
++  return out
++}
+diff --git a/frontend/tests/unit/marketingServerMessages.test.js b/frontend/tests/unit/marketingServerMessages.test.js
+new file mode 100644
+index 0000000..796f6de
+--- /dev/null
++++ b/frontend/tests/unit/marketingServerMessages.test.js
+@@ -0,0 +1,39 @@
++import { describe, expect, it } from 'vitest'
++import { serverMessageList } from '@/utils/serverMessages'
++
++// ADR 0033 việc V2: cảnh báo máy chủ gửi kèm khi lưu thành công (frappe.msgprint) phải hiện trên trang Marketing.
++describe('serverMessageList', () => {
++  it('đọc cảnh báo kho ảnh S3 như Frappe gửi (_server_messages)', () => {
++    const raw = [
++      JSON.stringify({
++        message:
++          'Kho ảnh S3: ghi ảnh không được (EndpointConnectionError). Ảnh vẫn lưu trên máy chủ CRM, sẽ tự đẩy lại trong vòng 1 giờ.',
++        indicator: 'orange',
++        alert: 1,
++      }),
++    ]
++    expect(serverMessageList(raw)).toEqual([
++      {
++        message:
++          'Kho ảnh S3: ghi ảnh không được (EndpointConnectionError). Ảnh vẫn lưu trên máy chủ CRM, sẽ tự đẩy lại trong vòng 1 giờ.',
++        indicator: 'orange',
++      },
++    ])
++  })
++  it('bỏ thẻ HTML, bỏ tin rỗng, nhận chuỗi không phải JSON', () => {
++    expect(
++      serverMessageList([
++        JSON.stringify({ message: '<b>Đã</b> lưu', indicator: 'green' }),
++        JSON.stringify({ message: '   ' }),
++        'tin thường',
++      ]),
++    ).toEqual([
++      { message: 'Đã lưu', indicator: 'green' },
++      { message: 'tin thường', indicator: '' },
++    ])
++  })
++  it('không có gì thì trả mảng rỗng', () => {
++    expect(serverMessageList()).toEqual([])
++    expect(serverMessageList(null)).toEqual([])
++  })
++})

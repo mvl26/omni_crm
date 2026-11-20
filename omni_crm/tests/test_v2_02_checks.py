@@ -24,6 +24,21 @@ ROOT = pathlib.Path(omni_crm.__file__).parent
 # Danh sách hàm whitelisted đã duyệt (V2-02). Thêm hàm mới = test đỏ để người duyệt xem có phải đường gửi hàng loạt /
 # trả dữ liệu khách không kiểm quyền không.
 EXPECTED_WHITELISTED = {
+	"api/media.py": {"check_storage"},  # ADR 0033: nút Kiểm kho ảnh S3 (Omni Admin)
+	"api/script.py": {  # ADR 0032 (bot kịch bản v3): MỘT Lead mỗi lần gọi; bot_status kiểm quyền đọc, còn lại POST + quyền ghi Lead
+		"bot_status",
+		"return_to_bot",
+		"mark_docs_sent",
+		"mark_quote_sent",
+		"set_demo_result",
+		"set_no_bot_followup",
+		"demo_calendar",  # trang Lịch demo: chỉ đọc, Lead lọc theo quyền đọc; khung đã đặt chỉ có giờ, không lộ khách
+	},
+	"script/brain.py": {  # ADR 0034 (bộ não cải tiến): chỉ Omni Admin / System Manager; sửa câu kịch bản, không gửi tin
+		"approve",
+		"reject",
+		"approve_phrases",
+	},
 	"marketing/api.py": {  # V3-10: Marketing Hub, mỗi lời gọi MỘT bài / MỘT kênh
 		"hub_state",
 		"get_social_channels",

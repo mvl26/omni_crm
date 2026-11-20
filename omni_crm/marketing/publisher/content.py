@@ -10,6 +10,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_url
 
+from omni_crm.marketing import s3_media
 from omni_crm.marketing.publisher.errors import PublishValidationError
 
 ZALO_TITLE_MAX = 150
@@ -47,6 +48,11 @@ def public_image_url(file_url: str | None) -> str:
 		if not file_url.startswith("https://"):
 			raise PublishValidationError(_("Ảnh phải dùng https"))
 		return file_url
+	if s3_media.is_public_url(file_url):  # ADR 0033: ảnh đã chuyển sang kho S3, CRM phát lại ở /omni-media/
+		try:
+			return s3_media.absolute_public_url(file_url)
+		except s3_media.S3Error as e:
+			raise PublishValidationError(str(e)) from None
 	if file_url.startswith("/private/files/"):
 		raise PublishValidationError(
 			_("Ảnh {0} là tệp riêng tư: nền tảng không tải được. Tải lại ảnh ở chế độ công khai").format(
