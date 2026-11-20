@@ -88,15 +88,27 @@ def enqueue_identity(identity_key: str, *, after_commit: bool = True, job_suffix
 
 	def _enqueue() -> None:
 		try:
-			from omni_crm.script.switch import fast_debounce
+			from omni_crm.script.switch import GATHER, fast_debounce
 
+			wait = fast_debounce(identity_key)  # bot kịch bản: 0 = bấm nút, GATHER = tin gõ, None = mặc định
+			if wait == GATHER:  # đợi khách nhắn xong rồi xử lý cả lượt (script.gather)
+				from omni_crm.script.gather import METHOD as GATHER_METHOD
+
+				frappe.enqueue(
+					GATHER_METHOD,
+					queue=queue_for_identity(identity_key),
+					job_id=job_id,
+					deduplicate=True,
+					identity_key=identity_key,
+				)
+				return
 			frappe.enqueue(
 				WORKER_METHOD,
 				queue=queue_for_identity(identity_key),
 				job_id=job_id,
 				deduplicate=True,
 				identity_key=identity_key,
-				debounce_seconds=fast_debounce(identity_key),  # bot kịch bản: không chờ gom tin (None = mặc định)
+				debounce_seconds=wait,
 			)
 		except Exception:
 			# Không ghi identity_key (có thể chứa SĐT/email) và không ghi nội dung lỗi.

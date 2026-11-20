@@ -270,7 +270,8 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 			threshold = getattr(classifier, "LOW_CONFIDENCE", CONF_MIN)
 			try:
 				info = {**ctx.state, "service": engine.current_service(ctx) or ""}
-				if _needs_ai(classifier, text, info):
+				waited_for_ai = _needs_ai(classifier, text, info)
+				if waited_for_ai:
 					thinking(ctx)  # sắp nhờ AI hiểu ý: báo khách đợi
 					info.update(conversation_context(ctx))  # AI đọc cả mấy lượt gần nhất và câu bot vừa hỏi
 				frappe.flags.pop(DETAIL_FLAG, None)
@@ -280,8 +281,12 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 				detail = frappe.flags.pop(DETAIL_FLAG, None) or {}
 				if detail.get("batch_id") == ctx.batch_id and detail.get("code") == code:
 					ctx.state[DETAIL_KEY] = detail
+				if waited_for_ai:
+					router.check_superseded(ctx)  # khách nhắn thêm trong lúc bot hỏi AI: huỷ lượt, gom lại
 				conf = float(conf or 0)
 				result = (str(code or UNCLEAR).upper(), conf) if conf >= threshold else (UNCLEAR, conf)
+			except router.Superseded:
+				raise  # khách nhắn thêm: huỷ cả lượt (router xử lý)
 			except Exception as e:  # nội dung khách không vào log
 				frappe.logger("omni").info(
 					"omni script: phân loại lỗi (%s) batch=%s", type(e).__name__, ctx.batch_id

@@ -227,6 +227,11 @@ def build_context(batch_id: str) -> RouteContext | None:
 	for r in messages:
 		attachments.extend(_attachments_of(r.attachments))
 	st = state.get(last.identity)
+	carried = str((st.get("script_state") or {}).get("carry") or "").strip()
+	if carried and text and _code_of(last, st) is None:  # lượt trước bị huỷ vì khách nhắn tiếp: đọc cả hai như một lượt
+		text = f"{carried}\n{text}"
+	if carried:
+		st["script_state"] = state.update_state(last.identity, carry=None)
 	return RouteContext(
 		batch_id=batch_id,
 		identity=last.identity,
@@ -299,11 +304,36 @@ def handle_batch(batch_id: str) -> bool:
 	frappe.flags[send.BATCH_FLAG] = batch_id
 	try:
 		handler(ctx)
+	except Superseded:
+		# Khách nhắn thêm khi bot đang nghĩ: bỏ lượt này (không gửi câu đã soạn cho tin cũ), mang chữ của nó sang
+		# lượt sau để xử lý CẢ HAI cùng lúc.
+		frappe.db.rollback()
+		state.update_state(ctx.identity, carry=((ctx.state.get("script_state") or {}).get("carry") or "") + "\n" + ctx.text)
 	finally:
 		frappe.flags.pop(send.BATCH_FLAG, None)
 	_mark(batch_id)
 	frappe.db.commit()
 	return True
+
+
+class Superseded(Exception):
+	"""Lượt đang xử lý đã cũ: khách vừa nhắn thêm tin mới."""
+
+
+def check_superseded(ctx: RouteContext) -> None:
+	"""Gọi sau mỗi bước chậm (gọi AI). Có tin gõ MỚI của khách đang chờ xử lý thì ném `Superseded`."""
+	try:
+		frappe.db.commit()  # kết thúc transaction đang mở để đọc được tin khách vừa tới
+		newer = frappe.get_all(
+			INBOUND,
+			filters={"identity": ctx.identity, "event_type": "message", "status": ["in", ["New", "Retry"]]},
+			fields=["name", "text", "batch_id"],
+			limit_page_length=10,
+		)
+	except Exception:
+		return
+	if any(r.batch_id != ctx.batch_id and not (r.text or "").strip().startswith("#") for r in newer):
+		raise Superseded()
 
 
 def _customer_cancels_handoff(ctx: RouteContext) -> bool:

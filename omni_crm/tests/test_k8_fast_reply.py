@@ -26,9 +26,10 @@ class TestFastDebounce(FrappeTestCase):
 	def test_button_tap_does_not_wait(self):
 		self.assertEqual(self._run(_rows(("Zalo OA", "#MENU_SPD"))), 0)
 
-	def test_typed_text_waits_at_most_one_second(self):
-		self.assertEqual(self._run(_rows(("Zalo OA", "#MENU_SPD"), ("Zalo OA", "alo"))), 1)
-		self.assertEqual(self._run(_rows(("Zalo OA", "alo")), base=0), 0)
+	def test_typed_text_is_gathered_until_the_customer_stops(self):
+		# 20/11 (bước 3 "hiểu ngữ cảnh"): tin gõ không còn chờ cố định 1 giây mà đợi khách nhắn xong (script.gather)
+		self.assertEqual(self._run(_rows(("Zalo OA", "#MENU_SPD"), ("Zalo OA", "alo"))), switch.GATHER)
+		self.assertEqual(self._run(_rows(("Zalo OA", "alo")), base=0), switch.GATHER)
 
 	def test_other_channel_or_script_off_keeps_default(self):
 		self.assertIsNone(self._run(_rows(("Email", "#X"))))

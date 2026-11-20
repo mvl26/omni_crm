@@ -38,12 +38,13 @@ def enabled_for(identity: str | None) -> bool:
 
 
 FAST_CHANNEL = "Zalo OA"
-TYPED_DEBOUNCE_MAX = 1  # giây chờ gom tin gõ khi bot kịch bản trả lời (bấm nút: không chờ)
+GATHER = -1  # giá trị đặc biệt của `fast_debounce`: lượt có tin gõ, gom tin bằng `script.gather.run`
 
 
 def fast_debounce(identity_key: str) -> int | None:
-	"""Giây chờ gom tin cho định danh đang chạy bot kịch bản: 0 nếu mọi tin đang chờ là bấm nút (`#MÃ`), tối đa
-	`TYPED_DEBOUNCE_MAX` với tin gõ; None = dùng `debounce_seconds` chung (kênh khác, bot kịch bản không chạy, lỗi).
+	"""Cách chờ gom tin cho định danh đang chạy bot kịch bản: 0 nếu mọi tin đang chờ là bấm nút (`#MÃ`); `GATHER` nếu
+	có tin gõ (đợi khách im `debounce_seconds` kể từ tin cuối); None = dùng `debounce_seconds` chung (kênh khác, bot
+	kịch bản không chạy, lỗi).
 	"""
 	try:
 		rows = frappe.get_all(
@@ -60,7 +61,6 @@ def fast_debounce(identity_key: str) -> int | None:
 				return None
 		if all((r.text or "").strip().startswith("#") for r in rows):
 			return 0
-		base = cint(frappe.db.get_single_value("Omni Settings", "debounce_seconds") or 0)
-		return min(base, TYPED_DEBOUNCE_MAX)
+		return GATHER  # tin gõ: đợi khách nhắn xong (`script.gather`), không dùng thời gian chờ cố định
 	except Exception:
 		return None

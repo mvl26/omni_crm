@@ -160,6 +160,7 @@ def staff_replied_after(lead: str | None, after) -> bool:
 
 THINKING_CONF = "omni_script_thinking"  # site_config: 1 = gửi câu "đang suy nghĩ" khi bot phải nhờ AI (mặc định tắt)
 NODE_THINKING = "DANG_SUYNGHI"
+THINKING_ONCE_SECONDS = 60
 
 
 def send_thinking(identity: str) -> str | None:
@@ -167,9 +168,13 @@ def send_thinking(identity: str) -> str | None:
 	Chỉ khi site_config `omni_script_thinking` bật và ô đang dùng. Không tính là câu trả lời của lượt."""
 	if not frappe.utils.cint(frappe.conf.get(THINKING_CONF) or 0) or not switch.enabled_for(identity):
 		return None
+	key = f"omni:script:thinking:{identity}"
+	if frappe.cache().get_value(key, expires=True):
+		return None  # lượt này đã báo rồi (bước gom tin hoặc bước hỏi AI): chỉ một lần mỗi lượt
 	rendered = store.render(store.get_node(NODE_THINKING), {"identity": identity})
 	if not rendered:
 		return None
+	frappe.cache().set_value(key, 1, expires_in_sec=THINKING_ONCE_SECONDS)
 	name = _queue(identity, rendered[0], [], NODE_THINKING, "reply", notice=True)
 	if name:  # gửi ngay trong tiến trình này (đã commit, không giữ khoá DB): nếu để hàng đợi thì tới cùng lúc câu trả lời
 		try:
@@ -245,6 +250,8 @@ def _queue(
 		},
 		update_modified=False,
 	)
+	if not notice:  # bot đã trả lời thật: lượt sau lại được báo chờ một lần
+		frappe.cache().delete_value(f"omni:script:thinking:{identity}")
 	if not notice:  # tin báo chờ không đổi mốc "bot vừa nói" và không xoá các lựa chọn khách đang được hỏi
 		frappe.db.set_value(IDENTITY, identity, "script_last_bot_at", now_datetime(), update_modified=False)
 		_remember_choices(identity, choices)
