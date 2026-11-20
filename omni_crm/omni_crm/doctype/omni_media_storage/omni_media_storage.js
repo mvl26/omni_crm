@@ -1,6 +1,7 @@
 // Kho ảnh S3 (MinIO) cho ảnh bài marketing (ADR 0033)
 frappe.ui.form.on("Omni Media Storage", {
 	refresh(frm) {
+		frm.add_custom_button(__("Xem kho ảnh"), () => frappe.set_route("query-report", "Kho ảnh MinIO"));
 		frm.add_custom_button(__("Kiểm kho ảnh S3"), () => {
 			if (frm.is_dirty()) {
 				frappe.msgprint(__("Lưu trước khi kiểm"));

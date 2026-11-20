@@ -160,6 +160,24 @@ def delete_object(key: str) -> None:
 		raise _wrap(_("xóa ảnh"), e) from None
 
 
+def list_objects(prefix: str | None = None, limit: int = 10000) -> list[dict]:
+	"""Object trong bucket dưới `prefix` (mặc định thư mục ảnh bài): [{key, size, modified}], `modified` là datetime
+	UTC có múi giờ. Dừng ở `limit` object. Ném S3Error. Dùng cho báo cáo "Kho ảnh MinIO" (chỉ đọc)."""
+	out: list[dict] = []
+	try:
+		pages = _client().get_paginator("list_objects_v2").paginate(
+			Bucket=_bucket(), Prefix=_prefix() if prefix is None else prefix
+		)
+		for page in pages:
+			for obj in page.get("Contents") or []:
+				out.append({"key": obj["Key"], "size": obj.get("Size") or 0, "modified": obj.get("LastModified")})
+				if len(out) >= limit:
+					return out
+	except Exception as e:
+		raise _wrap(_("liệt kê ảnh"), e) from None
+	return out
+
+
 # ---------------------------------------------------------------- địa chỉ công khai có chữ ký
 
 

@@ -64,3 +64,20 @@ Chọn 1.
   `omni_s3_key`. Chưa có lệnh tự động.
 - `tests/test_v3_33_media_storage.py`: kho S3 giả và boto3 thật (moto qua HTTP và HTTPS với CA thử) khi đặt
   `OMNI_S3_TEST_ENDPOINT`. `tests/test_v2_02_checks.py` thêm `api/media.py`.
+
+## Bổ sung 20/11/2026: báo cáo "Kho ảnh MinIO"
+
+Người phụ trách cần một chỗ xem kho đang có ảnh gì, của bài nào, xem được ảnh, mà không cần SSH (`spd/docs/30`, phương
+án B; phương án A là Console của AIStor qua đường SSH, cho IT).
+
+- Script Report **`Kho ảnh MinIO`** (module Omni CRM, `ref_doctype` Omni Content Item vì Frappe đòi quyền `report` trên
+  DocType đó; Single `Omni Media Storage` không có quyền `report`). Vai trò: Omni Admin, System Manager; `execute` kiểm
+  lại vai trò. Nút **Xem kho ảnh** trên form Omni Media Storage.
+- `s3_media.list_objects` (ListObjectsV2 phân trang, dưới thư mục ảnh bài, dừng ở 10 000 object) dùng tài khoản
+  `crm-yhct` đã cấu hình (đã có `s3:ListBucket`). Lỗi kho = thông báo lỗi, không hiện bảng rỗng.
+- Mỗi dòng một khóa: **Khớp** (có object và File), **Thiếu trên MinIO** (File có `omni_s3_key` mà object không còn),
+  **Mồ côi** (object không File nào dùng). Kèm bài, tiêu đề, File, số ô ảnh đang dùng, kích thước, giờ ghi, liên kết
+  `/omni-media/...` để xem (chỉ khi object còn). Ô tổng hợp tính trên cả kho (cộng `pending_count`), không theo bộ lọc.
+- **Chỉ đọc**: không có nút xóa hay sửa. Dọn object mồ côi vẫn làm bằng `mc rm` sau khi IT xem.
+- Chỉ bucket của CRM. Bucket giai đoạn 2 (ERP, bot) mã hóa phía ứng dụng (`spd/docs/29`), mỗi ứng dụng tự có màn hình.
+- `tests/test_v3_33_media_report.py`: kho S3 giả, phân trang giả, boto3 thật qua moto khi đặt `OMNI_S3_TEST_ENDPOINT`.
