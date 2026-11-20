@@ -58,6 +58,8 @@ _NAME_SPLIT = re.compile(r"\s*[,;\n]\s*|\s+[-–]\s+")  # noqa: RUF001 (gạch n
 FORCE_MARK = "!"
 PREFILL_KEY = "_prefill"  # ctx.state: thông tin khách đã nêu trong tin (items, quantity, need_by)
 PREFILL_FIELDS = ("items", "quantity", "need_by")
+FILE_FIELD = "file"  # ô chờ khách gửi tệp danh mục
+NODE_TYPE_ITEMS = "BAOGIA_VATTU"  # khách không có tệp: hỏi mặt hàng bằng chữ
 EXTRACT_FROM = "items"  # câu trả lời mặt hàng hay kèm luôn số lượng / thời gian
 FORCED_NODES = ("NL_DOIEMAIL", "NL_BG_DOIEMAIL")  # "Đổi email khác": luôn hỏi email mới dù Lead đã có
 OWN_TASK_KINDS = ("docs", "quote", "resend_docs", "resend_quote")
@@ -224,11 +226,34 @@ def _more_from_answer(ctx: RouteContext, text: str) -> dict:
 	try:
 		from omni_crm.script import classify
 
-		got = classify.classify_detail(text, ctx.state, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id)
+		got = ctx.state.get("_classify_detail") or {}  # lượt này đã hỏi AI (menu._side_talk): không hỏi lần hai
+		if got.get("batch_id") != ctx.batch_id:
+			got = classify.classify_detail(
+				text, ctx.state, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id
+			)
 		slots = got.get("slots") or {}
 		return {f: v for f, v in slots.items() if f in PREFILL_FIELDS and f != EXTRACT_FROM}
 	except Exception:
 		return {}
+
+
+_FILLERS = frozenset(
+	"anh chi em toi minh ben can muon lay mua dat khoang tam la cho them nhe nha a da vang thi cai".split()
+)
+
+
+def _only_extras(text: str, extras: dict) -> bool:
+	"""Câu trả lời cho ô "mặt hàng" chỉ gồm số lượng / thời gian ("anh cần 100 hộp"), không nêu mặt hàng nào — thuần."""
+	rest = text.lower()
+	for value in extras.values():
+		rest = rest.replace(str(value).lower(), " ")
+	try:
+		from omni_crm.script import classify
+
+		words = classify.fold(rest).split()
+	except Exception:
+		return False
+	return not [w for w in words if w not in _FILLERS]
 
 
 def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) -> None:
@@ -237,7 +262,10 @@ def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) 
 	st = engine.script_state(ctx)
 	answers = store.as_dict(st.get("answers"))
 	answers[field] = (value or "").strip()[:MAX_ANSWER]
-	if not (typed and field == "tai_lieu"):  # tên tài liệu khách tự gõ: giữ quy tắc không nhắc lại nguyên văn
+	skip_ack = (typed and field == "tai_lieu") or bool(ctx.attachments)  # tên tài liệu tự gõ / tệp: không nhắc lại
+	if typed and len(answers[field]) <= DECLINE_MAX_LEN and DECLINE.search(answers[field]):
+		skip_ack = True  # "bỏ qua", "không": không phải thông tin để xác nhận
+	if not skip_ack:
 		ctx.state.setdefault(ACK_KEY, []).append((field, answers[field]))
 	values: dict = {"answers": answers}
 	if field in MIRROR_KEYS:  # flows/quote.py (K7) đọc câu trả lời báo giá ở khóa cấp trên của script_state
@@ -303,13 +331,23 @@ def on_text(ctx: RouteContext) -> bool:
 			_clear_flow(ctx)
 			engine.run_button(ctx, NODE_DISCOUNT)
 			return True
+		if field == FILE_FIELD and not ctx.attachments:  # chưa có tệp nào: không báo "đã nhận danh mục"
+			_clear_flow(ctx)
+			return bool(engine.run_button(ctx, NODE_TYPE_ITEMS))
 		value = text or _("(khách gửi tệp)")
 		if ctx.attachments:
 			remember_files(ctx)
-		save_answer(ctx, field, value, typed=True)
-		if field == EXTRACT_FROM and st.get("branch") == "3b" and text:
-			for extra, extra_value in _more_from_answer(ctx, text).items():
+		extras = _more_from_answer(ctx, text) if field == EXTRACT_FROM and st.get("branch") == "3b" and text else {}
+		if extras and _only_extras(text, extras) and not ctx.attachments and not st.get("wrong"):
+			# khách mới nêu số lượng / thời gian ("anh cần 100 hộp"): ghi vào đúng ô rồi hỏi lại mặt hàng một lần
+			for extra, extra_value in extras.items():
 				save_answer(ctx, extra, extra_value, typed=True)
+			engine.run_node(ctx, node.get("code") or "")
+			_restore_flow(ctx, st, wrong=1)
+			return True
+		save_answer(ctx, field, value, typed=True)
+		for extra, extra_value in extras.items():
+			save_answer(ctx, extra, extra_value, typed=True)
 		_advance(ctx, st, node)
 	state.reset_reask(ctx.identity)
 	if _bot_mark(ctx) == before and not engine.script_state(ctx).get("flow"):

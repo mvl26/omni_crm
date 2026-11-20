@@ -119,7 +119,7 @@ class TestSmoothFlow(FlowCase):
 		self.tap("DEMO_HT_ONLINE")
 		self.codes["bên em là bot à"] = ("BOT_HOI", 1.0)
 		self.turn("bên em là bot à")
-		self.assertEqual(self.sent()[-1], "C3_BOT")
+		self.assertEqual(self.sent()[-2:], ["C3_BOT", "DEMO_KHUNGGIO"])  # đáp xong gửi lại danh sách khung giờ
 
 
 class TestTypedTimeAndAck(FrappeTestCase):
@@ -136,9 +136,9 @@ class TestTypedTimeAndAck(FrappeTestCase):
 		self.assertEqual(collect.ack_value("trong tuần sau"), "trong tuần sau")
 
 	def test_ack_only(self):
-		for text in ("ok", "Oki em", "vâng ạ", "cảm ơn em nhé", "được rồi", "Thanks"):
+		for text in ("ok", "Oki em", "vâng ạ", "cảm ơn em nhé", "được rồi", "Thanks", "dạ", "ừ", "Đúng rồi em"):
 			self.assertTrue(cl.is_ack_only(text), text)
-		for text in ("ok gửi anh báo giá", "không cảm ơn", "a", "dạ", "em", ""):
+		for text in ("ok gửi anh báo giá", "không cảm ơn", "a", "em", "đừng", ""):
 			self.assertFalse(cl.is_ack_only(text), text)
 
 
@@ -223,3 +223,17 @@ class TestBatchB(FlowCase):
 		self.codes["xóa dữ liệu của tôi đi"] = ("XOA_DULIEU", 1.0)
 		self.turn("xóa dữ liệu của tôi đi")
 		self.assertIn("C4_XOADULIEU_GHINHAN", self.sent())
+
+
+class TestBatchC(FrappeTestCase):
+	def test_attendee_count(self):
+		cases = {"20": 20, "khoảng 20 người": 20, "hai mươi người": 20, "mười lăm": 15, "ba người": 3,
+			"anh và 2 đồng nghiệp": 3, "chưa biết": None, "asdf": None, "0": None}
+		for text, want in cases.items():
+			self.assertEqual(demo.attendee_count(text), want, text)
+
+	def test_only_extras(self):
+		from omni_crm.script.flows import collect
+
+		self.assertTrue(collect._only_extras("anh cần 100 hộp", {"quantity": "100 hộp"}))
+		self.assertFalse(collect._only_extras("Bơm 5ml g23 10 hộp", {"quantity": "10 hộp"}))

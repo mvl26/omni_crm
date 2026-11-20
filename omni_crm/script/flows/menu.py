@@ -34,6 +34,8 @@ NODE_REASK_CHOICE = "REASK_LUACHON"  # câu dẫn khi hỏi lại đúng câu đ
 NODE_HELLO_AGAIN = "CHAO_LAI"  # câu dẫn khi khách cũ chỉ chào
 NODE_YES = "DA_VANG_NGAN"  # câu dẫn "Dạ vâng ạ." trước khi hỏi lại câu đang dở
 NODE_BACK = "HOI_TIEP_CAUDO"  # câu dẫn khi quay lại câu đang hỏi dở
+NODE_GOT_CONTACT = "DA_NHAN_LIENHE"  # câu dẫn khi khách tự gửi số điện thoại / email
+NODE_GOT_FILE = "DA_NHAN_TEP"  # câu dẫn khi khách gửi tệp / ảnh không kèm chữ
 NODE_OK = "DA_VANG"  # đáp lại "ok", "vâng", "cảm ơn"
 NODE_HANDOFF = "GAP_NHANVIEN"
 NODE_KB_NONE = "KB_CHUYENVIEN"
@@ -138,6 +140,8 @@ def on_text(ctx: RouteContext) -> None:
 			engine.run_button(ctx, NODE_FILE_RECEIVED)
 		elif first:
 			greet(ctx)
+		elif ctx.attachments and _reply_with_menu(ctx, NODE_GOT_FILE):  # tệp / ảnh không kèm chữ: báo đã nhận, hỏi nhu cầu
+			state.reset_reask(ctx.identity)
 		else:
 			reask(ctx)
 		return
@@ -146,6 +150,10 @@ def on_text(ctx: RouteContext) -> None:
 	):  # "không cần" sau câu "hỗ trợ tiếp phần nào": lời kết lịch sự, không dừng nhắn
 		state.reset_reask(ctx.identity)
 		engine.run_button(ctx, NODE_NO_THANKS)
+		return
+	if not flow and text and _typed_cancel_reason(ctx, text):
+		return
+	if not flow and not first and _contact_only(ctx, text):  # khách mới: chào như thường, chưa ghi gì
 		return
 	if not flow and _polite_decline(text):  # "không cần": cảm ơn rồi thôi, KHÔNG đánh dấu dừng nhắn
 		state.reset_reask(ctx.identity)
@@ -216,6 +224,13 @@ def _typed_document(ctx: RouteContext, text: str) -> bool:
 		return False
 	from omni_crm.script.flows import collect
 
+	if not any(ch.isalpha() for ch in text) or _greeting_only(text) or _ack_only(text):
+		return _resend_current(ctx, NODE_REASK_CHOICE)  # "5", "?", "ok": không phải tên tài liệu
+	code, _conf = classify_text(ctx)
+	if code not in (UNCLEAR, "TAILIEU"):
+		return False  # khách nói ý khác (báo giá, hỏi chuyện khác…): định tuyến ý đó
+	if code == UNCLEAR and len(text.split()) < 2:
+		return _resend_current(ctx, NODE_REASK_CHOICE)  # một chữ không rõ nghĩa ("asdfgh")
 	state.reset_reask(ctx.identity)
 	collect.save_answer(ctx, "tai_lieu", text, typed=True)
 	engine.run_button(ctx, NODE_ASK_EMAIL_DOCS)
@@ -271,7 +286,7 @@ def route(ctx: RouteContext, code: str) -> None:
 		auto_handoff(ctx, "REASON_COMPLAINT")
 	elif _quote_with_details(ctx, code):
 		return
-	elif code in SIDE_REPLY and _resend_current(ctx, SIDE_REPLY[code]):
+	elif code in SIDE_REPLY and _reply_then_back(ctx, SIDE_REPLY[code]):
 		state.reset_reask(ctx.identity)  # đáp câu hỏi chen ngang rồi hỏi lại đúng câu đang dở
 	elif code in DIRECT:
 		state.reset_reask(ctx.identity)
@@ -357,6 +372,61 @@ def _greeting_only(text: str) -> bool:
 		return bool(classify.is_greeting_only(text))
 	except Exception:
 		return False
+
+
+def _typed_cancel_reason(ctx: RouteContext, text: str) -> bool:
+	try:
+		from omni_crm.script import classify
+		from omni_crm.script.flows import demo
+
+		if classify.is_greeting_only(text) or classify.is_ack_only(text) or classify.classify_by_rules(text, {}):
+			return False
+		return demo.typed_cancel_reason(ctx)
+	except Exception:
+		return False
+
+
+CONTACT_ONLY_WORDS = 6  # "sđt anh 09xx nhé": vài chữ đệm quanh số điện thoại / email
+
+
+def _contact_only(ctx: RouteContext, text: str) -> bool:
+	"""Khách tự gửi số điện thoại / email khi bot không hỏi: ghi vào Lead (không ghi đè) để KHÔNG hỏi lại sau này.
+	Tin chỉ có thông tin liên hệ thì báo đã ghi nhận và hỏi nhu cầu (True); tin còn ý khác thì ghi rồi xử lý ý đó (False)."""
+	if not text:
+		return False
+	try:
+		from omni_crm.script import validate
+		from omni_crm.script.flows import collect
+
+		email, phone = validate.find_email(text), validate.find_phone(text)
+		if not (email or phone):
+			return False
+		collect._save_contact(ctx, email, phone)
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không ghi được liên hệ khách tự gửi (%s)", type(e).__name__)
+		return False
+	other = [w for w in text.split() if "@" not in w and not any(ch.isdigit() for ch in w)]
+	try:
+		from omni_crm.script import classify
+
+		has_intent = classify.classify_by_rules(" ".join(other)) not in (None, (UNCLEAR, 0.0), (UNCLEAR, 1.0))
+	except Exception:
+		has_intent = True
+	if len(other) > CONTACT_ONLY_WORDS or has_intent or QUESTION.search(_fold(" ".join(other))):
+		return False  # tin còn ý khác ("gửi tài liệu SPD qua mail …", "gọi cho anh số …"): đã ghi liên hệ, xử lý tiếp ý đó
+	state.reset_reask(ctx.identity)
+	return _reply_with_menu(ctx, NODE_GOT_CONTACT)
+
+
+def _reply_with_menu(ctx: RouteContext, lead_in: str) -> bool:
+	"""Câu dẫn + câu bot đang hỏi dở (nếu đang ở một câu có nút), không thì + menu chính."""
+	if _resend_current(ctx, lead_in):
+		return True
+	ctx.state[engine.LEAD_IN_KEY] = _plain(ctx, lead_in)
+	if engine.run_node(ctx, MENU_CODE):
+		return True
+	ctx.state.pop(engine.LEAD_IN_KEY, None)
+	return False
 
 
 def _polite_decline(text: str) -> bool:
@@ -445,6 +515,52 @@ def _ask_again(ctx: RouteContext, code: str, lead_in: str) -> bool:
 	return True
 
 
+MID_FLOW_PREFIXES = ("DEMO_", "BAOGIA_", "BG_", "TAILIEU_", "TL_", "NL_")
+
+
+def _resend_slots(ctx: RouteContext) -> bool:
+	"""Bot đang chờ khách chọn khung giờ demo: gửi lại danh sách khung giờ (tính lại cho mới)."""
+	try:
+		from omni_crm.script.flows import demo
+
+		return demo.waiting_for_slot(ctx.identity) and bool(demo.propose(ctx))
+	except Exception:
+		return False
+
+
+def _back_to_pending(ctx: RouteContext, pending: str | None, lead_in: str = "") -> bool:
+	"""Sau khi đáp một câu chen ngang: quay lại câu bot đang hỏi dở (câu thu thông tin, câu có nút giữa luồng, hoặc
+	danh sách khung giờ demo). Đang ở menu thì trả False để nơi gọi gửi câu hỏi tiếp bình thường."""
+	if pending:
+		return _ask_again(ctx, pending, lead_in)
+	if _resend_slots(ctx):
+		return True
+	code = str(state.get(ctx.identity).get("script_node") or ctx.state.get("script_node") or "")
+	return code.startswith(MID_FLOW_PREFIXES) and _resend_current(ctx, lead_in)
+
+
+def _reply_then_back(ctx: RouteContext, reply: str, pending: str | None = None) -> bool:
+	"""Gửi câu đáp cố định (`C3_*`) thành một tin riêng rồi hỏi lại câu đang dở. Không có câu nào đang dở → False."""
+	pending = pending or _pending_question(ctx)
+	code = str(ctx.state.get("script_node") or "")
+	node = store.get_node(code) or {}
+	waiting = bool(pending) or (code not in TOP_NODES and bool(node.get("buttons")))
+	try:
+		from omni_crm.script.flows import demo
+
+		waiting = waiting or demo.waiting_for_slot(ctx.identity)
+	except Exception:
+		pass
+	if not waiting or not send.send_node(ctx.identity, reply, engine.variables(ctx)):
+		return False
+	router._mark(ctx.batch_id)
+	if pending:
+		_ask_again(ctx, pending, "")
+	elif not _resend_slots(ctx):
+		_resend_current(ctx, "")
+	return True
+
+
 def _tap_affirmative(ctx: RouteContext) -> bool:
 	"""Khách gõ "ok", "vâng" khi câu đang hỏi có nút đồng ý ("Được", "Đúng"): coi như bấm nút đó."""
 	node = store.get_node(_pending_question(ctx) or ctx.state.get("script_node"))
@@ -458,6 +574,10 @@ def _tap_affirmative(ctx: RouteContext) -> bool:
 				on_button(ctx)
 			return True
 	return False
+
+
+AI_CHECKED = ("items",)  # câu trả lời tự do dễ lẫn với chuyện ngoài lề: hỏi AI trước khi ghi
+ANSWER_CODES = (UNCLEAR, "MENU_VATTU", "BAOGIA")
 
 
 def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
@@ -485,11 +605,21 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 		return False  # luồng đang hỏi tự xử lý (rời câu hỏi / xin giá khi đang báo giá / câu chèn lệnh: ghi cho nhân viên, không đáp)
 	if code is None or code == UNCLEAR:
 		declining = len(text) <= collect.DECLINE_MAX_LEN and collect.DECLINE.search(text)
-		if declining or "@" in text or not QUESTION.search(_fold(text)):
-			return False  # câu trả lời bình thường (kể cả từ chối "không ạ")
+		if declining or "@" in text:
+			return False  # từ chối ("không ạ", "bỏ qua") hoặc đang gõ email: luồng đang hỏi tự xử lý
+		field = str(st.get("field") or "")
+		asking = bool(QUESTION.search(_fold(text)))
+		if not asking and not (field in AI_CHECKED and not any(ch.isdigit() for ch in text)):
+			return False  # câu trả lời bình thường
 		code, _conf = classify_text(ctx)
+		slots = (ctx.state.get(DETAIL_KEY) or {}).get("slots") or {}
+		plain = not asking and code in ANSWER_CODES and (slots or code != UNCLEAR or len(text.split()) > 1)
+		if field in AI_CHECKED and plain:
+			return False  # AI coi là câu trả lời (nêu mặt hàng / nhu cầu mua)
+		if field in AI_CHECKED and code == UNCLEAR:  # "asdfgh": hỏi lại một lần, lần sau ghi nguyên văn cho nhân viên
+			return _ask_again(ctx, pending, NODE_REASK_CHOICE)
 	if code in SIDE_REPLY:
-		return _ask_again(ctx, pending, SIDE_REPLY[code])
+		return _reply_then_back(ctx, SIDE_REPLY[code], pending)
 	if code == "KB_HOI":
 		state.reset_reask(ctx.identity)
 		answer_kb(ctx)
@@ -586,7 +716,7 @@ def reask(ctx: RouteContext) -> None:
 		state.reset_reask(ctx.identity)
 		auto_handoff(ctx, "REASON_MISUNDERSTOOD")
 		return
-	if _resend_current(ctx, NODE_REASK_CHOICE):
+	if _resend_current(ctx, NODE_REASK_CHOICE) or _resend_slots(ctx):
 		return
 	if not engine.run_node(ctx, NODE_REASK):
 		engine.run_node(ctx, MENU_CODE)
@@ -644,7 +774,7 @@ def answer_kb(ctx: RouteContext) -> None:
 			pending = _pending_question(ctx)
 			if send.send_text(ctx.identity, res["text"], code=KB_CODE):
 				router._mark(ctx.batch_id)
-				if not (pending and _ask_again(ctx, pending, NODE_BACK)):
+				if not _back_to_pending(ctx, pending, NODE_BACK):
 					engine.run_node(ctx, engine.service_code(ctx, "HOITIEP") or MENU_CODE)
 				return
 		elif not _shadow_only(res["group"]) and _to_sale_draft(ctx, res["name"]):

@@ -188,7 +188,8 @@ for i, t in enumerate(GREETS):
 	polite = i >= 3  # "ok", "oki", "vâng", "cảm ơn", "dạ": lời đáp xã giao, không phải lời chào
 	add(f"f1_first_{i}", [t], [nodes("GREETING")], new=True)
 	add(f"f1_return_{i}", [t], [clear()] if polite else [nodes("MENU_CHINH"), clear(), says("Miyano chào")], R_OK if t == "dạ" else None)
-	add(f"f1_mid_menu_{i}", [*SPD, t], [ends("MENU_SPD"), clear()], R_OK if polite else None)
+	# 19/11: "ok/vâng/cảm ơn" ở menu -> đáp ngắn "Dạ vâng ạ…" (không gửi lại cả menu dài, không "chưa rõ")
+	add(f"f1_mid_menu_{i}", [*SPD, t], [clear(), no_main()] if polite else [ends("MENU_SPD"), clear()])
 for i, t in enumerate(["alo em", "ok", "cảm ơn"]):
 	add(f"f1_mid_items_{i}", [*VT_Q, t], [unsaved("items")], R_ANS)
 	add(f"f1_mid_email_{i}", [*DOC_E, t], [not_says(BAD_EMAIL)], R_EMAIL)
@@ -280,7 +281,8 @@ add("f3_call_me_with_phone_after_hours", [("after_hours",), I7, "#GAP_NV_VATTU",
 I8 = "Bên mình có bơm tiêm, găng tay không?"
 add("f3_have_gloves", [I8], [nodes("MENU_VATTU")], ai={I8: A("MENU_VATTU", service="VATTU", mat_hang="bơm tiêm, găng tay")})
 I9 = "cho anh báo giá 200 hộp găng tay nitrile giao trong tuần sau, mail nam@bv-abc.vn"
-add("f3_full_quote_one_msg", [I9], [nodes("BG_VT_THAYTHE"), saved("quantity", "200 hộp")], ai={I9: A("BAOGIA", service="VATTU", mat_hang="găng tay nitrile", so_luong="200 hộp", thoi_gian="trong tuần sau")})
+# 19/11: tin có kèm email -> email được ghi ngay, câu chính sách bảo mật (lần đầu để lại liên hệ) đi trước câu hỏi kế tiếp
+add("f3_full_quote_one_msg", [I9], [ends("BG_VT_THAYTHE"), saved("quantity", "200 hộp")], ai={I9: A("BAOGIA", service="VATTU", mat_hang="găng tay nitrile", so_luong="200 hộp", thoi_gian="trong tuần sau")})
 add("f3_baogia_no_service", ["báo giá"], [nodes("BAOGIA_CHUARO")])
 add("f3_baogia_in_each_service", [*SPD, "giá sao em", *SC, "giá sao em", *VT, "giá sao em"], [nodes("BAOGIA_SPD", at=1), nodes("BAOGIA_PHANMEM", at=3), nodes("BAOGIA_VATTU")])
 
@@ -514,7 +516,7 @@ add("f9_mid_demo_format_gibberish_then_answer", [*SPD_D, "asdfgh", "online"], [e
 add("f9_mid_demo_format_switch_topic", [*SPD_D, "ben em co ban gang tay khong"], [nodes("MENU_VATTU")], ai=rand_ai("noaccent")[1])
 add("f9_mid_demo_slots_name", [*SLOTS, "em tên gì"], [has("C3_BOT"), ends("DEMO_KHUNGGIO")], R_BACK, ai=rand_ai("name")[1])
 # 19/11: hỏi ngoài lề khi đang ở menu dịch vụ -> câu từ chối ghép trước, rồi hỏi lại đúng menu đang đứng (không về menu chính)
-add("f9_mid_menu_weather", [*SPD, "hôm nay trời đẹp nhỉ em"], [nodes("MENU_SPD"), says("chỉ hỗ trợ")], ai=rand_ai("weather")[1])
+add("f9_mid_menu_weather", [*SPD, "hôm nay trời đẹp nhỉ em"], [nodes("C3_KHONGLIENQUAN", "MENU_SPD")], ai=rand_ai("weather")[1])
 add("f9_mid_menu_gibberish", [*SPD, "asdfgh"], [ends("MENU_SPD"), reasked()], ai=rand_ai("gibberish")[1])
 add("f9_mid_menu_noaccent", [*SPD, "ben em co ban gang tay khong"], [nodes("MENU_VATTU")], ai=rand_ai("noaccent")[1])
 
@@ -530,6 +532,40 @@ def _reraise(error):
 # Kịch bản từng là chỗ vụng (xfail) và đã được sửa: lý do xfail chung của nhóm không còn áp cho các tên này.
 FIXED = frozenset(
 	{
+		"f1_return_7",
+		"f2_docs_out_of_range",
+		"f2_sc_confirm_natural_0",
+		"f2_sc_confirm_natural_1",
+		"f3_docs_with_email",
+		"f4_vt_catalogue_text_only",
+		"f4_vt_file_for_items",
+		"f4_vt_file_for_quantity",
+		"f4_vt_image_for_items",
+		"f4_vt_skip_items",
+		"f5_attendees_me_plus_two",
+		"f5_attendees_words",
+		"f5_cancel_reason_typed",
+		"f6_kb_mid_demo_format",
+		"f6_kb_mid_demo_slots",
+		"f6_switch_mid_docs",
+		"f7_are_you_bot_mid_quote",
+		"f7_medical_mid_quote",
+		"f8_idle_email_only",
+		"f8_idle_file_only",
+		"f8_idle_image_only",
+		"f8_idle_phone_only",
+		"f8_mid_menu_file_only",
+		"f8_mid_menu_phone_only",
+		"f9_mid_demo_format_name",
+		"f9_mid_demo_slots_gibberish",
+		"f9_mid_demo_slots_name",
+		"f9_mid_docs_gibberish",
+		"f9_mid_docs_name",
+		"f9_mid_docs_noaccent",
+		"f9_mid_docs_ship",
+		"f9_mid_docs_weather",
+		"f9_mid_items_gibberish",
+		"f9_mid_items_weather",
 		"f1_mid_demo_slots_0",
 		"f5_cancel_typed",
 		"f5_other_time_no_hour",

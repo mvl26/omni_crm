@@ -137,5 +137,31 @@
 		"buttons": [],
 		"action": "",
 		"notes": "Chỉ gửi khi C4_XOADULIEU không gửi được (chưa có link hướng dẫn). Việc cho người phụ trách tuân thủ vẫn được tạo như cũ."
+	},
+	{
+		"code": "DA_NHAN_LIENHE",
+		"title": "Câu dẫn khi khách tự gửi số điện thoại / email",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, Miyano đã ghi nhận thông tin liên hệ của anh/chị ạ.",
+		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách chỉ nhắn số điện thoại / email lúc bot không hỏi."
+	},
+	{
+		"code": "DA_NHAN_TEP",
+		"title": "Câu dẫn khi khách gửi tệp / ảnh không kèm chữ",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 19/11/2026",
+		"text": "Dạ, Miyano đã nhận tệp anh/chị gửi ạ.",
+		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách gửi tệp / ảnh mà bot chưa biết để làm gì. Tệp vẫn được lưu cho nhân viên."
 	}
 ]

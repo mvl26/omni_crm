@@ -745,6 +745,59 @@ def _has_booking(ctx: RouteContext) -> datetime | None:
 	return at if at and at > _now() else None
 
 
+_UNITS = {"một": 1, "hai": 2, "ba": 3, "bốn": 4, "tư": 4, "năm": 5, "lăm": 5, "sáu": 6, "bảy": 7, "tám": 8, "chín": 9}
+_NUM_WORDS = re.compile(
+	r"(?<![\wÀ-ỹ])(?:(một|hai|ba|bốn|năm|sáu|bảy|tám|chín) (?:mươi|chục)(?: (một|hai|ba|bốn|tư|lăm|sáu|bảy|tám|chín))?"
+	r"|mười(?: (một|hai|ba|bốn|lăm|sáu|bảy|tám|chín))?|(một|hai|ba|bốn|năm|sáu|bảy|tám|chín))(?![\wÀ-ỹ])"
+)
+_PLUS_SELF = re.compile(r"(?<![\wÀ-ỹ])(?:anh|chị|em|tôi|mình|tui) (?:và|với|cùng) (\d{1,3})(?!\d)")
+
+
+def attendee_count(text: str | None) -> int | None:
+	"""Số người tham dự khách gõ: "20", "khoảng 20 người", "hai mươi người", "anh và 2 đồng nghiệp" (= 3); không đọc được → None."""
+	raw = " ".join(unicodedata.normalize("NFC", cstr(text)).lower().split())
+	m = _PLUS_SELF.search(raw)
+	if m:
+		count = int(m.group(1)) + 1
+	else:
+		m = re.search(r"\d{1,4}", raw)
+		if m:
+			count = int(m.group())
+		else:
+			m = _NUM_WORDS.search(raw)
+			if not m:
+				return None
+			tens, tens_unit, teen_unit, unit = m.groups()
+			if tens:
+				count = _UNITS[tens] * 10 + (_UNITS[tens_unit] if tens_unit else 0)
+			elif unit:
+				count = _UNITS[unit]
+			else:
+				count = 10 + (_UNITS[teen_unit] if teen_unit else 0)
+	return count if 0 < count <= MAX_ATTENDEES else None
+
+
+def typed_cancel_reason(ctx: RouteContext) -> bool:
+	"""Khách GÕ lý do huỷ lịch thay vì bấm nút: ghi nguyên văn cho nhân viên (không nhắc lại với khách) rồi cảm ơn."""
+	text = cstr(ctx.text).strip()
+	if not text or state.get(ctx.identity).get("script_node") != NODE_CANCEL:
+		return False
+	if ctx.lead:
+		note = _("Khách hủy lịch demo: {0}").format(text[:300])
+		old = frappe.db.get_value(LEAD, ctx.lead, "omni_demo_note") or ""
+		frappe.db.set_value(LEAD, ctx.lead, "omni_demo_note", f"{old}\n{note}".strip(), update_modified=False)
+	_send(ctx, NODE_CANCEL_THANKS)
+	state.set_journey(ctx.lead, scheduler.NURTURE)
+	scheduler.cancel_for(ctx.lead)
+	return True
+
+
+def waiting_for_slot(identity: str) -> bool:
+	"""Bot vừa gửi danh sách khung giờ và đang chờ khách chọn."""
+	st = _st(identity)
+	return st.get("flow") == FLOW and st.get("demo_wait") == WAIT_SLOTS
+
+
 def _leaves_demo(ctx: RouteContext) -> bool:
 	"""Ở bước hỏi số người mà khách đổi ý hoặc nói rõ ý khác: bỏ khung đang chọn dở (chưa đặt gì), trả True."""
 	text = ctx.text or ""
@@ -799,8 +852,7 @@ def on_text(ctx: RouteContext) -> bool:
 		else:
 			choose(ctx, start)
 	elif wait == "attendees":
-		m = re.search(r"\d{1,4}", ctx.text or "")
-		count = int(m.group()) if m and 0 < int(m.group()) <= MAX_ATTENDEES else None
+		count = attendee_count(ctx.text)
 		if count is None and not _SKIP_COUNT.search(ctx.text or ""):
 			if _leaves_demo(ctx):
 				return False  # khách đổi ý / muốn gặp người / dừng nhắn: KHÔNG chốt lịch, để bộ hiểu ý xử lý
