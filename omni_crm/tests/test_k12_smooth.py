@@ -390,3 +390,74 @@ class TestThinking(FlowCase):
 		import frappe
 
 		self.assertFalse(frappe.db.get_value("Omni Outbound Message", name, "script_batch"))
+
+
+class TestContextAware(FlowCase):
+	"""AI đọc theo ngữ cảnh (script_classify v3): kết quả AI được giả; kiểm cách bot dùng `relation` / `choice`."""
+
+	def _ai(self, code, relation, choice=0, service="", extra=None, demo_mode="", conf=0.9):
+		import frappe
+
+		def fake(text, info=None, **kw):
+			self.seen = info or {}
+			frappe.flags[cl.DETAIL_FLAG] = {
+				"code": code, "confidence": conf, "service": service, "slots": {}, "relation": relation,
+				"choice": choice, "demo_mode": demo_mode, "extra": extra or {}, "batch_id": kw.get("batch_id"),
+			}
+			return code, conf
+
+		self.classify.side_effect = fake
+
+	def test_ai_gets_history_and_the_pending_question(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self._ai("MENU_SPD", "", 0)
+		self.turn("thế bên em triển khai ra sao")
+		asked = self.seen.get(cl.ASKED_KEY) or ""
+		self.assertIn("Đặt lịch demo", asked)
+		self.assertTrue(any(who == "BOT" for who, _t in self.seen.get(cl.HISTORY_KEY) or []))
+		block = cl.conversation_block(self.seen)
+		self.assertIn("<bot_vua_hoi>", block)
+		self.assertIn("<lich_su>", block)
+
+	def test_natural_answer_picks_the_choice(self):
+		self.greeted()
+		for code in ("MENU_SPD", "DEMO_SPD"):
+			self.tap(code)
+		self._ai("DEMO", "TRA_LOI", 2)
+		self.turn("em qua chỗ anh đi")
+		self.assertEqual(self.sstate().get("demo_mode"), "Gặp trực tiếp")
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+
+	def test_low_confidence_or_out_of_range_choice_is_ignored(self):
+		self.greeted()
+		for code in ("MENU_SPD", "DEMO_SPD"):
+			self.tap(code)
+		self._ai("CHUA_RO", "TRA_LOI", 7)
+		self.turn("ờ thì cái kia")
+		self.assertIsNone(self.sstate().get("demo_mode"))
+
+	def test_other_intent_while_asked_leaves_the_question(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self._ai("MENU_PHANMEM", "Y_KHAC", 0, service="PHANMEM")
+		self.turn("thôi cho anh xem bên phần mềm đi")
+		self.assertNotIn("items", self.sstate().get("answers") or {})
+		self.assertEqual(self.sent()[-1], "MENU_PHANMEM")
+
+	def test_answer_with_choice_inside_collect_taps_the_button(self):
+		self.greeted()
+		for code in ("MENU_PHANMEM", "BAOGIA_PHANMEM"):
+			self.tap(code)
+		self.assertEqual(self.sent()[-1], "BAOGIA_PHANMEM")
+		self._ai("BAOGIA", "TRA_LOI", 1)
+		self.turn("chuẩn rồi đó em")
+		self.assertEqual(self.sent()[-1], "BG_SC_MATHANG")
+
+	def test_context_fields_are_verbatim_only(self):
+		raw = {"quan_he": "TRA_LOI", "lua_chon": 2, "ngay_gio": "thứ sáu 14h", "so_co_so": "5 cơ sở", "hinh_thuc_demo": "ONLINE"}
+		got = cl.context_fields(raw, "demo online thứ sáu 14h nhé", True)
+		self.assertEqual((got["relation"], got["choice"], got["demo_mode"]), ("TRA_LOI", 2, "ONLINE"))
+		self.assertEqual(got["extra"], {"when": "thứ sáu 14h"})  # "5 cơ sở" không có trong tin khách: bỏ
+		self.assertEqual(cl.context_fields(raw, "x", False)["relation"], "")  # bot không hỏi gì: không có quan hệ

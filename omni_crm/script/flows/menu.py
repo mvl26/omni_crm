@@ -179,6 +179,11 @@ def on_text(ctx: RouteContext) -> None:
 	if first and code == UNCLEAR:  # "Alo", "hi": chào như khách mới mở khung chat
 		greet(ctx)
 		return
+	picked = ai_choice(ctx)
+	if picked and not flow:  # khách trả lời câu đang hỏi bằng lời tự nhiên: coi như bấm lựa chọn đó
+		state.reset_reask(ctx.identity)
+		_tap(ctx, picked)
+		return
 	if code == UNCLEAR and _greeting_only(text):  # khách cũ gọi "Alo em ơi": chào lại, không nói "chưa rõ ý"
 		state.reset_reask(ctx.identity)
 		if not _resend_current(ctx, NODE_HELLO_AGAIN):
@@ -267,6 +272,7 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 				info = {**ctx.state, "service": engine.current_service(ctx) or ""}
 				if _needs_ai(classifier, text, info):
 					thinking(ctx)  # sắp nhờ AI hiểu ý: báo khách đợi
+					info.update(conversation_context(ctx))  # AI đọc cả mấy lượt gần nhất và câu bot vừa hỏi
 				frappe.flags.pop(DETAIL_FLAG, None)
 				code, conf = classifier.classify(
 					text, info, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id
@@ -282,6 +288,77 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 				)
 	ctx.state[CLASSIFIED_KEY] = result
 	return result
+
+
+CONTEXT_TURNS = 6
+OUTBOUND = "Omni Outbound Message"
+INBOUND = "Omni Inbound Message"
+
+
+def conversation_context(ctx: RouteContext) -> dict:
+	"""Ngữ cảnh cho AI hiểu ý: mấy lượt gần nhất (`_history`) và câu bot vừa hỏi đang chờ trả lời (`_asked`).
+	Lỗi đọc DB thì trả rỗng (AI vẫn phân loại được như trước, chỉ thiếu ngữ cảnh)."""
+	try:
+		rows = [
+			(r.creation, "BOT", r.text, r.script_node)
+			for r in frappe.get_all(
+				OUTBOUND,
+				filters={"identity": ctx.identity, "source": "Bot"},
+				fields=["creation", "text", "script_node"],
+				order_by="creation desc",
+				limit=CONTEXT_TURNS,
+			)
+			if r.script_node != send.NODE_THINKING
+		]
+		rows += [
+			(r.received_at, "KH", r.text, None)
+			for r in frappe.get_all(
+				INBOUND,
+				filters={"identity": ctx.identity, "event_type": "message", "batch_id": ["!=", ctx.batch_id]},
+				fields=["received_at", "text"],
+				order_by="received_at desc",
+				limit=CONTEXT_TURNS,
+			)
+			if (r.text or "").strip() and not router.NON_TEXT.match((r.text or "").strip())
+		]
+		rows = sorted((r for r in rows if r[0]), key=lambda r: str(r[0]))[-CONTEXT_TURNS:]
+		history = [[who, ("(bấm nút) " + text.strip()[1:]) if who == "KH" and text.strip().startswith("#") else text] for _at, who, text, _n in rows]
+		last_bot = next((r for r in reversed(rows) if r[1] == "BOT"), None)
+		asked = ""
+		if last_bot and rows and rows[-1] is last_bot:  # bot là bên nói sau cùng trước tin này
+			waiting = bool(_pending_question(ctx)) or bool((engine.script_state(ctx).get("choices") or {}).get("items"))
+			if waiting or "?" in (last_bot[2] or ""):
+				asked = last_bot[2] or ""
+		return {"_history": history, "_asked": asked}
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không đọc được ngữ cảnh hội thoại (%s)", type(e).__name__)
+		return {}
+
+
+def ai_choice(ctx: RouteContext, buttons: list | None = None) -> str | None:
+	"""Mã nút mà AI (đọc theo ngữ cảnh) cho là khách vừa chọn bằng lời ("qua teams nhé" → "Online qua Teams").
+	Chỉ nhận khi AI coi tin là câu trả lời, đủ chắc chắn và số thứ tự nằm trong danh sách đang hỏi."""
+	detail = ctx.state.get(DETAIL_KEY) or {}
+	index = cint(detail.get("choice"))
+	if detail.get("relation") != "TRA_LOI" or index < 1 or float(detail.get("confidence") or 0) < CONF_MIN:
+		return None
+	if buttons is None:
+		buttons = [
+			{"label": label, "target": target}
+			for label, target in (engine.script_state(ctx).get("choices") or {}).get("items") or []
+		]
+	if index > len(buttons):
+		return None
+	return store.normalize_code(buttons[index - 1].get("target")) or None
+
+
+def _tap(ctx: RouteContext, target: str) -> None:
+	ctx.payload_code = target
+	handler = _foreign_handler(target)
+	if handler is not None:
+		handler(ctx)
+	else:
+		on_button(ctx)
 
 
 THINKING_KEY = "_thinking"
@@ -358,6 +435,7 @@ DEMO_SERVICE = {"PHANMEM": "SUPPLYCORE", "SPD": "SPD"}  # dịch vụ có demo (
 
 
 NODE_DEMO_PRODUCT = "DEMO_CHONSANPHAM"
+AI_DEMO_MODE = {"ONLINE": "DEMO_HT_ONLINE", "TRUC_TIEP": "DEMO_HT_TRUCTIEP"}  # hình thức AI đọc được trong tin
 
 
 def _demo_needs_product(ctx: RouteContext) -> bool:
@@ -374,7 +452,8 @@ def _demo_with_details(ctx: RouteContext) -> bool:
 	try:
 		from omni_crm.script.flows import demo
 
-		mode = demo.mode_in_text(ctx.text)
+		detail = ctx.state.get(DETAIL_KEY) or {}
+		mode = demo.mode_in_text(ctx.text) or AI_DEMO_MODE.get(detail.get("demo_mode") or "")
 		if not mode:
 			return False
 		named = DEMO_SERVICE.get((ctx.state.get(DETAIL_KEY) or {}).get("service") or "")
@@ -400,7 +479,13 @@ def _known_sites(ctx: RouteContext, service: str) -> dict:
 	"""Số cơ sở khách đã nêu trong tin ("báo giá SPD cho 2 bệnh viện") để điền sẵn, không hỏi lại — thuần."""
 	m = SITES.search(ctx.text if isinstance(ctx.text, str) else "")
 	field = SITE_FIELD.get(service)
-	return {field: m.group(0).strip()} if m and field else {}
+	if not field:
+		return {}
+	if m:
+		return {field: m.group(0).strip()}
+	state_ = ctx.state if isinstance(ctx.state, dict) else {}
+	said = ((state_.get(DETAIL_KEY) or {}).get("extra") or {}).get("sites")  # AI chép nguyên văn từ tin khách
+	return {field: said} if said and any(ch.isdigit() for ch in said) else {}
 
 
 def _skip_confirm(ctx: RouteContext, service: str) -> str | None:
@@ -727,6 +812,34 @@ def _number_choice(ctx: RouteContext, text: str, pending: str) -> str | None:
 	return buttons[number - 1]["target"] if 1 <= number <= len(buttons) else None
 
 
+DECLINE_WORDS = 4
+NO_AI_FIELDS = ("name_org", "email", "phone")  # tên – đơn vị, liên hệ: không có gì để "hiểu ý", không gửi AI
+
+
+def _plain_answer(field: str, text: str, st: dict) -> bool:
+	"""Câu trả lời đủ rõ để ghi ngay mà không cần AI đọc ngữ cảnh: ô tên / liên hệ, câu có con số ở ô số lượng
+	hay số người, ngày giờ đọc được ở bước hẹn demo."""
+	if field in NO_AI_FIELDS:
+		return True
+	has_digit = any(ch.isdigit() for ch in text)
+	if field in ("quantity", "attendees") and has_digit:
+		return True
+	if (st.get("flow") or "") == "demo":
+		wait = str(st.get("demo_wait") or "")
+		if wait == "attendees" and has_digit:
+			return True
+		if wait == "email" and "@" in text:
+			return True
+		if wait == "time":
+			try:
+				from omni_crm.script.flows import demo
+
+				return bool(demo.parse_time(text))
+			except Exception:
+				return False
+	return False
+
+
 def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 	"""Bot đang hỏi dở mà khách chào, ừ, gửi sticker hay hỏi chen ngang: KHÔNG ghi câu đó làm câu trả lời; đáp lời rồi
 	hỏi lại đúng câu đang dở. Khách nói rõ ý khác (dịch vụ khác, cần người) thì rời câu hỏi. True nếu đã xử lý."""
@@ -756,17 +869,39 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 	if code in collect.LEAVE_CODES or code in ("BAOGIA", classify.INJECTION_CODE):
 		return False  # luồng đang hỏi tự xử lý (rời câu hỏi / xin giá khi đang báo giá / câu chèn lệnh: ghi cho nhân viên, không đáp)
 	if code is None or code == UNCLEAR:
-		declining = len(text) <= collect.DECLINE_MAX_LEN and collect.DECLINE.search(text)
+		# lời từ chối NGẮN ("không ạ", "bỏ qua", "thôi em"); câu dài mở đầu bằng "thôi…" có thể là ý khác → để AI đọc
+		declining = len(text.split()) <= DECLINE_WORDS and collect.DECLINE.search(text)
 		if declining or "@" in text:
-			return False  # từ chối ("không ạ", "bỏ qua") hoặc đang gõ email: luồng đang hỏi tự xử lý
+			return False  # từ chối hoặc đang gõ email: luồng đang hỏi tự xử lý
 		field = str(st.get("field") or "")
 		if field == collect.DELIVERY_FIELD and TIME_WORDS.search(_fold(text)):
 			return False  # "thứ 3 tuần sau được không em": vẫn là câu trả lời về thời gian (kèm lời hỏi giao kịp không)
 		asking = bool(QUESTION.search(_fold(text)))
-		if not asking and not (field in AI_CHECKED and not any(ch.isdigit() for ch in text)):
-			return False  # câu trả lời bình thường
+		if not asking and _plain_answer(field, text, st):
+			return False  # câu trả lời rõ ràng (có con số, tên – đơn vị…): ghi luôn, không cần hỏi AI
 		code, _conf = classify_text(ctx)
-		slots = (ctx.state.get(DETAIL_KEY) or {}).get("slots") or {}
+		detail = ctx.state.get(DETAIL_KEY) or {}
+		relation = detail.get("relation") or ""
+		if relation == "TRA_LOI":  # AI đọc cả ngữ cảnh và coi đây là câu trả lời cho câu đang hỏi
+			picked = ai_choice(ctx, _shown_buttons(ctx, store.get_node(pending)))
+			if picked:
+				_tap(ctx, picked)
+				return True
+			return False
+		if relation == "Y_KHAC" and field not in collect.CONTACT_FIELDS:
+			if code in SIDE_REPLY:
+				return _reply_then_back(ctx, SIDE_REPLY[code], pending)
+			if code == "KB_HOI":
+				state.reset_reask(ctx.identity)
+				answer_kb(ctx)
+				return True
+			if code != UNCLEAR and code not in ("BAOGIA", "MENU_VATTU") or (code in ("BAOGIA", "MENU_VATTU") and st.get("branch") != "3b"):
+				collect._clear_flow(ctx)  # khách nói sang việc khác: rời câu đang hỏi, làm theo ý khách
+				state.update_state(ctx.identity, demo_wait=None)
+				state.reset_reask(ctx.identity)
+				route(ctx, _refine(ctx, code))
+				return True
+		slots = detail.get("slots") or {}
 		plain = not asking and code in ANSWER_CODES and (slots or code != UNCLEAR or len(text.split()) > 1)
 		if field in AI_CHECKED and plain:
 			return False  # AI coi là câu trả lời (nêu mặt hàng / nhu cầu mua)

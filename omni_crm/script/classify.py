@@ -51,9 +51,9 @@ RULE_CONFIDENCE = 1.0
 AI_KIND = "Reply"  # Omni Bot Run.kind không có loại riêng cho phân loại; lượt này thay cho lượt Reply cũ
 DEFAULT_MODEL = "claude-haiku-5-5"
 PROMPT_NAME = "script_classify"
-PROMPT_VERSION = "v2"  # ghim trong code: câu lệnh này không có trường ghim trong Omni Settings
+PROMPT_VERSION = "v3"  # ghim trong code: câu lệnh này không có trường ghim trong Omni Settings
 MAX_TEXT_CHARS = 1000
-MAX_TOKENS = 200
+MAX_TOKENS = 300
 DATA_OPEN, DATA_CLOSE = "<tin_khach>", "</tin_khach>"
 CONTEXT_OPEN, CONTEXT_CLOSE = "<ngu_canh>", "</ngu_canh>"
 TRUNCATED = "…"
@@ -70,6 +70,13 @@ TOOL = {
 			"mat_hang": {"type": "string"},
 			"so_luong": {"type": "string"},
 			"thoi_gian": {"type": "string"},
+			"quan_he": {"type": "string", "enum": ["TRA_LOI", "Y_KHAC", "KHONG_HOI"]},
+			"lua_chon": {"type": "integer", "minimum": 0, "maximum": 9},
+			"dinh_chinh": {"type": "string"},
+			"hinh_thuc_demo": {"type": "string", "enum": ["ONLINE", "TRUC_TIEP"]},
+			"ngay_gio": {"type": "string"},
+			"so_co_so": {"type": "string"},
+			"so_nguoi": {"type": "string"},
 		},
 		"required": ["code", "confidence"],
 		"additionalProperties": False,
@@ -362,7 +369,32 @@ def build_user_message(text: str, state: dict | None = None) -> str:
 	clean = escape_tags(mask_pii(text).strip())
 	if len(clean) > MAX_TEXT_CHARS:
 		clean = clean[: MAX_TEXT_CHARS - len(TRUNCATED)] + TRUNCATED
-	return f"{context_line(state)}\n{DATA_OPEN}\n{clean}\n{DATA_CLOSE}"
+	return f"{context_line(state)}\n{conversation_block(state)}{DATA_OPEN}\n{clean}\n{DATA_CLOSE}"
+
+
+HISTORY_KEY = "_history"  # state: các lượt gần nhất, mỗi phần tử (vai, nội dung) với vai "KH" | "BOT"
+ASKED_KEY = "_asked"  # state: nguyên văn câu bot vừa hỏi và đang chờ khách trả lời (kèm danh sách lựa chọn)
+MAX_HISTORY = 6
+MAX_HISTORY_CHARS = 300
+MAX_ASKED_CHARS = 900
+
+
+def _short(value: object, limit: int) -> str:
+	clean = escape_tags(mask_pii(" ".join(str(value or "").split())))
+	return clean if len(clean) <= limit else clean[: limit - len(TRUNCATED)] + TRUNCATED
+
+
+def conversation_block(state: dict | None) -> str:
+	"""Khối `<lich_su>` và `<bot_vua_hoi>` cho AI (đã che email/SĐT, thoát thẻ, cắt độ dài); không có thì thẻ rỗng."""
+	state = state if isinstance(state, dict) else {}
+	turns = []
+	for item in (state.get(HISTORY_KEY) or [])[-MAX_HISTORY:]:
+		if isinstance(item, list | tuple) and len(item) == 2 and item[0] in ("KH", "BOT") and str(item[1]).strip():
+			turns.append(f"{item[0]}: {_short(item[1], MAX_HISTORY_CHARS)}")
+	asked = str(state.get(ASKED_KEY) or "").strip()
+	asked = escape_tags(mask_pii(asked))[:MAX_ASKED_CHARS] if asked else ""
+	history = "\n".join(turns)
+	return f"<lich_su>\n{history}\n</lich_su>\n<bot_vua_hoi>\n{asked}\n</bot_vua_hoi>\n"
 
 
 def _classify_ai(
@@ -388,7 +420,9 @@ def _classify_ai(
 	if isinstance(confidence, bool) or not isinstance(confidence, int | float):
 		return _detail(UNKNOWN, 0.0)
 	service = raw.get("service") if raw.get("service") in SERVICES else ""
-	return _detail(raw["code"], min(max(float(confidence), 0.0), 1.0), service, slots_from(raw, text))
+	out = _detail(raw["code"], min(max(float(confidence), 0.0), 1.0), service, slots_from(raw, text))
+	out.update(context_fields(raw, text, bool(str((state or {}).get(ASKED_KEY) or "").strip())))
+	return out
 
 
 DETAIL_FLAG = "omni_script_classify_detail"
@@ -399,6 +433,28 @@ MAX_SLOT = 200
 
 def _detail(code: str, confidence: float, service: str = "", slots: dict | None = None) -> dict:
 	return {"code": code, "confidence": confidence, "service": service, "slots": slots or {}}
+
+
+RELATIONS = ("TRA_LOI", "Y_KHAC")
+EXTRA_FIELDS = {"ngay_gio": "when", "so_co_so": "sites", "so_nguoi": "attendees", "dinh_chinh": "correction"}
+DEMO_MODES = ("ONLINE", "TRUC_TIEP")
+
+
+def context_fields(raw: dict, text: str, asked: bool) -> dict:
+	"""Phần "hiểu theo ngữ cảnh" của kết quả AI (thuần): `relation` (TRA_LOI | Y_KHAC | ""), `choice` (số thứ tự lựa
+	chọn khách chọn, 0 = không rõ), `demo_mode` và `extra` (ngày giờ, số cơ sở, số người, đính chính — chỉ nhận
+	giá trị là nguyên văn một đoạn của tin khách). Bot không hỏi gì thì không có `relation` / `choice`."""
+	source = _squash(text)
+	relation = raw.get("quan_he") if asked and raw.get("quan_he") in RELATIONS else ""
+	choice = raw.get("lua_chon")
+	choice = choice if relation == "TRA_LOI" and isinstance(choice, int) and not isinstance(choice, bool) else 0
+	extra = {}
+	for key, field in EXTRA_FIELDS.items():
+		value = " ".join(str(raw.get(key) or "").split())
+		if value and len(value) <= MAX_SLOT and _squash(value) in source:
+			extra[field] = value
+	mode = raw.get("hinh_thuc_demo") if raw.get("hinh_thuc_demo") in DEMO_MODES else ""
+	return {"relation": relation, "choice": max(0, choice), "demo_mode": mode, "extra": extra}
 
 
 def _squash(value: object) -> str:
