@@ -114,6 +114,7 @@ def find_handler(ctx: RouteContext) -> Handler | None:
 	return _handlers.get(DEFAULT_KEY)
 
 
+NON_TEXT = re.compile(r"^\[(?:sticker|gif|ảnh|hình ảnh|image|photo|tệp|file|link|vị trí|location|video|voice|ghi âm)\]$", re.I)
 CHOICE_NUMBER = re.compile(r"(?:số\s*)?(\d{1,2})[.)]?")
 
 
@@ -216,7 +217,12 @@ def build_context(batch_id: str) -> RouteContext | None:
 	lead = last.lead or frappe.db.get_value(IDENTITY, last.identity, "lead")
 	lead = lead_bridge.follow_merged(lead) or lead  # Lead đã gộp: làm việc trên Lead chính
 	messages = [r for r in rows if r.event_type == "message"]
-	text = "\n".join((r.text or "").strip() for r in messages if (r.text or "").strip())
+	# "[Sticker]", "[Hình ảnh]"…: chữ thế chỗ của tin không có chữ, không phải lời khách nói ("Alo em" + sticker vẫn là lời chào)
+	text = "\n".join(
+		(r.text or "").strip()
+		for r in messages
+		if (r.text or "").strip() and not NON_TEXT.match((r.text or "").strip())
+	)
 	attachments: list = []
 	for r in messages:
 		attachments.extend(_attachments_of(r.attachments))

@@ -237,3 +237,24 @@ class TestBatchC(FrappeTestCase):
 
 		self.assertTrue(collect._only_extras("anh cần 100 hộp", {"quantity": "100 hộp"}))
 		self.assertFalse(collect._only_extras("Bơm 5ml g23 10 hộp", {"quantity": "10 hộp"}))
+
+	def test_ack_drops_question_tail(self):
+		from omni_crm.script.flows import collect
+
+		self.assertEqual(collect.ack_value("Thứ 3 tuần sau được k em"), "Thứ 3 tuần sau")
+		self.assertEqual(collect.ack_value("găng tay nitrile nhé em"), "găng tay nitrile")
+		self.assertEqual(collect.ack_value("30 cái"), "30 cái")
+		self.assertEqual(collect.ack_value("được không em"), "")
+
+	def test_sticker_placeholder_is_not_text(self):
+		for raw in ("[Sticker]", "[sticker]", "[Hình ảnh]", "[GIF]"):
+			self.assertTrue(router.NON_TEXT.match(raw), raw)
+		for raw in ("[1] găng tay", "Alo em", "[ghi chú] cần gấp"):
+			self.assertFalse(router.NON_TEXT.match(raw), raw)
+
+
+class TestStickerWithGreeting(FlowCase):
+	def test_alo_plus_sticker_is_a_greeting(self):
+		self.greeted()
+		self.turn("Alo em", "[Sticker]")
+		self.assertEqual(self.sent(), ["MENU_CHINH"])

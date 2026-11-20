@@ -173,6 +173,11 @@ ACK_UNSAFE = re.compile(r"https?://|www\.|[<>{}\[\]|\\`$#@]", re.I)
 ACK_MONEY = re.compile(r"\d[\d.,]*\s*(đ|₫|vnd|vnđ|đồng|dong|nghìn|ngàn|k|triệu|trieu|tr|tỷ|tỉ|usd|\$)(?![a-zà-ỹ])", re.I)
 
 
+# đuôi hỏi lại / lời gọi ở cuối câu trả lời: không thuộc thông tin cần xác nhận
+ACK_TAIL = re.compile(
+	r"(?:\s+(?:có\s+)?(?:được|kịp|ok|oke)\s*(?:không|ko|k|hông|hok|chưa)?)?(?:\s+(?:em|ạ|nhé|nha|nhá|bạn|shop|ơi|với))*\s*\??$",
+	re.I,
+)
 ACK_QUESTION = re.compile(r"\?|khi nào|bao giờ|bao lâu|thế nào|như nào|ra sao|thì sao|được không|có thể|hay không|mấy ngày")
 
 
@@ -180,6 +185,7 @@ def ack_value(value: str | None) -> str:
 	"""Câu trả lời của khách đủ an toàn để nhắc lại trong tin bot (thuần): ngắn, một dòng, không link, không ký tự
 	lạ, không số tiền; không đạt thì trả chuỗi rỗng (bot không nhắc lại phần đó)."""
 	text = " ".join(str(value or "").split()).strip(" .;,")
+	text = ACK_TAIL.sub("", text).strip(" .;,")  # "thứ 3 tuần sau được k em" -> "thứ 3 tuần sau"
 	if not text or len(text) > ACK_MAX_VALUE or ACK_UNSAFE.search(text) or ACK_MONEY.search(text):
 		return ""
 	if ACK_QUESTION.search(text.lower()):  # khách hỏi ngược lại ("giao sớm nhất khi nào"): không phải thông tin để xác nhận
