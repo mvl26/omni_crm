@@ -7,7 +7,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from omni_crm.script import classify as cl
 from omni_crm.script import router
-from omni_crm.script.flows import demo
+from omni_crm.script.flows import demo, menu
 from omni_crm.tests.test_k2_flow import FlowCase
 
 MODE = [["Online qua Teams", "DEMO_HT_ONLINE"], ["Gặp trực tiếp", "DEMO_HT_TRUCTIEP"]]
@@ -461,3 +461,46 @@ class TestContextAware(FlowCase):
 		self.assertEqual((got["relation"], got["choice"], got["demo_mode"]), ("TRA_LOI", 2, "ONLINE"))
 		self.assertEqual(got["extra"], {"when": "thứ sáu 14h"})  # "5 cơ sở" không có trong tin khách: bỏ
 		self.assertEqual(cl.context_fields(raw, "x", False)["relation"], "")  # bot không hỏi gì: không có quan hệ
+
+
+class TestLive2011Afternoon(FlowCase):
+	"""Hội thoại thật 20/11 14:28–14:32."""
+
+	def test_ai_guess_of_unsubscribe_never_sets_do_not_contact(self):
+		import frappe
+
+		self.greeted()
+		text = "Anh quên mất là thứ 6 bận"
+		self.codes[text] = ("HUY_DANGKY", 0.6)
+		self.turn(text)
+		self.assertFalse(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"))
+		self.assertNotIn("C4_HUYDANGKY", self.sent())
+		self.assertEqual(self.sent()[-1], "KHONG_CAMON")
+
+	def test_explicit_stop_still_works(self):
+		import frappe
+
+		self.greeted()
+		self.turn("đừng nhắn tin cho tôi nữa")
+		self.assertEqual(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"), 1)
+
+	def test_busy_and_move_patterns(self):
+		for text in ("Anh quên mất là thứ 6 bận", "hôm đó anh kẹt rồi", "anh không tham gia được"):
+			self.assertTrue(menu.BUSY.search(text), text)
+		for text in ("Đổi sang thứ 7 nhé", "dời lại tuần sau giúp anh", "hoãn lịch nhé"):
+			self.assertTrue(menu.MOVE_PLAIN.search(text), text)
+		for text in ("bạn ơi cho hỏi", "anh muốn mua bàn mổ", "đổi găng tay thành khẩu trang"):
+			self.assertFalse(menu.BUSY.search(text) or menu.MOVE_PLAIN.search(text), text)
+
+	def test_greeting_after_a_long_gap_does_not_resume_an_old_question(self):
+		import frappe
+		from frappe.utils import add_to_date, now_datetime
+
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		frappe.db.set_value("Omni Identity", self.ident1, "script_last_bot_at", add_to_date(now_datetime(), hours=-3), update_modified=False)
+		frappe.db.commit()
+		self.turn("Alo miyano")
+		self.assertEqual(self.sent()[-1], "MENU_CHINH")
+		self.assertFalse(self.sstate().get("field"))

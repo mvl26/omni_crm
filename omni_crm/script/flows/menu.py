@@ -388,6 +388,13 @@ def _needs_ai(classifier, text: str, info: dict) -> bool:
 
 def route(ctx: RouteContext, code: str) -> None:
 	"""Đưa mã phân loại về đúng ô kịch bản, như thể khách đã bấm nút."""
+	if code in ("HUY_DANGKY", "XOA_DULIEU") and not _explicit_request(ctx, code):
+		# Dừng nhắn / xoá dữ liệu là việc không hoàn tác được với khách: chỉ làm khi khách NÓI RÕ (luật cố định trúng),
+		# không làm theo phỏng đoán của AI ("anh quên mất là thứ 6 bận" từng bị hiểu thành dừng nhắn).
+		state.reset_reask(ctx.identity)
+		if not _show_booking(ctx) and not engine.run_button(ctx, NODE_NO_THANKS):
+			reask(ctx)
+		return
 	if code == "PHAN_NAN":  # C.2: khách phàn nàn thì tự chuyển nhân viên
 		state.reset_reask(ctx.identity)
 		auto_handoff(ctx, "REASON_COMPLAINT")
@@ -631,6 +638,31 @@ def _polite_decline(text: str) -> bool:
 		return False
 
 
+def _explicit_request(ctx: RouteContext, code: str) -> bool:
+	"""Chính khách nói rõ yêu cầu dừng nhắn / xoá dữ liệu (luật cố định trúng đúng mã đó), không phải AI suy ra."""
+	try:
+		from omni_crm.script import classify
+
+		hit = classify.classify_by_rules(ctx.text or "")
+		return bool(hit and hit[0] == code) or (code == "HUY_DANGKY" and _is_stop_phrase(ctx.text or ""))
+	except Exception:
+		return False
+
+
+def _show_booking(ctx: RouteContext) -> bool:
+	try:
+		from omni_crm.script.flows import demo
+
+		return bool(demo.show_booking(ctx))
+	except Exception:
+		return False
+
+
+# có lịch demo rồi mà khách báo bận / muốn dời (không cần nhắc chữ "demo" hay "lịch")
+BUSY = re.compile(r"bận|kẹt|vướng|quên mất|không (?:đi|tham gia|dự|xem|kịp|sắp xếp)(?: được)?", re.I)
+MOVE_PLAIN = re.compile(r"(?:đổi|dời|chuyển|lùi|hoãn)\b.{0,30}(?:lịch|giờ|ngày|hôm|thứ|tuần|mai|sáng|chiều|buổi)", re.I)
+
+
 DEMO_MOVE = re.compile(
 	r"\b(?:doi|chuyen|hoan|lui|dich)\b.*\b(?:demo|lich)\b|\b(?:demo|lich)\b.*\b(?:sang|qua) (?:ngay|tuan|hom|thu)\b"
 )
@@ -643,6 +675,12 @@ def _demo_change(ctx: RouteContext, text: str) -> bool:
 		return False
 	folded = _fold(text)
 	code = "DEMO_HUY" if DEMO_CANCEL.search(folded) else "DEMO_DOILICH" if DEMO_MOVE.search(folded) else ""
+	if not code and len(text) <= 120:
+		if MOVE_PLAIN.search(text):  # "Đổi sang thứ 7 nhé"
+			code = "DEMO_DOILICH"
+		elif BUSY.search(text):  # "Anh quên mất là thứ 6 bận": nhắc lịch đang có, hỏi đổi hay huỷ
+			state.reset_reask(ctx.identity)
+			return _show_booking(ctx)
 	if not code or _foreign_handler(code) is None:
 		return False
 	state.reset_reask(ctx.identity)
@@ -813,6 +851,20 @@ def _number_choice(ctx: RouteContext, text: str, pending: str) -> str | None:
 
 
 DECLINE_WORDS = 4
+STALE_MINUTES = 60  # câu hỏi dở quá lâu không được trả lời thì không còn là "câu đang hỏi"
+
+
+def _stale(ctx: RouteContext) -> bool:
+	"""Tin cuối của bot đã cách đây hơn `STALE_MINUTES` phút."""
+	try:
+		from frappe.utils import get_datetime
+
+		last = ctx.state.get("script_last_bot_at")
+		return bool(last) and (now_datetime() - get_datetime(last)).total_seconds() > STALE_MINUTES * 60
+	except Exception:
+		return False
+
+
 NO_AI_FIELDS = ("name_org", "email", "phone")  # tên – đơn vị, liên hệ: không có gì để "hiểu ý", không gửi AI
 
 
@@ -854,6 +906,10 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 	except Exception:
 		return False
 	if classify.is_greeting_only(text):
+		if _stale(ctx):  # câu đang hỏi dở đã quá cũ: bỏ, để khách bắt đầu lại từ menu
+			collect._clear_flow(ctx)
+			state.update_state(ctx.identity, demo_wait=None, handoff_phone_tries=None)
+			return False
 		return _ask_again(ctx, pending, NODE_HELLO_AGAIN)
 	picked = _number_choice(ctx, text, pending)
 	if picked:  # gõ số cho danh sách khoảng số ("Dưới 500 / 500–2.000…") hoặc số thứ tự của danh sách không đánh số

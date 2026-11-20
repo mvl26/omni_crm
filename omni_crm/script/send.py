@@ -138,7 +138,17 @@ def send_thinking(identity: str) -> str | None:
 	rendered = store.render(store.get_node(NODE_THINKING), {"identity": identity})
 	if not rendered:
 		return None
-	return _queue(identity, rendered[0], [], NODE_THINKING, "reply", notice=True)
+	name = _queue(identity, rendered[0], [], NODE_THINKING, "reply", notice=True)
+	if name:  # gửi ngay trong tiến trình này (đã commit, không giữ khoá DB): nếu để hàng đợi thì tới cùng lúc câu trả lời
+		try:
+			from omni_crm.pipeline import outbound
+
+			outbound.send_outbound(name)
+			frappe.db.commit()
+		except Exception as e:
+			frappe.db.rollback()
+			_log(f"bao_cho_chua_gui_ngay:{type(e).__name__}", identity, NODE_THINKING)
+	return name
 
 
 def send_text(

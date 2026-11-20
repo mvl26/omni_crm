@@ -68,6 +68,7 @@ c. Câu bot hỏi là một menu (“Anh/chị muốn Miyano hỗ trợ gì ạ?
 d. Khách đang được hỏi mà nói chuyện phiếm không liên quan (“hôm nay trời đẹp nhỉ em”, “em ăn cơm chưa”) → Y_KHAC, code = KHONG_LIENQUAN.
 e. Một tin vừa nhắc tên dịch vụ vừa nêu việc muốn làm (“bên mình có phần mềm spd, anh muốn đặt lịch demo”, “báo giá SPD cho 2 bệnh viện”) → code là mã của VIỆC muốn làm (DEMO, BAOGIA, TAILIEU), còn dịch vụ ghi ở trường service. Chỉ dùng mã MENU_ khi khách mới hỏi chung về dịch vụ đó.
 f. Bot hỏi mặt hàng / số lượng / thời gian / hãng mà khách gõ một cụm ngắn đúng loại thông tin đó (tên hàng, con số, mốc thời gian, tên hãng) → TRA_LOI, kể cả khi viết không dấu hay không có động từ. Ví dụ bot hỏi có chấp nhận hãng khác thay thế không, khách gõ “Hãng moba em nhé” → TRA_LOI (khách nêu hãng mình muốn), lua_chon = 0.
+h. HUY_DANGKY và XOA_DULIEU CHỈ chọn khi khách nói RÕ là không muốn nhận tin / muốn xoá dữ liệu (“đừng nhắn nữa”, “hủy đăng ký”). Khách báo bận, quên, không tham gia được một buổi hẹn, muốn đổi hay huỷ MỘT lịch demo (“anh quên mất là thứ 6 bận”, “đổi sang thứ 7 nhé”, “hủy lịch demo giúp anh”) KHÔNG phải HUY_DANGKY → code = DEMO, và điền ngay_gio nếu khách nêu ngày giờ mới.
 g. Khách chọn bằng số thứ tự nói thành lời (“cái thứ hai đi em”, “lấy cái đầu tiên”, “số 3”) → TRA_LOI, lua_chon = số thứ tự đó.
 
 Khách đính chính điều vừa nói (“à anh nhầm, đổi găng tay thành khẩu trang”) → quan_he = TRA_LOI, `code` giữ theo việc đang làm, và điền `dinh_chinh` = phần nội dung mới, chép nguyên văn từ tin khách (ví dụ “khẩu trang”).

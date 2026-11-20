@@ -819,6 +819,15 @@ def start_with(ctx: RouteContext, mode_code: str) -> bool:
 	return True
 
 
+def show_booking(ctx: RouteContext) -> bool:
+	"""Khách đã có lịch demo ở tương lai: gửi câu nhắc lịch kèm nút Đổi lịch / Huỷ lịch / Giữ lịch. True nếu đã gửi."""
+	booked = _has_booking(ctx)
+	if not booked:
+		return False
+	mode = frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")
+	return bool(_send(ctx, NODE_HAS_BOOKING, scheduler.demo_variables(booked, mode)))
+
+
 def waiting_for_slot(identity: str) -> bool:
 	"""Bot vừa gửi danh sách khung giờ và đang chờ khách chọn."""
 	st = _st(identity)
