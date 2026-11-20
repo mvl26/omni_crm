@@ -510,8 +510,8 @@ class TestUnknownService(K3Case):
 class TestUnanswered(K3Case):
 	def test_decision_pure(self):
 		ok = dict(staff_replied=False, escalated=False)
-		self.assertFalse(handoff.should_escalate(14.9, **ok))
-		self.assertTrue(handoff.should_escalate(15, **ok))
+		self.assertFalse(handoff.should_escalate(9.9, **ok))  # 20/11: mốc 10 phút (trước là 15)
+		self.assertTrue(handoff.should_escalate(10, **ok))
 		self.assertFalse(handoff.should_escalate(60, staff_replied=True, escalated=False))
 		self.assertFalse(handoff.should_escalate(60, staff_replied=False, escalated=True))
 		self.assertTrue(handoff.should_escalate(5, minutes=5, **ok))
@@ -564,11 +564,13 @@ class TestUnanswered(K3Case):
 		handoff.start(self.ctx())
 		frappe.db.commit()
 
-	def test_after_15_minutes_asks_phone_and_notifies_manager(self):
+	def test_after_10_minutes_asks_phone_and_notifies_manager(self):
+		# 20/11 (người phụ trách quyết): mốc chờ nhân viên là 10 phút (trước là 15)
 		self._handoff_now()
-		self.assertEqual(handoff.check_unanswered(now_datetime() + timedelta(minutes=10))["escalated"], 0)
+		self.assertEqual(handoff.check_unanswered(now_datetime() + timedelta(minutes=8))["escalated"], 0)
+		self.assertTrue(bot_handoff.is_bot_paused(self.ident1))
 		with mock.patch.object(handoff, "_notify") as notify:
-			out = handoff.check_unanswered(now_datetime() + timedelta(minutes=16))
+			out = handoff.check_unanswered(now_datetime() + timedelta(minutes=11))
 		self.assertEqual(out["escalated"], 1)
 		self.assertEqual(notify.call_args.args[1], [SALE2])
 		self.assertEqual(self.codes(), ["GAP_NV_TRONGGIO", "GAP_NV_GOIDIEN"])
@@ -606,7 +608,8 @@ class TestUnanswered(K3Case):
 		self.assertEqual(self.codes(), ["GAP_NV_TRONGGIO"])
 		self.assertFalse(self.hstate()["handoff"]["escalated"])
 
-	def test_ask_phone_not_queued_keeps_pause(self):
+	def test_bot_resumes_even_when_nothing_could_be_sent(self):
+		# 20/11 (người phụ trách quyết): quá 10 phút chưa ai trả lời thì bot LUÔN hoạt động lại (trước: giữ tạm dừng)
 		self._handoff_now()
 		with (
 			mock.patch.object(handoff.send, "send_node", return_value=None),
@@ -615,7 +618,18 @@ class TestUnanswered(K3Case):
 			out = handoff.check_unanswered(now_datetime() + timedelta(minutes=30))
 		self.assertEqual(out["escalated"], 1)
 		self.assertEqual(notify.call_args.args[1], [SALE2])  # quản lý vẫn được báo
-		self.assertTrue(bot_handoff.is_bot_paused(self.ident1))  # không mở bot khi chưa hỏi được số
+		self.assertFalse(bot_handoff.is_bot_paused(self.ident1))
+		self.assertNotIn("flow", self.hstate())
+
+	def test_known_phone_gets_apology_and_menu_not_phone_question(self):
+		frappe.db.set_value("CRM Lead", self.lead1, "mobile_no", "0912345678", update_modified=False)
+		self._handoff_now()
+		with mock.patch.object(handoff, "_notify"):
+			out = handoff.check_unanswered(now_datetime() + timedelta(minutes=11))
+		self.assertEqual(out["escalated"], 1)
+		self.assertEqual(self.codes(), ["GAP_NV_TRONGGIO", "MENU_CHINH"])
+		self.assertIn("chưa phản hồi kịp", self.sent()[-1].text)
+		self.assertFalse(bot_handoff.is_bot_paused(self.ident1))
 		self.assertNotIn("flow", self.hstate())
 
 
@@ -845,7 +859,7 @@ class TestLeadApi(K3Case):
 		hooks = frappe.get_hooks("doc_events")["CRM Lead"]["on_update"]
 		self.assertIn("omni_crm.script.lead_ui.on_lead_fields_changed", hooks)
 		self.assertIn("omni_crm.crm_bridge.lead.track_manual_edits", hooks)
-		cron = frappe.get_hooks("scheduler_events")["cron"]["*/5 * * * *"]
+		cron = frappe.get_hooks("scheduler_events")["cron"]["*/1 * * * *"]  # 20/11: kiểm mỗi phút để bot mở lại đúng 10 phút
 		self.assertIn("omni_crm.script.flows.handoff.check_unanswered", cron)
 
 	def test_layout_section_pure(self):

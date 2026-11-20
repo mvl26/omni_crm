@@ -163,5 +163,31 @@
 		"source_ref": "Yêu cầu 19/11/2026",
 		"text": "Dạ, Miyano đã nhận tệp anh/chị gửi ạ.",
 		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách gửi tệp / ảnh mà bot chưa biết để làm gì. Tệp vẫn được lưu cho nhân viên."
+	},
+	{
+		"code": "BG_GIAOHANG_XACNHAN",
+		"title": "Báo giá – khách hỏi có giao kịp thời gian mình cần không",
+		"step": "3",
+		"service": "VATTU",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Nhân viên Miyano sẽ xác nhận thời gian giao hàng khi gửi báo giá ạ.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026",
+		"notes": "Không gửi riêng: ghép sau câu xác nhận thông tin khi khách trả lời thời gian cần hàng kèm câu hỏi (\"thứ 3 tuần sau được không em\"). Bot không tự cam kết thời gian giao."
+	},
+	{
+		"code": "GAP_NV_CHUAKIP",
+		"title": "Câu dẫn khi nhân viên chưa trả lời sau 10 phút (bot hoạt động lại)",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Dạ, nhân viên Miyano hiện chưa phản hồi kịp, Miyano xin lỗi vì để anh/chị chờ. Miyano đã báo lại bộ phận phụ trách và tiếp tục hỗ trợ anh/chị ngay ạ.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026",
+		"notes": "Không gửi riêng: ghép lên đầu câu xin số điện thoại (khách chưa có số) hoặc menu chính (khách đã có số) khi đã chuyển nhân viên 10 phút trong giờ mà chưa ai trả lời. Bot hoạt động lại ngay sau câu này."
 	}
 ]

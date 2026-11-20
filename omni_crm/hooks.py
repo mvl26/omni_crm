@@ -181,7 +181,6 @@ scheduler_events = {
 			"omni_crm.bot.reply.expire_pending_drafts",  # D3-01: nháp Draft chờ duyệt quá 24 giờ -> Expired
 			"omni_crm.crm_bridge.response_sla.run",  # V2-05: nhắc lead quảng cáo quá hạn phản hồi (giờ làm việc)
 			"omni_crm.bot.handoff.email_unread_handoffs",  # D3-02: email nhắc nếu chưa mở thông báo chuyển người sau 10 phút
-			"omni_crm.script.flows.handoff.check_unanswered",  # K3: 15 phút chưa ai nhận khách -> xin SĐT, báo quản lý
 		],
 		"*/30 * * * *": ["omni_crm.channels.zalo.token.refresh_if_needed"],  # D1-08
 		"10 */6 * * *": [
@@ -198,7 +197,11 @@ scheduler_events = {
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
 		# V3-10 Marketing Hub (ADR 0028): CRM tự giữ lịch, mỗi phút đăng bài đến giờ. Khóa riêng "*/1" để không chung
 		# danh sách "* * * * *" (dễ đụng thay đổi của luồng khác khi gộp).
-		"*/1 * * * *": ["omni_crm.marketing.publisher.dispatch.dispatch_due"],
+		"*/1 * * * *": [
+			"omni_crm.marketing.publisher.dispatch.dispatch_due",
+			# K3 (20/11): 10 phút chưa ai trả lời khách đã chuyển -> bot hoạt động lại, báo quản lý. Mỗi phút để không trễ.
+			"omni_crm.script.flows.handoff.check_unanswered",
+		],
 		# V3-10 Prompt 6: mỗi giờ (phút 23) xem đã đủ insights_sync_hours chưa rồi đồng bộ số liệu bài đăng
 		"23 * * * *": ["omni_crm.marketing.insights.sync_due"],
 		"*/15 * * * *": ["omni_crm.script.scheduler.run_due"],  # bot kịch bản v3 (K5): tin hẹn giờ đến hạn

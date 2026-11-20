@@ -258,3 +258,39 @@ class TestStickerWithGreeting(FlowCase):
 		self.greeted()
 		self.turn("Alo em", "[Sticker]")
 		self.assertEqual(self.sent(), ["MENU_CHINH"])
+
+
+class TestDeliveryNote(FlowCase):
+	def test_need_by_with_question_gets_staff_will_confirm(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self.codes["găng tay nitrile"] = ("MENU_VATTU", 0.9)
+		self.turn("găng tay nitrile")
+		self.turn("100 hộp")
+		self.assertEqual(self.sent()[-1], "BG_VT_THOIGIAN")
+		self.turn("Thứ 3 tuần sau được không")
+		self.classify.assert_called_once()  # chỉ lượt "găng tay nitrile" hỏi AI; câu thời gian kèm lời hỏi thì không
+		self.assertEqual(self.sent()[-1], "BG_VT_THAYTHE")
+		self.reset()
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self.turn("găng tay nitrile")
+		self.turn("100 hộp")
+		self.turn("Thứ 3 tuần sau được k em")
+		last = [t for t in self.texts() if "hãng" in t.lower() and "xác nhận thông tin" in t]
+		self.assertEqual(len(last), 1, self.texts())
+		self.assertIn("thời gian cần hàng Thứ 3 tuần sau.", last[0])
+		self.assertIn("Nhân viên Miyano sẽ xác nhận thời gian giao hàng khi gửi báo giá ạ.", last[0])
+		self.assertNotIn("được k em", last[0])
+
+	def test_plain_need_by_has_no_note(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self.codes["găng tay nitrile"] = ("MENU_VATTU", 0.9)
+		self.turn("găng tay nitrile")
+		self.turn("100 hộp")
+		self.turn("trong tuần sau")
+		self.assertFalse([t for t in self.texts() if "xác nhận thời gian giao hàng" in t])

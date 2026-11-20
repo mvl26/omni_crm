@@ -20,7 +20,7 @@ from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from omni_crm import flags
 from omni_crm.bot import handoff as bot_handoff
-from omni_crm.script import engine, router, send, state, switch, tasks, timeutil, validate
+from omni_crm.script import engine, router, send, state, store, switch, tasks, timeutil, validate
 from omni_crm.script.router import RouteContext
 
 IDENTITY = "Omni Identity"
@@ -29,6 +29,7 @@ OUTBOUND = "Omni Outbound Message"
 CHANNEL = "Omni Channel"
 
 NODE_ENTRY = "GAP_NHANVIEN"
+NODE_MENU = "MENU_CHINH"
 NODE_IN_HOURS = "GAP_NV_TRONGGIO"
 NODE_AFTER_HOURS = "GAP_NV_NGOAIGIO"
 NODE_ASK_SERVICE = "GAP_NV_HOIDICHVU"
@@ -50,7 +51,8 @@ SERVICE_BUTTONS = {
 FLOW_SERVICE = "handoff_service"
 FLOW_PHONE = "handoff_phone"
 MODE_IN, MODE_AFTER = "in_hours", "after_hours"
-UNANSWERED_MINUTES = 15  # 1.4: sau 15 phút trong giờ chưa có nhân viên nhận
+UNANSWERED_MINUTES = 10  # 20/11 (người phụ trách quyết, thay mốc 15 phút của 1.4): 10 phút trong giờ chưa ai trả lời -> bot hoạt động lại
+NODE_STAFF_LATE = "GAP_NV_CHUAKIP"  # câu dẫn xin lỗi vì nhân viên chưa phản hồi kịp
 PHONE_REASKS = 1  # 3.4: số sai chỉ hỏi lại 1 lần
 NODE_CALL_CONFIRM_IN = (
 	"GAP_NV_GOIDIEN_XACNHAN_TRONGGIO"  # seed/nodes_k3.json (Cần duyệt): xác nhận gọi lại trong giờ
@@ -444,9 +446,15 @@ def on_call_me(ctx: RouteContext) -> None:
 	ask_phone(ctx.identity, _vars(ctx))
 
 
-def ask_phone(identity: str, variables: dict | None = None) -> str | None:
+def _late_sentence(identity: str) -> str:
+	"""Câu xin lỗi "nhân viên chưa phản hồi kịp" (ô `GAP_NV_CHUAKIP`) để ghép lên đầu tin; ô tắt thì rỗng."""
+	rendered = store.render(store.get_node(NODE_STAFF_LATE), {"identity": identity})
+	return rendered[0] if rendered else ""
+
+
+def ask_phone(identity: str, variables: dict | None = None, prefix: str = "") -> str | None:
 	"""Gửi câu xin SĐT gọi lại; gửi được thì đặt trạng thái chờ số. Trả tên tin ra (None nếu không gửi được)."""
-	name = send.send_node(identity, NODE_CALL, variables or {})
+	name = send.send_node(identity, NODE_CALL, variables or {}, prefix=prefix)
 	if name:
 		state.update_state(identity, flow=FLOW_PHONE, handoff_phone_tries=0)
 		state.set_node(identity, NODE_CALL, "1")
@@ -607,13 +615,17 @@ def _escalate_one(identity: str, lead: str | None, now: datetime) -> bool:
 		return False
 	state.update_state(identity, handoff={**info, "escalated": 1})
 	names = frappe.get_all(IDENTITY, filters={"lead": lead}, pluck="name") if lead else [identity]
-	paused = {n: frappe.db.get_value(IDENTITY, n, "bot_paused_until") for n in names}
 	for n in names:  # phải mở bot thì câu xin số mới gửi được
 		frappe.db.set_value(IDENTITY, n, "bot_paused_until", None, update_modified=False)
-	asked = ask_phone(identity, {"ngay_lam_viec_tiep_theo": timeutil.next_working_day_text(now)})
-	if not asked:  # không gửi được câu xin số: giữ nguyên tạm dừng, vẫn báo quản lý
-		for n, until in paused.items():
-			frappe.db.set_value(IDENTITY, n, "bot_paused_until", until, update_modified=False)
+	# Bot LUÔN hoạt động lại trong đoạn chat này (không trả lại tạm dừng dù câu dưới đây gửi được hay không).
+	variables = {"ngay_lam_viec_tiep_theo": timeutil.next_working_day_text(now)}
+	sorry = _late_sentence(identity)
+	has_phone = bool(lead and frappe.db.get_value(LEAD, lead, "mobile_no"))
+	asked = None if has_phone else ask_phone(identity, variables, prefix=sorry)
+	if not asked:  # đã có số (hoặc không gửi được câu xin số): xin lỗi rồi đưa menu để khách đi tiếp với bot
+		state.update_state(identity, flow=None, handoff_phone_tries=None)
+		if send.send_node(identity, NODE_MENU, variables, prefix=sorry):
+			state.set_node(identity, NODE_MENU, "1")
 	frappe.db.commit()
 	label = _("Khách chờ nhân viên quá {0} phút").format(UNANSWERED_MINUTES)
 	if not lead:
@@ -627,7 +639,9 @@ def _escalate_one(identity: str, lead: str | None, now: datetime) -> bool:
 			title="Omni: quá 15 phút chưa ai nhận, chưa cấu hình quản lý", message=f"lead={lead}"
 		)
 	done = (
-		_("Bot đã xin số điện thoại của khách.") if asked else _("Bot chưa gửi được câu xin số điện thoại.")
+		_("Bot đã xin số điện thoại của khách và hoạt động lại.")
+		if asked
+		else _("Bot đã hoạt động lại trong đoạn chat.")
 	)
 	tasks.append_note(info.get("task"), f"{label}. {done}")
 	bot_handoff.note_on_lead(

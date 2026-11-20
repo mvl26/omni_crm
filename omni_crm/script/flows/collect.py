@@ -178,6 +178,11 @@ ACK_TAIL = re.compile(
 	r"(?:\s+(?:có\s+)?(?:được|kịp|ok|oke)\s*(?:không|ko|k|hông|hok|chưa)?)?(?:\s+(?:em|ạ|nhé|nha|nhá|bạn|shop|ơi|với))*\s*\??$",
 	re.I,
 )
+NOTE_KEY = "_note"  # ctx.state: mã ô ghép thêm sau câu xác nhận của lượt
+DELIVERY_FIELD = "need_by"
+NODE_DELIVERY_NOTE = "BG_GIAOHANG_XACNHAN"
+# khách vừa nêu thời gian cần hàng vừa hỏi Miyano có giao kịp không ("thứ 3 tuần sau được k em")
+DELIVERY_ASK = re.compile(r"(?:được|kịp|ok|oke|nổi)\s*(?:không|ko|k|hông|hok|chưa)(?![\wÀ-ỹ])|\?")
 ACK_QUESTION = re.compile(r"\?|khi nào|bao giờ|bao lâu|thế nào|như nào|ra sao|thì sao|được không|có thể|hay không|mấy ngày")
 
 
@@ -214,10 +219,17 @@ def take_ack(ctx: RouteContext, values: dict) -> str:
 	"""Câu xác nhận thông tin khách vừa trả lời trong lượt (lấy từ ô `XACNHAN_THONGTIN`) rồi xoá hàng chờ; không có thì rỗng."""
 	pairs = ctx.state.pop(ACK_KEY, None)
 	summary = ack_text(pairs)
-	if not summary:
-		return ""
-	rendered = store.render(store.get_node(ACK_NODE), {**values, "identity": ctx.identity, "thong_tin": summary})
-	return rendered[0] if rendered else ""
+	parts = []
+	if summary:
+		rendered = store.render(
+			store.get_node(ACK_NODE), {**values, "identity": ctx.identity, "thong_tin": summary}
+		)
+		parts.append(rendered[0] if rendered else "")
+	note = ctx.state.pop(NOTE_KEY, None)
+	if note:  # khách hỏi "giao kịp không": bot không tự cam kết, báo nhân viên sẽ xác nhận
+		rendered = store.render(store.get_node(note), {**values, "identity": ctx.identity})
+		parts.append(rendered[0] if rendered else "")
+	return " ".join(p for p in parts if p)
 
 
 def apply_prefill(ctx: RouteContext) -> None:
@@ -273,6 +285,8 @@ def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) 
 		skip_ack = True  # "bỏ qua", "không": không phải thông tin để xác nhận
 	if not skip_ack:
 		ctx.state.setdefault(ACK_KEY, []).append((field, answers[field]))
+	if typed and field == DELIVERY_FIELD and DELIVERY_ASK.search(answers[field].lower()):
+		ctx.state[NOTE_KEY] = NODE_DELIVERY_NOTE
 	values: dict = {"answers": answers}
 	if field in MIRROR_KEYS:  # flows/quote.py (K7) đọc câu trả lời báo giá ở khóa cấp trên của script_state
 		values[field] = answers[field]

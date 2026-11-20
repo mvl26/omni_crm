@@ -472,6 +472,7 @@ QUESTION = re.compile(
 	r"\?|\b(?:gi|sao|the nao|nhu nao|khi nao|bao gio|bao lau|bao nhieu|o dau|la ai|ai vay)\b"
 	r"|\b(?:khong|chua|ha|nhi)$"
 )
+TIME_WORDS = re.compile(r"\d|\b(?:tuan|thang|ngay|thu|mai|nay|gap|quy|cuoi|dau)\b")
 AFFIRMATIVE = ("duoc", "dung", "dong y", "co")
 DEMO_PENDING = {"attendees": "DEMO_SONGUOI", "time": "DEMO_GIOKHAC", "email": "DEMO_HOI_EMAIL"}
 
@@ -608,6 +609,8 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 		if declining or "@" in text:
 			return False  # từ chối ("không ạ", "bỏ qua") hoặc đang gõ email: luồng đang hỏi tự xử lý
 		field = str(st.get("field") or "")
+		if field == collect.DELIVERY_FIELD and TIME_WORDS.search(_fold(text)):
+			return False  # "thứ 3 tuần sau được không em": vẫn là câu trả lời về thời gian (kèm lời hỏi giao kịp không)
 		asking = bool(QUESTION.search(_fold(text)))
 		if not asking and not (field in AI_CHECKED and not any(ch.isdigit() for ch in text)):
 			return False  # câu trả lời bình thường
