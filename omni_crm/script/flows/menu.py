@@ -169,7 +169,10 @@ def on_text(ctx: RouteContext) -> None:
 		return
 	if not first and _ack_only(text):  # "ok", "vâng", "cảm ơn": đáp lời, không hỏi AI, không nói "chưa rõ ý"
 		state.reset_reask(ctx.identity)
-		if not _tap_affirmative(ctx) and not engine.run_node(ctx, NODE_OK):
+		mid = str(ctx.state.get("script_node") or "").startswith(MID_FLOW_PREFIXES)
+		if _tap_affirmative(ctx) or (mid and (_resend_slots(ctx) or _resend_current(ctx, NODE_YES))):
+			return
+		if not engine.run_node(ctx, NODE_OK):
 			reask(ctx)
 		return
 	code, _confidence = classify_text(ctx)
@@ -291,12 +294,20 @@ def route(ctx: RouteContext, code: str) -> None:
 	elif code in DIRECT:
 		state.reset_reask(ctx.identity)
 		go(ctx, DIRECT[code])
+	elif code == "DEMO" and _demo_with_details(ctx):
+		state.reset_reask(ctx.identity)
+	elif code == "DEMO" and _demo_needs_product(ctx):
+		state.reset_reask(ctx.identity)
+		go(ctx, NODE_DEMO_PRODUCT)
 	elif code in BY_SERVICE:
 		base, without_service = BY_SERVICE[code]
 		state.reset_reask(ctx.identity)
 		go(ctx, _detail_service_node(ctx, base) or engine.service_code(ctx, base) or without_service)
 	elif code in THEN_MENU:
-		state.reset_reask(ctx.identity)
+		if cint(ctx.state.get("script_reask_count")) >= 1 and ctx.state.get("script_node") == MENU_CODE:
+			reask(ctx)  # vừa từ chối một câu ngoài lề xong lại ngoài lề tiếp: không lặp y nguyên, lần thứ ba chuyển nhân viên
+			return
+		state.bump_reask(ctx.identity)
 		if not engine.run_node(ctx, THEN_MENU[code]):
 			engine.run_node(ctx, MENU_CODE)
 	elif code == "KB_HOI":
@@ -316,6 +327,67 @@ def route(ctx: RouteContext, code: str) -> None:
 		reask(ctx)
 
 
+DEMO_SERVICE = {"PHANMEM": "SUPPLYCORE", "SPD": "SPD"}  # dịch vụ có demo (Vật tư không có)
+
+
+NODE_DEMO_PRODUCT = "DEMO_CHONSANPHAM"
+
+
+def _demo_needs_product(ctx: RouteContext) -> bool:
+	"""Khách GÕ muốn xem demo mà chưa rõ sản phẩm nào (chưa chọn dịch vụ, hoặc đang ở Vật tư – không có demo):
+	hỏi khách muốn xem demo Phần mềm hay SPD, thay vì mời gửi danh mục vật tư."""
+	if _detail_service_node(ctx, "DEMO") and (ctx.state.get(DETAIL_KEY) or {}).get("service") != "VATTU":
+		return False
+	return engine.current_service(ctx) not in DEMO_SERVICE.values() and bool(store.get_node(NODE_DEMO_PRODUCT))
+
+
+def _demo_with_details(ctx: RouteContext) -> bool:
+	"""Khách nêu luôn hình thức demo (và có thể cả ngày giờ) trong tin: "demo phần mềm online thứ sáu 14h", hoặc đang
+	được hỏi hình thức mà gõ "gặp trực tiếp tại bệnh viện". Không hỏi lại hình thức. True nếu đã xử lý."""
+	try:
+		from omni_crm.script.flows import demo
+
+		mode = demo.mode_in_text(ctx.text)
+		if not mode:
+			return False
+		named = DEMO_SERVICE.get((ctx.state.get(DETAIL_KEY) or {}).get("service") or "")
+		service = named or engine.current_service(ctx)
+		if service not in DEMO_SERVICE.values():
+			return False
+		if named:  # ghi nhận dịch vụ và nhu cầu như khi khách bấm nút "Đặt lịch demo" của dịch vụ đó
+			node = store.get_node(f"DEMO_{(ctx.state.get(DETAIL_KEY) or {}).get('service')}") or {}
+			keep = [(n, a) for n, a in engine.split_actions(node.get("action")) if n in ("service", "need")]
+			engine.run_actions(ctx, keep, node)
+		return demo.start_with(ctx, mode)
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không vào thẳng được demo (%s)", type(e).__name__)
+		return False
+
+
+SITES = re.compile(r"(?<!\d)(\d{1,3})\s*(?:cơ sở|bệnh viện|bv|chi nhánh|phòng khám|trung tâm|kho|điểm)(?![\wÀ-ỹ])", re.I)
+SITE_FIELD = {"PHANMEM": "sc_sites", "SPD": "spd_sites"}
+SKIP_CONFIRM = {"PHANMEM": ("BAOGIA_PHANMEM", "BG_SC_MATHANG")}  # khách đã nói rõ sản phẩm: bỏ câu "…đúng không ạ?"
+
+
+def _known_sites(ctx: RouteContext, service: str) -> dict:
+	"""Số cơ sở khách đã nêu trong tin ("báo giá SPD cho 2 bệnh viện") để điền sẵn, không hỏi lại — thuần."""
+	m = SITES.search(ctx.text if isinstance(ctx.text, str) else "")
+	field = SITE_FIELD.get(service)
+	return {field: m.group(0).strip()} if m and field else {}
+
+
+def _skip_confirm(ctx: RouteContext, service: str) -> str | None:
+	"""Khách đã nêu rõ sản phẩm thì không hỏi lại "anh/chị cần báo giá … đúng không ạ?": chạy các lệnh ghi nhận của
+	ô đó (dịch vụ, nhu cầu, nhánh) rồi trả mã ô kế tiếp. Không áp dụng được → None."""
+	pair = SKIP_CONFIRM.get(service)
+	node = store.get_node(pair[0]) if pair else None
+	if not node or not store.get_node(pair[1]):
+		return None
+	keep = [(n, a) for n, a in engine.split_actions(node.get("action")) if n in ("service", "need", "branch", "journey")]
+	engine.run_actions(ctx, keep, node)
+	return pair[1]
+
+
 QUOTE_SERVICE_NODE = {"VATTU": "BAOGIA_VATTU", "PHANMEM": "BAOGIA_PHANMEM", "SPD": "BAOGIA_SPD"}
 
 
@@ -333,11 +405,20 @@ def _quote_with_details(ctx: RouteContext, code: str) -> bool:
 	target = QUOTE_SERVICE_NODE.get(service)
 	if not target or not store.get_node(target):
 		return False  # không rõ dịch vụ: đi đường cũ (theo dịch vụ đang tư vấn / hỏi lại sản phẩm)
-	if service == "VATTU" and slots:
-		from omni_crm.script.flows import collect
+	from omni_crm.script.flows import collect
 
+	if service == "VATTU" and slots:
 		ctx.state[collect.PREFILL_KEY] = dict(slots)
+	sites = _known_sites(ctx, service) if detail.get("service") else {}
+	if sites:
+		ctx.state[collect.PREFILL_KEY] = {**(ctx.state.get(collect.PREFILL_KEY) or {}), **sites}
 	state.reset_reask(ctx.identity)
+	if detail.get("service"):  # chính khách nêu sản phẩm trong tin này
+		after = _skip_confirm(ctx, service)
+		if after:
+			collect.apply_prefill(ctx)
+			go(ctx, after)
+			return True
 	go(ctx, target)
 	return True
 
@@ -497,6 +578,8 @@ def _pending_question(ctx: RouteContext) -> str | None:
 		return str(st.get("node") or "") or None
 	if flow == "demo":
 		return DEMO_PENDING.get(str(st.get("demo_wait") or ""))
+	if flow == "handoff_phone":  # = handoff.FLOW_PHONE
+		return "GAP_NV_GOIDIEN"
 	return None
 
 
@@ -577,8 +660,44 @@ def _tap_affirmative(ctx: RouteContext) -> bool:
 	return False
 
 
-AI_CHECKED = ("items",)  # câu trả lời tự do dễ lẫn với chuyện ngoài lề: hỏi AI trước khi ghi
+AI_CHECKED = ("items", "quantity", "file")
+OTHER_INTENT = ("DEMO", "TAILIEU", "MENU_PHANMEM", "MENU_SPD", "MENU_KHAC", "GAP_NHANVIEN", "CAN_NGUOI")  # câu trả lời tự do dễ lẫn với chuyện ngoài lề: hỏi AI trước khi ghi
 ANSWER_CODES = (UNCLEAR, "MENU_VATTU", "BAOGIA")
+
+
+_NUM = r"(\d[\d.]*)"
+_RANGES = (
+	(re.compile(rf"^(?:dưới|duoi|<)\s*{_NUM}$", re.I), lambda a, b=None: (0, a - 1)),
+	(re.compile(rf"^(?:trên|tren|>)\s*{_NUM}$", re.I), lambda a, b=None: (a + 1, 10**12)),
+	(re.compile(rf"^(?:từ\s*|tu\s*)?{_NUM}\s*[–\-]\s*{_NUM}$", re.I), lambda a, b=None: (a, b)),
+	(re.compile(rf"^{_NUM}$"), lambda a, b=None: (a, a)),
+)
+
+
+def _range_of(label: str) -> tuple[int, int] | None:
+	"""Khoảng số của một nhãn nút ("Dưới 500", "500–2.000", "Trên 20", "1"); nhãn không phải khoảng số → None."""
+	for pattern, make in _RANGES:
+		m = pattern.match(label.strip())
+		if m:
+			return make(*[int(g.replace(".", "")) for g in m.groups()])
+	return None
+
+
+def _number_choice(ctx: RouteContext, text: str, pending: str) -> str | None:
+	"""Khách gõ MỘT con số khi câu đang hỏi có các nút chứa chữ số. Nút là khoảng số → chọn khoảng chứa số đó
+	("300" → "Dưới 500"). Nút không phải khoảng số ("Trong 1 tuần"…) → số nhỏ là số thứ tự của nút."""
+	raw = text.strip().rstrip(".)").replace(".", "")
+	buttons = _shown_buttons(ctx, store.get_node(pending))
+	if not raw.isdigit() or len(raw) > 9 or len(buttons) < 2:
+		return None
+	labels = [b["label"] for b in buttons]
+	if not any(ch.isdigit() for label in labels for ch in label):
+		return None  # danh sách đánh số thường: router đã xử lý
+	number, ranges = int(raw), [_range_of(label) for label in labels]
+	if all(ranges):
+		hits = [b["target"] for b, (low, high) in zip(buttons, ranges) if low <= number <= high]
+		return hits[0] if len(hits) == 1 else None
+	return buttons[number - 1]["target"] if 1 <= number <= len(buttons) else None
 
 
 def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
@@ -596,6 +715,11 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 		return False
 	if classify.is_greeting_only(text):
 		return _ask_again(ctx, pending, NODE_HELLO_AGAIN)
+	picked = _number_choice(ctx, text, pending)
+	if picked:  # gõ số cho danh sách khoảng số ("Dưới 500 / 500–2.000…") hoặc số thứ tự của danh sách không đánh số
+		ctx.payload_code = picked
+		on_button(ctx)
+		return True
 	if classify.is_ack_only(text):
 		return _tap_affirmative(ctx) or _ask_again(ctx, pending, NODE_YES)
 	if not any(ch.isalnum() for ch in text):  # "?", "👍": không có gì để ghi
@@ -621,6 +745,13 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 			return False  # AI coi là câu trả lời (nêu mặt hàng / nhu cầu mua)
 		if field in AI_CHECKED and code == UNCLEAR:  # "asdfgh": hỏi lại một lần, lần sau ghi nguyên văn cho nhân viên
 			return _ask_again(ctx, pending, NODE_REASK_CHOICE)
+		if field in AI_CHECKED and code in OTHER_INTENT:
+			# khách nói sang việc khác hẳn ("Anh muốn demo spd", "Demo cơ mà không phải mua hàng"): KHÔNG ghi làm
+			# câu trả lời; rời câu đang hỏi và làm theo ý khách
+			collect._clear_flow(ctx)
+			state.reset_reask(ctx.identity)
+			route(ctx, _refine(ctx, code))
+			return True
 	if code in SIDE_REPLY:
 		return _reply_then_back(ctx, SIDE_REPLY[code], pending)
 	if code == "KB_HOI":

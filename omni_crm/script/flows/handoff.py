@@ -14,6 +14,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
+import re
+
 import frappe
 from frappe import _
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
@@ -442,7 +444,13 @@ def on_chat_here(ctx: RouteContext) -> None:
 
 
 def on_call_me(ctx: RouteContext) -> None:
-	"""Router: khách chọn "Gọi điện cho tôi" → xin SĐT, chờ khách gõ số (trạng thái `handoff_phone`)."""
+	"""Router: khách chọn "Gọi điện cho tôi" → xin SĐT, chờ khách gõ số (trạng thái `handoff_phone`).
+	Khách vừa nêu số ngay trong cuộc trò chuyện này ("gọi cho anh số 09…") thì dùng luôn số đó, không xin lại."""
+	answers = state.get(ctx.identity)["script_state"].get("answers") or {}
+	known = validate.validate_phone(str(answers.get("phone") or "")) if isinstance(answers, dict) else None
+	if known:
+		_phone_received(ctx, known)
+		return
 	ask_phone(ctx.identity, _vars(ctx))
 
 
@@ -647,6 +655,36 @@ def _escalate_one(identity: str, lead: str | None, now: datetime) -> bool:
 	bot_handoff.note_on_lead(
 		lead, f"{label}. {done} " + _("Đã báo quản lý.") if manager else f"{label}. {done}"
 	)
+	return True
+
+
+NO_STAFF = re.compile(
+	r"(?:không|ko|khỏi|thôi|đừng)\s*(?:cần|muốn|phải)?\s*(?:gặp|gọi|chuyển|nối|kết nối)?\s*(?:cho\s*)?(?:nhân viên|nv|tư vấn viên|người thật|người)",
+	re.I,
+)
+NODE_BACK_TO_BOT = "GAP_NV_HUY"
+
+
+def customer_cancels(ctx: RouteContext) -> bool:
+	"""Khách đang chờ nhân viên (chưa ai trả lời) mà nhắn "anh không muốn gặp nhân viên": huỷ việc chờ, mở lại bot
+	ngay và báo khách. Việc đã giao cho nhân viên được ghi chú, không xoá. True nếu đã xử lý."""
+	info = _handoff_state(ctx.identity)
+	text = " ".join((ctx.text or "").split())
+	if not info.get("at") or not text or len(text) > 80 or not NO_STAFF.search(text):
+		return False
+	if _staff_replied(ctx.identity, get_datetime(info["at"])):
+		return False  # nhân viên đã vào cuộc: để nhân viên xử lý
+	if ctx.lead:
+		bot_handoff.resume_lead(ctx.lead)
+	frappe.db.set_value(IDENTITY, ctx.identity, "bot_paused_until", None, update_modified=False)
+	state.update_state(ctx.identity, handoff=None, flow=None, handoff_phone_tries=None, pause_pending=None)
+	note = _("Khách báo không cần gặp nhân viên nữa; bot đã hoạt động lại.")
+	tasks.append_note(info.get("task"), note)
+	if ctx.lead:
+		bot_handoff.note_on_lead(ctx.lead, note)
+	sorry = store.render(store.get_node(NODE_BACK_TO_BOT), {"identity": ctx.identity})
+	if send.send_node(ctx.identity, NODE_MENU, _vars(ctx), prefix=sorry[0] if sorry else ""):
+		state.set_node(ctx.identity, NODE_MENU, "1")
 	return True
 
 

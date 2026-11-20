@@ -57,7 +57,7 @@ _NAME_SPLIT = re.compile(r"\s*[,;\n]\s*|\s+[-–]\s+")  # noqa: RUF001 (gạch n
 
 FORCE_MARK = "!"
 PREFILL_KEY = "_prefill"  # ctx.state: thông tin khách đã nêu trong tin (items, quantity, need_by)
-PREFILL_FIELDS = ("items", "quantity", "need_by")
+PREFILL_FIELDS = ("items", "quantity", "need_by", "sc_sites", "spd_sites")
 FILE_FIELD = "file"  # ô chờ khách gửi tệp danh mục
 NODE_TYPE_ITEMS = "BAOGIA_VATTU"  # khách không có tệp: hỏi mặt hàng bằng chữ
 EXTRACT_FROM = "items"  # câu trả lời mặt hàng hay kèm luôn số lượng / thời gian
@@ -260,6 +260,34 @@ _FILLERS = frozenset(
 )
 
 
+QUANTITY = re.compile(
+	r"\d[\d.,]*\s*(?:hộp|cái|chiếc|thùng|bộ|gói|lọ|chai|túi|cuộn|đôi|kg|lít|tấm|vỉ|ống|bịch|cây|tuýp|kiện|can|bao)(?![\wÀ-ỹ])",
+	re.I,
+)
+CORRECTION = re.compile(
+	r"(?:đổi|sửa|thay)\s+(?P<old>.+?)\s+(?:thành|sang|bằng)\s+(?P<new>.+?)(?:\s+(?:nhé|nha|nhá|ạ|em|giúp anh|giúp chị|giúp mình))*\s*[.!]?$",
+	re.I,
+)
+
+
+def _corrected_items(ctx: RouteContext, st: dict, node: dict, text: str) -> bool:
+	"""Khách sửa mặt hàng đã nêu ("à anh nhầm, đổi găng tay thành khẩu trang nhé") trong lúc đang được hỏi câu khác:
+	sửa câu trả lời mặt hàng rồi hỏi lại câu đang dở, KHÔNG ghi câu sửa làm câu trả lời của câu đang hỏi."""
+	m = CORRECTION.search(text)
+	items = str(store.as_dict(st.get("answers")).get(EXTRACT_FROM) or "")
+	if not m or not items:
+		return False
+	old, new = m["old"].strip(), m["new"].strip()
+	if not new or len(new) > MAX_ANSWER:
+		return False
+	at = items.lower().find(old.lower())
+	fixed = items[:at] + new + items[at + len(old) :] if at >= 0 else new
+	save_answer(ctx, EXTRACT_FROM, fixed, typed=True)
+	engine.run_node(ctx, node.get("code") or "")
+	_restore_flow(ctx, st, wrong=cint(st.get("wrong")))
+	return True
+
+
 def _only_extras(text: str, extras: dict) -> bool:
 	"""Câu trả lời cho ô "mặt hàng" chỉ gồm số lượng / thời gian ("anh cần 100 hộp"), không nêu mặt hàng nào — thuần."""
 	rest = text.lower()
@@ -357,7 +385,14 @@ def on_text(ctx: RouteContext) -> bool:
 		value = text or _("(khách gửi tệp)")
 		if ctx.attachments:
 			remember_files(ctx)
+		if st.get("branch") == "3b" and text and field != EXTRACT_FROM and _corrected_items(ctx, st, node, text):
+			return True
 		extras = _more_from_answer(ctx, text) if field == EXTRACT_FROM and st.get("branch") == "3b" and text else {}
+		if not extras and field == EXTRACT_FROM and st.get("branch") == "3b" and text:
+			m = QUANTITY.search(text)
+			extras = {"quantity": m.group(0).strip()} if m else {}
+			if not _only_extras(text, extras):
+				extras = {}
 		if extras and _only_extras(text, extras) and not ctx.attachments and not st.get("wrong"):
 			# khách mới nêu số lượng / thời gian ("anh cần 100 hộp"): ghi vào đúng ô rồi hỏi lại mặt hàng một lần
 			for extra, extra_value in extras.items():

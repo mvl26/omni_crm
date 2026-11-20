@@ -792,6 +792,33 @@ def typed_cancel_reason(ctx: RouteContext) -> bool:
 	return True
 
 
+MODE_WORDS = (("DEMO_HT_ONLINE", re.compile(r"online|teams|trực tuyến|truc tuyen|qua mạng", re.I)),
+	("DEMO_HT_TRUCTIEP", re.compile(r"trực tiếp|truc tiep|tận nơi|tại (?:bệnh viện|công ty|văn phòng|đơn vị)", re.I)))
+
+
+def mode_in_text(text: str | None) -> str | None:
+	"""Mã nút hình thức demo khách đã nêu trong câu ("demo online", "gặp trực tiếp tại bệnh viện"); nêu cả hai hoặc không nêu → None."""
+	hits = [code for code, pattern in MODE_WORDS if pattern.search(cstr(text))]
+	return hits[0] if len(hits) == 1 else None
+
+
+def start_with(ctx: RouteContext, mode_code: str) -> bool:
+	"""Khách đã nêu hình thức (và có thể cả ngày giờ) ngay trong tin: không hỏi lại hình thức; có ngày giờ đọc được thì
+	đi thẳng tới khung đó, không thì đề xuất khung. True nếu đã xử lý (khách đã có lịch thì để luồng thường nhắc lịch)."""
+	mode = _answer_value(mode_code, "demo_mode")
+	if not mode or _has_booking(ctx):
+		return False
+	scheduler.on_inbound(ctx.identity, ctx.lead)
+	_reset(ctx.identity)
+	state.update_state(ctx.identity, demo_mode=mode)
+	start = parse_time(ctx.text, _now())
+	if start and in_booking_range(start, _now()):
+		choose(ctx, start)
+	else:
+		propose(ctx)
+	return True
+
+
 def waiting_for_slot(identity: str) -> bool:
 	"""Bot vừa gửi danh sách khung giờ và đang chờ khách chọn."""
 	st = _st(identity)

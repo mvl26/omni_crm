@@ -91,7 +91,8 @@ class TestQuoteRouting(FrappeTestCase):
 
 		done, go, ctx = self._run("BAOGIA", {"service": "PHANMEM", "slots": {"items": "x"}})
 		self.assertTrue(done)
-		self.assertEqual(go.call_args.args[1], "BAOGIA_PHANMEM")
+		# 20/11: khách đã nêu rõ "phần mềm" trong tin -> bỏ câu "…cần báo giá SupplyCore đúng không ạ?", vào câu kế tiếp
+		self.assertEqual(go.call_args.args[1], "BG_SC_MATHANG")
 		self.assertNotIn(collect.PREFILL_KEY, ctx.state)
 
 

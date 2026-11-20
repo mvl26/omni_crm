@@ -294,3 +294,52 @@ class TestDeliveryNote(FlowCase):
 		self.turn("100 hộp")
 		self.turn("trong tuần sau")
 		self.assertFalse([t for t in self.texts() if "xác nhận thời gian giao hàng" in t])
+
+
+class TestLive2011(FlowCase):
+	"""Hội thoại thật 20/11 11:28–11:30."""
+
+	def test_typed_demo_while_in_supplies_asks_which_product(self):
+		self.greeted()
+		self.tap("MENU_VATTU")
+		self.codes["Anh muốn đặt lịch demo"] = ("DEMO", 0.93)
+		self.turn("Anh muốn đặt lịch demo")
+		self.assertEqual(self.sent()[-1], "DEMO_CHONSANPHAM")
+
+	def test_other_intent_is_not_saved_as_the_item(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		text = "Anh muốn demo spd"
+		self.codes[text] = ("DEMO", 0.9)
+		import frappe
+
+		def fake(t, info=None, **kw):
+			frappe.flags[cl.DETAIL_FLAG] = {"code": "DEMO", "confidence": 0.9, "service": "SPD", "slots": {}, "batch_id": kw.get("batch_id")}
+			return "DEMO", 0.9
+
+		self.classify.side_effect = fake
+		self.turn(text)
+		self.assertNotIn("items", self.sstate().get("answers") or {})
+		self.assertEqual(self.sent()[-1], "DEMO_HINHTHUC")
+
+	def test_greeting_while_asked_for_phone_is_not_a_wrong_number(self):
+		from omni_crm.script.flows import handoff
+
+		self.greeted()
+		handoff.ask_phone(self.ident1, {})
+		import frappe
+
+		frappe.db.commit()
+		self.turn("Alo em ơi")
+		self.assertEqual(self.sent()[-1], "GAP_NV_GOIDIEN")
+		self.assertTrue(any("Miyano chào" in t for t in self.texts()))
+		self.assertNotIn("SAI_SDT", self.sent())
+
+	def test_no_staff_pattern(self):
+		from omni_crm.script.flows import handoff
+
+		for text in ("Anh không muốn gặp nhân viên", "thôi không cần nhân viên đâu", "ko cần gặp nv nữa"):
+			self.assertTrue(handoff.NO_STAFF.search(text), text)
+		for text in ("cho anh gặp nhân viên", "nhân viên đâu rồi", "alo"):
+			self.assertFalse(handoff.NO_STAFF.search(text), text)

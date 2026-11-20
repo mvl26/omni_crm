@@ -163,7 +163,7 @@ LOOSE_FILLERS = frozenset(
 )
 
 
-def _loose_choice(raw: str, items: list) -> str | None:
+def _loose_choice(raw: str, items: list, strict: bool = True) -> str | None:
 	"""Khách gõ gần đúng một lựa chọn ("Online", "anh muốn demo online" cho nút "Online qua Teams") — thuần.
 
 	Chỉ nhận khi câu ngắn, không có từ phủ định / từ để hỏi, chứa từ riêng của ĐÚNG MỘT lựa chọn và nhiều nhất một
@@ -182,14 +182,14 @@ def _loose_choice(raw: str, items: list) -> str | None:
 		return [w for w in fold(str(text)).split() if len(w) >= 3 and w.isalpha()]
 
 	typed = fold(raw).split()
-	if not typed or len(typed) > LOOSE_MAX_WORDS or LOOSE_SKIP.intersection(typed):
+	if not typed or LOOSE_SKIP.intersection(typed) or (strict and len(typed) > LOOSE_MAX_WORDS):
 		return None
 	content = {w for w in words(raw) if w not in LOOSE_FILLERS}
 	labels = [(set(words(label)) - LOOSE_FILLERS, target) for label, target in items]
 	every = [w for tokens, _t in labels for w in tokens]
 	hits = [t for tokens, t in labels if any(every.count(w) == 1 and w in content for w in tokens)]
 	foreign = [w for w in content if w not in every]
-	return hits[0] if len(hits) == 1 and len(foreign) <= 1 else None
+	return hits[0] if len(hits) == 1 and (not strict or len(foreign) <= 1) else None
 
 
 def _code_of(last, st: dict) -> str | None:
@@ -277,6 +277,10 @@ def handle_batch(batch_id: str) -> bool:
 	if ctx is None:
 		return False
 	code = send.block_code(ctx.identity)
+	if code in SILENT_STOPS and _customer_cancels_handoff(ctx):  # "anh không muốn gặp nhân viên": bot hoạt động lại
+		_mark(batch_id)
+		frappe.db.commit()
+		return True
 	if code in SILENT_STOPS or _sale_replied(ctx):  # nhân viên đang xử lý: bot im lặng
 		_mark(batch_id)
 		return True
@@ -300,6 +304,24 @@ def handle_batch(batch_id: str) -> bool:
 	_mark(batch_id)
 	frappe.db.commit()
 	return True
+
+
+def _customer_cancels_handoff(ctx: RouteContext) -> bool:
+	"""Khách đang chờ nhân viên mà nói không cần nhân viên nữa (xem `flows.handoff.customer_cancels`). Lỗi → False."""
+	if ctx.event_type != "message" or ctx.payload_code:
+		return False
+	try:
+		load_flows()
+		from omni_crm.script.flows import handoff
+
+		frappe.flags[send.BATCH_FLAG] = ctx.batch_id
+		return bool(handoff.customer_cancels(ctx))
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.logger("omni").info("omni script: không huỷ được chờ nhân viên (%s)", type(e).__name__)
+		return False
+	finally:
+		frappe.flags.pop(send.BATCH_FLAG, None)
 
 
 def _repeated_tap(ctx: RouteContext) -> bool:

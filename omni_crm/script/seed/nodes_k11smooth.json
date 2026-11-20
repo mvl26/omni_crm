@@ -189,5 +189,40 @@
 		"action": "",
 		"source_ref": "Yêu cầu 20/11/2026",
 		"notes": "Không gửi riêng: ghép lên đầu câu xin số điện thoại (khách chưa có số) hoặc menu chính (khách đã có số) khi đã chuyển nhân viên 10 phút trong giờ mà chưa ai trả lời. Bot hoạt động lại ngay sau câu này."
+	},
+	{
+		"code": "DEMO_CHONSANPHAM",
+		"title": "Demo – hỏi khách muốn xem demo sản phẩm nào",
+		"step": "2",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026",
+		"text": "Dạ, anh/chị muốn xem demo sản phẩm nào ạ?",
+		"buttons": [
+			{
+				"label": "Phần mềm SupplyCore",
+				"target": "DEMO_PHANMEM"
+			},
+			{
+				"label": "Hệ thống SPD",
+				"target": "DEMO_SPD"
+			}
+		],
+		"action": "need:Demo",
+		"notes": "Gửi khi khách GÕ muốn đặt lịch demo mà chưa rõ sản phẩm (chưa chọn dịch vụ, hoặc đang ở Vật tư – không có demo)."
+	},
+	{
+		"code": "GAP_NV_HUY",
+		"title": "Câu dẫn khi khách báo không cần gặp nhân viên nữa",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026",
+		"text": "Dạ vâng ạ, Miyano tiếp tục hỗ trợ anh/chị.",
+		"buttons": [],
+		"action": "",
+		"notes": "Không gửi riêng: ghép lên đầu menu chính khi khách đang chờ nhân viên (chưa ai trả lời) mà nhắn không muốn / không cần gặp nhân viên. Bot hoạt động lại ngay."
 	}
 ]

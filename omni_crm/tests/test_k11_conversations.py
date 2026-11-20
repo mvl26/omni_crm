@@ -353,7 +353,8 @@ add("f5_attendees_unknown", [*ATT, "chưa biết"], [booked, attendees(0)])
 add("f5_attendees_range", [*ATT, "10-15 người"], [booked, attendees(10)])
 add("f5_attendees_words", [*ATT, "hai mươi người"], [attendees(20)], "D10: số người viết bằng chữ ('hai mươi người') bị bỏ, vẫn chốt lịch")
 add("f5_attendees_me_plus_two", [*ATT, "anh và 2 đồng nghiệp"], [attendees(3)], "D10: 'anh và 2 đồng nghiệp' ghi thành 2 người")
-add("f5_vattu_has_no_demo", [*VT, "demo được không?"], [nodes("DANHMUC_VATTU")], ai={"demo được không?": A("DEMO")})
+# 20/11 (thử thật): khách ở Vật tư GÕ muốn demo -> hỏi muốn xem demo sản phẩm nào (trước: mời gửi danh mục)
+add("f5_vattu_has_no_demo", [*VT, "demo được không?"], [nodes("DEMO_CHONSANPHAM")], ai={"demo được không?": A("DEMO")})
 add("f5_slot_double_tap", [*ATT, "#DEMO_KHUNG_1"], [silent(), no_booking])
 
 # --- 6. Ngắt quãng ------------------------------------------------------------------------------------------------
@@ -532,6 +533,21 @@ def _reraise(error):
 # Kịch bản từng là chỗ vụng (xfail) và đã được sửa: lý do xfail chung của nhóm không còn áp cho các tên này.
 FIXED = frozenset(
 	{
+		"f1_mid_demo_format_1",
+		"f1_mid_demo_format_2",
+		"f2_demo_sentence_with_extra_words",
+		"f2_sc_items_ordinal",
+		"f2_vt_needby_ordinal",
+		"f3_call_me_with_phone_after_hours",
+		"f3_demo_sw_online_fri",
+		"f3_quote_spd_2_hospitals",
+		"f3_quote_sw_3sites",
+		"f3_quote_sw_3sites_first_reply",
+		"f4_vt_change_earlier",
+		"f4_vt_out_of_order",
+		"f9_mid_quantity_gibberish",
+		"f9_mid_quantity_weather",
+		"f9_repeat_unrelated_x4",
 		"f1_return_7",
 		"f2_docs_out_of_range",
 		"f2_sc_confirm_natural_0",

@@ -309,7 +309,8 @@ class TestMenu(FlowCase):
 			("VATTU", "có profile không?", "TAILIEU", ["TAILIEU_VATTU"]),
 			("SUPPLYCORE", "Cho xem thử", "DEMO", ["DEMO_HINHTHUC"]),
 			("SPD", "demo được không?", "DEMO", ["DEMO_HINHTHUC"]),
-			("VATTU", "demo được không?", "DEMO", ["DANHMUC_VATTU"]),  # Vật tư: mời gửi danh mục
+			# 20/11 (thử thật): khách ở Vật tư GÕ muốn demo -> hỏi muốn xem demo sản phẩm nào (trước: mời gửi danh mục)
+			("VATTU", "demo được không?", "DEMO", ["DEMO_CHONSANPHAM"]),
 			("VATTU", "thế còn SPD thì sao?", "MENU_SPD", ["MENU_SPD"]),
 		]
 		for svc, text, code, nodes in rows:
