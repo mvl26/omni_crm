@@ -343,3 +343,50 @@ class TestLive2011(FlowCase):
 			self.assertTrue(handoff.NO_STAFF.search(text), text)
 		for text in ("cho anh gặp nhân viên", "nhân viên đâu rồi", "alo"):
 			self.assertFalse(handoff.NO_STAFF.search(text), text)
+
+
+class TestThinking(FlowCase):
+	def setUp(self):
+		super().setUp()
+		import frappe
+
+		old = frappe.conf.get("omni_script_thinking")
+		frappe.conf["omni_script_thinking"] = 1
+		self.addCleanup(lambda: frappe.conf.__setitem__("omni_script_thinking", old))
+
+	def test_typed_message_that_needs_ai_gets_the_wait_line_first(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		text = "bên em triển khai mất bao lâu vậy"
+		self.codes[text] = ("MENU_SPD", 0.9)
+		self.turn(text)
+		self.assertEqual(self.sent()[-2:], ["DANG_SUYNGHI", "MENU_SPD"])
+		self.assertTrue((self.sstate().get("choices") or {}).get("items"))  # câu báo chờ không xoá lựa chọn
+
+	def test_taps_and_rule_hits_do_not_get_the_wait_line(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.turn("menu")
+		self.turn("2")
+		self.turn("Alo em ơi")
+		self.assertNotIn("DANG_SUYNGHI", self.sent())
+
+	def test_switch_off_by_default(self):
+		import frappe
+
+		frappe.conf["omni_script_thinking"] = 0
+		self.greeted()
+		text = "bên em triển khai mất bao lâu vậy"
+		self.codes[text] = ("MENU_SPD", 0.9)
+		self.turn(text)
+		self.assertNotIn("DANG_SUYNGHI", self.sent())
+
+	def test_wait_line_does_not_mark_the_batch_as_answered(self):
+		from omni_crm.script import send
+
+		self.greeted()
+		name = send.send_thinking(self.ident1)
+		self.assertTrue(name)
+		import frappe
+
+		self.assertFalse(frappe.db.get_value("Omni Outbound Message", name, "script_batch"))

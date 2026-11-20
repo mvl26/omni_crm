@@ -126,6 +126,21 @@ def send_node(
 	return _queue(identity, text, buttons, node["code"], purpose, node_channel=node.get("channel"))
 
 
+THINKING_CONF = "omni_script_thinking"  # site_config: 1 = gửi câu "đang suy nghĩ" khi bot phải nhờ AI (mặc định tắt)
+NODE_THINKING = "DANG_SUYNGHI"
+
+
+def send_thinking(identity: str) -> str | None:
+	"""Gửi NGAY câu báo chờ (ô `DANG_SUYNGHI`) trước khi bot đi hỏi AI, để khách không chờ trong im lặng.
+	Chỉ khi site_config `omni_script_thinking` bật và ô đang dùng. Không tính là câu trả lời của lượt."""
+	if not frappe.utils.cint(frappe.conf.get(THINKING_CONF) or 0) or not switch.enabled_for(identity):
+		return None
+	rendered = store.render(store.get_node(NODE_THINKING), {"identity": identity})
+	if not rendered:
+		return None
+	return _queue(identity, rendered[0], [], NODE_THINKING, "reply", notice=True)
+
+
 def send_text(
 	identity: str, text: str, buttons: list[dict] | None = None, code: str | None = None
 ) -> str | None:
@@ -146,6 +161,7 @@ def _queue(
 	code: str,
 	purpose: str,
 	node_channel: str | None = None,
+	notice: bool = False,
 ) -> str | None:
 	from omni_crm.pipeline import outbound  # import trễ: outbound -> auto_send -> (lazy) script.send
 
@@ -182,12 +198,14 @@ def _queue(
 		{
 			"script_node": code,
 			"buttons": json.dumps(buttons, ensure_ascii=False) if buttons else None,
-			"script_batch": frappe.flags.get(BATCH_FLAG) or None,
+			# tin báo chờ không phải câu trả lời của lượt: không mang dấu lượt (job chết giữa chừng vẫn trả lời lại được)
+			"script_batch": None if notice else (frappe.flags.get(BATCH_FLAG) or None),
 		},
 		update_modified=False,
 	)
-	frappe.db.set_value(IDENTITY, identity, "script_last_bot_at", now_datetime(), update_modified=False)
-	_remember_choices(identity, choices)
+	if not notice:  # tin báo chờ không đổi mốc "bot vừa nói" và không xoá các lựa chọn khách đang được hỏi
+		frappe.db.set_value(IDENTITY, identity, "script_last_bot_at", now_datetime(), update_modified=False)
+		_remember_choices(identity, choices)
 	frappe.db.commit()  # một tin = một đơn vị việc; job gửi chạy sau commit
 	return name
 

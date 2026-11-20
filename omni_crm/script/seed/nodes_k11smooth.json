@@ -224,5 +224,18 @@
 		"buttons": [],
 		"action": "",
 		"notes": "Không gửi riêng: ghép lên đầu menu chính khi khách đang chờ nhân viên (chưa ai trả lời) mà nhắn không muốn / không cần gặp nhân viên. Bot hoạt động lại ngay."
+	},
+	{
+		"code": "DANG_SUYNGHI",
+		"title": "Báo khách đợi khi bot đang nhờ AI hiểu ý / soạn câu",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"text": "Miyano đang suy nghĩ để trả lời, anh/chị vui lòng đợi ạ.",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026",
+		"notes": "Gửi ngay khi khách gõ một câu mà bot phải nhờ AI (mất vài giây). Bấm nút / gõ số được trả lời tức thì nên không gửi câu này. Bật bằng site_config omni_script_thinking = 1; tắt ô này cũng là tắt."
 	}
 ]

@@ -265,6 +265,8 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 			threshold = getattr(classifier, "LOW_CONFIDENCE", CONF_MIN)
 			try:
 				info = {**ctx.state, "service": engine.current_service(ctx) or ""}
+				if _needs_ai(classifier, text, info):
+					thinking(ctx)  # sắp nhờ AI hiểu ý: báo khách đợi
 				frappe.flags.pop(DETAIL_FLAG, None)
 				code, conf = classifier.classify(
 					text, info, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id
@@ -280,6 +282,31 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 				)
 	ctx.state[CLASSIFIED_KEY] = result
 	return result
+
+
+THINKING_KEY = "_thinking"
+
+
+def thinking(ctx: RouteContext) -> None:
+	"""Gửi câu "Miyano đang suy nghĩ…" một lần cho lượt này (xem `send.send_thinking`). Không bao giờ ném lỗi."""
+	if ctx.state.get(THINKING_KEY):
+		return
+	ctx.state[THINKING_KEY] = True
+	try:
+		send.send_thinking(ctx.identity)
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không gửi được câu báo chờ (%s)", type(e).__name__)
+
+
+def _needs_ai(classifier, text: str, info: dict) -> bool:
+	"""Câu này luật cố định và từ vựng đã học không quyết được, tức sắp phải gọi AI (mất vài giây)."""
+	try:
+		if classifier.classify_by_rules(text, info) is not None:
+			return False
+		learned = getattr(classifier, "_learned", None)
+		return not (learned and learned(text))
+	except Exception:
+		return False
 
 
 def route(ctx: RouteContext, code: str) -> None:
@@ -902,6 +929,7 @@ def _on_kb_text(ctx: RouteContext) -> bool:
 
 def answer_kb(ctx: RouteContext) -> None:
 	"""Trả lời câu hỏi bằng Kho tri thức rồi hỏi tiếp kèm nút của bước đang đứng; không có câu trả lời thì chuyển người."""
+	thinking(ctx)  # soạn câu từ Kho tri thức mất vài giây
 	res = kb_draft(ctx)
 	if res and res["action"] == "Reply" and (res["text"] or "").strip():
 		if _kb_auto_send(ctx, res):
