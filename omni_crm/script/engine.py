@@ -226,6 +226,10 @@ def _run(ctx: RouteContext, code: str | None, extra: dict | None, depth: int) ->
 	if depth > MAX_DEPTH:
 		return False
 	code = resolve(ctx, code)
+	for hook in _before_node:  # vd: tới ô "còn cần hỗ trợ gì thêm" mà khách đã nêu sẵn việc kế tiếp
+		alt = hook(ctx, code)
+		if alt and alt != code:
+			return _run(ctx, alt, extra, depth + 1)
 	node = store.get_node(code)
 	if not node or node["status"] == store.OFF:
 		return False
@@ -252,7 +256,26 @@ def _run(ctx: RouteContext, code: str | None, extra: dict | None, depth: int) ->
 	elif not cmds:
 		return False
 	did = run_actions(ctx, cmds, node, depth)
+	if has_text:
+		for hook in _after_node:
+			hook(ctx, code)
 	return has_text or did
+
+
+_before_node: list = []  # hàm (ctx, mã ô sắp chạy) -> mã ô thay thế | None
+_after_node: list = []  # hàm (ctx, mã ô vừa gửi) -> None
+
+
+def on_before_node(fn) -> None:
+	"""Đăng ký hàm được gọi trước khi chạy một ô; trả mã ô khác để chạy ô đó thay."""
+	if fn not in _before_node:
+		_before_node.append(fn)
+
+
+def on_after_node(fn) -> None:
+	"""Đăng ký hàm được gọi sau khi một ô có chữ đã gửi xong."""
+	if fn not in _after_node:
+		_after_node.append(fn)
 
 
 def _ack_prefix(ctx: RouteContext, code: str, values: dict) -> str:

@@ -192,6 +192,8 @@ def on_text(ctx: RouteContext) -> None:
 		return
 	if _must_clarify(ctx.state.get(DETAIL_KEY) or {}, code) and not flow and _ask_to_clarify(ctx):
 		return
+	if not flow:
+		_several_ideas(ctx, code)  # tin nhiều ý: trả lời câu hỏi trước, xếp các việc khác vào hàng chờ
 	if code == "DEMO" and (ctx.state.get(DETAIL_KEY) or {}).get("demo_mode") and not flow and _demo_with_details(ctx):
 		state.reset_reask(ctx.identity)  # "Demo" + "Online": vào thẳng chọn khung giờ, không hỏi lại hình thức
 		return
@@ -731,6 +733,139 @@ def clarify_question(reading: dict) -> str:
 		if len(options) == 2:
 			return f"anh/chị muốn {options[0]}, hay {options[1]} ạ?"
 	return ""
+
+
+# --- Tin có nhiều ý (yêu cầu 20/11: "trả lời câu hỏi trước, hành động sau", không bỏ ý nào) -------------------------
+TODO_KEY = "todo"  # script_state: [{intent, service, at}] các việc khách đã nêu, làm sau khi xong việc đang làm
+TODO_TTL_MINUTES = 120
+TODO_CONF = 0.8
+TODO_LABEL = {"TAILIEU": "nhận tài liệu", "DEMO": "đặt lịch demo", "BAOGIA": "báo giá"}
+TODO_SERVICE_LABEL = {"VATTU": "vật tư", "PHANMEM": "phần mềm SupplyCore", "SPD": "hệ thống SPD"}
+NODE_NOTED_MORE = "GHINHAN_THEM"  # "Miyano đã ghi nhận anh/chị còn cần {viec}; xong phần này Miyano hỗ trợ tiếp ạ."
+NODE_NEXT_TODO = "TIEP_VIEC"  # "Dạ, tiếp theo là việc anh/chị đã nhắn lúc trước: {viec}."
+FOLLOWUP_PREFIXES = ("HOITIEP_", "TL_HOITHEM")  # ô "còn cần hỗ trợ gì thêm"
+DONE_PREFIXES = ("BG_XACNHAN", "DEMO_XACNHAN")  # ô chốt cuối luồng không kèm câu hỏi tiếp
+
+
+def todo_label(item: dict) -> str:
+	"""Tên một việc trong hàng chờ để nói với khách ("nhận tài liệu hệ thống SPD") — thuần, chỉ từ bảng cố định."""
+	what = TODO_LABEL.get(item.get("intent") or "", "")
+	service = TODO_SERVICE_LABEL.get(item.get("service") or "", "")
+	return f"{what} {service}".strip()
+
+
+def _todo_target(ctx: RouteContext, item: dict) -> str:
+	"""Ô mở việc đã xếp hàng: theo dịch vụ khách nêu, không có thì theo dịch vụ đang xem, không rõ thì ô hỏi dịch vụ."""
+	intent, service = item.get("intent"), item.get("service")
+	if service in QUOTE_SERVICE_NODE and store.get_node(f"{intent}_{service}"):
+		if not (intent == "DEMO" and service == "VATTU"):
+			return f"{intent}_{service}"
+	if intent == "DEMO":
+		return NODE_DEMO_PRODUCT
+	if intent == "BAOGIA":
+		return "BAOGIA_CHUARO"
+	return engine.service_code(ctx, intent) or MENU_CODE
+
+
+def _several_ideas(ctx: RouteContext, code: str) -> None:
+	"""Lượt có nhiều ý (theo bản đọc hiểu): trả lời NGAY các câu hỏi thông tin, rồi ghi các việc khác vào hàng chờ và
+	báo khách đã ghi nhận. Việc chính (`code`) do nơi gọi làm tiếp. Không bao giờ ném lỗi."""
+	try:
+		reading = ctx.state.get(READING_KEY) or {}
+		detail = ctx.state.get(DETAIL_KEY) or {}
+		ideas = [i for i in reading.get("cac_y") or [] if isinstance(i, dict)]
+		if len(ideas) < 2 and not (detail.get("questions") and code not in ("KB_HOI", "NHAC_LAI")):
+			return
+		from omni_crm.script import understand
+
+		questions = detail.get("questions") or []
+		if questions and code not in ("KB_HOI", "NHAC_LAI"):  # hai mã này tự trả lời câu hỏi ở bước định tuyến
+			_answer_questions(ctx, questions)
+		queued = []
+		for idea in ideas:
+			intent = idea.get("y_dinh")
+			if intent not in TODO_LABEL or understand.INTENT_CODE.get(intent, intent) == code:
+				continue
+			if float(idea.get("do_tin_cay") or 0) < TODO_CONF:
+				continue
+			queued.append({"intent": intent, "service": understand.SERVICE_CODE.get(idea.get("dich_vu") or "", ""), "at": str(now_datetime())})
+		if not queued:
+			return
+		state.update_state(ctx.identity, **{TODO_KEY: queued[:3]})
+		note = _plain_with(ctx, NODE_NOTED_MORE, {"viec": ", ".join(todo_label(q) for q in queued[:3])})
+		if note:
+			ctx.state[engine.LEAD_IN_KEY] = note
+	except Exception as e:
+		frappe.logger("omni").info("omni script: xử lý tin nhiều ý lỗi (%s)", type(e).__name__)
+
+
+def _plain_with(ctx: RouteContext, code: str, extra: dict) -> str:
+	try:
+		rendered = store.render(store.get_node(code), {**engine.variables(ctx), **extra, "identity": ctx.identity})
+	except Exception:
+		return ""
+	return rendered[0] if rendered else ""
+
+
+def _answer_questions(ctx: RouteContext, questions: list) -> None:
+	"""Trả lời phần CÂU HỎI của một tin nhiều ý thành một tin riêng: Kho tri thức có thì trả lời, không thì nói rõ
+	chưa có thông tin và ghi lại cho chuyên viên. Sau đó nơi gọi làm tiếp việc chính."""
+	text = "\n".join(str(q).strip() for q in questions[:3] if str(q).strip())
+	if not text:
+		return
+	res = kb_draft(ctx, question=text)
+	if res and res["action"] == "Reply" and (res["text"] or "").strip() and _kb_auto_send(ctx, res):
+		if send.send_text(ctx.identity, res["text"], code=KB_CODE):
+			router._mark(ctx.batch_id)
+			return
+	_log_unanswered(ctx, "", {})
+	if send.send_node(ctx.identity, NODE_KB_NOTED, engine.variables(ctx)):
+		router._mark(ctx.batch_id)
+
+
+def _fresh_todo(ctx: RouteContext) -> list:
+	from frappe.utils import get_datetime
+
+	items = engine.script_state(ctx).get(TODO_KEY) or []
+	out = []
+	for item in items if isinstance(items, list) else []:
+		try:
+			if (now_datetime() - get_datetime(item.get("at"))).total_seconds() <= TODO_TTL_MINUTES * 60:
+				out.append(item)
+		except Exception:
+			continue
+	return out
+
+
+def _next_todo_before(ctx: RouteContext, code: str) -> str | None:
+	"""Bot sắp hỏi "còn cần hỗ trợ gì thêm" mà khách đã nêu sẵn một việc: mở luôn việc đó."""
+	if not str(code or "").startswith(FOLLOWUP_PREFIXES):
+		return None
+	return _take_todo(ctx)
+
+
+def _next_todo_after(ctx: RouteContext, code: str) -> None:
+	"""Vừa gửi ô chốt của một luồng (không có câu hỏi tiếp): còn việc khách đã nêu thì mở luôn."""
+	if str(code or "").startswith(DONE_PREFIXES):
+		target = _take_todo(ctx)
+		if target:
+			go(ctx, target)
+
+
+def _take_todo(ctx: RouteContext) -> str | None:
+	try:
+		items = _fresh_todo(ctx)
+		if not items:
+			if engine.script_state(ctx).get(TODO_KEY):
+				state.update_state(ctx.identity, **{TODO_KEY: None})
+			return None
+		item, rest = items[0], items[1:]
+		state.update_state(ctx.identity, **{TODO_KEY: rest or None})
+		ctx.state[engine.LEAD_IN_KEY] = _plain_with(ctx, NODE_NEXT_TODO, {"viec": todo_label(item)})
+		return _todo_target(ctx, item)
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không mở được việc đã xếp hàng (%s)", type(e).__name__)
+		return None
 
 
 def _no_staff(text: str) -> bool:
@@ -1381,8 +1516,9 @@ def _shadow_only(group: str | None) -> bool:
 	return bool(group) and bool(cint(frappe.db.get_value("Omni Question Group", group, "shadow_only")))
 
 
-def kb_draft(ctx: RouteContext) -> dict | None:
-	"""Soạn câu trả lời cho tin hiện tại bằng bộ máy Reply (nháp ngầm, không có đường gửi); lỗi hoặc không có → None."""
+def kb_draft(ctx: RouteContext, question: str | None = None) -> dict | None:
+	"""Soạn câu trả lời cho tin hiện tại (hoặc riêng `question`) bằng bộ máy Reply (nháp ngầm, không có đường gửi);
+	lỗi hoặc không có → None."""
 	if not ctx.lead:
 		return None
 	try:
@@ -1396,7 +1532,7 @@ def kb_draft(ctx: RouteContext) -> dict | None:
 				channel=ctx.channel,
 				channel_type=frappe.db.get_value("Omni Channel", ctx.channel, "channel_type"),
 				batch_id=ctx.batch_id,
-				customer_text=ctx.text,
+				customer_text=question or ctx.text,
 				mode="Shadow",
 			)
 		if not name:
@@ -1469,6 +1605,8 @@ def flag_spam(ctx: RouteContext, arg: str = "", node: dict | None = None) -> Non
 		frappe.logger("omni").info("omni script: không ghi được ghi chú tin rác (%s)", type(e).__name__)
 
 
+engine.on_before_node(_next_todo_before)
+engine.on_after_node(_next_todo_after)
 engine.register_action("spam", flag_spam)
 engine.register_action("no_lead", lambda ctx, arg, node: None)
 engine.register_action("log_unanswered", _log_unanswered)

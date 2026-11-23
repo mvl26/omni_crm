@@ -156,8 +156,8 @@ class ConversationCase(CollectCase):
 		self.ai_calls.append(self._text)
 		return dict(raw) if raw else {"code": "CHUA_RO", "confidence": 0.3}
 
-	def _fake_kb(self, ctx):
-		answer = self.kb.get((ctx.text or "").strip())
+	def _fake_kb(self, ctx, question=None):
+		answer = self.kb.get((question or ctx.text or "").strip())
 		if not answer:
 			return None
 		return {"name": "K11-DRAFT", "action": "Reply", "text": answer, "group": None, "flags": "info:k11"}

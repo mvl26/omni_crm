@@ -324,5 +324,31 @@
 		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
 		"text": "Miyano đang ghi nhận: {thong_tin}.",
 		"notes": "Không gửi riêng. {thong_tin} ghép từ các thông tin đã thu (đã qua bộ lọc: ngắn, không link, không số tiền)."
+	},
+	{
+		"code": "GHINHAN_THEM",
+		"title": "Câu dẫn khi khách nhắn nhiều việc trong một tin (ghi nhận việc sẽ làm sau)",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
+		"text": "Dạ, Miyano đã ghi nhận anh/chị còn cần {viec}; xong phần này Miyano hỗ trợ tiếp ạ.",
+		"notes": "Không gửi riêng: ghép lên đầu tin của việc chính. {viec} ghép từ bảng cố định (nhận tài liệu / đặt lịch demo / báo giá + tên dịch vụ), không dùng chữ của AI."
+	},
+	{
+		"code": "TIEP_VIEC",
+		"title": "Câu dẫn khi bot mở việc khách đã nhắn từ trước",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
+		"text": "Dạ, tiếp theo là việc anh/chị đã nhắn lúc trước: {viec}.",
+		"notes": "Không gửi riêng: ghép lên đầu ô mở việc đó, thay cho câu 'còn cần hỗ trợ gì thêm'. Việc xếp hàng quá 120 phút thì bỏ."
 	}
 ]

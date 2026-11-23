@@ -123,3 +123,88 @@ class TestSwitchedOn(FlowCase):
 			self.turn("bên em triển khai ra sao")
 		read.assert_not_called()
 		self.assertEqual(self.sent(), ["MENU_SPD"])
+
+
+class TestSeveralIdeas(FlowCase):
+	"""Tin nhiều nội dung (23/11): trả lời câu hỏi trước, làm việc chính, các việc còn lại xếp hàng và tự mở sau."""
+
+	def setUp(self):
+		super().setUp()
+		old = frappe.conf.get(u.SWITCH)
+		frappe.conf[u.SWITCH] = 1
+		self.addCleanup(lambda: frappe.conf.__setitem__(u.SWITCH, old))
+
+	def _read(self, value, said):
+		p = mock.patch.object(u, "read", return_value=u.clean(value, said))
+		p.start()
+		self.addCleanup(p.stop)
+
+	def test_question_is_answered_first_then_the_quote_starts_with_what_was_said(self):
+		said = "bg giup a 500 hop khau trang, can trong tuan nay dc k, ma ben e o dau"
+		self.greeted()
+		self._read(
+			{
+				"quan_he": "Y_KHAC",
+				"cac_y": [{"y_dinh": "BAOGIA", "do_tin_cay": 0.9, "dich_vu": "VATTU"}, {"y_dinh": "HOI_THONG_TIN", "do_tin_cay": 0.9}],
+				"slots": {"mat_hang": [{"ten": "khau trang", "so_luong": 500, "don_vi": "hop"}], "thoi_gian_can_hang": {"nguyen_van": "trong tuan nay"}},
+				"cau_hoi_kb": ["Có giao kịp trong tuần này không", "Địa chỉ Miyano ở đâu"],
+			},
+			said,
+		)
+		with mock.patch.object(menu, "kb_draft", return_value=None) as kb:
+			self.turn(said)
+		sent = self.sent()
+		self.assertEqual(sent[0], "KB_GHINHAN")  # câu hỏi (kho chưa có): nói rõ, ghi cho chuyên viên — TRƯỚC
+		self.assertIn("Địa chỉ Miyano", kb.call_args.kwargs.get("question") or "")
+		self.assertNotIn("BAOGIA_VATTU", sent)  # không hỏi lại mặt hàng
+		answers = self.sstate()["answers"]
+		self.assertEqual((answers["items"], answers["quantity"], answers["need_by"]), ("khau trang", "500 hop", "trong tuan nay"))
+		self.assertEqual(self.handoffs, [])
+
+	def test_second_request_is_queued_and_announced(self):
+		said = "Gửi anh tài liệu spd với báo giá găng tay 300 đôi"
+		self.greeted()
+		self._read(
+			{
+				"quan_he": "Y_KHAC",
+				"cac_y": [{"y_dinh": "TAILIEU", "do_tin_cay": 0.95, "dich_vu": "SPD"}, {"y_dinh": "BAOGIA", "do_tin_cay": 0.93, "dich_vu": "VATTU"}],
+				"slots": {"mat_hang": [{"ten": "găng tay", "so_luong": 300, "don_vi": "đôi"}]},
+			},
+			said,
+		)
+		self.turn(said)
+		self.assertEqual(self.sstate()["answers"]["quantity"], "300 đôi")
+		todo = self.sstate().get("todo") or []
+		self.assertEqual([(t["intent"], t["service"]) for t in todo], [("TAILIEU", "SPD")])
+		self.assertTrue(any("còn cần nhận tài liệu hệ thống SPD" in t for t in self.texts()), self.texts())
+
+	def test_queued_request_opens_instead_of_anything_else(self):
+		from omni_crm.script import engine, state
+		from omni_crm.script.router import RouteContext
+
+		self.greeted()
+		state.update_state(self.ident1, todo=[{"intent": "TAILIEU", "service": "SPD", "at": str(frappe.utils.now_datetime())}])
+		frappe.db.commit()
+		ctx = RouteContext("b-todo", self.ident1, self.lead1, self.channel.name, "", None, state=state.get(self.ident1))
+		self.assertTrue(engine.run_node(ctx, "TL_HOITHEM"))
+		frappe.db.commit()
+		self.assertEqual(self.sent(), ["TAILIEU_SPD"])
+		self.assertTrue(any("việc anh/chị đã nhắn lúc trước: nhận tài liệu hệ thống SPD" in t for t in self.texts()))
+		self.assertFalse(self.sstate().get("todo"))
+
+	def test_stale_queue_is_dropped(self):
+		from omni_crm.script import engine, state
+		from omni_crm.script.router import RouteContext
+
+		self.greeted()
+		old = frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-5)
+		state.update_state(self.ident1, todo=[{"intent": "DEMO", "service": "SPD", "at": str(old)}])
+		frappe.db.commit()
+		ctx = RouteContext("b-old", self.ident1, self.lead1, self.channel.name, "", None, state=state.get(self.ident1))
+		engine.run_node(ctx, "TL_HOITHEM")
+		frappe.db.commit()
+		self.assertEqual(self.sent(), ["TL_HOITHEM"])
+
+	def test_labels_come_from_a_fixed_table_only(self):
+		self.assertEqual(menu.todo_label({"intent": "DEMO", "service": "PHANMEM"}), "đặt lịch demo phần mềm SupplyCore")
+		self.assertEqual(menu.todo_label({"intent": "TU_BIA", "service": "<b>x</b>"}), "")
