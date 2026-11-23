@@ -43,9 +43,18 @@ def is_tap(text: str | None) -> bool:
 	return raw.startswith("#") and " " not in raw
 
 
-def quiet_needed(rows: list, base: int) -> float:
+def _label_tap(identity_key: str | None, text: str | None) -> bool:
+	"""Zalo gửi về CHỮ TRÊN NÚT khi khách bấm nút (xem `script.buttons`): cũng là bấm nút, không cần đợi."""
+	if not identity_key:
+		return False
+	from omni_crm.script import buttons
+
+	return bool(buttons.code_for(identity_key, text))
+
+
+def quiet_needed(rows: list, base: int, identity_key: str | None = None) -> float:
 	"""Số giây khách phải im kể từ tin cuối (thuần): 0 nếu cả lượt là bấm nút; `base`, cộng thêm nửa nhịp nếu tin cuối dở dang."""
-	if not rows or all(is_tap(r.text) for r in rows):
+	if not rows or all(is_tap(r.text) or _label_tap(identity_key, r.text) for r in rows):
 		return 0
 	last = (rows[-1].text or "").strip()
 	return base * 1.5 if UNFINISHED.search(last) else base
@@ -59,7 +68,7 @@ def wait_quiet(identity_key: str, base: int | None = None, sleep=time.sleep, now
 	while waited < MAX_WAIT:
 		frappe.db.rollback()  # đọc lại tin mới của khách (mức cô lập mặc định giữ ảnh chụp cũ)
 		rows = pending(identity_key)
-		need = quiet_needed(rows, base)
+		need = quiet_needed(rows, base, identity_key)
 		if not need:
 			break
 		at = now()

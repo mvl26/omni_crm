@@ -326,8 +326,10 @@ def slot_value(ctx: RouteContext, field: str, text: str) -> str | None:
 		return text
 	if len(text.split()) <= 5 and (DECLINE.search(text) or SKIP_VALUE.search(text)):
 		return text  # khách chủ động bỏ qua câu này ("bỏ qua", "chưa biết", "để sau"): ghi đúng như vậy cho nhân viên
-	if "intents" in detail and detail.get("relation") != "TRA_LOI":
+	if "intents" in detail and not detail.get("failed") and detail.get("relation") != "TRA_LOI":
 		return None  # bước hiểu mới đã đọc lượt này và KHÔNG coi là câu trả lời cho câu đang hỏi
+	# AI KHÔNG DÙNG ĐƯỢC (lỗi mạng / hết ngân sách): không coi là "không phải câu trả lời", kiểm kiểu như đường cũ
+	# để bot vẫn ghi được câu trả lời của khách
 	talk = bool(TALK.search(text))
 	unsure = detail.get("relation") == "TRA_LOI" and float(detail.get("confidence") or 0) < LOW_ANSWER_CONF
 	if field in ("items", "quantity") and SEE_FILE.search(text) and not talk:

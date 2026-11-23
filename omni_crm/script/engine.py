@@ -266,6 +266,16 @@ _before_node: list = []  # hàm (ctx, mã ô sắp chạy) -> mã ô thay thế 
 _after_node: list = []  # hàm (ctx, mã ô vừa gửi) -> None
 
 
+def after_sent(ctx: RouteContext, code: str) -> None:
+	"""Luồng tự gửi một ô bằng `send.send_node` (không qua `_run`) gọi hàm này để các hàm "sau khi gửi" vẫn chạy.
+	Không bao giờ ném lỗi."""
+	for hook in _after_node:
+		try:
+			hook(ctx, code)
+		except Exception as e:
+			frappe.logger("omni").info("omni script: hàm sau-khi-gửi lỗi (%s) ô=%s", type(e).__name__, code)
+
+
 def on_before_node(fn) -> None:
 	"""Đăng ký hàm được gọi trước khi chạy một ô; trả mã ô khác để chạy ô đó thay."""
 	if fn not in _before_node:

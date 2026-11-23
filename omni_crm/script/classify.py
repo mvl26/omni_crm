@@ -184,6 +184,8 @@ BOT_PATTERNS = (
 	r"\b(?:la|phai) nguoi that\b",
 	r"\bare you (?:a |an )?(?:bot|robot|chatbot|human|real)\b",
 	r"\bis this (?:a |an )?(?:bot|robot|chatbot)\b",
+	r"\b(?:em|ban|shop|ad|admin) (?:ten (?:la )?gi|la ai)\b",  # "em tên gì", "bạn là ai": hỏi về chính bot
+	r"\bai (?:dang )?tra loi\b",
 )
 HUMAN_PATTERNS = (
 	r"\bgap (?:truc tiep )?(?:nhan vien|tu van vien|nguoi that|nguoi|sale|sales|chuyen vien|quan ly|sep|ai do)\b",

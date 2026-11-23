@@ -156,7 +156,9 @@ class ZaloClient:
 		return sent
 
 	def send_buttons(self, user_id: str, text: str, buttons: list[dict]) -> str:
-		"""Gửi tin tư vấn kèm nút (template, `oa.query.show`, payload `#mã`) trong MỘT tin; trả mã tin. Sandbox: không gọi HTTP.
+		"""Gửi tin tư vấn kèm nút (template, `oa.query.show`) trong MỘT tin; trả mã tin. Sandbox: không gọi HTTP.
+
+		Payload của nút là CHỮ TRÊN NÚT (Zalo hiện payload thành tin của khách); `script.buttons` đổi về `#mã` khi tin về.
 
 		Đã kiểm thật 17/11 (docs/bot_v3_plan.md mục 3): 5 nút, chỉ hiện trên app điện thoại. # VERIFY: giới hạn ký tự tiêu đề nút.
 		"""
@@ -170,13 +172,15 @@ class ZaloClient:
 				"omni sandbox: bỏ qua gửi Zalo kèm nút (kênh %s, %s nút)", self.channel, len(buttons)
 			)
 			return f"sandbox:{uuid.uuid4().hex[:16]}"
+		from omni_crm.script.buttons import payload as button_payload
+
 		message = {
 			"text": text,
 			"attachment": {
 				"type": "template",
 				"payload": {
 					"buttons": [
-						{"title": b["label"], "type": "oa.query.show", "payload": "#" + b["target"]}
+						{"title": b["label"], "type": "oa.query.show", "payload": button_payload(b)}
 						for b in buttons
 					]
 				},

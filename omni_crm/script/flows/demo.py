@@ -726,8 +726,10 @@ def confirm(ctx: RouteContext) -> None:
 		demo_resched=None,
 	)
 	extra = scheduler.demo_variables(start, mode)
-	if any(_send(ctx, code, extra) for code in NODE_CONFIRM):
-		return
+	for code in NODE_CONFIRM:
+		if _send(ctx, code, extra):
+			engine.after_sent(ctx, code)  # còn việc khách đã nêu kèm (tin nhiều nội dung) thì mở luôn
+			return
 	_confirmation_failed(ctx, booked, start)
 
 

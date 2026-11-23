@@ -196,7 +196,12 @@ def _code_of(last, st: dict) -> str | None:
 	"""Mã nút của tin cuối: bấm nút / gõ "menu", hoặc gõ số / nhãn của danh sách lựa chọn."""
 	if last.event_type != "message":
 		return None
-	return payload_code(last.text) or typed_choice(last.text, st)
+	code = payload_code(last.text) or typed_choice(last.text, st)
+	if code:
+		return code
+	from omni_crm.script import buttons  # Zalo gửi về chữ trên nút (kể cả nút của tin cũ hơn): tra lại mã
+
+	return payload_code(buttons.code_for_identity(getattr(last, "identity", None), last.text))
 
 
 def _batch_rows(batch_id: str) -> list:
@@ -351,7 +356,13 @@ def check_superseded(ctx: RouteContext) -> None:
 		)
 	except Exception:
 		return
-	if any(r.batch_id != ctx.batch_id and not (r.text or "").strip().startswith("#") for r in newer):
+	from omni_crm.script import buttons
+
+	def tap(text) -> bool:
+		raw = (text or "").strip()
+		return raw.startswith("#") or bool(buttons.code_for_identity(ctx.identity, raw))
+
+	if any(r.batch_id != ctx.batch_id and not tap(r.text) for r in newer):
 		raise Superseded()
 
 

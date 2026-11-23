@@ -140,6 +140,7 @@ def on_text(ctx: RouteContext) -> None:
 	if handler is not None and _side_talk(ctx, text, st):
 		return
 	if handler is not None and handler(ctx):
+		_queue_more(ctx, flow, st)  # khách vừa trả lời vừa nêu thêm việc khác: ghi vào hàng chờ, làm sau
 		return
 	if ctx.attachments:
 		_keep_files(ctx)
@@ -744,7 +745,7 @@ TODO_SERVICE_LABEL = {"VATTU": "vật tư", "PHANMEM": "phần mềm SupplyCore"
 NODE_NOTED_MORE = "GHINHAN_THEM"  # "Miyano đã ghi nhận anh/chị còn cần {viec}; xong phần này Miyano hỗ trợ tiếp ạ."
 NODE_NEXT_TODO = "TIEP_VIEC"  # "Dạ, tiếp theo là việc anh/chị đã nhắn lúc trước: {viec}."
 FOLLOWUP_PREFIXES = ("HOITIEP_", "TL_HOITHEM")  # ô "còn cần hỗ trợ gì thêm"
-DONE_PREFIXES = ("BG_XACNHAN", "DEMO_XACNHAN")  # ô chốt cuối luồng không kèm câu hỏi tiếp
+DONE_PREFIXES = ("BG_XACNHAN", "DEMO_XACNHAN", "XACNHAN_KHONG_EMAIL")  # ô chốt cuối luồng không kèm câu hỏi tiếp
 
 
 def todo_label(item: dict) -> str:
@@ -797,6 +798,41 @@ def _several_ideas(ctx: RouteContext, code: str) -> None:
 			ctx.state[engine.LEAD_IN_KEY] = note
 	except Exception as e:
 		frappe.logger("omni").info("omni script: xử lý tin nhiều ý lỗi (%s)", type(e).__name__)
+
+
+MORE_MIN_WORDS = 6  # câu trả lời giữa luồng dài từ ngần này từ mới đáng một lượt AI để tìm việc nêu kèm
+FLOW_INTENT = {"demo": "DEMO", "3b": "BAOGIA", "3a": "TAILIEU"}  # việc mà luồng đang dở chính là đang làm
+
+
+def _queue_more(ctx: RouteContext, flow: str, st: dict) -> None:
+	"""Khách đang ở giữa một luồng, TRẢ LỜI câu đang hỏi và nêu thêm việc khác trong cùng tin ("5 người, à gửi anh
+	tài liệu luôn nhé"): ghi việc đó vào hàng chờ để mở sau khi luồng này xong. Không bao giờ ném lỗi."""
+	try:
+		from omni_crm.script import understand
+
+		reading = ctx.state.get(READING_KEY) or {}
+		if not reading and understand.enabled() and len((ctx.text or "").split()) >= MORE_MIN_WORDS:
+			# luồng đã tự đọc được câu trả lời (vd số người) mà tin còn dài: nhờ bước hiểu xem khách có nêu thêm việc gì
+			reading = understand.read(ctx)
+			ctx.state[READING_KEY] = reading
+		if reading.get("quan_he") != "TRA_LOI":
+			return
+
+		doing = FLOW_INTENT.get(flow) or FLOW_INTENT.get(str(st.get("branch") or ""))
+		queued = _fresh_todo(ctx)
+		have = {(q.get("intent"), q.get("service")) for q in queued}
+		for idea in reading.get("cac_y") or []:
+			intent = idea.get("y_dinh") if isinstance(idea, dict) else None
+			if intent not in TODO_LABEL or intent == doing or float(idea.get("do_tin_cay") or 0) < TODO_CONF:
+				continue
+			item = {"intent": intent, "service": understand.SERVICE_CODE.get(idea.get("dich_vu") or "", ""), "at": str(now_datetime())}
+			if (item["intent"], item["service"]) not in have:
+				queued.append(item)
+				have.add((item["intent"], item["service"]))
+		if queued and queued != _fresh_todo(ctx):
+			state.update_state(ctx.identity, **{TODO_KEY: queued[:3]})
+	except Exception as e:
+		frappe.logger("omni").info("omni script: xếp hàng việc nêu kèm lỗi (%s)", type(e).__name__)
 
 
 def _plain_with(ctx: RouteContext, code: str, extra: dict) -> str:

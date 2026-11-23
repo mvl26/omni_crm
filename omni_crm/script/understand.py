@@ -136,6 +136,7 @@ TOOL = {
 		"additionalProperties": False,
 	},
 }
+FAILED = "khong_doc_duoc"  # khoá đánh dấu bản đọc hiểu rỗng vì AI không dùng được
 UNKNOWN = {"dien_giai": "", "quan_he": "KHONG_RO", "cac_y": [], "slots": {}, "cau_hoi_kb": [], "chua_ro": []}
 
 
@@ -345,10 +346,13 @@ def read(ctx) -> dict:
 		content = build_input(ctx)
 		history, current = conversation(ctx.identity, ctx.batch_id)
 		said = "\n".join([*current, ctx.text or "", *[h.split("] KH: ", 1)[1] for h in history if "] KH: " in h]])
-		return clean(call(content, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id), said)
+		raw = call(content, lead=ctx.lead, identity=ctx.identity, batch_id=ctx.batch_id)
+		if not raw:  # AI không trả kết quả (lỗi mạng, hết ngân sách, sai schema hai lần): khác với "AI đọc mà không rõ"
+			return {**UNKNOWN, FAILED: True}
+		return clean(raw, said)
 	except Exception as e:
 		frappe.logger("omni").info("omni script: bước hiểu lỗi (%s) batch=%s", type(e).__name__, getattr(ctx, "batch_id", "-"))
-		return dict(UNKNOWN)
+		return {**UNKNOWN, FAILED: True}
 
 
 def primary(reading: dict) -> dict:
@@ -436,4 +440,5 @@ def to_detail(reading: dict) -> dict:
 		"intents": [i.get("y_dinh") for i in reading.get("cac_y") or []],
 		"unclear_action": any(c.get("anh_huong") == "DOI_HANH_DONG" for c in reading.get("chua_ro") or [] if isinstance(c, dict)),
 		"substitute": slots_in.get("hang_thay_the") or "",
+		"failed": bool(reading.get(FAILED)),
 	}

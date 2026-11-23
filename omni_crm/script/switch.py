@@ -59,7 +59,9 @@ def fast_debounce(identity_key: str) -> int | None:
 			name = frappe.db.get_value("Omni Identity", {"identity_key": identity_key}, "name")
 			if not name or not is_test(name):
 				return None
-		if all((r.text or "").strip().startswith("#") for r in rows):
+		from omni_crm.script import buttons
+
+		if all(buttons.is_tap(r.text, identity_key) for r in rows):
 			return 0
 		return GATHER  # tin gõ: đợi khách nhắn xong (`script.gather`), không dùng thời gian chờ cố định
 	except Exception:

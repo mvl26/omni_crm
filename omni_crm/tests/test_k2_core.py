@@ -195,8 +195,8 @@ class TestSendButtons(K2Case):
 					"type": "template",
 					"payload": {
 						"buttons": [
-							{"title": "Vật tư", "type": "oa.query.show", "payload": f"#{PFX}VT"},
-							{"title": "SPD", "type": "oa.query.show", "payload": f"#{PFX}SPD"},
+							{"title": "Vật tư", "type": "oa.query.show", "payload": "Vật tư"},
+							{"title": "SPD", "type": "oa.query.show", "payload": "SPD"},
 						]
 					},
 				},

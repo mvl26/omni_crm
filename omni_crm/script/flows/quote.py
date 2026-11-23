@@ -74,6 +74,8 @@ def fallback_to_staff(ctx: RouteContext, service: str | None, why: str = "") -> 
 	state.update_state(ctx.identity, quote_task_batch=ctx.batch_id)
 	if not sent:
 		engine.fallback(ctx, code, "task")
+	else:
+		engine.after_sent(ctx, code)  # còn việc khách đã nêu kèm (tin nhiều nội dung) thì mở luôn
 	return task
 
 

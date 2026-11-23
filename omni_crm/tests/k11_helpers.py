@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from unittest import mock
@@ -40,8 +41,40 @@ AFTER_HOURS = datetime(2026, 11, 19, 19, 0)
 WEEKDAYS = (parse_hours({"mon-fri": "08:00-17:30"}), frozenset())
 EMAIL, PHONE = "nam.tran@benhvien-abc.vn", "0912345678"
 DUMP_ENV = "K11_DUMP"  # đường dẫn tệp .jsonl để ghi lại toàn bộ hội thoại (chỉ khi cần đọc bằng mắt)
+PROD_ENV = "K11_PROD"  # =1: chạy với các công tắc đang bật trên yhct (bước hiểu, đọc lại, trả lời khi chờ, xưng hô)
+PROD_SWITCHES = ("omni_script_understand", "omni_script_readback", "omni_script_answer_waiting", "omni_script_pronoun")
 REASK_WORDS = ("chưa rõ ý", "chưa rõ lựa chọn")
 MAIN_MENU_NODES = ("MENU_CHINH", "REASK_CHUARO", "GREETING")
+
+
+def as_reading(raw: dict | None) -> dict:
+	"""Kết quả giả kiểu cũ (`A(...)`) -> bản đọc hiểu của công cụ `doc_hieu` (để chạy K11 trên đường mới)."""
+	from omni_crm.script import understand
+
+	if not raw:
+		return {}  # câu không có trong bảng: coi như AI không dùng được (bot phải tự xoay bằng luật)
+	back = {v: k for k, v in understand.INTENT_CODE.items()}
+	intent = back.get(raw["code"], raw["code"])
+	if intent not in understand.INTENTS:
+		intent = "HOI_THONG_TIN" if raw["code"] == "BOT_HOI" else "CHUA_RO"
+	service = {v: k for k, v in understand.SERVICE_CODE.items()}.get(raw.get("service") or "", "KHONG_RO")
+	slots: dict = {}
+	if raw.get("mat_hang"):
+		good: dict = {"ten": raw["mat_hang"]}
+		found = re.match(r"\s*(\d+)\s*(.*)", str(raw.get("so_luong") or ""))
+		if found:
+			good["so_luong"] = int(found.group(1))
+			if found.group(2).strip():
+				good["don_vi"] = found.group(2).strip()
+		slots["mat_hang"] = [good]
+	if raw.get("thoi_gian"):
+		slots["thoi_gian_can_hang"] = {"nguyen_van": raw["thoi_gian"]}
+	return {
+		"dien_giai": "",
+		"quan_he": "KHONG_RO",
+		"cac_y": [{"y_dinh": intent, "do_tin_cay": raw.get("confidence", 0.9), "dich_vu": service}],
+		"slots": slots,
+	}
 
 
 def A(code: str, conf: float = 0.9, service: str | None = None, **slots) -> dict:
@@ -128,6 +161,14 @@ class ConversationCase(CollectCase):
 		self._clock = self._start(mock.patch.object(k3_handoff, "now_datetime", return_value=NOW))
 		self._start(mock.patch.object(demo, "_now", return_value=NOW))
 		self._start(mock.patch.object(demo, "demo_user", return_value=None))
+		if os.environ.get(PROD_ENV):
+			from omni_crm.script import understand
+
+			self._start(mock.patch.object(understand, "now_datetime", return_value=NOW))
+			for key in PROD_SWITCHES:
+				self.addCleanup(frappe.conf.__setitem__, key, frappe.conf.get(key))
+				frappe.conf[key] = 1
+			frappe.db.delete("Omni Inbound Message", {"identity": self.ident1})
 		self.kb_auto(1)  # khách thử: câu Kho tri thức (nếu có) được bot tự gửi
 		self.contact(False)
 		self.addCleanup(self._k11_cleanup)
@@ -149,9 +190,14 @@ class ConversationCase(CollectCase):
 	# --- Giả lập --------------------------------------------------------------------------------------------------
 
 	def _fake_ai(self, kind, model, system, messages, tool, **kw):
-		if (tool or {}).get("name") != "classify_message":
+		name = (tool or {}).get("name")
+		if name not in ("classify_message", "doc_hieu" if os.environ.get(PROD_ENV) else ""):
 			raise AssertionError("test K11 không được gọi AI ngoài bộ phân loại")
 		raw = self.ai.get(self._text)
+		if name == "doc_hieu":
+			self._ai_seen.append((self._text, raw["code"] if raw else "KHONG_CO_TRONG_BANG"))
+			self.ai_calls.append(self._text)
+			return as_reading(raw)
 		self._ai_seen.append((self._text, raw["code"] if raw else "KHONG_CO_TRONG_BANG"))
 		self.ai_calls.append(self._text)
 		return dict(raw) if raw else {"code": "CHUA_RO", "confidence": 0.3}
