@@ -23,6 +23,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, now_datetime
 
+from omni_crm.marketing import s3_media
 from omni_crm.pipeline.retry import redact
 
 DOCUMENT = "Omni KB Document"
@@ -88,6 +89,16 @@ def file_bytes(file_url: str) -> tuple[str, bytes]:
 	if not name:
 		raise ValueError(_("Không tìm thấy tệp {0}").format(file_url))
 	f = frappe.get_doc("File", name)
+	if f.get(s3_media.KEY_FIELD):  # ADR 0033: tệp đã chuyển sang kho S3, không còn trên đĩa
+		if cint(f.file_size) > MAX_FILE_BYTES:
+			raise ValueError(_("Tệp lớn hơn 20 MB"))
+		try:
+			data = s3_media.file_content(f)
+		except s3_media.S3Error as e:
+			raise ValueError(str(e)) from None
+		if len(data) > MAX_FILE_BYTES:
+			raise ValueError(_("Tệp lớn hơn 20 MB"))
+		return f.file_name or os.path.basename(f.file_url or ""), data
 	path = f.get_full_path()
 	if not os.path.isfile(path):
 		raise ValueError(_("Tệp không còn trên máy chủ"))

@@ -354,7 +354,8 @@ fixtures = [
 # ignore_translatable_strings_from = []
 
 # >>> ADR 0033 kho anh S3 (MinIO) - them boi them_hooks_minio.py
-# Ảnh bài marketing lưu trên kho S3: job mỗi giờ đẩy ảnh còn trên đĩa, lưu bài thì đẩy ngay, xóa File thì xóa object,
+# Ảnh và tệp đính kèm công khai của bài marketing lưu trên kho S3: job mỗi giờ đẩy tệp còn trên đĩa, lưu bài hoặc tải
+# tệp đính kèm lên thì đẩy ngay, xóa File thì xóa object,
 # CRM phát ảnh đã chuyển ở /omni-media/. Nối ngoài các dict ở trên để không đụng dòng có sẵn.
 scheduler_events.setdefault("cron", {})["47 * * * *"] = ["omni_crm.marketing.s3_media.push_pending"]
 _s3_old = doc_events.setdefault("Omni Content Item", {}).get("on_change")
@@ -366,6 +367,12 @@ _s3_old = doc_events.setdefault("File", {}).get("after_delete")
 doc_events["File"]["after_delete"] = [
 	*([_s3_old] if isinstance(_s3_old, str) else (_s3_old or [])),
 	"omni_crm.marketing.s3_media.on_file_delete",
+]
+# Mức 2 (tài liệu 33): tệp đính kèm công khai của bài lên kho S3 ngay khi tải lên
+_s3_old = doc_events["File"].get("after_insert")
+doc_events["File"]["after_insert"] = [
+	*([_s3_old] if isinstance(_s3_old, str) else (_s3_old or [])),
+	"omni_crm.marketing.s3_media.on_file_insert",
 ]
 page_renderer = [*globals().get("page_renderer", []), "omni_crm.marketing.s3_media.MediaRenderer"]
 # <<< ADR 0033 kho anh S3 (MinIO)

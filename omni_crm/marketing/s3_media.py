@@ -9,8 +9,12 @@ máy chủ CRM, vì Facebook/Zalo tải ảnh theo địa chỉ (`publisher/cont
   ra Internet; chữ ký HMAC theo khóa mã hóa của site nên không đoán được địa chỉ ảnh khác;
 - MinIO lỗi thì ảnh ở lại đĩa, người soạn được báo, job đẩy lại sau.
 
-Ảnh riêng tư (`/private/files/`) không bao giờ được chuyển (chuyển sẽ biến chúng thành công khai). Secret key chỉ đọc
-bằng `get_password`, không vào log.
+Mức 2 (tài liệu 33 của người phụ trách, 23/11/2026): tệp **đính kèm công khai** của bài (thanh bên "Đính kèm" trên
+Desk: video, âm thanh, PDF, tài liệu văn phòng, ảnh) cũng được chuyển khi tải lên hoặc trong job mỗi giờ, phát lại ở
+cùng kiểu địa chỉ. Ảnh, video, âm thanh phát trong trình duyệt; tài liệu luôn kèm `Content-Disposition: attachment`.
+
+Tệp riêng tư (`/private/files/`) không bao giờ được chuyển (chuyển sẽ biến chúng thành công khai, và dữ liệu nhạy cảm
+chỉ lên MinIO khi đã mã hóa phía ứng dụng). Secret key chỉ đọc bằng `get_password`, không vào log.
 """
 
 from __future__ import annotations
@@ -49,11 +53,45 @@ IMAGE_TYPES = {
 	".gif": "image/gif",
 	".webp": "image/webp",
 }
+# Tệp đính kèm công khai của bài (mức 2): thêm video, âm thanh (phát trong trình duyệt) và tài liệu (luôn tải về).
+# KHÔNG có HTML, SVG, XML, JS hay tệp chạy được: phát trên tên miền CRM là XSS hoặc phát tán mã độc.
+INLINE_TYPES = {
+	**IMAGE_TYPES,
+	".mp4": "video/mp4",
+	".mov": "video/quicktime",
+	".webm": "video/webm",
+	".mp3": "audio/mpeg",
+	".m4a": "audio/mp4",
+	".wav": "audio/wav",
+	".ogg": "audio/ogg",
+}
+DOWNLOAD_TYPES = {
+	".pdf": "application/pdf",
+	".doc": "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xls": "application/vnd.ms-excel",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".ppt": "application/vnd.ms-powerpoint",
+	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	".csv": "text/csv",
+	".txt": "text/plain",
+	".zip": "application/zip",
+}
+ATTACH_TYPES = {**INLINE_TYPES, **DOWNLOAD_TYPES}
+SERVE_INLINE = frozenset(INLINE_TYPES.values())
+SERVE_TYPES = frozenset(ATTACH_TYPES.values())
+# Mỗi lượt phát đọc cả object vào bộ nhớ gunicorn: tệp lớn hơn ở lại /files/ (nginx phục vụ như cũ)
+ATTACH_MAX_BYTES = 50 * 1024 * 1024
+_RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 _PATH_RE = re.compile(rf"^{ROUTE}/([A-Za-z0-9]+)-([0-9a-f]{{32}})(\.[A-Za-z0-9]{{1,5}})?$")
 
 
 class S3Error(Exception):
 	"""Lỗi kho S3, thông điệp an toàn để hiện cho người dùng (không có secret)."""
+
+
+class S3RangeError(S3Error):
+	"""Đoạn byte yêu cầu (header Range) nằm ngoài tệp."""
 
 
 # ---------------------------------------------------------------- cấu hình
@@ -152,6 +190,33 @@ def get_object(key: str) -> tuple[bytes, str]:
 		raise _wrap(_("đọc ảnh"), e) from None
 
 
+def get_object_part(key: str, byte_range: str) -> tuple[bytes, str, str | None]:
+	"""(bytes, Content-Type, Content-Range) của một đoạn object (`byte_range` dạng `bytes=0-1023`); ném S3RangeError
+	khi đoạn nằm ngoài tệp, S3Error khi lỗi khác. Video và âm thanh cần đọc từng đoạn để tua."""
+	try:
+		res = _client().get_object(Bucket=_bucket(), Key=key, Range=byte_range)
+		return (
+			res["Body"].read(),
+			res.get("ContentType") or "application/octet-stream",
+			res.get("ContentRange"),
+		)
+	except Exception as e:
+		code = getattr(e, "response", {}).get("Error", {}).get("Code") if hasattr(e, "response") else None
+		if code == "InvalidRange":
+			raise S3RangeError(_("Đoạn tệp yêu cầu nằm ngoài tệp")) from None
+		raise _wrap(_("đọc tệp"), e) from None
+
+
+def file_content(file_doc) -> bytes:
+	"""Nội dung một File: đọc từ kho S3 nếu đã chuyển (`omni_s3_key`), ngược lại từ đĩa. Ném S3Error hoặc OSError.
+	Dùng cho mã đọc tệp của bài (kho kiến thức, trợ lý soạn bài) thay cho `get_full_path` + `open`."""
+	key = file_doc.get(KEY_FIELD)
+	if key:
+		return get_object(key)[0]
+	with open(file_doc.get_full_path(), "rb") as fh:
+		return fh.read()
+
+
 def delete_object(key: str) -> None:
 	"""Xóa object; ném S3Error."""
 	try:
@@ -165,12 +230,16 @@ def list_objects(prefix: str | None = None, limit: int = 10000) -> list[dict]:
 	UTC có múi giờ. Dừng ở `limit` object. Ném S3Error. Dùng cho báo cáo "Kho ảnh MinIO" (chỉ đọc)."""
 	out: list[dict] = []
 	try:
-		pages = _client().get_paginator("list_objects_v2").paginate(
-			Bucket=_bucket(), Prefix=_prefix() if prefix is None else prefix
+		pages = (
+			_client()
+			.get_paginator("list_objects_v2")
+			.paginate(Bucket=_bucket(), Prefix=_prefix() if prefix is None else prefix)
 		)
 		for page in pages:
 			for obj in page.get("Contents") or []:
-				out.append({"key": obj["Key"], "size": obj.get("Size") or 0, "modified": obj.get("LastModified")})
+				out.append(
+					{"key": obj["Key"], "size": obj.get("Size") or 0, "modified": obj.get("LastModified")}
+				)
 				if len(out) >= limit:
 					return out
 	except Exception as e:
@@ -228,19 +297,53 @@ class MediaRenderer(BaseRenderer):
 		found = resolve(self.path)
 		if not found:
 			return Response(_("Không có ảnh này"), status=404, mimetype="text/plain")
+		file_name, key = found
+		byte_range = _range_header()
+		content_range = None
 		try:
-			body, content_type = get_object(found[1])
+			if byte_range:
+				body, content_type, content_range = get_object_part(key, byte_range)
+			else:
+				body, content_type = get_object(key)
+		except S3RangeError:
+			return Response(status=416, headers={"Accept-Ranges": "bytes"})
 		except S3Error:
-			frappe.log_error(title="Omni: không đọc được ảnh trên S3", message=f"file={found[0]}")
+			frappe.log_error(title="Omni: không đọc được ảnh trên S3", message=f"file={file_name}")
 			return Response(_("Kho ảnh tạm thời không đọc được"), status=503, mimetype="text/plain")
-		if content_type not in IMAGE_TYPES.values():
+		if content_type not in SERVE_TYPES:
 			return Response(_("Không có ảnh này"), status=404, mimetype="text/plain")
-		return Response(
-			body,
-			status=200,
-			mimetype=content_type,
-			headers={"Cache-Control": "public, max-age=604800", "X-Content-Type-Options": "nosniff"},
-		)
+		headers = {
+			"Cache-Control": "public, max-age=604800",
+			"X-Content-Type-Options": "nosniff",
+			"Accept-Ranges": "bytes",
+		}
+		if content_type not in SERVE_INLINE:  # tài liệu: luôn tải về, không mở trên tên miền CRM
+			original = frappe.db.get_value("File", file_name, "file_name") or os.path.basename(key)
+			headers["Content-Disposition"] = content_disposition(original)
+		if content_range:
+			headers["Content-Range"] = content_range
+		return Response(body, status=206 if content_range else 200, mimetype=content_type, headers=headers)
+
+
+def _range_header() -> str | None:
+	"""Header Range dạng một đoạn `bytes=a-b` (trình duyệt gửi khi phát video); dạng khác thì bỏ qua (trả cả tệp)."""
+	request = getattr(frappe.local, "request", None)
+	value = str((request.headers.get("Range") if request is not None else "") or "").strip()
+	m = _RANGE_RE.match(value)
+	if not m or not (m.group(1) or m.group(2)):
+		return None
+	if m.group(1) and m.group(2) and int(m.group(2)) < int(m.group(1)):
+		return None
+	return value
+
+
+def content_disposition(file_name: str) -> str:
+	"""`attachment` với tên gốc: bản ASCII cho trình duyệt cũ, bản UTF-8 (RFC 5987) cho tên tiếng Việt."""
+	from urllib.parse import quote
+
+	name = os.path.basename(str(file_name or "tep")).replace("\r", "").replace("\n", "") or "tep"
+	ascii_name = "".join(ch if 32 <= ord(ch) < 127 and ch not in '"\\;' else "_" for ch in name)
+	return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name, safe='')}"
 
 
 # ---------------------------------------------------------------- chuyển ảnh lên S3
@@ -324,13 +427,18 @@ def offload(item_name: str, url: str) -> str | None:
 	file_doc = _file_for(item_name, url)
 	if not file_doc:
 		return None
+	return _move(item_name, file_doc, url, ext, IMAGE_TYPES[ext])
+
+
+def _move(item_name: str, file_doc, url: str, ext: str, content_type: str) -> str | None:
+	"""Ghi tệp trên đĩa của `file_doc` lên S3 dưới thư mục của bài, đổi địa chỉ; trả địa chỉ mới. Ném S3Error."""
 	path = file_doc.get_full_path()
 	if not os.path.exists(path):
 		return None  # tệp đã mất trên đĩa: để publisher báo lỗi như hiện nay
 	with open(path, "rb") as fh:
 		content = fh.read()
 	key = f"{_prefix()}{item_name}/{file_doc.name}{ext}"
-	put_object(key, content, IMAGE_TYPES[ext])
+	put_object(key, content, content_type)
 	new = public_path(file_doc.name, key)
 	# Bỏ content_hash: Frappe gộp tệp tải lên trùng nội dung bằng hash rồi tìm tệp cũ trên đĩa; ảnh đã rời đĩa thì việc
 	# đó báo lỗi "Cannot access file path" và chặn tải lên. Không hash = tệp mới trùng nội dung được lưu như tệp riêng.
@@ -338,9 +446,101 @@ def offload(item_name: str, url: str) -> str | None:
 		"File", file_doc.name, {"file_url": new, KEY_FIELD: key, "content_hash": None}, update_modified=False
 	)
 	_replace_refs(item_name, url, new)
+	_replace_attachment_comment(item_name, url, new)
 	if not _still_used(url):
 		frappe.db.after_commit.add(lambda: _remove_quietly(path))  # chỉ xóa đĩa khi DB đã ghi đường mới
 	return new
+
+
+def _replace_attachment_comment(item_name: str | None, old: str, new: str) -> None:
+	"""Dòng "Đã thêm <tệp>" (Comment loại Attachment) trên dòng thời gian của bài trỏ địa chỉ cũ: đổi sang địa chỉ mới để
+	liên kết không chết khi tệp rời đĩa."""
+	from urllib.parse import quote
+
+	if not item_name:
+		return
+	olds = {old, quote(frappe.safe_encode(old), safe="/:")}
+	for row in frappe.get_all(
+		"Comment",
+		filters={"reference_doctype": ITEM, "reference_name": item_name, "comment_type": "Attachment"},
+		fields=["name", "content"],
+	):
+		content = row.content or ""
+		for o in olds:
+			content = content.replace(f"'{o}'", f"'{new}'").replace(f'"{o}"', f'"{new}"')
+		if content != (row.content or ""):
+			frappe.db.set_value("Comment", row.name, "content", content, update_modified=False)
+
+
+# ---------------------------------------------------------------- tệp đính kèm công khai của bài (mức 2)
+
+
+def attachment_type(url: str | None, size: int | None = None) -> str | None:
+	"""Content-Type khi `url` là tệp công khai trên đĩa, thuộc loại và cỡ chuyển được; ngược lại None."""
+	url = str(url or "")
+	if not url.startswith(LOCAL_PREFIX):
+		return None
+	if size is not None and cint(size) > ATTACH_MAX_BYTES:
+		return None
+	return ATTACH_TYPES.get(os.path.splitext(url)[1].lower())
+
+
+def _attachment_filters() -> dict:
+	"""Tệp đính kèm của bài còn trên đĩa: công khai, gắn qua thanh "Đính kèm" (không qua ô ảnh), chưa có khóa S3."""
+	return {
+		"attached_to_doctype": ITEM,
+		"attached_to_field": ["is", "not set"],
+		"is_private": 0,
+		"is_folder": 0,
+		"file_url": ["like", f"{LOCAL_PREFIX}%"],
+		KEY_FIELD: ["is", "not set"],
+	}
+
+
+def offload_attachment(file_name: str) -> str | None:
+	"""Đẩy tệp đính kèm công khai `file_name` (File) của bài lên S3; trả địa chỉ mới, None nếu không chuyển. Ném S3Error.
+
+	Không chuyển: tệp riêng tư, tệp tải qua ô ảnh (`attached_to_field`, việc của `on_item_change`), loại ngoài
+	ATTACH_TYPES, tệp lớn hơn ATTACH_MAX_BYTES, tệp không gắn vào bài."""
+	f = frappe.get_doc("File", file_name)
+	if f.is_folder or cint(f.is_private) or f.get(KEY_FIELD) or f.get("attached_to_field"):
+		return None
+	if f.attached_to_doctype != ITEM or not f.attached_to_name:
+		return None
+	url = f.file_url or ""
+	path = f.get_full_path() if url.startswith(LOCAL_PREFIX) else ""
+	size = os.path.getsize(path) if path and os.path.exists(path) else None
+	content_type = attachment_type(url, size)
+	if not content_type or size is None:
+		return None
+	return _move(f.attached_to_name, f, url, os.path.splitext(url)[1].lower(), content_type)
+
+
+def on_file_insert(doc, method=None) -> None:
+	"""Hook `after_insert` của File: tệp đính kèm công khai vừa tải lên bài thì chuyển ngay sang S3; lỗi thì báo, giữ
+	tệp trên đĩa (job mỗi giờ đẩy lại). Tệp tải qua ô ảnh để `on_item_change` lo khi lưu bài."""
+	if (
+		doc.is_folder
+		or cint(doc.is_private)
+		or doc.attached_to_doctype != ITEM
+		or doc.get("attached_to_field")
+	):
+		return
+	if not attachment_type(doc.file_url) or not enabled():
+		return
+	try:
+		new = offload_attachment(doc.name)
+	except S3Error as e:
+		frappe.msgprint(
+			_("{0}. Tệp vẫn lưu trên máy chủ CRM, sẽ tự đẩy lại trong vòng 1 giờ.").format(e),
+			indicator="orange",
+			alert=True,
+		)
+		return
+	if new:  # bản trả về trình tải lên đúng địa chỉ mới
+		doc.file_url = new
+		doc.set(KEY_FIELD, frappe.db.get_value("File", doc.name, KEY_FIELD))
+		doc.content_hash = None
 
 
 def _remove_quietly(path: str) -> None:
@@ -412,6 +612,26 @@ def push_pending(limit: int = 200) -> None:
 			frappe.db.rollback()
 			frappe.log_error(title="Omni: chưa đẩy được ảnh bài marketing lên S3", message=f"item={name}")
 			return  # kho đang lỗi: dừng lượt này
+	for row in frappe.get_all(
+		"File",
+		filters=_attachment_filters(),
+		fields=["name", "file_url", "file_size"],
+		limit_page_length=cint(limit) or 0,
+	):
+		if not attachment_type(row.file_url, row.file_size):
+			continue
+		attached = frappe.db.get_value("File", row.name, "attached_to_name")
+		if attached and _busy(attached, soon=True):
+			continue
+		try:
+			offload_attachment(row.name)
+			frappe.db.commit()
+		except S3Error:
+			frappe.db.rollback()
+			frappe.log_error(
+				title="Omni: chưa đẩy được tệp đính kèm bài marketing lên S3", message=f"file={row.name}"
+			)
+			return
 
 
 def pending_count() -> dict:
@@ -423,10 +643,18 @@ def pending_count() -> dict:
 		pluck=True,
 	)
 	on_disk = sum(1 for u in rows if movable(u))
+	attach = frappe.get_all("File", filters=_attachment_filters(), fields=["file_url", "file_size"])
+	attach_on_disk = sum(1 for r in attach if attachment_type(r.file_url, r.file_size))
 	return {
 		"on_disk": on_disk,
 		"on_s3": frappe.db.count("File", {KEY_FIELD: ["is", "set"]}),
 		"kept_other_type": len(rows) - on_disk,
+		# Tệp đính kèm công khai của bài (mức 2)
+		"attach_on_disk": attach_on_disk,
+		"attach_kept_other_type": len(attach) - attach_on_disk,
+		"attach_private": frappe.db.count(
+			"File", {"attached_to_doctype": ITEM, "is_private": 1, "is_folder": 0}
+		),
 	}
 
 
@@ -449,7 +677,7 @@ def pull_back(dry_run: int | bool = 1, limit: int = 0, item: str | None = None) 
 	files = frappe.get_all(
 		"File",
 		filters=filters,
-		fields=["name", "file_name", "file_url", KEY_FIELD],
+		fields=["name", "file_name", "file_url", KEY_FIELD, "attached_to_doctype", "attached_to_name"],
 		order_by="creation asc",
 		limit_page_length=cint(limit) or 0,
 	)
@@ -477,6 +705,8 @@ def pull_back(dry_run: int | bool = 1, limit: int = 0, item: str | None = None) 
 				update_modified=False,
 			)
 			_replace_refs(None, row.file_url, local)
+			if row.attached_to_doctype == ITEM:
+				_replace_attachment_comment(row.attached_to_name, row.file_url, local)
 			frappe.db.commit()
 			result["pulled"] += 1
 		except Exception as e:

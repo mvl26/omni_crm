@@ -81,3 +81,36 @@ Người phụ trách cần một chỗ xem kho đang có ảnh gì, của bài 
 - **Chỉ đọc**: không có nút xóa hay sửa. Dọn object mồ côi vẫn làm bằng `mc rm` sau khi IT xem.
 - Chỉ bucket của CRM. Bucket giai đoạn 2 (ERP, bot) mã hóa phía ứng dụng (`spd/docs/29`), mỗi ứng dụng tự có màn hình.
 - `tests/test_v3_33_media_report.py`: kho S3 giả, phân trang giả, boto3 thật qua moto khi đặt `OMNI_S3_TEST_ENDPOINT`.
+
+## Bổ sung 23/11/2026: tệp đính kèm công khai của bài (mức 2, `spd/docs/33`)
+
+Người phụ trách muốn thử "một tệp loại bất kỳ" và mở được ở báo cáo "Kho ảnh MinIO". Bài marketing chỉ có ô **ảnh**
+(`media`, `media_items[].image` là Attach Image), nên tệp loại khác chỉ gắn được vào bài qua thanh **Đính kèm** của Desk.
+Mức 1 của tài liệu 33 (đang chạy) đã chép **mọi** tệp CRM có mã hóa (restic, bucket `yhct-backup`); mức này chỉ cho
+tệp **công khai** gắn vào bài, chuyển hẳn như ảnh.
+
+- **Tệp nào:** File gắn vào `Omni Content Item` (`attached_to_doctype`), **không** có `attached_to_field` (tệp tải qua ô
+  ảnh vẫn do `on_item_change` lo khi lưu bài, để không đổi địa chỉ trước khi ô ảnh được lưu), `is_private = 0`, còn ở
+  `/files/`, loại trong `ATTACH_TYPES`, cỡ không quá `ATTACH_MAX_BYTES` (50 MB).
+- **Loại:** `INLINE_TYPES` = 5 loại ảnh cũ + MP4, MOV, WebM, MP3, M4A, WAV, OGG (phát trong trình duyệt);
+  `DOWNLOAD_TYPES` = PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, CSV, TXT, ZIP (luôn `Content-Disposition: attachment`, tên gốc
+  theo RFC 5987). **Không** HTML, SVG, XML, JS hay tệp chạy được. `MediaRenderer` chỉ trả object có Content-Type trong
+  `SERVE_TYPES`, kèm `nosniff`.
+- **Tệp riêng tư không bao giờ chuyển** (luật: dữ liệu nhạy cảm chỉ lên MinIO khi đã mã hóa phía ứng dụng). Thanh Đính
+  kèm của Desk mặc định tick "Riêng tư": muốn chuyển thì bỏ tick khi tải lên.
+- **Khi nào chuyển:** hook `after_insert` của File (`on_file_insert`) chuyển ngay lúc tải lên, bản trả về trình tải lên
+  có địa chỉ mới; MinIO lỗi thì báo cam, tệp ở lại đĩa; `push_pending` (mỗi giờ) đẩy nốt.
+- **Dòng thời gian:** Frappe ghi Comment "Đã thêm <tệp>" với địa chỉ `/files/…`; khi chuyển (và khi `pull_back`) đổi
+  liên kết trong Comment đó cho khỏi chết.
+- **Video:** `MediaRenderer` hỗ trợ header `Range` một đoạn (`get_object_part`, 206 + `Content-Range`; đoạn ngoài tệp
+  416; nhiều đoạn thì trả cả tệp). Mỗi lượt phát vẫn đọc qua gunicorn vào bộ nhớ: vì vậy có trần 50 MB và giới hạn tải
+  lên của site (`max_file_size`) vẫn áp. Video lớn hơn cần `X-Accel-Redirect` sang nginx (sửa cấu hình nginx trên yhct),
+  chưa làm.
+- **Đọc tệp đã chuyển (việc V8):** `s3_media.file_content(file_doc)`; `marketing/kb.py::file_bytes` và
+  `marketing/planner.py::_attachment` đọc qua đó (trước đây dùng `get_full_path`, lỗi với tệp `/omni-media/`).
+- **Chưa làm:** đăng video hay PDF lên Facebook/Zalo (bộ đăng chỉ gửi ảnh); tệp đính kèm không vào bài đăng.
+- `pending_count` thêm `attach_on_disk`, `attach_kept_other_type`, `attach_private`; báo cáo "Kho ảnh MinIO" hiện tệp
+  đính kèm (ghi chú "Tệp đính kèm của bài", liên kết "Mở"), ô tổng hợp đổi "Ảnh trên MinIO" thành "Tệp trên MinIO".
+- Đã biết: File đã chuyển không lưu lại được trên Desk (Frappe kiểm đường dẫn trên đĩa khi `validate`), nên cũng không
+  đổi được "Riêng tư" cho tệp đã chuyển. Muốn sửa thì `pull_back` trước. Như ảnh từ 18/11.
+- `tests/test_v3_33_media_attach.py`: kho S3 giả có đọc từng đoạn; boto3 thật qua moto khi đặt `OMNI_S3_TEST_ENDPOINT`.

@@ -1,4 +1,4 @@
-// Báo cáo "Kho ảnh MinIO" (ADR 0033): ảnh bài marketing trên kho S3, chỉ đọc
+// Báo cáo "Kho ảnh MinIO" (ADR 0033): ảnh và tệp đính kèm công khai của bài marketing trên kho S3, chỉ đọc
 frappe.query_reports["Kho ảnh MinIO"] = {
 	filters: [
 		{
@@ -18,7 +18,7 @@ frappe.query_reports["Kho ảnh MinIO"] = {
 		if (column.fieldname === "view_url") {
 			// chỉ địa chỉ /omni-media/... do máy chủ trả (đã kiểm ở Python)
 			if (!value || !String(value).startsWith("/omni-media/")) return "";
-			return `<a href="${encodeURI(value)}" target="_blank" rel="noopener">${__("Xem ảnh")}</a>`;
+			return `<a href="${encodeURI(value)}" target="_blank" rel="noopener">${__("Mở")}</a>`;
 		}
 		const out = default_formatter(value, row, column, data);
 		if (column.fieldname === "status" && data) {

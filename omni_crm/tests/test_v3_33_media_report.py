@@ -62,7 +62,7 @@ class TestReport(ReportCase):
 		self.assertGreater(row["size_kb"], 0)
 		self.assertIsNone(row["modified"].tzinfo)
 		self.assertEqual(row["note"], "")
-		self.assertEqual(summary["Ảnh trên MinIO"], 1)
+		self.assertEqual(summary["Tệp trên MinIO"], 1)
 		self.assertEqual(summary[report.OK], 1)
 		self.assertEqual(summary[report.MISSING], 0)
 		self.assertEqual(summary[report.ORPHAN], 0)
@@ -95,7 +95,7 @@ class TestReport(ReportCase):
 		self.s3.objects["khac/ngoai.png"] = (b"x", "image/png")
 		rows, _m, summary = self.run_report()
 		self.assertFalse([r for r in rows if r["key"] == "khac/ngoai.png"])
-		self.assertEqual(summary["Ảnh trên MinIO"], 0)
+		self.assertEqual(summary["Tệp trên MinIO"], 0)
 
 	def test_filters_keep_summary_of_whole_store(self):
 		name, _f, key = self.offloaded_item()

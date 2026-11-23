@@ -108,7 +108,9 @@ def _attachment(file_url: str) -> dict:
 		frappe.throw(_("Bạn không có quyền đọc tệp {0}").format(f.file_name), frappe.PermissionError)
 	ext = os.path.splitext(f.file_name or file_url)[1].lower()
 	if ext in IMAGE_TYPES:
-		if os.path.getsize(f.get_full_path()) > MAX_IMAGE_BYTES:
+		# Ảnh đã chuyển sang kho S3 (ADR 0033) không còn trên đĩa: lấy cỡ từ dòng File
+		size = cint(f.file_size) if f.get("omni_s3_key") else os.path.getsize(f.get_full_path())
+		if size > MAX_IMAGE_BYTES:
 			frappe.throw(_("Ảnh {0} lớn hơn 5 MB").format(f.file_name))
 		return {"name": f.file_name, "kind": "image", "file_url": file_url, "media_type": IMAGE_TYPES[ext]}
 	try:

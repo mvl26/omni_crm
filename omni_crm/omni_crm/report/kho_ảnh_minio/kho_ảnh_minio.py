@@ -1,4 +1,5 @@
-"""Báo cáo "Kho ảnh MinIO" (ADR 0033, mục "Báo cáo kho ảnh"): ảnh bài marketing trên kho S3, chỉ đọc.
+"""Báo cáo "Kho ảnh MinIO" (ADR 0033, mục "Báo cáo kho ảnh"): ảnh và tệp đính kèm công khai của bài marketing trên
+kho S3, chỉ đọc.
 
 Mỗi dòng một khóa object, đối chiếu object trong bucket (dưới thư mục ảnh bài) với dòng File có `omni_s3_key`:
 - Khớp: có object và có File.
@@ -83,7 +84,15 @@ def _files_by_key() -> dict[str, list]:
 	rows = frappe.get_all(
 		"File",
 		filters={s3_media.KEY_FIELD: ["is", "set"]},
-		fields=["name", "file_name", "file_url", s3_media.KEY_FIELD, "attached_to_doctype", "attached_to_name"],
+		fields=[
+			"name",
+			"file_name",
+			"file_url",
+			s3_media.KEY_FIELD,
+			"attached_to_doctype",
+			"attached_to_name",
+			"attached_to_field",
+		],
 		order_by="creation asc",
 	)
 	out: dict[str, list] = {}
@@ -141,7 +150,10 @@ def build_rows(objects: list[dict]) -> list[dict]:
 			item = None
 		used = sum(usage.get(r.file_url, 0) for r in rows)
 		if f and not used:
-			notes.append(_("Không ô ảnh nào của bài dùng tệp này"))
+			if f.attached_to_doctype == s3_media.ITEM and not f.get("attached_to_field"):
+				notes.append(_("Tệp đính kèm của bài"))
+			else:
+				notes.append(_("Không ô ảnh nào của bài dùng tệp này"))
 		view = f.file_url if f and s3_media.is_public_url(f.file_url) and obj else None
 		out.append(
 			{
@@ -168,7 +180,7 @@ def report_summary(rows: list[dict], objects: list[dict]) -> list[dict]:
 	pending = s3_media.pending_count()
 	total_mb = flt(sum(o["size"] for o in objects) / 1024 / 1024, 2)
 	return [
-		{"value": len(objects), "label": _("Ảnh trên MinIO"), "datatype": "Int", "indicator": "Blue"},
+		{"value": len(objects), "label": _("Tệp trên MinIO"), "datatype": "Int", "indicator": "Blue"},
 		{"value": total_mb, "label": _("Dung lượng (MB)"), "datatype": "Float", "indicator": "Blue"},
 		{"value": counts[OK], "label": _(OK), "datatype": "Int", "indicator": "Green"},
 		{
@@ -192,6 +204,18 @@ def report_summary(rows: list[dict], objects: list[dict]) -> list[dict]:
 		{
 			"value": pending["kept_other_type"],
 			"label": _("Ở lại đĩa vì loại tệp"),
+			"datatype": "Int",
+			"indicator": "Gray",
+		},
+		{
+			"value": pending.get("attach_on_disk", 0),
+			"label": _("Tệp đính kèm chờ chuyển"),
+			"datatype": "Int",
+			"indicator": "Orange" if pending.get("attach_on_disk") else "Green",
+		},
+		{
+			"value": pending.get("attach_kept_other_type", 0) + pending.get("attach_private", 0),
+			"label": _("Tệp đính kèm ở lại đĩa (riêng tư, loại hoặc cỡ)"),
 			"datatype": "Int",
 			"indicator": "Gray",
 		},
