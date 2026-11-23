@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-13 10:00:00.000000",
- "modified": "2026-11-13 12:00:00.000000",
+ "modified": "2026-11-23 13:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -24,6 +24,8 @@
   "caption",
   "media",
   "media_items",
+  "video",
+  "document",
   "sec_link",
   "landing_page",
   "utm_content",
@@ -112,6 +114,18 @@
    "fieldtype": "Table",
    "label": "Ảnh thêm",
    "options": "Omni Content Media"
+  },
+  {
+   "description": "Cho định dạng fb_video. MP4 hoặc MOV, tải lên ở chế độ công khai (bỏ tick Riêng tư).",
+   "fieldname": "video",
+   "fieldtype": "Attach",
+   "label": "Video đăng kèm"
+  },
+  {
+   "description": "Cho định dạng fb_pdf_link: bài Facebook có link tới PDF. Tải lên ở chế độ công khai.",
+   "fieldname": "document",
+   "fieldtype": "Attach",
+   "label": "Tài liệu PDF đăng kèm"
   },
   {
    "fieldname": "sec_link",

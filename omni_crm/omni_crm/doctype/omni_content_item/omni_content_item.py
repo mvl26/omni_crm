@@ -68,7 +68,11 @@ class OmniContentItem(Document):
 
 
 def _media_key(doc) -> list:
-	return [doc.media or ""] + [(m.image or "") for m in (doc.get("media_items") or [])]
+	return (
+		[doc.media or ""]
+		+ [(m.image or "") for m in (doc.get("media_items") or [])]
+		+ [doc.get("video") or "", doc.get("document") or ""]  # tệp đăng kèm (ADR 0035)
+	)
 
 
 def _content_changed(before, after) -> bool:

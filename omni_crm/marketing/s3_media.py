@@ -82,6 +82,8 @@ SERVE_INLINE = frozenset(INLINE_TYPES.values())
 SERVE_TYPES = frozenset(ATTACH_TYPES.values())
 # Mỗi lượt phát đọc cả object vào bộ nhớ gunicorn: tệp lớn hơn ở lại /files/ (nginx phục vụ như cũ)
 ATTACH_MAX_BYTES = 50 * 1024 * 1024
+# Ô tệp đăng kèm của bài (ADR 0035: video cho fb_video, PDF cho fb_pdf_link): chuyển khi lưu bài như ô ảnh
+FILE_FIELDS = ("video", "document")
 _RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 _PATH_RE = re.compile(rf"^{ROUTE}/([A-Za-z0-9]+)-([0-9a-f]{{32}})(\.[A-Za-z0-9]{{1,5}})?$")
 
@@ -404,6 +406,12 @@ def _replace_refs(item_name: str | None, old: str, new: str) -> None:
 		cond["parent"] = item_name
 	for name in frappe.get_all(MEDIA, filters=cond, pluck="name"):
 		frappe.db.set_value(MEDIA, name, "image", new, update_modified=False)
+	for fieldname in FILE_FIELDS:
+		cond = {fieldname: old}
+		if item_name:
+			cond["name"] = item_name
+		for name in frappe.get_all(ITEM, filters=cond, pluck="name"):
+			frappe.db.set_value(ITEM, name, fieldname, new, update_modified=False)
 
 
 def _still_used(url: str) -> bool:
@@ -412,6 +420,7 @@ def _still_used(url: str) -> bool:
 		frappe.db.exists("File", {"file_url": url})
 		or frappe.db.exists(ITEM, {"media": url})
 		or frappe.db.exists(MEDIA, {"image": url})
+		or any(frappe.db.exists(ITEM, {f: url}) for f in FILE_FIELDS)
 	)
 
 
@@ -557,12 +566,33 @@ def offload_item(item_name: str) -> int:
 	for url in dict.fromkeys(item_urls(item)):  # giữ thứ tự, bỏ trùng
 		if offload(item_name, url):
 			done += 1
+	for fieldname in FILE_FIELDS:
+		if offload_file_field(item_name, item.get(fieldname)):
+			done += 1
 	return done
+
+
+def offload_file_field(item_name: str, url: str | None) -> str | None:
+	"""Đẩy tệp công khai của ô video / tài liệu (ADR 0035) lên S3; trả địa chỉ mới, None nếu không chuyển (riêng tư,
+	loại ngoài ATTACH_TYPES, lớn hơn ATTACH_MAX_BYTES, của tài liệu khác). Ném S3Error."""
+	if not attachment_type(url):
+		return None
+	file_doc = _file_for(item_name, url)
+	if not file_doc:
+		return None
+	path = file_doc.get_full_path()
+	if not os.path.exists(path) or not attachment_type(url, os.path.getsize(path)):
+		return None
+	return _move(item_name, file_doc, url, os.path.splitext(url)[1].lower(), attachment_type(url))
 
 
 def on_item_change(doc, method=None) -> None:
 	"""Hook `on_change` của Omni Content Item: chuyển ảnh mới tải lên sang S3; lỗi thì báo, giữ ảnh trên đĩa."""
-	if not enabled() or not any(movable(u) for u in item_urls(doc)):
+	if not enabled():
+		return
+	if not any(movable(u) for u in item_urls(doc)) and not any(
+		attachment_type(doc.get(f)) for f in FILE_FIELDS
+	):
 		return
 	if _busy(doc.name):
 		return  # đang đăng: job mỗi giờ chuyển sau
@@ -579,6 +609,8 @@ def on_item_change(doc, method=None) -> None:
 	doc.media = frappe.db.get_value(ITEM, doc.name, "media")
 	for row in doc.get("media_items") or []:
 		row.image = frappe.db.get_value(MEDIA, row.name, "image")
+	for fieldname in FILE_FIELDS:
+		doc.set(fieldname, frappe.db.get_value(ITEM, doc.name, fieldname))
 
 
 def movable(url: str | None) -> bool:
@@ -594,7 +626,20 @@ def _local_refs() -> list[tuple[str, str]]:
 		union all select parent, image from `tab{MEDIA}` where parenttype = %s and image like '/files/%%'""",
 		(ITEM,),
 	)
-	return [(name, url) for name, url in rows if movable(url)]
+	out = [(name, url) for name, url in rows if movable(url)]
+	return out + [(name, url) for name, url, _size in _local_file_fields() if attachment_type(url, _size)]
+
+
+def _local_file_fields() -> list[tuple[str, str, int | None]]:
+	"""(bài, địa chỉ, cỡ) của ô video / tài liệu (ADR 0035) còn ở /files/."""
+	out = []
+	for fieldname in FILE_FIELDS:
+		for name, url in frappe.get_all(
+			ITEM, filters={fieldname: ["like", f"{LOCAL_PREFIX}%"]}, fields=["name", fieldname], as_list=True
+		):
+			size = frappe.db.get_value("File", {"file_url": url, "is_private": 0}, "file_size")
+			out.append((name, url, size))
+	return out
 
 
 def push_pending(limit: int = 200) -> None:
@@ -645,10 +690,12 @@ def pending_count() -> dict:
 	on_disk = sum(1 for u in rows if movable(u))
 	attach = frappe.get_all("File", filters=_attachment_filters(), fields=["file_url", "file_size"])
 	attach_on_disk = sum(1 for r in attach if attachment_type(r.file_url, r.file_size))
+	fields = _local_file_fields()  # ô video / tài liệu (ADR 0035): tính chung với ô ảnh
+	fields_on_disk = sum(1 for _n, url, size in fields if attachment_type(url, size))
 	return {
-		"on_disk": on_disk,
+		"on_disk": on_disk + fields_on_disk,
 		"on_s3": frappe.db.count("File", {KEY_FIELD: ["is", "set"]}),
-		"kept_other_type": len(rows) - on_disk,
+		"kept_other_type": len(rows) - on_disk + len(fields) - fields_on_disk,
 		# Tệp đính kèm công khai của bài (mức 2)
 		"attach_on_disk": attach_on_disk,
 		"attach_kept_other_type": len(attach) - attach_on_disk,

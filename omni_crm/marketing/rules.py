@@ -13,7 +13,7 @@ PLATFORMS = (FACEBOOK, ZALO, TIKTOK)
 UTM_SOURCE = {FACEBOOK: "facebook", ZALO: "zalo", TIKTOK: "tiktok"}
 UTM_MEDIUM = {FACEBOOK: "social", ZALO: "oa", TIKTOK: "social"}
 FORMATS = {
-	FACEBOOK: ("fb_link", "fb_photo", "fb_multi_photo"),
+	FACEBOOK: ("fb_link", "fb_photo", "fb_multi_photo", "fb_video", "fb_pdf_link"),
 	ZALO: ("zalo_article",),
 	TIKTOK: ("tiktok_video",),
 }

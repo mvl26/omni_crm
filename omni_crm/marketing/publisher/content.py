@@ -27,6 +27,8 @@ class Payload:
 	caption: str
 	tracking_url: str
 	images: list[str] = field(default_factory=list)  # URL công khai tuyệt đối, ảnh chính trước
+	video: str = ""  # URL công khai tuyệt đối của video đăng kèm (fb_video, ADR 0035)
+	document: str = ""  # URL công khai tuyệt đối của PDF đăng kèm (fb_pdf_link, ADR 0035)
 
 	@property
 	def marker(self) -> str:
@@ -39,14 +41,37 @@ class Payload:
 		return f"{caption}\n\n{self.tracking_url}" if self.tracking_url else caption
 
 
-def public_image_url(file_url: str | None) -> str:
-	"""URL tuyệt đối của ảnh trong CRM; ném PublishValidationError nếu ảnh riêng tư / không có trên đĩa / không phải File."""
+# Facebook nhận nhiều loại hơn; giữ hai loại phổ biến mà máy quay và điện thoại đều ra
+VIDEO_EXTS = (".mp4", ".mov")
+PDF_EXTS = (".pdf",)
+
+
+def public_file_url(file_url: str | None, exts: tuple[str, ...], label: str) -> str:
+	"""URL tuyệt đối của tệp đăng kèm (video, PDF) trong CRM: đúng đuôi, công khai, còn trên đĩa hoặc trên kho S3.
+	Ném PublishValidationError. Kiểm như ảnh (`public_image_url`), thêm kiểm đuôi."""
 	file_url = str(file_url or "").strip()
 	if not file_url:
-		raise PublishValidationError(_("Thiếu ảnh"))
+		raise PublishValidationError(_("Thiếu {0} đăng kèm").format(_(label)))
+	path = urlparse(file_url).path if file_url.startswith(("http://", "https://")) else file_url
+	if os.path.splitext(path)[1].lower() not in exts:
+		big = _(label)[:1].upper() + _(label)[1:]
+		raise PublishValidationError(
+			_("{0} phải là tệp {1}").format(big, ", ".join(e.lstrip(".").upper() for e in exts))
+		)
+	return public_image_url(file_url, what=label)
+
+
+def public_image_url(file_url: str | None, what: str = "ảnh") -> str:
+	"""URL tuyệt đối của ảnh trong CRM; ném PublishValidationError nếu ảnh riêng tư / không có trên đĩa / không phải File.
+	`what`: tên loại tệp trong thông báo lỗi (ảnh, video, tài liệu PDF)."""
+	file_url = str(file_url or "").strip()
+	what = _(what)
+	big = what[:1].upper() + what[1:]
+	if not file_url:
+		raise PublishValidationError(_("Thiếu {0}").format(what))
 	if file_url.startswith(("http://", "https://")):
 		if not file_url.startswith("https://"):
-			raise PublishValidationError(_("Ảnh phải dùng https"))
+			raise PublishValidationError(_("{0} phải dùng https").format(big))
 		return file_url
 	if s3_media.is_public_url(file_url):  # ADR 0033: ảnh đã chuyển sang kho S3, CRM phát lại ở /omni-media/
 		try:
@@ -55,19 +80,21 @@ def public_image_url(file_url: str | None) -> str:
 			raise PublishValidationError(str(e)) from None
 	if file_url.startswith("/private/files/"):
 		raise PublishValidationError(
-			_("Ảnh {0} là tệp riêng tư: nền tảng không tải được. Tải lại ảnh ở chế độ công khai").format(
-				os.path.basename(file_url)
+			_("{0} {1} là tệp riêng tư: nền tảng không tải được. Tải lại {2} ở chế độ công khai").format(
+				big, os.path.basename(file_url), what
 			)
 		)
 	if not file_url.startswith("/files/"):
-		raise PublishValidationError(_("Đường dẫn ảnh không hợp lệ"))
+		raise PublishValidationError(_("Đường dẫn {0} không hợp lệ").format(what))
 	row = frappe.db.get_value("File", {"file_url": file_url}, ["name", "is_private"], as_dict=True)
 	if not row or row.is_private:
-		raise PublishValidationError(_("Không tìm thấy ảnh công khai {0}").format(os.path.basename(file_url)))
+		raise PublishValidationError(
+			_("Không tìm thấy {0} công khai {1}").format(what, os.path.basename(file_url))
+		)
 	path = frappe.get_site_path("public", file_url.lstrip("/"))
 	if not os.path.exists(path):
 		raise PublishValidationError(
-			_("Tệp ảnh {0} không còn trên máy chủ").format(os.path.basename(file_url))
+			_("Tệp {0} {1} không còn trên máy chủ").format(what, os.path.basename(file_url))
 		)
 	return get_url(quote(file_url))  # tên tệp có dấu cách/tiếng Việt: mã hóa để nền tảng tải được
 
@@ -80,6 +107,12 @@ def build(target_name: str) -> Payload:
 	raw_images += [m.image for m in item.get("media_items") or [] if m.image]
 	needs_images = t.post_format in ("fb_photo", "fb_multi_photo", "zalo_article")
 	images = [public_image_url(u) for u in raw_images] if needs_images else []
+	video = public_file_url(item.get("video"), VIDEO_EXTS, "video") if t.post_format == "fb_video" else ""
+	document = (
+		public_file_url(item.get("document"), PDF_EXTS, "tài liệu PDF")
+		if t.post_format == "fb_pdf_link"
+		else ""
+	)
 	payload = Payload(
 		target=t.name,
 		platform=t.platform,
@@ -89,6 +122,8 @@ def build(target_name: str) -> Payload:
 		caption=(item.caption or "").strip(),
 		tracking_url=t.tracking_url or "",
 		images=images,
+		video=video,
+		document=document,
 	)
 	validate(payload)
 	return payload
@@ -104,6 +139,10 @@ def validate(p: Payload) -> None:
 		raise PublishValidationError(_("Bài ảnh Facebook chưa có ảnh"))
 	if p.post_format == "fb_multi_photo" and len(p.images) < 2:
 		raise PublishValidationError(_("Bài nhiều ảnh cần ít nhất 2 ảnh"))
+	if p.post_format == "fb_video" and not p.video:
+		raise PublishValidationError(_("Bài video Facebook chưa có video"))
+	if p.post_format == "fb_pdf_link" and not p.document:
+		raise PublishValidationError(_("Bài PDF Facebook chưa có tài liệu PDF"))
 	if p.post_format == "zalo_article":
 		if not p.images:
 			raise PublishValidationError(_("Bài viết Zalo OA thiếu ảnh bìa"))

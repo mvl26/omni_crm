@@ -21,6 +21,8 @@ TARGET = "Omni Content Target"
 CAMPAIGN = "Omni Campaign"
 PLACEHOLDER = "[cần bổ sung]"
 NEED_IMAGE = {"fb_photo": 1, "fb_multi_photo": 2, "zalo_article": 1}
+# Định dạng cần tệp đăng kèm (ADR 0035): ô của bài phải có tệp trước khi duyệt
+NEED_FILE = {"fb_video": ("video", "video"), "fb_pdf_link": ("document", "tài liệu PDF")}
 
 
 def _check_media(doc, item: str) -> None:
@@ -36,6 +38,13 @@ def _check_media(doc, item: str) -> None:
 			frappe.throw(
 				_("Định dạng {0} trên {1} cần ít nhất {2} ảnh: thêm ảnh trước khi duyệt").format(
 					t.post_format, t.platform, need
+				)
+			)
+		field, label = NEED_FILE.get(t.post_format, (None, None))
+		if field and not doc.get(field):
+			frappe.throw(
+				_("Định dạng {0} trên {1} cần {2} đăng kèm: thêm tệp trước khi duyệt").format(
+					t.post_format, t.platform, _(label)
 				)
 			)
 

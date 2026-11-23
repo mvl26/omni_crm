@@ -102,7 +102,7 @@ def _files_by_key() -> dict[str, list]:
 
 
 def _usage(urls: list[str]) -> dict[str, int]:
-	"""Số ô ảnh (ảnh bìa, ảnh thêm) của bài đang dùng từng địa chỉ."""
+	"""Số ô (ảnh bìa, ảnh thêm, video và tài liệu đăng kèm) của bài đang dùng từng địa chỉ."""
 	count: dict[str, int] = {}
 	if not urls:
 		return count
@@ -112,6 +112,9 @@ def _usage(urls: list[str]) -> dict[str, int]:
 		s3_media.MEDIA, filters={"image": ["in", urls], "parenttype": s3_media.ITEM}, pluck="image"
 	):
 		count[url] = count.get(url, 0) + 1
+	for fieldname in s3_media.FILE_FIELDS:  # ô video / tài liệu đăng kèm (ADR 0035)
+		for url in frappe.get_all(s3_media.ITEM, filters={fieldname: ["in", urls]}, pluck=fieldname):
+			count[url] = count.get(url, 0) + 1
 	return count
 
 
