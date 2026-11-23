@@ -186,7 +186,8 @@ def on_text(ctx: RouteContext) -> None:
 		return
 	if code == UNCLEAR and _greeting_only(text):  # khách cũ gọi "Alo em ơi": chào lại, không nói "chưa rõ ý"
 		state.reset_reask(ctx.identity)
-		if not _resend_current(ctx, NODE_HELLO_AGAIN):
+		# câu đang đứng đã quá cũ (khách quay lại sau nhiều giờ / nhiều ngày): chào và đưa menu, không hỏi tiếp câu cũ
+		if _stale(ctx) or not _resend_current(ctx, NODE_HELLO_AGAIN):
 			ctx.state[engine.LEAD_IN_KEY] = _plain(ctx, NODE_HELLO_AGAIN)
 			if not engine.run_node(ctx, MENU_CODE):  # đã gửi lặp quá số lần cho phép: đi đường hỏi lại / chuyển người
 				ctx.state.pop(engine.LEAD_IN_KEY, None)

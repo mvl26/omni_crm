@@ -211,8 +211,12 @@ def _batch_rows(batch_id: str) -> list:
 def build_context(batch_id: str) -> RouteContext | None:
 	"""RouteContext của lượt, hoặc None nếu tin cuối không phải tin khách/sự kiện quan tâm."""
 	rows = _batch_rows(batch_id)
-	last = rows[-1] if rows else None
-	if not last or not last.identity or last.event_type not in EVENTS:
+	# Tin cuối của KHÁCH trong lượt. Lượt có thể lẫn "echo" của tin OA vừa gửi (vd câu báo chờ gửi trong lúc đợi gom
+	# tin): echo không phải lời khách và không được làm bot bỏ lượt (lỗi 23/11). Nhân viên trả lời thật thì
+	# `_sale_replied` chặn ở bước sau.
+	events = [r for r in rows if r.event_type in EVENTS]
+	last = events[-1] if events else None
+	if not last or not last.identity:
 		return None
 	lead = last.lead or frappe.db.get_value(IDENTITY, last.identity, "lead")
 	lead = lead_bridge.follow_merged(lead) or lead  # Lead đã gộp: làm việc trên Lead chính

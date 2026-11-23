@@ -112,3 +112,42 @@ class TestSuperseded(FlowCase):
 		router.check_superseded(ctx)  # không ném lỗi
 		frappe.db.delete("Omni Inbound Message", {"identity": self.ident1, "status": "New"})
 		frappe.db.commit()
+
+
+class TestEchoInsideTheBatch(FlowCase):
+	"""Lỗi 23/11: câu báo chờ gửi trong lúc đợi gom tin -> echo của nó rơi vào CÙNG lượt với tin khách và đứng cuối lượt,
+	bot kịch bản bỏ cả lượt (khách chỉ thấy "đang suy nghĩ" rồi im lặng)."""
+
+	def _echo_into(self, batch_id, text):
+		frappe.get_doc(
+			{
+				"doctype": "Omni Inbound Message", "dedupe_key": frappe.generate_hash(length=12), "channel": self.channel.name,
+				"channel_type": self.channel.channel_type, "event_type": "oa_echo", "identity": self.ident1, "lead": self.lead1,
+				"identity_key": frappe.db.get_value("Omni Identity", self.ident1, "identity_key"),
+				"external_message_id": "echo-of-notice", "batch_id": batch_id,
+				"received_at": frappe.utils.add_to_date(frappe.utils.now_datetime(), seconds=5), "text": text, "status": "Done",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+
+	def test_trailing_echo_does_not_hide_the_customer_message(self):
+		from omni_crm.script import send
+
+		self.greeted()
+		text = "Anh muốn đặt lịch demo phần mềm"
+		self.codes[text] = ("MENU_PHANMEM", 0.9)
+		real = router.build_context
+
+		def with_echo(batch_id):
+			if not frappe.db.exists("Omni Inbound Message", {"batch_id": batch_id, "event_type": "oa_echo"}):
+				self._echo_into(batch_id, "Miyano đang suy nghĩ để trả lời, anh/chị vui lòng đợi ạ.")
+			return real(batch_id)
+
+		with mock.patch.object(router, "build_context", side_effect=with_echo), mock.patch.object(send, "staff_replied_after", return_value=False):
+			self.turn(text)
+		self.assertTrue(self.sent(), "bot im lặng dù khách vừa nhắn")
+		self.assertEqual(self.sent()[-1], "DEMO_HINHTHUC")  # nêu dịch vụ + muốn demo -> vào thẳng đặt demo
+
+	def test_batch_with_only_an_echo_is_not_a_customer_turn(self):
+		self._echo_into("only-echo-batch", "Chào anh")
+		self.assertIsNone(router.build_context("only-echo-batch"))

@@ -504,3 +504,16 @@ class TestLive2011Afternoon(FlowCase):
 		self.turn("Alo miyano")
 		self.assertEqual(self.sent()[-1], "MENU_CHINH")
 		self.assertFalse(self.sstate().get("field"))
+
+	def test_greeting_days_later_at_a_buttons_question_gets_the_menu(self):
+		# 23/11: "Helo" sau 3 ngày -> bot chào rồi hỏi tiếp "cần hàng vào khoảng thời gian nào" của hôm 20/11
+		import frappe
+		from frappe.utils import add_to_date, now_datetime
+
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")  # đang đứng ở câu hỏi có nút, không có luồng thu thông tin
+		frappe.db.set_value("Omni Identity", self.ident1, "script_last_bot_at", add_to_date(now_datetime(), days=-3), update_modified=False)
+		frappe.db.commit()
+		self.turn("Helo")
+		self.assertEqual(self.sent()[-1], "MENU_CHINH")
