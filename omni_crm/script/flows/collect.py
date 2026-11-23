@@ -268,12 +268,18 @@ TALK = re.compile(
 	r"|khi nào|bao giờ|bao lâu|thế nào|như nào|\?",
 	re.I,
 )
-TIME_VALUE = re.compile(r"\d|tuần|tháng|ngày|thứ|mai|nay|gấp|quý|cuối|đầu|sớm|gói thầu|càng", re.I)
+# mốc thời gian: ngày/tháng, "3 tuần", "thứ 5"… Một con số trơ trọi ("300 đôi") KHÔNG phải mốc thời gian.
+TIME_VALUE = re.compile(
+	r"\d{1,2}\s*[/-]\s*\d{1,2}|\d+\s*(?:ngày|tuần|tháng|năm|giờ|h\b)|(?:ngày|thứ|tháng|tuần|quý|mùng|mồng)\s*\d+"
+	r"|tuần|tháng|ngày|thứ|mai|nay|gấp|quý|cuối|đầu|sớm|gói thầu|càng",
+	re.I,
+)
 NUMBER_WORD = re.compile(r"(?<![\wÀ-ỹ])(?:một|hai|ba|bốn|năm|sáu|bảy|tám|chín|mười|chục|trăm|nghìn|ngàn|vài|dăm)(?![\wÀ-ỹ])", re.I)
 SKIP_VALUE = re.compile(r"chưa (?:biết|rõ|chắc|có|tính)|không (?:rõ|biết|nhớ)|tính sau|để sau|tuỳ|tùy", re.I)
 LOW_ANSWER_CONF = 0.7  # luật 3: AI coi là câu trả lời nhưng chưa chắc thì không ghi
 MAX_NOT_RECORDED = 2  # hỏi lại tối đa 2 lần, lần thứ ba mời gặp nhân viên
 NODE_NOT_RECORDED = "CHUA_GHI_DUOC"
+NODE_HAVE = "DANG_GHI_NHAN"  # "Miyano đang ghi nhận: …" (đọc lại điều đã thu)
 FREE_FIELDS = ("name_org",)  # tên – đơn vị: chữ tự do, không kiểm kiểu
 
 
@@ -320,6 +326,8 @@ def slot_value(ctx: RouteContext, field: str, text: str) -> str | None:
 		return text
 	if len(text.split()) <= 5 and (DECLINE.search(text) or SKIP_VALUE.search(text)):
 		return text  # khách chủ động bỏ qua câu này ("bỏ qua", "chưa biết", "để sau"): ghi đúng như vậy cho nhân viên
+	if "intents" in detail and detail.get("relation") != "TRA_LOI":
+		return None  # bước hiểu mới đã đọc lượt này và KHÔNG coi là câu trả lời cho câu đang hỏi
 	talk = bool(TALK.search(text))
 	unsure = detail.get("relation") == "TRA_LOI" and float(detail.get("confidence") or 0) < LOW_ANSWER_CONF
 	if field in ("items", "quantity") and SEE_FILE.search(text) and not talk:
@@ -347,9 +355,12 @@ def _not_recorded(ctx: RouteContext, st: dict, node: dict) -> bool:
 	tries = cint(st.get("not_recorded")) + 1
 	if tries <= MAX_NOT_RECORDED:
 		lead_in = store.render(store.get_node(NODE_NOT_RECORDED), {**engine.variables(ctx), "identity": ctx.identity})
-		sent = send.send_node(
-			ctx.identity, node.get("code") or "", engine.variables(ctx), prefix=lead_in[0] if lead_in else ""
-		)
+		prefix = lead_in[0] if lead_in else ""
+		have = ack_text(list(store.as_dict(st.get("answers")).items()))
+		if prefix and have:  # đọc lại điều đã ghi được để khách thấy bot vẫn giữ thông tin
+			noted = store.render(store.get_node(NODE_HAVE), {**engine.variables(ctx), "identity": ctx.identity, "thong_tin": have})
+			prefix = f"{prefix} {noted[0]}" if noted else prefix
+		sent = send.send_node(ctx.identity, node.get("code") or "", engine.variables(ctx), prefix=prefix)
 		if sent:
 			router._mark(ctx.batch_id)
 			_restore_flow(ctx, st, wrong=cint(st.get("wrong")))
@@ -482,6 +493,9 @@ def on_text(ctx: RouteContext) -> bool:
 			return True
 		if field == FILE_FIELD and not ctx.attachments:  # chưa có tệp nào: không báo "đã nhận danh mục"
 			_clear_flow(ctx)
+			said = (ctx.state.get("_classify_detail") or {}).get("slots") or {}
+			if said:  # khách gõ luôn mặt hàng / số lượng: mang theo, không hỏi lại (luật 2)
+				ctx.state[PREFILL_KEY] = {k: v for k, v in said.items() if k in PREFILL_FIELDS}
 			return bool(engine.run_button(ctx, NODE_TYPE_ITEMS))
 		value = text or _("(khách gửi tệp)")
 		if ctx.attachments:
@@ -501,6 +515,8 @@ def on_text(ctx: RouteContext) -> bool:
 			engine.run_node(ctx, node.get("code") or "")
 			_restore_flow(ctx, st, wrong=1)
 			return True
+		if field == DELIVERY_FIELD and text and ((ctx.state.get("_classify_detail") or {}).get("questions") or DELIVERY_ASK.search(text.lower())):
+			ctx.state[NOTE_KEY] = NODE_DELIVERY_NOTE
 		if text and not ctx.attachments:
 			value = slot_value(ctx, field, text)
 			if value is None:  # không phải giá trị của ô này (câu nói, câu hỏi, AI chưa chắc): KHÔNG ghi, hỏi lại

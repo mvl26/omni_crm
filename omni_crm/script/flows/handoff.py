@@ -448,6 +448,8 @@ def on_call_me(ctx: RouteContext) -> None:
 	Khách vừa nêu số ngay trong cuộc trò chuyện này ("gọi cho anh số 09…") thì dùng luôn số đó, không xin lại."""
 	answers = state.get(ctx.identity)["script_state"].get("answers") or {}
 	known = validate.validate_phone(str(answers.get("phone") or "")) if isinstance(answers, dict) else None
+	if not known and ctx.lead:  # luật 11: số đã lưu trên Lead thì dùng luôn, câu xác nhận nêu lại số để khách sửa nếu sai
+		known = validate.validate_phone(str(frappe.db.get_value(LEAD, ctx.lead, "mobile_no") or ""))
 	if known:
 		_phone_received(ctx, known)
 		return

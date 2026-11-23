@@ -218,6 +218,8 @@ _STOP_RE = _compile(STOP_PATTERNS)
 _ERASE_RE = _compile(ERASE_PATTERNS)
 _BOT_RE = _compile(BOT_PATTERNS)
 _HUMAN_RE = _compile(HUMAN_PATTERNS)
+# phủ định: "anh không muốn gặp nhân viên", "khỏi cần gọi" — KHÔNG phải yêu cầu gặp người
+_NO_HUMAN_RE = re.compile(r"\b(?:khong|khoi|dung|thoi)\s+(?:can |muon |phai |can phai )?(?:gap|goi|noi chuyen|chuyen|ket noi)\b")
 _COMPLAINT_RE = _compile(COMPLAINT_PATTERNS)
 _NEED_HUMAN_RE = _compile(NEED_HUMAN_PATTERNS)
 _QUOTE_RE = re.compile("^(?:" + "|".join(f"(?:{p})" for p in QUOTE_EXACT) + ")$")
@@ -287,7 +289,7 @@ def _rule_for_clause(clause: str) -> str | None:
 	if _BOT_RE.search(clause):
 		return "BOT_HOI"
 	topics = guards.sensitive_topics(_NOT_MEDICAL.sub(" ", clause))
-	if _HUMAN_RE.search(clause) or "gap_nguoi" in topics:
+	if (_HUMAN_RE.search(clause) or "gap_nguoi" in topics) and not _NO_HUMAN_RE.search(clause):
 		return "GAP_NHANVIEN"
 	if _COMPLAINT_RE.search(clause) or "khieu_nai" in topics:
 		return "PHAN_NAN"

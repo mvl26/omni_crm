@@ -1,0 +1,1029 @@
+{
+ "_meta": {
+  "model": "claude-haiku-5-5",
+  "calls": 43,
+  "empty": 0,
+  "seconds": 95,
+  "in_tok": 56305,
+  "out_tok": 17153,
+  "cost": 0.0182,
+  "avg_ms": 2199
+ },
+ "KB-01": {
+  "dien_giai": "Khách hỏi Miyano giao hàng sớm nhất vào khi nào, chưa trả lời câu hỏi về thời gian cần hàng.",
+  "quan_he": "HOI_NGUOC",
+  "cac_y": [
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "dich_vu": "VATTU",
+    "doi_tuong": "KHONG",
+    "do_tin_cay": 0.95,
+    "noi_dung": "Miyano giao sớm nhất khi nào"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Miyano giao sớm nhất khi nào"
+  ]
+ },
+ "KB-02": {
+  "dien_giai": "Khách muốn nhận hàng ống thở vào thứ Ba tuần sau (24/11/2026).",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "doi_tuong": "BAO_GIA",
+    "dich_vu": "VATTU",
+    "do_tin_cay": 0.9,
+    "noi_dung": "Khách muốn nhận 1000 cái ống thở vào thứ Ba tuần sau"
+   },
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "dich_vu": "VATTU",
+    "do_tin_cay": 0.5,
+    "noi_dung": "Hỏi thứ Ba tuần sau có được không"
+   }
+  ],
+  "slots": {
+   "thoi_gian_can_hang": {
+    "lua_chon": "TRONG_1_TUAN",
+    "ngay": "2026-11-24",
+    "nguyen_van": "Thứ 3 tuần sau"
+   }
+  },
+  "lua_chon": 0,
+  "cau_hoi_kb": [
+   "Miyano có giao ống thở vào thứ Ba tuần sau (24/11/2026) được không"
+  ],
+  "chua_ro": [
+   {
+    "diem": "thời gian cần hàng: thứ Ba tuần sau (24/11) có nằm trong nhóm 'trong 1 tuần' hay cần chọn lại",
+    "cach_hieu": [
+     "Trong 1 tuần",
+     "Trong 1 tháng"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ]
+ },
+ "KB-03": {
+  "dien_giai": "Khách muốn nhận găng tay (300 đôi) vào ngày mai, thứ Sáu 20/11/2026.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.9,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Khách trả lời thời gian cần hàng là ngày mai"
+   }
+  ],
+  "slots": {
+   "thoi_gian_can_hang": {
+    "lua_chon": "TRONG_1_TUAN",
+    "ngay": "2026-11-20",
+    "nguyen_van": "ngày mai"
+   }
+  },
+  "lua_chon": 1,
+  "ly_do": "Khách trả lời \"ngày mai\" cho câu hỏi thời gian cần hàng; ngày mai (20/11) nằm trong 1 tuần nên khớp lựa chọn 1."
+ },
+ "KB-04": {
+  "dien_giai": "Khách muốn báo giá 30 chiếc găng tay phẫu thuật.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Xin báo giá 30 chiếc găng tay phẫu thuật"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay phẫu thuật",
+     "so_luong": 30,
+     "don_vi": "chiếc"
+    }
+   ]
+  },
+  "lua_chon": 0,
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-05": {
+  "dien_giai": "Khách muốn đặt lịch demo, trong khi đang dở yêu cầu báo giá găng tay nitrile và bot đang hỏi số lượng.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "do_tin_cay": 0.93,
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "KHONG_RO",
+    "noi_dung": "Anh muốn đặt lịch demo"
+   }
+  ],
+  "chua_ro": [
+   {
+    "diem": "demo dịch vụ nào",
+    "cach_hieu": [
+     "Vật tư y tế (VATTU)",
+     "SupplyCore",
+     "SPD"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "da_co_san": [
+   "mặt hàng găng tay nitrile đã có trong yêu cầu báo giá đang dở"
+  ],
+  "cam_xuc": "BINH_THUONG",
+  "lua_chon": 0
+ },
+ "KB-06": {
+  "dien_giai": "Khách muốn đặt lịch demo chứ không phải mua hàng hay gửi danh mục báo giá.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "do_tin_cay": 0.85,
+    "dich_vu": "KHONG_RO",
+    "doi_tuong": "LICH_DEMO",
+    "noi_dung": "Khách muốn demo, không mua hàng"
+   }
+  ],
+  "chua_ro": [
+   {
+    "diem": "demo dịch vụ nào",
+    "cach_hieu": [
+     "vật tư y tế",
+     "SupplyCore",
+     "SPD"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-07": {
+  "dien_giai": "Khách muốn đặt lịch demo phần mềm SPD, chuyển khỏi luồng báo giá vật tư đang dở.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.95,
+    "noi_dung": "Anh muốn demo spd"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-08": {
+  "dien_giai": "Khách muốn đặt 30 chiếc giường bệnh, thuộc dịch vụ cung ứng vật tư y tế.",
+  "quan_he": "KHONG_RO",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.85,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Đặt 30 chiếc giường bệnh"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "giường bệnh",
+     "so_luong": 30,
+     "don_vi": "chiếc"
+    }
+   ]
+  },
+  "lua_chon": 0
+ },
+ "KB-09": {
+  "dien_giai": "Khách nhắc lại việc đã nói trước đó là đặt 30 chiếc giường bệnh, và bot chưa trả lời yêu cầu này nên khách đang giục.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "NHAC_LAI",
+    "do_tin_cay": 0.9,
+    "dich_vu": "VATTU",
+    "doi_tuong": "KHONG",
+    "noi_dung": "Anh vừa nói bên trên thây"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "giường bệnh",
+     "so_luong": 30,
+     "don_vi": "chiếc"
+    }
+   ]
+  },
+  "da_co_san": [
+   "mặt hàng giường bệnh và số lượng 30 chiếc đã có ở lượt trước"
+  ],
+  "cam_xuc": "SOT_RUOT",
+  "lua_chon": 0,
+  "ly_do": "Khách nhắc lại thông tin đã gửi, không chọn khoảng thời gian cần hàng."
+ },
+ "KB-10": {
+  "dien_giai": "Khách bận thứ Sáu 20/11, muốn dời buổi demo SPD online đã đặt (8:00 thứ Sáu) sang thứ Bảy.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DOI_LICH",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.9
+   }
+  ],
+  "slots": {
+   "hinh_thuc_demo": "ONLINE",
+   "thoi_gian_demo": {
+    "nguyen_van": "thứ 7",
+    "thu": 7,
+    "ngay": "2026-11-21",
+    "tuan": "NAY"
+   }
+  },
+  "chua_ro": [
+   {
+    "diem": "giờ demo mới trong thứ Bảy",
+    "cach_hieu": [
+     "giữ 8:00",
+     "giờ khác"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-11": {
+  "dien_giai": "Khách muốn dời lịch demo SPD đang có (thứ Sáu 20/11, 8:00, online) sang thứ Bảy.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DOI_LICH",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.9
+   }
+  ],
+  "slots": {
+   "thoi_gian_demo": {
+    "nguyen_van": "thứ 7",
+    "thu": 7,
+    "ngay": "2026-11-21",
+    "tuan": "NAY"
+   }
+  },
+  "chua_ro": [
+   {
+    "diem": "giờ demo mới trong thứ Bảy",
+    "cach_hieu": [
+     "giữ 8:00",
+     "giờ khác"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ]
+ },
+ "KB-12": {
+  "dien_giai": "Khách muốn xem demo SPD online vào 15:00 thứ Năm tuần sau (thứ Năm 26/11/2026).",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.8
+   }
+  ],
+  "cam_xuc": "BINH_THUONG",
+  "lua_chon": 0,
+  "slots": {
+   "hinh_thuc_demo": "ONLINE",
+   "thoi_gian_demo": {
+    "nguyen_van": "3 giờ chiều ngày thứ 5 tuần sau",
+    "ngay": "2026-11-26",
+    "gio": "15:00",
+    "thu": 5,
+    "tuan": "SAU"
+   }
+  },
+  "ly_do": "Khách đưa giờ cụ thể thay vì chọn khung bot đề xuất; \"thứ 5 tuần sau\" là 26/11 lúc 15:00, không khớp lựa chọn nào trong danh sách."
+ },
+ "KB-14": {
+  "dien_giai": "Khách muốn đặt lịch demo sản phẩm SPD.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.6,
+    "noi_dung": "Anh muốn xin lịch demo sản phẩm SPD"
+   }
+  ],
+  "da_co_san": [
+   "Lịch demo SPD thứ Sáu 20/11/2026 08:00, Online qua Teams, 5 người đã được xác nhận ở hội thoại trước"
+  ],
+  "chua_ro": [
+   {
+    "diem": "Khách muốn đặt thêm một lịch demo mới hay muốn xin lại lịch đã có",
+    "cach_hieu": [
+     "Đặt lịch demo SPD mới",
+     "Đã có lịch demo rồi, khách chỉ muốn xác nhận lại"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-15": {
+  "dien_giai": "Khách muốn biết Miyano cung cấp những mặt hàng gì.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "doi_tuong": "KHONG",
+    "dich_vu": "KHONG_RO",
+    "do_tin_cay": 0.9,
+    "noi_dung": "Hỏi công ty cung cấp mặt hàng gì"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Miyano cung cấp những mặt hàng gì"
+  ]
+ },
+ "KB-16": {
+  "dien_giai": "Khách muốn biết mã số thuế của công ty Miyano Việt Nam.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "do_tin_cay": 0.95,
+    "doi_tuong": "KHONG",
+    "dich_vu": "KHONG_RO",
+    "noi_dung": "Mã số thuế của công ty"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Mã số thuế của Miyano Việt Nam"
+  ]
+ },
+ "KB-17": {
+  "dien_giai": "Khách hỏi Miyano đang ở đâu (địa chỉ công ty).",
+  "quan_he": "XA_GIAO",
+  "cac_y": [
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "do_tin_cay": 0.8,
+    "doi_tuong": "KHONG",
+    "dich_vu": "KHONG_RO",
+    "noi_dung": "Hỏi địa chỉ công ty"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Địa chỉ Miyano Việt Nam ở đâu"
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-18": {
+  "dien_giai": "Khách hỏi Miyano có bán bơm kim tiêm không.",
+  "quan_he": "HOI_NGUOC",
+  "cac_y": [
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "doi_tuong": "KHONG",
+    "dich_vu": "VATTU",
+    "do_tin_cay": 0.93,
+    "noi_dung": "Hỏi Miyano có bơm kim tiêm không"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Miyano có bơm kim tiêm không"
+  ],
+  "lua_chon": 0
+ },
+ "KB-19": {
+  "dien_giai": "Khách xác nhận đã nhận thông tin báo giá, không có yêu cầu mới.",
+  "quan_he": "XA_GIAO",
+  "cac_y": [
+   {
+    "y_dinh": "KHONG_LIENQUAN",
+    "do_tin_cay": 0.5,
+    "noi_dung": "Ok em nhé - lời xác nhận, không có yêu cầu mới"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-20": {
+  "dien_giai": "Khách gọi alo để mở đầu cuộc trò chuyện, chưa có yêu cầu cụ thể.",
+  "quan_he": "XA_GIAO",
+  "cac_y": [
+   {
+    "y_dinh": "CHUA_RO",
+    "do_tin_cay": 0.6,
+    "doi_tuong": "KHONG",
+    "dich_vu": "KHONG_RO",
+    "noi_dung": "Alo em ơi"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-21": {
+  "dien_giai": "Khách không còn muốn gặp nhân viên nữa, rút yêu cầu gặp nhân viên trước đó.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "KHONG_GAP_NGUOI",
+    "do_tin_cay": 0.93,
+    "dich_vu": "KHONG_RO",
+    "doi_tuong": "YEU_CAU_GAP_NGUOI",
+    "noi_dung": "Anh không muốn gặp nhân viên"
+   }
+  ],
+  "lua_chon": 0,
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-22": {
+  "dien_giai": "Khách muốn mua hàng, chưa nói rõ mặt hàng hay dịch vụ nào.",
+  "quan_he": "KHONG_RO",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.8,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Anh muốn mua hàng"
+   }
+  ],
+  "lua_chon": 0,
+  "chua_ro": [
+   {
+    "diem": "dịch vụ muốn mua",
+    "cach_hieu": [
+     "Cung ứng vật tư",
+     "Phần mềm hoặc dịch vụ khác"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-24": {
+  "dien_giai": "Khách gọi \"alo\" để hỏi bot có đang trả lời không, trong lúc bot đang chờ số điện thoại để nhân viên gọi lại.",
+  "quan_he": "XA_GIAO",
+  "cac_y": [
+   {
+    "y_dinh": "CHUA_RO",
+    "do_tin_cay": 0.5,
+    "noi_dung": "alo em ơi"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-25": {
+  "dien_giai": "Khách cung cấp số điện thoại để nhân viên gọi lại về yêu cầu tư vấn vật tư.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "CAN_NGUOI",
+    "do_tin_cay": 0.9,
+    "dich_vu": "VATTU",
+    "doi_tuong": "YEU_CAU_GAP_NGUOI",
+    "noi_dung": "Khách muốn nhân viên gọi lại qua số điện thoại vừa cung cấp"
+   }
+  ],
+  "slots": {
+   "sdt": "[sdt]"
+  },
+  "lua_chon": 2,
+  "ly_do": "Khách trả lời đúng câu hỏi xin số điện thoại sau khi chọn gọi điện."
+ },
+ "KB-26": {
+  "dien_giai": "Khách yêu cầu không nhận tin nhắn nữa.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "HUY_DANGKY",
+    "do_tin_cay": 0.95,
+    "doi_tuong": "KHONG",
+    "dich_vu": "KHONG_RO",
+    "noi_dung": "đừng nhắn nữa"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-27": {
+  "dien_giai": "Khách bận thứ Sáu 20/11, muốn dời buổi demo SPD online đã đặt sang thứ Bảy 21/11.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DOI_LICH",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.9,
+    "noi_dung": "Đổi lịch demo SPD từ thứ Sáu 20/11 sang thứ Bảy"
+   }
+  ],
+  "slots": {
+   "thoi_gian_demo": {
+    "nguyen_van": "thứ 7",
+    "thu": 7,
+    "ngay": "2026-11-21",
+    "tuan": "NAY"
+   },
+   "hinh_thuc_demo": "ONLINE"
+  },
+  "chua_ro": [
+   {
+    "diem": "giờ demo mới trong thứ Bảy",
+    "cach_hieu": [
+     "giữ 8:00 như lịch cũ",
+     "giờ khác trong thứ Bảy"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-28": {
+  "dien_giai": "Khách muốn đặt lịch demo SPD theo hình thức online.",
+  "quan_he": "TRA_LOI",
+  "lua_chon": 1,
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "dich_vu": "SPD",
+    "doi_tuong": "LICH_DEMO",
+    "do_tin_cay": 0.93,
+    "noi_dung": "Demo"
+   }
+  ],
+  "slots": {
+   "hinh_thuc_demo": "ONLINE"
+  },
+  "ly_do": "Khách chọn đặt lịch demo và trả lời hình thức online; chưa có thời gian demo."
+ },
+ "KB-29": {
+  "dien_giai": "Khách giục bot trả lời câu hỏi chưa được trả lời về việc công ty cung cấp mặt hàng gì.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "NHAC_LAI",
+    "do_tin_cay": 0.9,
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Sao không trả lời câu hỏi công ty cung cấp mặt hàng gì"
+   }
+  ],
+  "cam_xuc": "SOT_RUOT",
+  "cau_hoi_kb": [
+   "Miyano Việt Nam cung cấp mặt hàng gì"
+  ],
+  "lua_chon": 0,
+  "chua_ro": [
+   {
+    "diem": "khách có muốn chọn dịch vụ để được kết nối chuyên viên không",
+    "cach_hieu": [
+     "chọn một trong các dịch vụ menu",
+     "chỉ giục câu hỏi cũ"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ]
+ },
+ "KB-30": {
+  "dien_giai": "Khách không hiểu câu hỏi bot về thời gian cần hàng và đang chờ được giải thích rõ hơn.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "NHAC_LAI",
+    "do_tin_cay": 0.8,
+    "dich_vu": "VATTU",
+    "doi_tuong": "KHONG",
+    "noi_dung": "Khách không hiểu câu hỏi thời gian cần hàng bot vừa hỏi lại"
+   }
+  ],
+  "cam_xuc": "SOT_RUOT",
+  "chua_ro": [
+   {
+    "diem": "Khách không hiểu lựa chọn thời gian cần hàng hay không hiểu câu hỏi nói về điều gì",
+    "cach_hieu": [
+     "Cần giải thích các lựa chọn thời gian",
+     "Muốn hỏi lại chi tiết về việc đã ghi nhận"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "giường bệnh",
+     "so_luong": 30,
+     "don_vi": "chiếc"
+    }
+   ]
+  },
+  "ly_do": "Khách nói không hiểu, đang ở bước hỏi thời gian cần hàng, chưa chọn lựa chọn nào."
+ },
+ "KB-31": {
+  "dien_giai": "Khách muốn đổi số lượng găng tay phẫu thuật từ 30 chiếc thành 300 đôi.",
+  "quan_he": "TRA_LOI",
+  "lua_chon": 0,
+  "cac_y": [
+   {
+    "y_dinh": "SUA_THONG_TIN",
+    "do_tin_cay": 0.85,
+    "dich_vu": "VATTU",
+    "doi_tuong": "KHONG",
+    "noi_dung": "Sửa số lượng găng tay phẫu thuật thành 300 đôi"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay",
+     "so_luong": 300,
+     "don_vi": "đôi",
+     "quy_cach": "phẫu thuật"
+    }
+   ]
+  },
+  "mau_thuan": [
+   "Trước đó khách nói 30 chiếc, nay nói 300 đôi"
+  ],
+  "chua_ro": [
+   {
+    "diem": "300 đôi có thay thế cho 30 chiếc hay là thêm số lượng khác",
+    "cach_hieu": [
+     "sửa số lượng thành 300 đôi",
+     "đặt thêm 300 đôi ngoài 30 chiếc"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ]
+ },
+ "KB-32": {
+  "dien_giai": "Khách đồng ý để Miyano đề xuất hãng khác tương đương khi không có đúng hãng yêu cầu cho đơn găng tay nitrile 100 hộp.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "doi_tuong": "BAO_GIA",
+    "dich_vu": "VATTU",
+    "do_tin_cay": 0.9,
+    "noi_dung": "Đồng ý cho đề xuất hãng thay thế tương đương"
+   }
+  ],
+  "lua_chon": 1,
+  "slots": {
+   "hang_thay_the": "DUOC"
+  },
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-33": {
+  "dien_giai": "Khách muốn đặt găng tay nitrile hãng Toshiba thay cho câu hỏi về việc có thay thế hãng khác không.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.9,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Khách bổ sung hãng Toshiba cho găng tay nitrile trong yêu cầu báo giá"
+   }
+  ],
+  "lua_chon": 0,
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "hang": "toóhiba",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    }
+   ]
+  },
+  "chua_ro": [
+   {
+    "diem": "Khách chỉ ghi hãng Toshiba, chưa trả lời có chấp nhận hãng khác thay thế không",
+    "cach_hieu": [
+     "Chỉ đúng hãng Toshiba",
+     "Chấp nhận hãng khác tương đương"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-34": {
+  "dien_giai": "Khách yêu cầu găng tay nitrile phải đúng hãng Toshiba, không chấp nhận hãng khác thay thế.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.93,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Khách chọn chỉ đúng hãng Toshiba cho găng tay nitrile"
+   }
+  ],
+  "lua_chon": 2,
+  "slots": {
+   "hang_thay_the": "CHI_DUNG_HANG",
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "so_luong": 100,
+     "don_vi": "hộp",
+     "hang": "Toshiba"
+    }
+   ]
+  }
+ },
+ "KB-35": {
+  "dien_giai": "Khách muốn đổi lịch demo SPD đang có (thứ Sáu 20/11, 8:00) sang thứ Bảy.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "DOI_LICH",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.55
+   }
+  ],
+  "chua_ro": [
+   {
+    "diem": "đổi việc nào: lịch demo hay ngày cần hàng vật tư (đang chờ thời gian cần hàng)",
+    "cach_hieu": [
+     "đổi lịch demo SPD sang thứ Bảy",
+     "trả lời thời gian cần hàng là thứ Bảy"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   },
+   {
+    "diem": "giờ demo mới",
+    "cach_hieu": [
+     "giữ 8:00",
+     "giờ khác"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ],
+  "slots": {
+   "thoi_gian_demo": {
+    "nguyen_van": "thứ 7",
+    "thu": 7,
+    "ngay": "2026-11-21",
+    "tuan": "NAY"
+   }
+  },
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-36": {
+  "dien_giai": "Khách muốn báo giá 500 hộp khẩu trang, cần hàng trong tuần này, và hỏi địa chỉ bên Miyano ở đâu.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "doi_tuong": "BAO_GIA",
+    "dich_vu": "VATTU",
+    "noi_dung": "bg giup a 500 hop khau trang"
+   },
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "do_tin_cay": 0.9,
+    "doi_tuong": "KHONG",
+    "dich_vu": "VATTU",
+    "noi_dung": "ma ben e o dau (địa chỉ)"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "khau trang",
+     "so_luong": 500,
+     "don_vi": "hop"
+    }
+   ],
+   "thoi_gian_can_hang": {
+    "lua_chon": "TRONG_1_TUAN",
+    "nguyen_van": "trong tuan nay"
+   }
+  },
+  "cau_hoi_kb": [
+   "Có giao kịp trong tuần này không",
+   "Địa chỉ Miyano ở đâu"
+  ]
+ },
+ "KB-37": {
+  "dien_giai": "Khách muốn nhận tài liệu phần mềm SPD và báo giá 300 đôi găng tay.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "TAILIEU",
+    "do_tin_cay": 0.95,
+    "dich_vu": "SPD",
+    "doi_tuong": "KHONG"
+   },
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.93,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay",
+     "so_luong": 300,
+     "don_vi": "đôi"
+    }
+   ]
+  }
+ },
+ "KB-38": {
+  "dien_giai": "Khách hỏi phần mềm SPD có kết nối được với hệ thống HIS của bệnh viện không.",
+  "quan_he": "HOI_NGUOC",
+  "cac_y": [
+   {
+    "y_dinh": "HOI_THONG_TIN",
+    "dich_vu": "SPD",
+    "doi_tuong": "KHONG",
+    "do_tin_cay": 0.93,
+    "noi_dung": "Hỏi SPD có kết nối HIS của bệnh viện không"
+   }
+  ],
+  "cau_hoi_kb": [
+   "SPD có kết nối được với hệ thống HIS của bệnh viện không"
+  ],
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-39": {
+  "dien_giai": "Khách không chọn khung giờ cụ thể mà đồng ý với bất kỳ khung giờ nào bot đề xuất cho buổi demo SPD online.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "do_tin_cay": 0.8,
+    "dich_vu": "SUPPLYCORE",
+    "doi_tuong": "LICH_DEMO",
+    "noi_dung": "Chọn khung giờ demo (không ưu tiên)"
+   }
+  ],
+  "lua_chon": 1,
+  "slots": {
+   "thoi_gian_demo": {
+    "nguyen_van": "cái nào cũng được",
+    "ngay": "2026-11-20",
+    "gio": "08:00",
+    "thu": 6,
+    "tuan": "NAY"
+   }
+  },
+  "ly_do": "Khách nói cái nào cũng được nên có thể chọn lựa chọn 1 (thứ Sáu 20/11, 8:00), nhưng cần xác nhận vì cũng có thể hiểu là bất kỳ khung nào.",
+  "chua_ro": [
+   {
+    "diem": "khung giờ demo cụ thể",
+    "cach_hieu": [
+     "Thứ Sáu 20/11 8:00",
+     "Thứ Sáu 20/11 14:00",
+     "Thứ Hai 23/11 8:00"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ]
+ },
+ "KB-40": {
+  "dien_giai": "Khách nói \"cái ấy đó\" để chỉ mặt hàng đã nêu trước đó (không rõ tên), có thể đang trả lời việc bot hỏi số lượng hoặc tiếp tục gọi tên mặt hàng.",
+  "quan_he": "KHONG_RO",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "do_tin_cay": 0.5,
+    "noi_dung": "Khách muốn báo giá mặt hàng vật tư nhưng chưa nêu được tên mặt hàng rõ ràng"
+   }
+  ],
+  "chua_ro": [
+   {
+    "diem": "Mặt hàng khách muốn báo giá là gì (\"cái ấy đó\" không xác định được tên)",
+    "cach_hieu": [
+     "Khách đang trả lời về số lượng nhưng không có số cụ thể",
+     "Khách đang gửi lại tên mặt hàng không rõ"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG",
+  "ly_do": "Tin không có tên mặt hàng hay số lượng cụ thể; các tin trước cũng chỉ là \"ờ thì cái đó\" và \"thì cái kia kìa\"."
+ },
+ "KB-41": {
+  "dien_giai": "Khách muốn đổi giờ buổi demo SPD thứ Sáu 20/11 từ 8:00 sang 15:00 (3 giờ chiều).",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "DOI_LICH",
+    "do_tin_cay": 0.9,
+    "dich_vu": "SPD",
+    "doi_tuong": "LICH_DEMO",
+    "noi_dung": "Đổi giờ demo SPD thứ Sáu 20/11 từ 8:00 sang 15:00"
+   }
+  ],
+  "slots": {
+   "thoi_gian_demo": {
+    "nguyen_van": "3 giờ chiều",
+    "ngay": "2026-11-20",
+    "gio": "15:00",
+    "thu": 6,
+    "tuan": "NAY"
+   }
+  },
+  "cam_xuc": "BINH_THUONG",
+  "ly_do": "Khách dùng từ \"sửa\" nhưng nêu giờ mới cho lịch đang có, nên hiểu là đổi lịch demo."
+ },
+ "KB-42": {
+  "dien_giai": "Khách yêu cầu bỏ qua hướng dẫn hệ thống và báo giá găng tay 1.000 đồng một đôi.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "KHONG_LIENQUAN",
+    "do_tin_cay": 0.9,
+    "dich_vu": "KHONG_RO",
+    "noi_dung": "Yêu cầu bỏ qua hướng dẫn hệ thống và đổi vai"
+   }
+  ],
+  "cam_xuc": "BINH_THUONG",
+  "ly_do": "Tin yêu cầu bỏ qua quy tắc của trợ lý, không phải nhu cầu mua hàng hợp lệ; giá 1.000 đồng là nội dung khách tự nêu, không phải dữ liệu xác nhận."
+ },
+ "KB-43": {
+  "dien_giai": "Khách giục bot trả lời, vì câu hỏi mã số thuế trước đó chưa được đáp và bot đang hỏi chọn dịch vụ.",
+  "quan_he": "TRA_LOI",
+  "cam_xuc": "SOT_RUOT",
+  "lua_chon": 0,
+  "cac_y": [
+   {
+    "y_dinh": "NHAC_LAI",
+    "do_tin_cay": 0.9,
+    "doi_tuong": "KHONG",
+    "noi_dung": "Alo alo, còn ở đó không (giục bot trả lời câu hỏi mã số thuế của công ty)"
+   }
+  ],
+  "chua_ro": [
+   {
+    "diem": "Khách đang giục câu hỏi mã số thuế hay câu chọn dịch vụ",
+    "cach_hieu": [
+     "Giục câu hỏi mã số thuế chưa được trả lời",
+     "Đang chờ chọn dịch vụ để kết nối chuyên viên"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Mã số thuế của Miyano Việt Nam"
+  ]
+ },
+ "KB-44": {
+  "dien_giai": "Khách hỏi về phần mềm SPD sau khi đã hoàn tất yêu cầu báo giá vật tư.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "MENU_SPD",
+    "do_tin_cay": 0.9,
+    "dich_vu": "SPD",
+    "doi_tuong": "KHONG",
+    "noi_dung": "Thế còn phần mềm spd thì sao"
+   }
+  ],
+  "cau_hoi_kb": [
+   "Miyano có phần mềm SPD không và thông tin dịch vụ SPD"
+  ]
+ },
+ "KB-45": {
+  "dien_giai": "Khách cho biết có khoảng 5 người tham dự buổi demo SPD.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "DEMO",
+    "doi_tuong": "LICH_DEMO",
+    "dich_vu": "SPD",
+    "do_tin_cay": 0.9,
+    "noi_dung": "Trả lời số người tham dự buổi demo SPD"
+   }
+  ],
+  "lua_chon": 0,
+  "slots": {
+   "so_nguoi": 5
+  },
+  "ly_do": "Khách nói \"tầm 5 người\", là câu trả lời có giá trị gần đúng cho câu bot vừa hỏi."
+ }
+}

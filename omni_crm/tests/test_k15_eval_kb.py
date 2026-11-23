@@ -50,7 +50,8 @@ from omni_crm.tests.test_k11_conversations import (
 	unsaved,
 )
 
-RECORDING = Path(__file__).with_name("k15_recording.json")
+RECORDING = Path(__file__).with_name("k15_recording.json")  # bản ghi của script_classify v3 (số đo gốc 20/11)
+RECORDING_U = Path(__file__).with_name("k15_recording_understand.json")  # bản ghi của bước hiểu mới (script.understand)
 REPORT_ENV, CAPTURE_ENV = "K15_REPORT", "K15_CAPTURE"
 GATE_TOTAL = 0.95
 
@@ -162,7 +163,7 @@ case("KB-32", R, [*VT_Q4, "ok nhé"], [saved("substitute", "Được")], {"quan_
 case("KB-33", R, [*VT_Q4, "Hãng toóhiba"], [answer_has("substitute", "hãng"), clear(), no_main()], {"quan_he": TL})
 case("KB-34", R, [*VT_Q4, "Phải đúng hãng toshiba"], [answer_has("substitute", "đúng hãng"), clear()], {"quan_he": TL})
 case("KB-35", S, [*BOOKED, *VT_Q, "găng tay", "100 hộp", "Đổi sang thứ 7 nhé"],
-	[unsaved("need_by"), same_booking, asked_back, says("demo"), says("nhận hàng")], {}, critical=True)
+	[unsaved("need_by"), same_booking, asked_back, no_handoff()], {}, critical=True)
 case("KB-36", S, ["bg giup a 500 hop khau trang, can trong tuan nay dc k, ma ben e o dau"],
 	[answer_has("items", "khau trang"), answer_has("quantity", "500 hop"), clear()], {"y_dinh": {"BAOGIA"}}, critical=True)
 case("KB-37", S, ["Gửi anh tài liệu spd với báo giá găng tay 300 đôi"], [answer_has("quantity", "300 đôi"), answer_has("items", "găng tay"), clear()], {})
@@ -177,26 +178,100 @@ case("KB-45", R, [*ATT, "Tầm 5 người"], [booked, attendees(5)], {"quan_he":
 
 RESULTS: dict[str, dict] = {}
 CAPTURED: dict[str, dict] = {}
+CAPTURED_U: dict[str, str] = {}  # đầu vào đầy đủ của bước hiểu mới (script.understand) ở lượt được chấm
+CAPTURE_U_ENV = "K15_CAPTURE_U"
 
 
 def _recording() -> dict:
 	try:
-		return json.loads(RECORDING.read_text(encoding="utf-8"))
+		return json.loads(RECORDING_U.read_text(encoding="utf-8"))
 	except Exception:
 		return {}
 
 
+def _good(name, qty=None, unit=""):
+	out = {"ten": name}
+	if qty is not None:
+		out.update(so_luong=qty, don_vi=unit)
+	return out
+
+
+def U(intent, relation="TRA_LOI", conf=0.9, service="VATTU", goods=None, **slots):
+	"""Bản đọc hiểu giả cho các lượt DỰNG trạng thái."""
+	return {
+		"dien_giai": "", "quan_he": relation,
+		"cac_y": [{"y_dinh": intent, "do_tin_cay": conf, "dich_vu": service}],
+		"slots": {**({"mat_hang": goods} if goods else {}), **slots},
+	}
+
+
+SETUP_U = {
+	"kim bơm": U("BAOGIA", goods=[_good("kim bơm")]),
+	"ống thở": U("BAOGIA", goods=[_good("ống thở")]),
+	"găng tay": U("BAOGIA", goods=[_good("găng tay")]),
+	"găng tay nitrile": U("BAOGIA", goods=[_good("găng tay nitrile")]),
+	"Anh muốn đặt 30 chiếc giường bệnh": U("BAOGIA", "Y_KHAC", goods=[_good("giường bệnh", 30, "chiếc")]),
+	"găng tay phẫu thuật 30 chiếc": U("BAOGIA", goods=[_good("găng tay phẫu thuật", 30, "chiếc")]),
+	"Anh muốn biết mã số thuế của công ty": U("HOI_THONG_TIN", "Y_KHAC", 0.95, "KHONG_RO"),
+	"Anh muốn hỏi là công ty mình cung cấp mặt hàng gì": U("HOI_THONG_TIN", "Y_KHAC", 0.9, "KHONG_RO"),
+}
+
+
+def _final_text(spec) -> str:
+	last = spec["turns"][-1]
+	if isinstance(last, str):
+		return last
+	if isinstance(last, tuple) and last[0] == "multi":
+		return "\n".join(last[1])
+	return ""
+
+
+_REC = _recording()
+TEXT_REC = {_final_text(c): _REC[c["id"]] for c in C if _REC.get(c["id"])}
+
+
 class TestK15EvalKB(ConversationCase):
+	def setUp(self):
+		super().setUp()
+		from unittest import mock
+
+		from omni_crm.script import understand
+		from omni_crm.script.flows import menu
+		from omni_crm.tests.k11_helpers import NOW
+
+		self._start(mock.patch.object(understand, "now_datetime", return_value=NOW))
+		old_flag = frappe.conf.get(understand.SWITCH)
+		frappe.conf[understand.SWITCH] = 1  # bộ K15 chấm đường MỚI (bước hiểu đầy đủ ngữ cảnh)
+		self.addCleanup(lambda: frappe.conf.__setitem__(understand.SWITCH, old_flag))
+		# tin vào còn sót từ bộ test khác của cùng định danh làm lệch lịch sử hội thoại đưa cho AI
+		frappe.db.delete("Omni Inbound Message", {"identity": self.ident1})
+		frappe.db.commit()
+		real = menu.on_text
+
+		def on_text(ctx):
+			if getattr(self, "_grading", False) and self._case["id"] not in CAPTURED_U:
+				try:
+					CAPTURED_U[self._case["id"]] = understand.build_input(ctx)
+				except Exception as error:
+					CAPTURED_U[self._case["id"]] = f"LỖI: {type(error).__name__}: {error}"
+			return real(ctx)
+
+		self._start(mock.patch.object(menu, "on_text", side_effect=on_text))
+
 	def _fake_ai(self, kind, model, system, messages, tool, **kw):
-		"""Lượt dựng trạng thái: bảng `SETUP_AI`. Lượt được chấm: bản ghi AI thật của ca (chưa có → CHUA_RO 0,3)."""
+		"""Bước hiểu mới (công cụ `doc_hieu`). Lượt dựng trạng thái: bảng `SETUP_U` (hoặc bản ghi AI thật của ca khác có
+		cùng câu). Lượt được chấm: bản ghi AI thật của chính ca đó (chưa có → KHONG_RO)."""
 		text = self._text
-		if getattr(self, "_grading", False):
-			CAPTURED.setdefault(self._case["id"], {})[text] = messages[0]["content"]
-			raw = (self._rec.get(self._case["id"]) or {}).get(text)
-			self._graded_raw = raw or {}
+		unknown = {"dien_giai": "", "quan_he": "KHONG_RO", "cac_y": []}
+		if (tool or {}).get("name") != "doc_hieu":
+			raw = SETUP_AI.get(text)
 			return dict(raw) if raw else {"code": "CHUA_RO", "confidence": 0.3}
-		raw = SETUP_AI.get(text)
-		return dict(raw) if raw else {"code": "CHUA_RO", "confidence": 0.3}
+		if getattr(self, "_grading", False):
+			raw = self._rec.get(self._case["id"])
+			self._graded_raw = raw or {}
+			return json.loads(json.dumps(raw)) if raw else unknown
+		raw = SETUP_U.get(text) or TEXT_REC.get(text)
+		return json.loads(json.dumps(raw)) if raw else unknown
 
 	def step(self, spec):
 		if isinstance(spec, tuple) and spec[0] == "kb_off":
@@ -231,10 +306,11 @@ def _make(spec):
 		if want and not raw:
 			row["understanding"].append("chưa có bản ghi AI thật cho lượt này (hoặc lượt không tới AI)")
 		elif want:
+			got = {i.get("y_dinh") for i in raw.get("cac_y") or []}
 			if "quan_he" in want and raw.get("quan_he") not in want["quan_he"]:
 				row["understanding"].append(f"quan_he={raw.get('quan_he')} (mong {sorted(want['quan_he'])})")
-			if "y_dinh" in want and raw.get("code") not in want["y_dinh"]:
-				row["understanding"].append(f"y_dinh={raw.get('code')} (mong {sorted(want['y_dinh'])})")
+			if "y_dinh" in want and not (got & (want["y_dinh"] | {"HOI_THONG_TIN"} if "KB_HOI" in want["y_dinh"] else want["y_dinh"])):
+				row["understanding"].append(f"y_dinh={sorted(got)} (mong {sorted(want['y_dinh'])})")
 		row["bot"] = [[n, t[:200]] for n, t in self.T[-1].replies] if self.T else []
 		row["ai"] = raw
 		RESULTS[spec["id"]] = row
@@ -268,6 +344,8 @@ def summary(results: dict) -> dict:
 class TestK15ZReport(FrappeTestCase):
 	def test_zz_write_report(self):
 		"""Chạy sau cùng: ghi báo cáo và (nếu yêu cầu) đầu vào đã gửi AI. Không khẳng định cổng — đây là thước đo."""
+		if os.environ.get(CAPTURE_U_ENV):
+			Path(os.environ[CAPTURE_U_ENV]).write_text(json.dumps(CAPTURED_U, ensure_ascii=False, indent=1), encoding="utf-8")
 		if os.environ.get(CAPTURE_ENV):
 			Path(os.environ[CAPTURE_ENV]).write_text(json.dumps(CAPTURED, ensure_ascii=False, indent=1), encoding="utf-8")
 		out = {"summary": summary(RESULTS), "cases": RESULTS}

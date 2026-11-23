@@ -272,5 +272,57 @@
 		],
 		"action": "",
 		"notes": "Gửi khi AI đoán khách cần người với độ chắc chắn dưới 0,9 và khách không nói rõ. Khách nói rõ ('cho gặp nhân viên') thì chuyển ngay, không hỏi."
+	},
+	{
+		"code": "XINLOI_CHO",
+		"title": "Câu dẫn khi khách giục / nhắc câu chưa được trả lời",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+		"text": "Dạ, Miyano xin lỗi đã để anh/chị chờ ạ.",
+		"notes": "Không gửi riêng: ghép lên đầu câu trả lời còn nợ hoặc câu đang hỏi dở khi khách giục ('Sao k trả lời', 'alo alo')."
+	},
+	{
+		"code": "KB_GHINHAN",
+		"title": "Câu hỏi ngoài Kho tri thức: nói rõ chưa có thông tin, ghi cho chuyên viên (không tạm dừng bot)",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+		"text": "Dạ, câu này Miyano chưa có thông tin chính xác. Miyano đã ghi lại để chuyên viên trả lời anh/chị trong giờ làm việc ạ.",
+		"notes": "Thay cho việc chuyển nhân viên và tạm dừng bot khi Kho tri thức chưa có câu trả lời. Câu hỏi được ghi vào trường 'câu hỏi chưa trả lời' của Lead. Sau câu này bot hỏi tiếp câu đang dở (nếu có)."
+	},
+	{
+		"code": "HOI_LAM_RO",
+		"title": "Hỏi làm rõ khi tin của khách có hai cách hiểu dẫn tới hai việc khác nhau",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+		"text": "Dạ, để Miyano làm đúng ý, {cau_hoi}",
+		"notes": "{cau_hoi} do hệ thống ghép từ hai cách hiểu của bước đọc hiểu, ví dụ: anh/chị muốn đổi lịch demo, hay đổi ngày nhận hàng ạ? Bot không ghi gì và không đổi luồng cho tới khi khách trả lời. Tối đa 2 lần cho một câu."
+	},
+	{
+		"code": "DANG_GHI_NHAN",
+		"title": "Đọc lại điều bot đã ghi được (ghép sau câu 'chưa ghi được')",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+		"text": "Miyano đang ghi nhận: {thong_tin}.",
+		"notes": "Không gửi riêng. {thong_tin} ghép từ các thông tin đã thu (đã qua bộ lọc: ngắn, không link, không số tiền)."
 	}
 ]

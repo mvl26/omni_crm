@@ -125,6 +125,17 @@ def on_text(ctx: RouteContext) -> None:
 		else:
 			on_button(ctx)
 		return
+	if flow.startswith("handoff") and _no_staff(text):
+		state.update_state(ctx.identity, flow=None, handoff_pending=None, handoff_phone_tries=None)
+		state.reset_reask(ctx.identity)
+		if _reply_with_menu(ctx, "GAP_NV_HUY"):
+			return
+	if flow and _understand_on() and _new_session(ctx):
+		from omni_crm.script.flows import collect
+
+		collect._clear_flow(ctx)  # luật 13: phiên mới, câu hỏi dở của phiên trước không còn hiệu lực
+		state.update_state(ctx.identity, demo_wait=None, handoff_phone_tries=None)
+		flow, st = "", engine.script_state(ctx)
 	handler = engine._state_handlers.get(flow)
 	if handler is not None and _side_talk(ctx, text, st):
 		return
@@ -179,6 +190,16 @@ def on_text(ctx: RouteContext) -> None:
 	if first and code == UNCLEAR:  # "Alo", "hi": chào như khách mới mở khung chat
 		greet(ctx)
 		return
+	if _must_clarify(ctx.state.get(DETAIL_KEY) or {}, code) and not flow and _ask_to_clarify(ctx):
+		return
+	if code == "DEMO" and (ctx.state.get(DETAIL_KEY) or {}).get("demo_mode") and not flow and _demo_with_details(ctx):
+		state.reset_reask(ctx.identity)  # "Demo" + "Online": vào thẳng chọn khung giờ, không hỏi lại hình thức
+		return
+	if (ctx.state.get(DETAIL_KEY) or {}).get("social") and not flow and not ai_choice(ctx):
+		state.reset_reask(ctx.identity)  # luật 5: xã giao thì đáp ngắn, không hiện menu gốc
+		mid = str(ctx.state.get("script_node") or "").startswith(MID_FLOW_PREFIXES) and not _stale(ctx)
+		if (mid and _resend_current(ctx, NODE_YES)) or engine.run_node(ctx, NODE_OK):
+			return
 	picked = ai_choice(ctx)
 	if picked and not flow:  # khách trả lời câu đang hỏi bằng lời tự nhiên: coi như bấm lựa chọn đó
 		state.reset_reask(ctx.identity)
@@ -267,7 +288,24 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 			from omni_crm.script import classify as classifier
 		except ImportError:
 			classifier = None
-		if classifier is not None:
+		if classifier is not None and _understand_on() and _needs_ai(classifier, text, {**ctx.state}):
+			try:  # bước HIỂU mới (yêu cầu 20/11): đọc cả lượt cùng toàn bộ ngữ cảnh
+				from omni_crm.script import understand
+
+				thinking(ctx)
+				reading = understand.read(ctx)
+				router.check_superseded(ctx)
+				detail = {**understand.to_detail(reading), "batch_id": ctx.batch_id}
+				ctx.state[READING_KEY] = reading
+				ctx.state[DETAIL_KEY] = detail
+				conf = float(detail["confidence"] or 0)
+				keep = conf >= CONF_MIN or detail["relation"] == "TRA_LOI" or detail["social"]
+				result = (detail["code"], conf) if keep else (UNCLEAR, conf)
+			except router.Superseded:
+				raise
+			except Exception as e:
+				frappe.logger("omni").info("omni script: bước hiểu lỗi (%s) batch=%s", type(e).__name__, ctx.batch_id)
+		elif classifier is not None:
 			threshold = getattr(classifier, "LOW_CONFIDENCE", CONF_MIN)
 			try:
 				info = {**ctx.state, "service": engine.current_service(ctx) or ""}
@@ -294,6 +332,18 @@ def classify_text(ctx: RouteContext) -> tuple[str, float]:
 				)
 	ctx.state[CLASSIFIED_KEY] = result
 	return result
+
+
+READING_KEY = "_reading"  # bản đọc hiểu đầy đủ của lượt (script.understand)
+
+
+def _understand_on() -> bool:
+	try:
+		from omni_crm.script import understand
+
+		return understand.enabled()
+	except Exception:
+		return False
 
 
 CONTEXT_TURNS = 6
@@ -400,6 +450,8 @@ def route(ctx: RouteContext, code: str) -> None:
 		state.reset_reask(ctx.identity)
 		if not _show_booking(ctx) and not engine.run_button(ctx, NODE_NO_THANKS):
 			reask(ctx)
+		return
+	if code in NEW_INTENTS and _route_new_intent(ctx, code):
 		return
 	if code in ("GAP_NHANVIEN", "CAN_NGUOI") and _unsure_handoff(ctx, code):
 		# Luật 7: chuyển người (bot sẽ tạm dừng) chỉ làm ngay khi khách nói rõ hoặc AI rất chắc; còn lại hỏi một câu.
@@ -651,6 +703,121 @@ def _polite_decline(text: str) -> bool:
 		return False
 
 
+NEW_INTENTS = ("DOI_LICH", "HUY_LICH", "SUA_THONG_TIN", "NHAC_LAI", "KHONG_GAP_NGUOI")
+NODE_SORRY_WAIT = "XINLOI_CHO"  # "Dạ, Miyano xin lỗi đã để anh/chị chờ ạ."
+NODE_KB_NOTED = "KB_GHINHAN"  # chưa có thông tin: ghi lại cho chuyên viên, KHÔNG tạm dừng bot
+
+
+CLARIFY_OK = re.compile(r"^(?:đổi|dời|chuyển|hủy|huỷ|đặt|sửa|giữ|gửi|nhận|xem|mua|lấy|thêm|bớt|báo giá|đăng ký|hỏi)(?![\wÀ-ỹ])", re.I)
+CLARIFY_BAD = re.compile(r"khách|bot|hệ thống|slot|kịch bản|không rõ|chưa rõ", re.I)
+CLARIFY_CONF = 0.8  # ý chính đã chắc từ mức này thì không hỏi làm rõ nữa
+NODE_CLARIFY = "HOI_LAM_RO"
+CLARIFY_MAX_OPTION = 60
+
+
+def clarify_question(reading: dict) -> str:
+	"""Câu hỏi làm rõ ghép từ hai cách hiểu AI nêu ("anh/chị muốn đổi lịch demo, hay đổi ngày nhận hàng ạ?") — thuần.
+	Chỉ dùng cách hiểu ngắn, không số tiền, không đường link; không đủ hai cách hiểu sạch thì trả rỗng."""
+	from omni_crm.script import brain
+
+	for point in reading.get("chua_ro") or []:
+		if not isinstance(point, dict) or point.get("anh_huong") != "DOI_HANH_DONG":
+			continue
+		options = [brain.safe_text(o, CLARIFY_MAX_OPTION).rstrip(".?!") for o in point.get("cach_hieu") or [] if isinstance(o, str)]
+		options = [o[:1].lower() + o[1:] for o in options if o]
+		# AI viết cách hiểu cho hệ thống đọc, không phải cho khách: chỉ nhận cụm mở đầu bằng một động từ hành động và
+		# không nhắc "khách", "bot" (từng sinh câu "anh/chị muốn khách đang trả lời về số lượng…")
+		options = [o for o in options if CLARIFY_OK.match(o) and not CLARIFY_BAD.search(o)][:2]
+		if len(options) == 2:
+			return f"anh/chị muốn {options[0]}, hay {options[1]} ạ?"
+	return ""
+
+
+def _no_staff(text: str) -> bool:
+	try:
+		from omni_crm.script.flows import handoff
+
+		return len(text) <= 80 and bool(handoff.NO_STAFF.search(text))
+	except Exception:
+		return False
+
+
+def _must_clarify(detail: dict, code: str) -> bool:
+	"""Lượt này có điểm chưa rõ làm ĐỔI hành động và ý chính chưa đủ chắc. Đặt / đổi / huỷ lịch demo có ô hỏi lại riêng."""
+	if not detail.get("unclear_action") or code in ("DEMO", "DOI_LICH", "HUY_LICH"):
+		return False
+	return float(detail.get("confidence") or 0) < CLARIFY_CONF
+
+
+def _ask_to_clarify(ctx: RouteContext) -> bool:
+	"""Hỏi lại đúng điểm chưa rõ (tối đa 2 lần cho một câu đang chờ); KHÔNG ghi gì, KHÔNG đổi luồng. True nếu đã hỏi."""
+	question = clarify_question(ctx.state.get(READING_KEY) or {})
+	asked = cint(engine.script_state(ctx).get("clarified"))
+	if not question or asked >= 2 or not store.get_node(NODE_CLARIFY):
+		return False
+	if not send.send_node(ctx.identity, NODE_CLARIFY, {**engine.variables(ctx), "cau_hoi": question}):
+		return False
+	router._mark(ctx.batch_id)
+	state.update_state(ctx.identity, clarified=asked + 1)
+	state.reset_reask(ctx.identity)
+	return True
+
+
+def _route_new_intent(ctx: RouteContext, code: str) -> bool:
+	"""Các ý định của bước hiểu mới: đổi / huỷ lịch demo, khách sửa điều đã nói, khách giục, khách rút yêu cầu gặp người."""
+	detail = ctx.state.get(DETAIL_KEY) or {}
+	state.reset_reask(ctx.identity)
+	if code in ("DOI_LICH", "HUY_LICH"):
+		target = "DEMO_DOILICH" if code == "DOI_LICH" else "DEMO_HUY"
+		has_booking = bool(ctx.lead and frappe.db.get_value(LEAD, ctx.lead, "omni_demo_at"))
+		if code == "HUY_LICH" and has_booking:
+			return _show_booking(ctx)  # luật 7: huỷ lịch là việc khó hoàn tác, nhắc lịch và để khách bấm xác nhận
+		if has_booking and _foreign_handler(target) is not None:
+			go(ctx, target)
+			return True
+		route(ctx, "DEMO")  # chưa có lịch nào: coi như muốn đặt lịch
+		return True
+	if code == "SUA_THONG_TIN":
+		from omni_crm.script.flows import collect
+
+		changed = False
+		for field, value in (detail.get("slots") or {}).items():
+			if field in collect.PREFILL_FIELDS and value:
+				collect.save_answer(ctx, field, str(value), typed=True)
+				changed = True
+		if changed and _back_to_pending(ctx, _pending_question(ctx), ""):
+			return True
+		return False
+	if code == "NHAC_LAI":
+		pending = _pending_question(ctx)
+		if detail.get("questions"):
+			ctx.state[engine.LEAD_IN_KEY] = _plain(ctx, NODE_SORRY_WAIT)
+			answer_kb(ctx)
+			return True
+		if pending:  # xin lỗi, đọc lại điều đã ghi được, hỏi lại câu đang dở; hỏi mãi không xong thì mời gặp nhân viên
+			from omni_crm.script.flows import collect
+
+			prefix = _plain(ctx, NODE_SORRY_WAIT)
+			have = collect.ack_text(list(store.as_dict(engine.script_state(ctx).get("answers")).items()))
+			if have:
+				noted = store.render(store.get_node(collect.NODE_HAVE), {**engine.variables(ctx), "identity": ctx.identity, "thong_tin": have})
+				prefix = f"{prefix} {noted[0]}".strip() if noted else prefix
+			node, values = store.get_node(pending), engine.variables(ctx)
+			repeat = engine._repeat_count(ctx, pending)
+			if node and repeat < engine.MAX_RESEND and send.send_node(ctx.identity, pending, values, prefix=prefix):
+				state.update_state(ctx.identity, resend=repeat or None)
+				router._mark(ctx.batch_id)
+				return True
+			ctx.state[engine.LEAD_IN_KEY] = prefix
+			if engine.run_node(ctx, NODE_CONFIRM_HANDOFF):
+				return True
+			ctx.state.pop(engine.LEAD_IN_KEY, None)
+		return _back_to_pending(ctx, pending, NODE_SORRY_WAIT) or _reply_with_menu(ctx, NODE_SORRY_WAIT)
+	if code == "KHONG_GAP_NGUOI":
+		return bool(engine.run_node(ctx, NODE_OK))
+	return False
+
+
 HANDOFF_CONF = 0.9
 NODE_CONFIRM_HANDOFF = "GAP_NV_XACNHAN"
 
@@ -874,6 +1041,18 @@ def _number_choice(ctx: RouteContext, text: str, pending: str) -> str | None:
 
 
 DECLINE_WORDS = 4
+def _new_session(ctx: RouteContext) -> bool:
+	"""Khách im lặng lâu hơn `care_session_gap_hours` (Omni Settings) kể từ tin cuối của bot: coi là phiên mới."""
+	try:
+		from frappe.utils import get_datetime
+
+		hours = float(frappe.db.get_single_value("Omni Settings", "care_session_gap_hours") or 0)
+		last = ctx.state.get("script_last_bot_at")
+		return hours > 0 and bool(last) and (now_datetime() - get_datetime(last)).total_seconds() > hours * 3600
+	except Exception:
+		return False
+
+
 STALE_MINUTES = 60  # câu hỏi dở quá lâu không được trả lời thì không còn là "câu đang hỏi"
 
 
@@ -953,7 +1132,7 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 		if declining or "@" in text:
 			return False  # từ chối hoặc đang gõ email: luồng đang hỏi tự xử lý
 		field = str(st.get("field") or "")
-		if field == collect.DELIVERY_FIELD and TIME_WORDS.search(_fold(text)):
+		if field == collect.DELIVERY_FIELD and TIME_WORDS.search(_fold(text)) and not _understand_on():
 			return False  # "thứ 3 tuần sau được không em": vẫn là câu trả lời về thời gian (kèm lời hỏi giao kịp không)
 		asking = bool(QUESTION.search(_fold(text)))
 		if not asking and _plain_answer(field, text, st):
@@ -961,12 +1140,18 @@ def _side_talk(ctx: RouteContext, text: str, st: dict) -> bool:
 		code, _conf = classify_text(ctx)
 		detail = ctx.state.get(DETAIL_KEY) or {}
 		relation = detail.get("relation") or ""
+		if code in ("SUA_THONG_TIN", "NHAC_LAI") and _route_new_intent(ctx, code):
+			return True  # khách sửa điều đã nói / giục: xử lý rồi hỏi lại câu đang dở, không ghi vào ô đang hỏi
 		if relation == "TRA_LOI":  # AI đọc cả ngữ cảnh và coi đây là câu trả lời cho câu đang hỏi
+			if (detail.get("slots") or {}).get(field):
+				return False  # có giá trị đã trích cho đúng ô này: luồng thu thông tin ghi giá trị đó
 			picked = ai_choice(ctx, _shown_buttons(ctx, store.get_node(pending)))
 			if picked:
 				_tap(ctx, picked)
 				return True
 			return False
+		if _must_clarify(detail, code):  # bảng quyết định, dòng 1: KHÔNG ghi, KHÔNG đổi luồng; hỏi làm rõ hoặc hỏi lại
+			return _ask_to_clarify(ctx) or collect.not_recorded(ctx)
 		if relation == "Y_KHAC" and field not in collect.CONTACT_FIELDS:
 			if code in SIDE_REPLY:
 				return _reply_then_back(ctx, SIDE_REPLY[code], pending)
@@ -1148,13 +1333,21 @@ def answer_kb(ctx: RouteContext) -> None:
 	if res and res["action"] == "Reply" and (res["text"] or "").strip():
 		if _kb_auto_send(ctx, res):
 			pending = _pending_question(ctx)
-			if send.send_text(ctx.identity, res["text"], code=KB_CODE):
+			lead_in = ctx.state.pop(engine.LEAD_IN_KEY, "")
+			if send.send_text(ctx.identity, f"{lead_in} {res['text']}".strip(), code=KB_CODE):
 				router._mark(ctx.batch_id)
 				if not _back_to_pending(ctx, pending, NODE_BACK):
 					engine.run_node(ctx, engine.service_code(ctx, "HOITIEP") or MENU_CODE)
 				return
 		elif not _shadow_only(res["group"]) and _to_sale_draft(ctx, res["name"]):
 			return  # luồng nháp sẵn có: nhân viên duyệt rồi gửi
+	if _understand_on() and store.get_node(NODE_KB_NOTED):
+		pending = _pending_question(ctx)
+		_log_unanswered(ctx, "", {})
+		if send.send_node(ctx.identity, NODE_KB_NOTED, engine.variables(ctx), prefix=ctx.state.pop(engine.LEAD_IN_KEY, "")):
+			router._mark(ctx.batch_id)
+			_back_to_pending(ctx, pending, NODE_BACK)
+			return
 	if not engine.run_node(ctx, NODE_KB_NONE, {"question": ctx.text}):
 		engine.fallback(ctx, NODE_KB_NONE)
 
