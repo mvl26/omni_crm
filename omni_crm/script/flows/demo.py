@@ -64,6 +64,8 @@ STATE_KEYS = (
 	"demo_email_asked",
 	"demo_att_asked",
 	"demo_time_asked",
+	"demo_confirmed",
+	"demo_edit",
 )
 MIN_AHEAD = timedelta(hours=2)  # không nhận lịch bắt đầu trong vòng 2 giờ tới
 MAX_AHEAD = timedelta(days=45)  # không nhận lịch xa hơn 45 ngày
@@ -288,7 +290,7 @@ _WEEKDAYS = {
 _RE_DATE = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[/\-]|tháng)\s*(\d{1,2})(?:\s*(?:[/\-]|năm)\s*(\d{4}))?(?!\d)")
 _RE_WEEKDAY = re.compile(r"thứ\s*(hai|ba|tư|tu|năm|nam|sáu|sau|bảy|bay|[2-7])(?![\wÀ-ỹ])")
 _RE_SUNDAY = re.compile(r"chủ nhật|(?<![\wÀ-ỹ])cn(?![\wÀ-ỹ])")
-_RE_TIME = re.compile(r"(?<!\d)(\d{1,2})\s*(?:h|giờ|:)\s*(\d{1,2})?(?!\d)")
+_RE_TIME = re.compile(r"(?<!\d)(\d{1,2})\s*(?:h(?![a-zà-ỹ])|giờ|:)\s*(\d{1,2})?(?!\d)")
 _RE_BARE_HOUR = re.compile(r"(?<!\d)(\d{1,2})\s*(?=sáng|chiều|tối|trưa)")
 _RE_RELATIVE = (
 	(re.compile(r"hôm nay|(?<![\wÀ-ỹ])nay(?![\wÀ-ỹ])"), 0),
@@ -615,6 +617,10 @@ def choose(ctx: RouteContext, start: datetime) -> None:
 	if not is_free(start, demo_user(_service(ctx)), _now(), lead=ctx.lead):
 		_offer_nearest(ctx, start)
 		return
+	if _st(ctx.identity).get("demo_edit"):  # khách đang SỬA ngày giờ ở bước đọc lại: giữ các mục khác, đọc lại lần nữa
+		state.update_state(ctx.identity, demo_at=_iso(start))
+		confirm(ctx)
+		return
 	state.update_state(ctx.identity, demo_at=_iso(start), flow=FLOW, demo_wait="attendees")
 	if not _send(ctx, NODE_ATTENDEES):
 		confirm(ctx)  # câu hỏi số người không bắt buộc
@@ -636,6 +642,34 @@ def _offer_nearest(ctx: RouteContext, after: datetime) -> None:
 	)
 
 
+READBACK_CONF = "omni_script_readback"  # site_config: 1 = đọc lại cho khách xác nhận trước khi chốt (luật 7)
+NODE_READBACK = "DEMO_DOCLAI"
+NODE_EDIT = "DEMO_SUA_GI"
+NODE_EARLIEST = "DEMO_CHON_SOM"
+WAIT_CONFIRM = "confirm"
+
+
+def readback_on() -> bool:
+	return bool(cint(frappe.conf.get(READBACK_CONF) or 0))
+
+
+def read_back(ctx: RouteContext) -> bool:
+	"""Đọc lại toàn bộ lịch sắp chốt (dịch vụ, hình thức, ngày giờ, số người) và chờ khách bấm "Đúng rồi" / "Sửa lại"
+	(hoặc gõ). CHƯA chốt gì. True nếu đã gửi."""
+	st = _st(ctx.identity)
+	start = get_datetime(st.get("demo_at")) if st.get("demo_at") else None
+	if not start:
+		return False
+	mode = st.get("demo_mode") or (ctx.lead and frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")) or ""
+	count = cint(st.get("demo_attendees"))
+	extra = {
+		**scheduler.demo_variables(start, mode),
+		"so_nguoi": _("khoảng {0} người").format(count) if count else _("chưa rõ số người"),
+	}
+	state.update_state(ctx.identity, flow=FLOW, demo_wait=WAIT_CONFIRM, demo_edit=None)
+	return bool(_send(ctx, NODE_READBACK, extra))
+
+
 def confirm(ctx: RouteContext) -> None:
 	"""Bước 5 (4.4): chốt lịch đã chọn (có khóa theo khung giờ) rồi gửi câu xác nhận; không bao giờ chốt im lặng."""
 	st = _st(ctx.identity)
@@ -643,6 +677,8 @@ def confirm(ctx: RouteContext) -> None:
 	if not start or not ctx.lead:
 		propose(ctx)
 		return
+	if readback_on() and not st.get("demo_confirmed") and read_back(ctx):
+		return  # luật 7: chốt lịch là việc khó hoàn tác, đọc lại cho khách xác nhận trước
 	user = demo_user(_service(ctx))
 	mode = st.get("demo_mode") or frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")
 	with slot_lock(user, start) as locked:
@@ -661,6 +697,8 @@ def confirm(ctx: RouteContext) -> None:
 		demo_slots_msg=None,
 		demo_slots_at=None,
 		demo_email_asked=None,
+		demo_confirmed=None,
+		demo_edit=None,
 	)
 	extra = scheduler.demo_variables(start, mode)
 	if any(_send(ctx, code, extra) for code in NODE_CONFIRM):
@@ -686,6 +724,9 @@ def _confirmation_failed(ctx: RouteContext, booked: dict, start: datetime) -> No
 
 
 def _after_attendees(ctx: RouteContext) -> None:
+	if _st(ctx.identity).get("demo_edit"):
+		confirm(ctx)
+		return
 	if ctx.lead and not frappe.db.get_value(LEAD, ctx.lead, "email"):
 		state.update_state(ctx.identity, flow=FLOW, demo_wait="email")
 		if _send(ctx, NODE_ASK_EMAIL):
@@ -694,6 +735,7 @@ def _after_attendees(ctx: RouteContext) -> None:
 
 
 _ANYTIME = re.compile(r"(?:lúc|giờ|ngày|hôm|khi) nào cũng được|(?:tùy|tuỳ) (?:em|bạn|bên em|miyano)")
+_ANY_SLOT = re.compile(r"(?:cái|khung|giờ|lịch|hôm) nào cũng được|nào cũng được|sao cũng được|em (?:chọn|xếp|sắp) (?:giúp|đi|hộ)")
 _SKIP_COUNT = re.compile(r"chưa biết|chưa rõ|chưa chắc|không rõ|không biết|bỏ qua|để sau|tính sau", re.I)
 _DROP_DEMO = re.compile(r"không (?:muốn|cần|xem|demo)|thôi|hủy|huỷ|khỏi|để khi khác|dừng", re.I)
 _LEAVE_CODES = ("GAP_NHANVIEN", "CAN_NGUOI", "HUY_DANGKY", "XOA_DULIEU", "PHAN_NAN")
@@ -855,12 +897,26 @@ def on_text(ctx: RouteContext) -> bool:
 	wait = st.get("demo_wait")
 	if not wait:
 		return False
+	if wait == WAIT_CONFIRM:  # đang chờ khách xác nhận tin đọc lại
+		scheduler.on_inbound(ctx.identity, ctx.lead)
+		if _edit_from_text(ctx, st):
+			return True
+		if _small_talk(ctx.text):
+			return read_back(ctx)
+		return False
 	if wait == WAIT_SLOTS:  # đang chờ khách chọn khung: đọc được ý chọn / ngày giờ thì nhận, không thì để bộ hiểu ý xử lý
 		picked = _typed_slot(ctx.text, st)
 		if picked:
 			scheduler.on_inbound(ctx.identity, ctx.lead)
 			choose(ctx, picked)
 			return True
+		if _ANYTIME.search(cstr(ctx.text).lower()) or _ANY_SLOT.search(cstr(ctx.text).lower()):
+			slots = [get_datetime(x) for x in st.get("demo_slots") or []]
+			if slots:  # khách để Miyano chọn: lấy khung sớm nhất và nói rõ đã chọn khung nào
+				scheduler.on_inbound(ctx.identity, ctx.lead)
+				_send(ctx, NODE_EARLIEST, {"khung_1": slot_label(slots[0])})
+				choose(ctx, slots[0])
+				return True
 		if not parse_time(ctx.text, _now()):
 			if _small_talk(ctx.text):  # chào / ok / sticker: gửi lại danh sách khung giờ, không về menu chính
 				propose(ctx)
@@ -919,7 +975,74 @@ def on_text(ctx: RouteContext) -> bool:
 
 def _on_format(ctx: RouteContext) -> None:
 	state.update_state(ctx.identity, demo_mode=_answer_value(ctx.payload_code, "demo_mode") or None)
+	st = _st(ctx.identity)
+	if st.get("demo_edit") and st.get("demo_at"):  # đang sửa hình thức ở bước đọc lại
+		confirm(ctx)
+		return
 	propose(ctx)
+
+
+def _on_confirmed(ctx: RouteContext) -> None:
+	"""Khách bấm "Đúng rồi" ở tin đọc lại: chốt lịch."""
+	state.update_state(ctx.identity, demo_confirmed=1)
+	confirm(ctx)
+
+
+def _on_edit(ctx: RouteContext) -> None:
+	"""Khách bấm "Sửa lại": hỏi sửa mục nào; các mục khác giữ nguyên."""
+	state.update_state(ctx.identity, flow=FLOW, demo_wait=WAIT_CONFIRM, demo_edit=1)
+	if not _send(ctx, NODE_EDIT):
+		read_back(ctx)
+
+
+def _on_edit_count(ctx: RouteContext) -> None:
+	state.update_state(ctx.identity, flow=FLOW, demo_wait="attendees", demo_edit=1, demo_att_asked=1)
+	_send(ctx, NODE_ATTENDEES)
+
+
+def _on_edit_format(ctx: RouteContext) -> None:
+	state.update_state(ctx.identity, demo_edit=1)
+	_send(ctx, NODE_FORMAT)
+
+
+_YES = re.compile(r"^(?:dạ[\s,]*)?(?:đúng|chuẩn|chính xác|ok|oke|okay|được|đồng ý|xác nhận|vâng|ừ|uh)(?![\wÀ-ỹ])", re.I)
+_HOUR_IN_TEXT = re.compile(r"(?<!\d)(\d{1,2})\s*(?:h(?![a-zà-ỹ])|giờ|:)\s*(\d{1,2})?(?!\d)\s*(sáng|chiều|tối)?", re.I)
+
+
+def _edit_from_text(ctx: RouteContext, st: dict) -> bool:
+	"""Khách GÕ ở bước đọc lại: "đúng rồi" → chốt; nêu giờ / ngày giờ / hình thức / số người mới → chỉ sửa mục đó rồi
+	đọc lại. Không đọc được → False."""
+	text = " ".join(unicodedata.normalize("NFC", cstr(ctx.text)).split())
+	if not text:
+		return False
+	if _YES.match(text) and len(text.split()) <= 5:
+		_on_confirmed(ctx)
+		return True
+	old = get_datetime(st.get("demo_at")) if st.get("demo_at") else None
+	new = parse_time(text, _now())
+	if not new and old:
+		m = _HOUR_IN_TEXT.search(text.lower())
+		if m:  # chỉ nêu giờ ("sửa giờ thành 3 giờ chiều"): giữ ngày đã chọn
+			hour, minute = int(m.group(1)), int(m.group(2) or 0)
+			if hour < 12 and (m.group(3) in ("chiều", "tối") or (hour <= 7 and m.group(3) != "sáng")):
+				hour += 12
+			if hour <= 23 and minute <= 59:
+				new = old.replace(hour=hour, minute=minute)
+	if new:
+		state.update_state(ctx.identity, demo_edit=1)
+		if not in_booking_range(new, _now()):
+			return bool(_send(ctx, NODE_TIME_AGAIN))
+		choose(ctx, new)
+		return True
+	mode = mode_in_text(text)
+	if mode:
+		state.update_state(ctx.identity, demo_mode=_answer_value(mode, "demo_mode") or None)
+		return read_back(ctx)
+	count = attendee_count(text)
+	if count:
+		state.update_state(ctx.identity, demo_attendees=count)
+		return read_back(ctx)
+	return False
 
 
 def _on_slot(ctx: RouteContext) -> None:
@@ -1005,6 +1128,10 @@ _ROUTES = {
 	"DEMO_KHUNG_2": _on_slot,
 	"DEMO_KHUNG_3": _on_slot,
 	"DEMO_GIOKHAC": _on_other_time,
+	"DEMO_CHOT": _on_confirmed,
+	"DEMO_SUA": _on_edit,
+	"DEMO_SUA_SONGUOI": _on_edit_count,
+	"DEMO_SUA_HT": _on_edit_format,
 	"DEMO_DOILICH": _on_reschedule,
 	"DEMO_HUY": _on_cancel,
 	"DEMO_HUY_BAN": _on_cancel_reason,

@@ -693,6 +693,8 @@ def finish(ctx: RouteContext) -> bool:
 	if branch not in BRANCHES:
 		return False
 	ctx.state[TASK_FLAG] = False
+	if branch == "3b" and _read_back_quote(ctx):
+		return True  # luật 7: gửi yêu cầu báo giá cho nhân viên là việc khó hoàn tác, đọc lại cho khách xác nhận trước
 	if branch == "3b" and _quote_flow(ctx):
 		return True
 	late = timeutil.cutoff_1630(now_datetime())
@@ -700,6 +702,81 @@ def finish(ctx: RouteContext) -> bool:
 		engine.run_node(ctx, CONFIRM_NO_EMAIL)
 	_close_without_confirm(ctx)
 	return True
+
+
+FLOW_READBACK = "bg_readback"
+NODE_QUOTE_READBACK = "BG_DOCLAI"
+NODE_QUOTE_EDIT = "BG_SUA_GI"
+READBACK_FIELDS = ("items", "quantity", "need_by", "substitute", "sc_items", "sc_users", "sc_sites", "spd_sites", "spd_items", "spd_value")
+
+
+def _readback_on() -> bool:
+	return bool(cint(frappe.conf.get("omni_script_readback") or 0))
+
+
+def quote_summary(answers: dict) -> str:
+	"""Tóm tắt mọi thông tin báo giá đã thu để đọc lại cho khách (thuần; qua cùng bộ lọc với câu xác nhận từng bước)."""
+	return ack_text([(f, answers.get(f)) for f in READBACK_FIELDS if answers.get(f)])
+
+
+def _read_back_quote(ctx: RouteContext) -> bool:
+	"""Đọc lại toàn bộ yêu cầu báo giá và chờ khách xác nhận; CHƯA tạo việc cho nhân viên. True nếu đã gửi."""
+	st = engine.script_state(ctx)
+	if not _readback_on() or st.get("quote_confirmed"):
+		return False
+	summary = quote_summary(store.as_dict(st.get("answers")))
+	if not summary:
+		return False
+	ctx.state.pop(ACK_KEY, None)  # tin đọc lại đã gồm mọi thứ: không ghép thêm câu xác nhận từng bước
+	if not engine.run_node(ctx, NODE_QUOTE_READBACK, {"thong_tin": summary}):
+		return False
+	state.update_state(ctx.identity, flow=FLOW_READBACK)
+	return True
+
+
+def _quote_confirmed(ctx: RouteContext, arg: str = "", node: dict | None = None) -> bool:
+	"""Khách xác nhận tin đọc lại (nút "Đúng rồi" hoặc gõ): gửi yêu cầu cho nhân viên như cũ."""
+	state.update_state(ctx.identity, flow=None, quote_confirmed=1)
+	done = finish(ctx)
+	state.update_state(ctx.identity, quote_confirmed=None)
+	return done
+
+
+_YES_QUOTE = re.compile(r"^(?:dạ[\s,]*)?(?:đúng|chuẩn|chính xác|ok|oke|okay|được|đồng ý|xác nhận|vâng|ừ|uh)(?![\wÀ-ỹ])", re.I)
+
+
+def on_readback_text(ctx: RouteContext) -> bool:
+	"""Khách GÕ ở bước đọc lại báo giá: "đúng rồi" → gửi; nêu mục cần sửa (bước hiểu trích được mặt hàng / số lượng /
+	thời gian) → sửa đúng mục đó rồi đọc lại. Không đọc được → hỏi sửa mục nào."""
+	text = (ctx.text or "").strip()
+	if not text:
+		return False
+	if _YES_QUOTE.match(text) and len(text.split()) <= 5:
+		_quote_confirmed(ctx)
+		return True
+	from omni_crm.script.flows import menu
+
+	code, _conf = menu.classify_text(ctx)
+	slots = (ctx.state.get("_classify_detail") or {}).get("slots") or {}
+	changed = False
+	for field, value in slots.items():
+		if field in PREFILL_FIELDS and str(value or "").strip():
+			save_answer(ctx, field, str(value), typed=True)
+			changed = True
+	if changed:
+		ctx.state.pop(ACK_KEY, None)
+		state.update_state(ctx.identity, flow=None)
+		return _read_back_quote(ctx)
+	if code not in (menu.UNCLEAR, "BAOGIA", "MENU_VATTU", "SUA_THONG_TIN"):
+		state.update_state(ctx.identity, flow=None)
+		return False  # khách nói sang việc khác: để bộ định tuyến xử lý
+	sent = engine.run_node(ctx, NODE_QUOTE_EDIT)
+	state.update_state(ctx.identity, flow=FLOW_READBACK)
+	return bool(sent)
+
+
+def _quote_edit(ctx: RouteContext, arg: str = "", node: dict | None = None) -> None:
+	state.update_state(ctx.identity, flow=FLOW_READBACK)
 
 
 def _quote_flow(ctx: RouteContext) -> bool:
@@ -848,3 +925,6 @@ def _attach_file(ctx: RouteContext, arg: str, node: dict) -> None:
 engine.register_action("consent", _consent)
 engine.register_action("attach_file", _attach_file)
 engine.register_state(FLOW, on_text)
+engine.register_state(FLOW_READBACK, on_readback_text)
+engine.register_action("quote_confirmed", _quote_confirmed)
+engine.register_action("quote_edit", _quote_edit)

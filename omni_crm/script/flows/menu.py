@@ -1029,7 +1029,7 @@ QUESTION = re.compile(
 	r"|\b(?:khong|chua|ha|nhi)$"
 )
 TIME_WORDS = re.compile(r"\d|\b(?:tuan|thang|ngay|thu|mai|nay|gap|quy|cuoi|dau)\b")
-AFFIRMATIVE = ("duoc", "dung", "dong y", "co")
+AFFIRMATIVE = ("duoc", "dung", "dung roi", "dong y", "co")
 DEMO_PENDING = {"attendees": "DEMO_SONGUOI", "time": "DEMO_GIOKHAC", "email": "DEMO_HOI_EMAIL"}
 
 

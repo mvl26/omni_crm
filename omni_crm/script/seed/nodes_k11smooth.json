@@ -350,5 +350,166 @@
 		"source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
 		"text": "Dạ, tiếp theo là việc anh/chị đã nhắn lúc trước: {viec}.",
 		"notes": "Không gửi riêng: ghép lên đầu ô mở việc đó, thay cho câu 'còn cần hỗ trợ gì thêm'. Việc xếp hàng quá 120 phút thì bỏ."
+	},
+	{
+		"code": "DEMO_DOCLAI",
+		"title": "Demo – đọc lại cho khách xác nhận trước khi chốt lịch",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"text": "Dạ, Miyano đọc lại để anh/chị kiểm tra: demo {dich_vu}, hình thức {hinh_thuc}, {thu_ngay} lúc {gio_bat_dau}, {so_nguoi}. Anh/chị xác nhận giúp Miyano ạ.",
+		"buttons": [
+			{
+				"label": "Đúng rồi",
+				"target": "DEMO_CHOT"
+			},
+			{
+				"label": "Sửa lại",
+				"target": "DEMO_SUA"
+			}
+		],
+		"action": "",
+		"notes": "Lịch CHƯA được chốt cho tới khi khách bấm Đúng rồi (hoặc gõ đúng rồi / ok). Khách gõ mục cần sửa (vd 'sửa giờ thành 3 giờ chiều') thì chỉ mục đó đổi và bot đọc lại lần nữa. Bật bằng site_config omni_script_readback."
+	},
+	{
+		"code": "DEMO_SUA_GI",
+		"title": "Demo – khách bấm Sửa lại: hỏi sửa mục nào",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"text": "Dạ, anh/chị muốn sửa mục nào ạ? Anh/chị có thể bấm nút hoặc nhắn luôn nội dung cần sửa, ví dụ: đổi sang 3 giờ chiều.",
+		"buttons": [
+			{
+				"label": "Ngày giờ",
+				"target": "DEMO_GIOKHAC"
+			},
+			{
+				"label": "Số người",
+				"target": "DEMO_SUA_SONGUOI"
+			},
+			{
+				"label": "Hình thức",
+				"target": "DEMO_SUA_HT"
+			}
+		],
+		"action": "",
+		"notes": "Các mục khác giữ nguyên; sửa xong bot đọc lại lần nữa."
+	},
+	{
+		"code": "DEMO_CHON_SOM",
+		"title": "Demo – khách nói 'cái nào cũng được': báo khung sớm nhất đã chọn",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"text": "Dạ, Miyano xin chọn khung sớm nhất là {khung_1} ạ.",
+		"buttons": [],
+		"action": "",
+		"notes": "Gửi trước câu hỏi số người; lịch vẫn chưa chốt cho tới bước đọc lại."
+	},
+	{
+		"code": "BG_DOCLAI",
+		"title": "Báo giá – đọc lại cho khách xác nhận trước khi gửi yêu cầu cho nhân viên",
+		"step": "3",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"text": "Dạ, Miyano đọc lại để anh/chị kiểm tra: {thong_tin}. Anh/chị xác nhận giúp Miyano ạ.",
+		"buttons": [
+			{
+				"label": "Đúng rồi",
+				"target": "BG_CHOT"
+			},
+			{
+				"label": "Sửa lại",
+				"target": "BG_SUA_GI"
+			}
+		],
+		"action": "",
+		"notes": "Yêu cầu báo giá CHƯA được gửi cho nhân viên cho tới khi khách xác nhận. Bật bằng site_config omni_script_readback."
+	},
+	{
+		"code": "BG_CHOT",
+		"title": "Báo giá – khách xác nhận tin đọc lại",
+		"step": "3",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"text": "",
+		"buttons": [],
+		"action": "quote_confirmed",
+		"notes": "Không có chữ: chạy bước gửi yêu cầu như cũ."
+	},
+	{
+		"code": "BG_SUA_GI",
+		"title": "Báo giá – khách muốn sửa: hỏi nội dung cần sửa",
+		"step": "3",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"text": "Dạ, anh/chị nhắn giúp Miyano nội dung cần sửa ạ, ví dụ: số lượng 300 đôi.",
+		"buttons": [],
+		"action": "quote_edit",
+		"notes": "Khách nhắn mục cần sửa, bot sửa đúng mục đó rồi đọc lại lần nữa."
+	},
+	{
+		"code": "DEMO_CHOT",
+		"title": "Demo – khách bấm Đúng rồi ở tin đọc lại",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"step": "4",
+		"text": "",
+		"buttons": [],
+		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+		"action": "demo:button"
+	},
+	{
+		"code": "DEMO_SUA",
+		"title": "Demo – khách bấm Sửa lại ở tin đọc lại",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"step": "4",
+		"text": "",
+		"buttons": [],
+		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+		"action": "demo:button"
+	},
+	{
+		"code": "DEMO_SUA_SONGUOI",
+		"title": "Demo – sửa số người",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"step": "4",
+		"text": "",
+		"buttons": [],
+		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+		"action": "demo:button"
+	},
+	{
+		"code": "DEMO_SUA_HT",
+		"title": "Demo – sửa hình thức",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+		"step": "4",
+		"text": "",
+		"buttons": [],
+		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+		"action": "demo:button"
 	}
 ]
