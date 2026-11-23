@@ -690,6 +690,51 @@ def customer_cancels(ctx: RouteContext) -> bool:
 	return True
 
 
+WAITING_CONF = "omni_script_answer_waiting"  # site_config: 1 = trong lúc chờ nhân viên bot vẫn trả lời (luật 10)
+WAITING_ACTIONS = ("DEMO", "BAOGIA", "TAILIEU")  # yêu cầu mới rõ ràng: bot làm tiếp, việc gặp nhân viên vẫn mở
+WAITING_MIN_CONF = 0.9
+
+
+def while_waiting(ctx: RouteContext) -> str:
+	"""Khách đang chờ nhân viên, CHƯA ai trả lời, và khách nhắn tiếp:
+	- câu hỏi thông tin → bot trả lời bằng Kho tri thức (hoặc ghi lại cho chuyên viên), vẫn giữ trạng thái chờ → "answered";
+	- yêu cầu mới rõ ràng (demo / báo giá / tài liệu, độ tin cậy ≥ 0,9) → mở lại bot để làm việc đó; việc đã giao cho
+	  nhân viên vẫn mở và được ghi chú → "resumed";
+	- còn lại (cảm ơn, nói thêm cho nhân viên…) → "" (bot im, nhân viên xử lý).
+	Nhân viên đã nhắn trong hội thoại thì luôn "" (bot chỉ im khi nhân viên đã vào cuộc)."""
+	if not cint(frappe.conf.get(WAITING_CONF) or 0):
+		return ""
+	info = _handoff_state(ctx.identity)
+	if not info.get("at"):
+		return ""
+	since = get_datetime(info["at"])
+	if _staff_replied(ctx.identity, since) or (ctx.lead and send.staff_replied_after(ctx.lead, since)):
+		return ""
+	from omni_crm.script.flows import menu
+
+	code, conf = menu.classify_text(ctx)
+	detail = ctx.state.get(menu.DETAIL_KEY) or {}
+	questions = detail.get("questions") or ([ctx.text] if code == "KB_HOI" else [])
+	if questions:
+		frappe.flags[send.WAITING_FLAG] = True
+		try:
+			menu._answer_questions(ctx, questions)
+		finally:
+			frappe.flags.pop(send.WAITING_FLAG, None)
+		return "answered"
+	if code in WAITING_ACTIONS and float(conf or 0) >= WAITING_MIN_CONF:
+		if ctx.lead:
+			bot_handoff.resume_lead(ctx.lead)
+		frappe.db.set_value(IDENTITY, ctx.identity, "bot_paused_until", None, update_modified=False)
+		state.update_state(ctx.identity, handoff=None, flow=None, handoff_phone_tries=None, pause_pending=None)
+		note = _("Trong lúc chờ nhân viên, khách nêu yêu cầu mới; bot xử lý tiếp. Yêu cầu gặp nhân viên vẫn cần được phản hồi.")
+		tasks.append_note(info.get("task"), note)
+		if ctx.lead:
+			bot_handoff.note_on_lead(ctx.lead, note)
+		return "resumed"
+	return ""
+
+
 # --- Trả lại cho bot ----------------------------------------------------------------------------------------------
 
 

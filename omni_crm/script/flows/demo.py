@@ -66,6 +66,7 @@ STATE_KEYS = (
 	"demo_time_asked",
 	"demo_confirmed",
 	"demo_edit",
+	"demo_resched",
 )
 MIN_AHEAD = timedelta(hours=2)  # không nhận lịch bắt đầu trong vòng 2 giờ tới
 MAX_AHEAD = timedelta(days=45)  # không nhận lịch xa hơn 45 ngày
@@ -631,6 +632,8 @@ def _offer_nearest(ctx: RouteContext, after: datetime) -> None:
 	if not nearest:
 		_handoff(ctx, _("Khách muốn demo vào giờ đã kín lịch, không tìm được khung thay thế"))
 		return
+	if readback_on() and outside_hours(after) and _offer_three(ctx, nearest):
+		return  # luật 8: ngoài giờ thì nói rõ và đề xuất 3 khung gần nhất
 	state.update_state(ctx.identity, demo_slots=[_iso(nearest)], demo_at=None, flow=None, demo_wait=None)
 	labels = {"khung_1": slot_label(nearest)}
 	sent = (_send(ctx, NODE_OUTSIDE, labels) if outside_hours(after) else None) or _send(ctx, NODE_BUSY, labels)
@@ -640,6 +643,27 @@ def _offer_nearest(ctx: RouteContext, after: datetime) -> None:
 	state.update_state(
 		ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(_now()), flow=FLOW, demo_wait=WAIT_SLOTS
 	)
+
+
+NODE_OUTSIDE_3 = "DEMO_NGOAIGIO_3"
+
+
+def _offer_three(ctx: RouteContext, first: datetime) -> bool:
+	"""Giờ khách muốn nằm ngoài giờ làm việc: đề xuất 3 khung trống gần giờ đó nhất. True nếu đã gửi."""
+	user, slots = demo_user(_service(ctx)), [first]
+	while len(slots) < 3:
+		nxt = next_free(slots[-1] + DURATION, user, _now(), lead=ctx.lead)
+		if not nxt or nxt in slots:
+			break
+		slots.append(nxt)
+	if len(slots) < 3:
+		return False
+	state.update_state(ctx.identity, demo_slots=[_iso(x) for x in slots], demo_at=None, flow=None, demo_wait=None)
+	sent = _send(ctx, NODE_OUTSIDE_3, {f"khung_{i + 1}": slot_label(x) for i, x in enumerate(slots)})
+	if not sent:
+		return False
+	state.update_state(ctx.identity, demo_slots_msg=sent, demo_slots_at=_iso(_now()), flow=FLOW, demo_wait=WAIT_SLOTS)
+	return True
 
 
 READBACK_CONF = "omni_script_readback"  # site_config: 1 = đọc lại cho khách xác nhận trước khi chốt (luật 7)
@@ -699,6 +723,7 @@ def confirm(ctx: RouteContext) -> None:
 		demo_email_asked=None,
 		demo_confirmed=None,
 		demo_edit=None,
+		demo_resched=None,
 	)
 	extra = scheduler.demo_variables(start, mode)
 	if any(_send(ctx, code, extra) for code in NODE_CONFIRM):
@@ -1077,11 +1102,43 @@ def _on_other_time(ctx: RouteContext) -> None:
 
 
 def _on_reschedule(ctx: RouteContext) -> None:
+	if readback_on() and _reschedule_keeping(ctx):
+		return
 	mode = ctx.lead and frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")
 	release(ctx.identity, ctx.lead, _("Khách đổi lịch demo"))
 	if mode and not _st(ctx.identity).get("demo_mode"):
 		state.update_state(ctx.identity, demo_mode=mode)
 	propose(ctx)
+
+
+def _reschedule_keeping(ctx: RouteContext) -> bool:
+	"""Đổi lịch (luật 7 + 8): lịch cũ GIỮ NGUYÊN cho tới khi khách xác nhận lịch mới ở tin đọc lại (lúc đó `book` mới
+	thay lịch và tạo lại tin nhắc). Hình thức và số người lấy từ lịch cũ, không hỏi lại. Khách đã nêu ngày giờ mới
+	trong câu thì dùng luôn; mới nêu ngày thì xin thêm giờ; không nêu thì đề xuất khung trống."""
+	if not ctx.lead:
+		return False
+	row = frappe.db.get_value(LEAD, ctx.lead, ["omni_demo_at", "omni_demo_mode", "omni_demo_attendees"], as_dict=True)
+	if not row or not row.omni_demo_at:
+		return False
+	state.update_state(
+		ctx.identity,
+		demo_mode=row.omni_demo_mode or _st(ctx.identity).get("demo_mode"),
+		demo_attendees=cint(row.omni_demo_attendees) or None,
+		demo_edit=1,
+		demo_resched=1,
+		demo_confirmed=None,
+		demo_at=None,
+	)
+	text = cstr(ctx.text) if not ctx.payload_code or ctx.payload_code != "DEMO_DOILICH" or len(cstr(ctx.text)) > 12 else ""
+	start = parse_time(text, _now()) if text else None
+	if start and in_booking_range(start, _now()):
+		choose(ctx, start)
+		return True
+	if text and not start and _parse_day(" " + text.lower() + " ", _now().date())[0]:
+		state.update_state(ctx.identity, flow=FLOW, demo_wait="time", demo_time_asked=1)
+		if _send(ctx, NODE_TIME_AGAIN):
+			return True
+	return bool(propose(ctx))
 
 
 def _on_cancel(ctx: RouteContext) -> None:
@@ -1154,6 +1211,9 @@ BOOKING_ENTRY = (
 )
 
 
+BOOKING_OPEN = ("DAT_DEMO", "DEMO_PHANMEM", "DEMO_SPD")  # nút MỞ một lượt đặt lịch mới
+
+
 def handle(ctx: RouteContext) -> None:
 	"""Handler router cho mọi nút `DEMO_*` và `DAT_DEMO`."""
 	code = ctx.payload_code or ""
@@ -1161,6 +1221,8 @@ def handle(ctx: RouteContext) -> None:
 	if code == "DAT_DEMO" and _service(ctx) == "VATTU":
 		code = NODE_NO_DEMO  # Vật tư không có demo: mời gửi danh mục (2.5)
 	booked = _has_booking(ctx) if code in BOOKING_ENTRY else None
+	if booked and code not in BOOKING_OPEN and _st(ctx.identity).get("demo_resched"):
+		booked = None  # khách đang đổi lịch (đã bấm "Đổi lịch"): các nút chọn khung / giờ khác là của lượt đổi này
 	if booked:
 		# đã có lịch: không lặng lẽ mở đặt lịch mới rồi ghi đè; nhắc lịch đang có và hỏi khách muốn đổi hay huỷ
 		mode = frappe.db.get_value(LEAD, ctx.lead, "omni_demo_mode")

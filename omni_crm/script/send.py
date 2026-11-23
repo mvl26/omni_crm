@@ -42,6 +42,7 @@ BATCH_FLAG = (
 INFRA_CONF = "omni_script_bot_allowed"  # site_config: khóa hạ tầng cho khách ngoài danh sách thử
 # Mã lý do chặn: nhóm "im lặng có chủ ý" (không báo nhân viên khi tin bị chặn lúc gửi)
 SWITCH, INFRA, PAUSED, DNC, JUNK = "switch", "infra", "paused", "dnc", "junk"
+WAITING_FLAG = "omni_script_waiting_ok"  # frappe.flags: lượt này được gửi dù bot đang tạm dừng (xem handoff.while_waiting)
 QUIET_BLOCKS = frozenset({SWITCH, INFRA, DNC, JUNK})
 
 
@@ -201,6 +202,15 @@ def send_text(
 	return _queue(identity, text.strip(), btns, store.normalize_code(code) or TEXT_CODE, "reply")
 
 
+def _addressed(identity: str, text: str) -> str:
+	try:
+		from omni_crm.script import address
+
+		return address.apply(identity, text)
+	except Exception:
+		return text
+
+
 def _queue(
 	identity: str,
 	text: str,
@@ -221,8 +231,10 @@ def _queue(
 		_log("tin_kem_nut_qua_dai", identity, code)
 		return None
 	text, choices = with_choice_list(text, buttons)
-	if blocked_reason(identity):
-		return None
+	blocked = block_code(identity)
+	if blocked and not (blocked == PAUSED and frappe.flags.get(WAITING_FLAG)):
+		return None  # đang chờ nhân viên mà chưa ai nhắn: riêng câu trả lời thông tin vẫn được gửi (luật 10)
+	text = _addressed(identity, text)
 	channel = channel_of(identity)
 	if not channel:
 		_log("khong_co_kenh", identity, code)

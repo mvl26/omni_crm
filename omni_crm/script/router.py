@@ -236,6 +236,11 @@ def build_context(batch_id: str) -> RouteContext | None:
 		text = f"{carried}\n{text}"
 	if carried:
 		st["script_state"] = state.update_state(last.identity, carry=None)
+	if text and _code_of(last, st) is None:  # luật 11: nhớ cách khách tự xưng (anh / chị) để bot gọi cho đúng
+		from omni_crm.script import address
+
+		if address.remember(last.identity, text, st.get("script_state")):
+			st = state.get(last.identity)
 	return RouteContext(
 		batch_id=batch_id,
 		identity=last.identity,
@@ -290,6 +295,16 @@ def handle_batch(batch_id: str) -> bool:
 		_mark(batch_id)
 		frappe.db.commit()
 		return True
+	if code in SILENT_STOPS and not _sale_replied(ctx):
+		# luật 10: đang chờ nhân viên mà chưa ai nhắn — bot vẫn trả lời câu hỏi thông tin / nhận yêu cầu mới
+		waiting = _answer_while_waiting(ctx)
+		if waiting == "answered":
+			_mark(batch_id)
+			frappe.db.commit()
+			return True
+		if waiting == "resumed":
+			code = send.block_code(ctx.identity)
+			ctx.state = state.get(ctx.identity)
 	if code in SILENT_STOPS or _sale_replied(ctx):  # nhân viên đang xử lý: bot im lặng
 		_mark(batch_id)
 		return True
@@ -338,6 +353,26 @@ def check_superseded(ctx: RouteContext) -> None:
 		return
 	if any(r.batch_id != ctx.batch_id and not (r.text or "").strip().startswith("#") for r in newer):
 		raise Superseded()
+
+
+def _answer_while_waiting(ctx: RouteContext) -> str:
+	"""Xem `flows.handoff.while_waiting`: "answered" | "resumed" | "" (bot im như cũ). Lỗi → ""."""
+	if ctx.event_type != "message" or ctx.payload_code or not (ctx.text or "").strip():
+		return ""
+	try:
+		load_flows()
+		from omni_crm.script.flows import handoff
+
+		frappe.flags[send.BATCH_FLAG] = ctx.batch_id
+		return handoff.while_waiting(ctx) or ""
+	except Superseded:
+		raise
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.logger("omni").info("omni script: không xử lý được tin trong lúc chờ nhân viên (%s)", type(e).__name__)
+		return ""
+	finally:
+		frappe.flags.pop(send.BATCH_FLAG, None)
 
 
 def _customer_cancels_handoff(ctx: RouteContext) -> bool:

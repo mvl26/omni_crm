@@ -1009,8 +1009,14 @@ def _demo_change(ctx: RouteContext, text: str) -> bool:
 	if not code or _foreign_handler(code) is None:
 		return False
 	state.reset_reask(ctx.identity)
+	if code == "DEMO_HUY" and _readback_on() and _show_booking(ctx):
+		return True  # luật 7: huỷ lịch là việc khó hoàn tác — nhắc lịch đang có, khách bấm "Huỷ lịch" mới huỷ
 	go(ctx, code)
 	return True
+
+
+def _readback_on() -> bool:
+	return bool(cint(frappe.conf.get("omni_script_readback") or 0))
 
 
 def _ack_only(text: str) -> bool:
@@ -1475,7 +1481,8 @@ def answer_kb(ctx: RouteContext) -> None:
 					engine.run_node(ctx, engine.service_code(ctx, "HOITIEP") or MENU_CODE)
 				return
 		elif not _shadow_only(res["group"]) and _to_sale_draft(ctx, res["name"]):
-			return  # luồng nháp sẵn có: nhân viên duyệt rồi gửi
+			_hold_for_staff(ctx)  # luật 9: nháp chờ nhân viên duyệt thì khách vẫn nhận một câu, không im lặng
+			return
 	if _understand_on() and store.get_node(NODE_KB_NOTED):
 		pending = _pending_question(ctx)
 		_log_unanswered(ctx, "", {})
@@ -1485,6 +1492,30 @@ def answer_kb(ctx: RouteContext) -> None:
 			return
 	if not engine.run_node(ctx, NODE_KB_NONE, {"question": ctx.text}):
 		engine.fallback(ctx, NODE_KB_NONE)
+
+
+NODE_KB_HOLD = "KB_CHODUYET"
+
+
+def _hold_for_staff(ctx: RouteContext) -> bool:
+	"""Câu trả lời đang chờ nhân viên duyệt: báo khách đã nhận câu hỏi rồi quay lại câu đang hỏi dở (nếu có). Nhân viên
+	đã trả lời sau tin này thì thôi. Không bao giờ ném lỗi."""
+	try:
+		from omni_crm.bot import reply
+
+		last = (reply._batch_messages(ctx.batch_id) or [None])[-1]
+		if last and send.staff_replied_after(ctx.lead, last.received_at):
+			return False
+		pending = _pending_question(ctx)
+		prefix = ctx.state.pop(engine.LEAD_IN_KEY, "")
+		if not send.send_node(ctx.identity, NODE_KB_HOLD, engine.variables(ctx), prefix=prefix):
+			return False
+		router._mark(ctx.batch_id)
+		_back_to_pending(ctx, pending, NODE_BACK)
+		return True
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không gửi được câu giữ chân (%s)", type(e).__name__)
+		return False
 
 
 def _kb_auto_send(ctx: RouteContext, res: dict) -> bool:

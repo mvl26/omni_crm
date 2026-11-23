@@ -511,5 +511,48 @@
 		"buttons": [],
 		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
 		"action": "demo:button"
+	},
+	{
+		"code": "KB_CHODUYET",
+		"title": "Câu giữ chân khi câu trả lời đang chờ nhân viên duyệt",
+		"step": "1",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"buttons": [],
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 6, luật 9)",
+		"text": "Dạ, Miyano đã nhận câu hỏi của anh/chị. Chuyên viên Miyano sẽ kiểm tra và trả lời anh/chị trong giờ làm việc ạ.",
+		"notes": "Gửi khi bot đã soạn câu trả lời nhưng nhóm câu hỏi đó cần nhân viên duyệt trước khi gửi. Không hứa thời gian cụ thể."
+	},
+	{
+		"code": "DEMO_NGOAIGIO_3",
+		"title": "Demo – giờ khách muốn nằm ngoài giờ làm việc: đề xuất 3 khung gần nhất",
+		"step": "4",
+		"service": "",
+		"channel": "Tất cả",
+		"status": "Đang dùng",
+		"action": "",
+		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 7, luật 8)",
+		"text": "Dạ, giờ anh/chị chọn nằm ngoài giờ Miyano nhận lịch demo (thứ Hai đến thứ Sáu, trong giờ làm việc) ạ. Miyano đề xuất 3 khung gần nhất, anh/chị chọn giúp Miyano một khung phù hợp ạ:",
+		"buttons": [
+			{
+				"label": "{khung_1}",
+				"target": "DEMO_KHUNG_1"
+			},
+			{
+				"label": "{khung_2}",
+				"target": "DEMO_KHUNG_2"
+			},
+			{
+				"label": "{khung_3}",
+				"target": "DEMO_KHUNG_3"
+			},
+			{
+				"label": "Giờ khác",
+				"target": "DEMO_GIOKHAC"
+			}
+		],
+		"notes": "Thay cho DEMO_NGOAIGIO (1 khung) khi công tắc omni_script_readback bật."
 	}
 ]

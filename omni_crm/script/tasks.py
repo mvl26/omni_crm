@@ -139,8 +139,21 @@ def lead_assignee(lead: str | None) -> str | None:
 
 
 def assignee_for(lead: str | None, service: str | None) -> str | None:
-	"""Người nhận việc: bảng người nhận của dịch vụ → người phụ trách Lead → None."""
-	return recipient(service) or lead_assignee(lead)
+	"""Người nhận việc: bảng người nhận của dịch vụ → người phụ trách Lead → người dự phòng trong Omni Settings
+	(`callback_fallback_user`, rồi `assignment_fallback_users`) → None. Luật 10: chuyển người luôn có người nhận."""
+	return recipient(service) or lead_assignee(lead) or _fallback_user(lead)
+
+
+def _fallback_user(lead: str | None) -> str | None:
+	if not lead:
+		return None
+	try:
+		from omni_crm.bot import handoff as bot_handoff
+
+		users = bot_handoff.recipients(lead)
+		return users[0] if users else None
+	except Exception:
+		return None
 
 
 @contextmanager

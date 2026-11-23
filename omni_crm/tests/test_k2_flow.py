@@ -353,7 +353,8 @@ class TestMenu(FlowCase):
 		):
 			self.say("triển khai mất bao lâu?", "KB_HOI")
 		to_sale.assert_called_once()
-		self.assertEqual((self.sent(), self.handoffs), ([], []))
+		# luật 9 (20/11): nháp chờ nhân viên duyệt thì khách vẫn nhận câu giữ chân, không im lặng
+		self.assertEqual((self.sent()[:1], self.handoffs), (["KB_CHODUYET"], []))
 
 	def test_kb_no_answer_fixed_sentence_handoff_and_logged(self):
 		with mock.patch.object(reply, "make_draft", return_value=None) as make:
