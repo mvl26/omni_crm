@@ -235,3 +235,65 @@ class TestZaloClientHeaders(FrappeTestCase):
 		self.assertEqual(data, {"status": 1})
 		sent = req.call_args.kwargs["headers"]
 		self.assertEqual((sent["token"], sent["access_token"]), ("vt", "tok"))
+
+
+class TestZaloPermalink(ZaloCase):
+	"""Link "Xem bài đã đăng" cho bài Zalo OA: `link_view` của article/getdetail."""
+
+	def test_fetch_permalink_uses_link_view(self):
+		link = "https://post.oa.zalo.me/v?id=2d26&pageId=3781"
+		fake = FakeClient([{"type": "video", "link_view": link}])
+		with mock.patch.object(zalo, "_client", return_value=fake):
+			self.assertEqual(zalo.ZaloAdapter().fetch_permalink(video_payload(), "2d26"), link)
+		self.assertEqual(fake.calls[0][1], "/v2.0/article/getdetail")
+		self.assertEqual(fake.calls[0][2]["params"], {"id": "2d26"})
+
+	def test_odd_link_or_error_gives_empty(self):
+		from omni_crm.channels.zalo import errors as zerr
+
+		for reply in (
+			{"link_view": "javascript:alert(1)"},
+			{"link_view": "http://x"},
+			{},
+			zerr.to_error(-201, 200, "x"),
+		):
+			with mock.patch.object(zalo, "_client", return_value=FakeClient([reply])):
+				self.assertEqual(zalo.ZaloAdapter().fetch_permalink(video_payload(), "a1"), "")
+		self.assertEqual(zalo.ZaloAdapter().fetch_permalink(video_payload(), ""), "")
+
+	def test_publish_success_stores_link(self):
+		from omni_crm.marketing.publisher import dispatch, run
+
+		_item, target = self.zalo_item("zalo_pdf_link", document=self.file(".pdf"))
+		frappe.db.set_value("Omni Content Target", target, "status", rules.T_SCHEDULED)
+		self.assertTrue(dispatch._claim_scheduled(target))
+		link = "https://post.oa.zalo.me/d/3781?id=ed03&pageId=3781"
+		fake = FakeClient([{"token": "tk"}, {"article_id": "ed03"}, {"link_view": link}])
+		with (
+			mock.patch.object(zalo, "_client", return_value=fake),
+			mock.patch("omni_crm.marketing.settings.dry_run", return_value=False),
+			mock.patch("time.sleep"),
+		):
+			self.assertEqual(run.publish_target(target), rules.T_SUCCESS)
+		row = frappe.db.get_value(
+			"Omni Content Target", target, ["external_post_id", "permalink"], as_dict=True
+		)
+		self.assertEqual((row.external_post_id, row.permalink), ("ed03", link))
+
+	def test_backfill_previews_then_writes(self):
+		_item, target = self.zalo_item("zalo_article")
+		frappe.db.set_value(
+			"Omni Content Target",
+			target,
+			{"status": rules.T_SUCCESS, "external_post_id": "c835", "permalink": None},
+			update_modified=False,
+		)
+		frappe.db.commit()
+		link = "https://post.oa.zalo.me/d/3781?id=c835&pageId=3781"
+		with mock.patch.object(zalo, "_client", side_effect=lambda ch: FakeClient([{"link_view": link}])):
+			preview = zalo.backfill_permalinks()
+			self.assertIsNone(frappe.db.get_value("Omni Content Target", target, "permalink"))
+			done = zalo.backfill_permalinks(dry_run=0)
+		self.assertGreaterEqual(preview["filled"], 1)
+		self.assertEqual(done["dry_run"], 0)
+		self.assertEqual(frappe.db.get_value("Omni Content Target", target, "permalink"), link)

@@ -117,6 +117,10 @@ developers.zalo.me chỉ hiện trong trình duyệt nên chưa đọc được 
 - **Số liệu Zalo** (trước đây để trống): `getdetail` cho lượt xem (cột `impressions`), thích, bình luận, chia sẻ. Bài
   video thì lượt xem cũng ghi vào `video_views`. Zalo không có tiếp cận và lượt bấm.
 - `ZaloClient._request` nhận thêm `headers` (header `token` của bước kiểm video). Không thay được `access_token`.
+- **Link "Xem bài đã đăng"** (bổ sung 24/11/2026): `ZaloAdapter.fetch_permalink` lấy `link_view` của `getdetail`.
+  T3 trả `https://post.oa.zalo.me/v?id=…` cho bài video và `https://post.oa.zalo.me/d/<oa>?id=…` cho bài thường. Chỉ
+  nhận https; lỗi thì để trống, không làm hỏng lần đăng. Bài đăng trước bản vá này được điền bằng lệnh chạy tay
+  `zalo.backfill_permalinks` (mặc định chỉ xem trước).
 - Không dùng tin Truyền thông (broadcast) để báo người quan tâm OA: đó là gửi hàng loạt, trái quy tắc dự án.
   Đăng bài viết chỉ đưa bài lên trang OA.
 
@@ -126,4 +130,4 @@ developers.zalo.me chỉ hiện trong trình duyệt nên chưa đọc được 
   Facebook.
 - Chưa thử đăng thật bài `zalo_video` qua bộ đăng bài (sau khi triển khai: `thu_t3.py --nen-tang zalo`).
 - Giới hạn chính thức (thời lượng, độ phân giải video) chưa đọc được.
-- Test: `tests/test_v3_35_zalo_video.py` (13 test).
+- Test: `tests/test_v3_35_zalo_video.py` (17 test).

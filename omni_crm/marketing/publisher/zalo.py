@@ -14,6 +14,8 @@ ADR 0035 (Zalo), đã thử trên OA thật 23/11/2026 (spd/docs/35 mục 11):
   video_id; rồi `article/create` {type:"video", title, description, video_id, avatar, status, comment} như bài thường.
 - zalo_pdf_link: bài viết thường, nội dung có thêm link tới PDF công khai của CRM.
 - Số liệu: `GET /v2.0/article/getdetail?id=` -> total_view, total_like, total_comment, total_share.
+- Link bài: `link_view` của getdetail (thử thật 24/11/2026: `https://post.oa.zalo.me/v?id=…` cho bài video,
+  `https://post.oa.zalo.me/d/<oa>?id=…` cho bài thường).
 """
 
 from __future__ import annotations
@@ -197,6 +199,55 @@ def video_bytes(file_url: str) -> tuple[str, bytes]:
 	return (doc.file_name or "video.mp4"), data
 
 
+def article_link(channel: str, article_id: str) -> str:
+	"""Link xem bài viết OA (`link_view` của article/getdetail); chỉ nhận https, lỗi thì chuỗi rỗng."""
+	if not channel or not article_id:
+		return ""
+	try:
+		data = (
+			_client(channel)._request("GET", config.get("article_detail_path"), params={"id": article_id})
+			or {}
+		)
+	except Exception:
+		return ""
+	link = str(data.get("link_view") or "").strip()
+	return link if link.startswith("https://") and " " not in link else ""
+
+
+def backfill_permalinks(dry_run: int = 1) -> dict:
+	"""Lệnh chạy tay: điền link "Xem bài đã đăng" cho bài Zalo OA đã đăng trước khi có `fetch_permalink`.
+	Mặc định chỉ xem trước (dry_run=1); dry_run=0 mới ghi. Trả {found, filled, missing}.
+
+	bench --site <site> execute omni_crm.marketing.publisher.zalo.backfill_permalinks --kwargs "{'dry_run': 0}"
+	"""
+	from omni_crm.marketing import rules
+
+	rows = frappe.get_all(
+		"Omni Content Target",
+		filters={
+			"platform": rules.ZALO,
+			"status": rules.T_SUCCESS,
+			"external_post_id": ["is", "set"],
+			"permalink": ["is", "not set"],
+		},
+		fields=["name", "channel_account", "external_post_id"],
+	)
+	filled = missing = 0
+	for row in rows:
+		if str(row.external_post_id).startswith("dryrun-"):
+			continue
+		link = article_link(row.channel_account, row.external_post_id)
+		if not link:
+			missing += 1
+			continue
+		filled += 1
+		if not int(dry_run):
+			frappe.db.set_value("Omni Content Target", row.name, "permalink", link, update_modified=False)
+	if not int(dry_run):
+		frappe.db.commit()
+	return {"found": len(rows), "filled": filled, "missing": missing, "dry_run": int(dry_run)}
+
+
 class ZaloAdapter(Adapter):
 	platform = "Zalo OA"
 
@@ -293,6 +344,10 @@ class ZaloAdapter(Adapter):
 				continue  # bài cũ trùng tiêu đề: không nhận nhầm
 			return PublishResult(external_post_id=str(row.get("id") or ""))
 		return None
+
+	def fetch_permalink(self, payload: Payload, external_post_id: str) -> str:
+		"""Link "Xem bài đã đăng" trên trang bài /crm (run._success gọi sau khi đăng thành công)."""
+		return article_link(payload.channel, external_post_id)
 
 	def fetch_insights(self, channel: str, external_post_id: str) -> dict[str, int | None]:
 		"""Số liệu bài viết OA (ADR 0035): lượt xem, thích, bình luận, chia sẻ từ `article/getdetail` (thử thật
