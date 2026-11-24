@@ -437,6 +437,49 @@ class TestVideoMetricsSaved(VideoCase):
 		self.assertIn("Lượt xem video", [c.value for c in wb["Bai dang"][1]])
 
 
+class TestFacebookPermalink(VideoCase):
+	"""Link "Xem bài đã đăng" cho bài Facebook: chỉ https, lỗi thì rỗng, lệnh điền bù xem trước rồi ghi."""
+
+	def test_https_only_and_errors_give_empty(self):
+		ad = facebook.FacebookAdapter()
+		p = video_payload()
+		with mock.patch.object(facebook.FacebookAdapter, "_page", return_value=("320320", "tok")):
+			for body, want in (
+				({"permalink_url": "/reel/16835/"}, "https://www.facebook.com/reel/16835/"),
+				(
+					{"permalink_url": "https://www.facebook.com/320320/posts/7"},
+					"https://www.facebook.com/320320/posts/7",
+				),
+				({"permalink_url": "javascript:alert(1)"}, ""),
+				({"permalink_url": "http://x.com/a"}, ""),
+				({}, ""),
+			):
+				with mock.patch("requests.request", return_value=FakeResp(200, body)):
+					self.assertEqual(ad.fetch_permalink(p, "320_1"), want)
+		with mock.patch.object(facebook.FacebookAdapter, "_page", side_effect=frappe.DoesNotExistError):
+			self.assertEqual(ad.fetch_permalink(p, "320_1"), "", "kênh hỏng: không ném lỗi")
+		self.assertEqual(ad.fetch_permalink(p, ""), "")
+
+	def test_backfill_previews_then_writes(self):
+		_item, target = self.item_with("fb_pdf_link", document=self.file(".pdf"))
+		frappe.db.set_value(
+			"Omni Content Target",
+			target,
+			{"status": rules.T_SUCCESS, "external_post_id": "320320_77", "permalink": None},
+			update_modified=False,
+		)
+		frappe.db.commit()
+		link = "https://www.facebook.com/320320/posts/77"
+		with mock.patch("requests.request", return_value=FakeResp(200, {"permalink_url": link})) as req:
+			preview = facebook.backfill_permalinks()
+			self.assertIsNone(frappe.db.get_value("Omni Content Target", target, "permalink"))
+			done = facebook.backfill_permalinks(dry_run=0)
+		self.assertGreaterEqual(preview["filled"], 1)
+		self.assertEqual(done["dry_run"], 0)
+		self.assertEqual(frappe.db.get_value("Omni Content Target", target, "permalink"), link)
+		self.assertTrue(any(c.args[1].endswith("/320320_77") for c in req.call_args_list))
+
+
 class TestVideoFieldOnS3(MediaCase):
 	"""Ô video / tài liệu của bài chuyển lên kho S3 khi lưu bài (như ô ảnh), quay lui được."""
 

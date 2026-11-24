@@ -305,12 +305,62 @@ class FacebookAdapter(Adapter):
 		return None
 
 	def fetch_permalink(self, payload: Payload, external_post_id: str) -> str:
-		_page_id, token = self._page(payload.channel)
+		"""Link "Xem bài đã đăng" (`permalink_url`; video trả đường tương đối, đổi sang tuyệt đối). Chỉ nhận https;
+		lỗi (kênh, token, bài đã xóa) thì chuỗi rỗng, không làm hỏng lần đăng."""
+		if not external_post_id:
+			return ""
 		try:
+			_page_id, token = self._page(payload.channel)
 			body = self._call("GET", external_post_id, token, params={"fields": "permalink_url"})
 		except Exception:
 			return ""
-		return _absolute(body.get("permalink_url"))
+		link = _absolute(body.get("permalink_url")).strip()
+		return link if link.startswith("https://") and " " not in link else ""
+
+
+def backfill_permalinks(dry_run: int = 1) -> dict:
+	"""Lệnh chạy tay: điền link "Xem bài đã đăng" cho bài Facebook đã đăng mà chưa có link (lần lấy link lúc đăng bị
+	lỗi, hoặc đăng trước khi có link). Mặc định chỉ xem trước (dry_run=1); dry_run=0 mới ghi. Trả {found, filled,
+	missing}.
+
+	bench --site <site> execute omni_crm.marketing.publisher.facebook.backfill_permalinks --kwargs "{'dry_run': 0}"
+	"""
+	from omni_crm.marketing import rules
+
+	rows = frappe.get_all(
+		"Omni Content Target",
+		filters={
+			"platform": rules.FACEBOOK,
+			"status": rules.T_SUCCESS,
+			"external_post_id": ["is", "set"],
+			"permalink": ["is", "not set"],
+		},
+		fields=["name", "channel_account", "post_format", "external_post_id"],
+	)
+	adapter = FacebookAdapter()
+	filled = missing = 0
+	for row in rows:
+		if str(row.external_post_id).startswith("dryrun-"):
+			continue
+		payload = Payload(
+			target=row.name,
+			platform=rules.FACEBOOK,
+			post_format=row.post_format,
+			channel=row.channel_account,
+			title="",
+			caption="",
+			tracking_url="",
+		)
+		link = adapter.fetch_permalink(payload, row.external_post_id)
+		if not link:
+			missing += 1
+			continue
+		filled += 1
+		if not int(dry_run):
+			frappe.db.set_value("Omni Content Target", row.name, "permalink", link, update_modified=False)
+	if not int(dry_run):
+		frappe.db.commit()
+	return {"found": len(rows), "filled": filled, "missing": missing, "dry_run": int(dry_run)}
 
 
 def _absolute(link: Any) -> str:

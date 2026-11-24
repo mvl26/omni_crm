@@ -54,6 +54,9 @@ Ngày: 2026-11-23 · Trạng thái: Đề xuất (chờ Việt review) · Liên 
     (15/8/2025), blog Graph API v25 (18/2/2026), và kết quả T3.
 - **Bài có link tới PDF chờ 60 giây** (`LINK_TIMEOUT`): Facebook tải PDF dựng thẻ xem trước trong lúc trả lời. T3:
   quá 10 giây, bài vẫn lên, lượt thử sau đối chiếu thấy, không trùng.
+- **Link "Xem bài đã đăng"** (bổ sung 24/11/2026, giống Zalo): `fetch_permalink` chỉ nhận https, lỗi (kênh, token, bài
+  đã xóa) thì để trống. Bài Facebook đã đăng mà chưa có link được điền bằng lệnh chạy tay
+  `facebook.backfill_permalinks` (mặc định chỉ xem trước).
 - **Kho S3 (ADR 0033):** hai ô mới chuyển lên MinIO khi lưu bài như ô ảnh. Loại và cỡ theo `ATTACH_TYPES`, tối đa
   `ATTACH_MAX_BYTES`. Video lớn hơn ở lại `/files/`, và nginx phát trực tiếp nên Facebook vẫn tải được. `_replace_refs`,
   `_still_used`, `push_pending`, `pending_count`, `pull_back` và báo cáo "Kho ảnh MinIO" đều tính hai ô này. Đổi video
@@ -89,7 +92,7 @@ Ngày: 2026-11-23 · Trạng thái: Đề xuất (chờ Việt review) · Liên 
   - Đạt các chỗ VERIFY về video: mô tả có mã theo dõi, permalink tương đối, `created_time`, đối chiếu.
   - Tên metric và đường đọc chỉ số đã chốt theo kết quả thật (mục Quyết định). Hai chỗ `VERIFY` còn lại trong
     `facebook.py` là tên metric do Meta đổi định kỳ; kiểm lại bằng `thu_t3.py --kiem-bai` khi Meta báo đổi.
-- Test: `tests/test_v3_35_video_pdf.py` (23 test, giả lập HTTP và kho S3), `frontend/tests/unit/marketingMedia.test.js` (17 test).
+- Test: `tests/test_v3_35_video_pdf.py` (25 test, giả lập HTTP và kho S3), `frontend/tests/unit/marketingMedia.test.js` (17 test).
 
 ## Bổ sung: Zalo OA (23/11/2026)
 
