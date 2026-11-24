@@ -25,7 +25,14 @@ DEFAULTS: dict = {
 	# create trả `token`; verify(token) trả `article_id` khi xử lý xong; getslice liệt kê bài gần nhất.
 	"article_create_path": "/v2.0/article/create",
 	"article_verify_path": "/v2.0/article/verify",
-	"article_list_path": "/v2.0/article/getslice",  # V3-10 VERIFY: "Lấy thông tin Official Account" (chưa đọc được tài liệu chính thức)
+	"article_list_path": "/v2.0/article/getslice",
+	# ADR 0035 (Zalo), đã thử trên OA thật 23/11/2026 (spd/docs/35 mục 11): tải video cho bài viết (multipart `file`,
+	# trả `token`); kiểm video (header `token`: status 1 sẵn sàng, 3 đang xử lý; trả `video_id`); chi tiết bài viết
+	# (trả total_view, total_like, total_comment, total_share).
+	"article_video_prepare_path": "/v2.0/article/upload_video/preparevideo",
+	"article_video_verify_path": "/v2.0/article/upload_video/verify",
+	"article_detail_path": "/v2.0/article/getdetail",
+	"article_video_timeout": 120,  # giây: tải video tới 50 MB  # V3-10 VERIFY: "Lấy thông tin Official Account" (chưa đọc được tài liệu chính thức)
 	"oauth_permission_path": "/v4/oa/permission",
 	"oauth_token_path": "/v4/oa/access_token",
 	"max_text_length": 2000,  # độ dài tối đa một tin văn bản tư vấn (chưa xác nhận)

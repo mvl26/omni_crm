@@ -1,4 +1,4 @@
-# ADR 0035 · Bài Facebook có video (fb_video) và bài có link tới PDF (fb_pdf_link)
+# ADR 0035 · Bài Facebook có video (fb_video) và bài có link tới PDF (fb_pdf_link) · bổ sung Zalo OA (zalo_video, zalo_pdf_link)
 
 Ngày: 2026-11-23 · Trạng thái: Đề xuất (chờ Việt review) · Liên quan: ADR 0028 (Marketing Hub), ADR 0033 (kho S3, mức 2), `spd/docs/35`
 
@@ -90,3 +90,40 @@ Ngày: 2026-11-23 · Trạng thái: Đề xuất (chờ Việt review) · Liên 
   - Tên metric và đường đọc chỉ số đã chốt theo kết quả thật (mục Quyết định). Hai chỗ `VERIFY` còn lại trong
     `facebook.py` là tên metric do Meta đổi định kỳ; kiểm lại bằng `thu_t3.py --kiem-bai` khi Meta báo đổi.
 - Test: `tests/test_v3_35_video_pdf.py` (23 test, giả lập HTTP và kho S3), `frontend/tests/unit/marketingMedia.test.js` (17 test).
+
+## Bổ sung: Zalo OA (23/11/2026)
+
+**Bối cảnh:** thứ tự đã chốt là Facebook, Website, Zalo, Gmail. Phần Website giao cho phiên khác. Trang
+developers.zalo.me chỉ hiện trong trình duyệt nên chưa đọc được tự động; luồng API lấy từ mã cộng đồng (DOS/Ludy PR
+1448) và **đã thử trên OA thật** Miyano Việt Nam bằng `thu_zalo_video.py`, tạo bài ẩn rồi gỡ (`spd/docs/35` mục 11):
+- `preparevideo` (multipart `file`, MP4 14.872 byte) trả `token`.
+- `upload_video/verify` (header `token`) trả status 3 rồi 1 và `video_id`.
+- Bài `type: "video"` (title, description, video_id, avatar, status, comment) qua create/verify trả `article_id`.
+- Bài thường có bìa video (`cover_type: "video"`) cũng được, khi verify có thể trả -214 (đang xử lý).
+- `getdetail` trả total_view, total_like, total_comment, total_share.
+- `article/remove {id}` gỡ được.
+
+**Quyết định:**
+- Hai định dạng mới cho Zalo OA:
+  - `zalo_video`: bài viết video gốc của Zalo. CRM đọc tệp video của bài (trên đĩa hoặc MinIO, `s3_media.file_content`),
+    tải lên Zalo, chờ xử lý (tối đa 5 phút), rồi tạo bài viết video. Mô tả là caption rút gọn trong 300 byte, ảnh đại
+    diện là ảnh bìa của bài. Chỉ MP4, tối đa 50 MB.
+  - `zalo_pdf_link`: bài viết thường như `zalo_article`, nội dung có thêm link "Xem tài liệu PDF" tới PDF công khai của
+    CRM, đặt trước link theo dõi.
+  - Cả hai cần ảnh bìa và tệp tương ứng trước khi duyệt (`approval.NEED_IMAGE`, `NEED_FILE`).
+- Lỗi ở bước tải hoặc xử lý video xảy ra **trước** khi tạo bài, nên là lỗi thử lại được, không mơ hồ. Video bị khóa,
+  lỗi hoặc đã xóa (status 2, 4, 5) là lỗi dữ liệu, có câu báo của Zalo.
+- Đối chiếu bài video: `getslice` với `type=video`.
+- **Số liệu Zalo** (trước đây để trống): `getdetail` cho lượt xem (cột `impressions`), thích, bình luận, chia sẻ. Bài
+  video thì lượt xem cũng ghi vào `video_views`. Zalo không có tiếp cận và lượt bấm.
+- `ZaloClient._request` nhận thêm `headers` (header `token` của bước kiểm video). Không thay được `access_token`.
+- Không dùng tin Truyền thông (broadcast) để báo người quan tâm OA: đó là gửi hàng loạt, trái quy tắc dự án.
+  Đăng bài viết chỉ đưa bài lên trang OA.
+
+**Hệ quả:**
+- Migrate: thêm hai giá trị vào ô chọn định dạng của `Omni Content Target`.
+- Giao diện `/crm`: hộp chọn định dạng Zalo OA có "Bài viết video" và "Bài viết có link tới PDF", nhắc thiếu tệp như
+  Facebook.
+- Chưa thử đăng thật bài `zalo_video` qua bộ đăng bài (sau khi triển khai: `thu_t3.py --nen-tang zalo`).
+- Giới hạn chính thức (thời lượng, độ phân giải video) chưa đọc được.
+- Test: `tests/test_v3_35_zalo_video.py` (13 test).

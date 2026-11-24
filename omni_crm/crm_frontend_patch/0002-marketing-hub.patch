@@ -1017,10 +1017,10 @@ index 3efc194..ac1fc77 100644
  
 diff --git a/frontend/src/composables/marketing.js b/frontend/src/composables/marketing.js
 new file mode 100644
-index 0000000..4a34c31
+index 0000000..42205ab
 --- /dev/null
 +++ b/frontend/src/composables/marketing.js
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,113 @@
 +// Marketing Hub (omni_crm, V3-10 Prompt 3): tiện ích dùng chung cho các trang Marketing.
 +import { call, frappeRequest, toast } from 'frappe-ui'
 +import { serverMessageList } from '@/utils/serverMessages'
@@ -1083,7 +1083,12 @@ index 0000000..4a34c31
 +    { label: 'Video', value: 'fb_video' },
 +    { label: 'Bài có link tới PDF', value: 'fb_pdf_link' },
 +  ],
-+  'Zalo OA': [{ label: 'Bài viết OA', value: 'zalo_article' }],
++  'Zalo OA': [
++    { label: 'Bài viết OA', value: 'zalo_article' },
++    // ADR 0035 (Zalo): cần tệp ở ô Video (chỉ MP4) / Tài liệu PDF, và ảnh bìa
++    { label: 'Bài viết video', value: 'zalo_video' },
++    { label: 'Bài viết có link tới PDF', value: 'zalo_pdf_link' },
++  ],
 +  TikTok: [{ label: 'Video (chưa hỗ trợ)', value: 'tiktok_video' }],
 +}
 +export const FUNNEL = ['Nhận biết', 'Cân nhắc', 'Chuyển đổi']
@@ -1916,7 +1921,7 @@ index 0000000..2116327
 +</script>
 diff --git a/frontend/src/pages/marketing/MarketingPost.vue b/frontend/src/pages/marketing/MarketingPost.vue
 new file mode 100644
-index 0000000..8721a1d
+index 0000000..4947fda
 --- /dev/null
 +++ b/frontend/src/pages/marketing/MarketingPost.vue
 @@ -0,0 +1,586 @@
@@ -2041,8 +2046,8 @@ index 0000000..8721a1d
 +          <section v-if="fileSlotsOn" class="rounded-lg border border-outline-gray-2 p-4">
 +            <h3 class="mb-1 text-base font-medium text-ink-gray-8">Video và tài liệu PDF</h3>
 +            <p class="mb-3 text-p-sm text-ink-gray-5">
-+              Cho Facebook định dạng "Video" (MP4, MOV) hoặc "Bài có link tới PDF". Tệp tải lên ở chế độ công khai: ai có
-+              link đều mở được.
++              Cho định dạng video (Facebook: MP4, MOV; Zalo OA: chỉ MP4, tối đa 50 MB) hoặc có link tới PDF. Tệp tải lên
++              ở chế độ công khai: ai có link đều mở được.
 +            </p>
 +            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 +              <div v-for="s in slots" :key="s.key" class="flex min-w-0 flex-col gap-2">
@@ -2750,10 +2755,10 @@ index 3ae5d43..6547151 100644
      name: 'Welcome',
 diff --git a/frontend/src/utils/marketingMedia.js b/frontend/src/utils/marketingMedia.js
 new file mode 100644
-index 0000000..38540ec
+index 0000000..38e38b4
 --- /dev/null
 +++ b/frontend/src/utils/marketingMedia.js
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,120 @@
 +// Trang bài marketing: video và tài liệu PDF đăng kèm (ADR 0035). Hàm thuần, test ở tests/unit/marketingMedia.test.js.
 +// Khớp máy chủ: content.VIDEO_EXTS, content.PDF_EXTS, approval.NEED_FILE, ô `video` và `document` của Omni Content Item.
 +
@@ -2775,7 +2780,12 @@ index 0000000..38540ec
 +}
 +
 +// Định dạng nào cần ô nào có tệp trước khi duyệt
-+export const NEED_FILE = { fb_video: 'video', fb_pdf_link: 'document' }
++export const NEED_FILE = {
++  fb_video: 'video',
++  fb_pdf_link: 'document',
++  zalo_video: 'video',
++  zalo_pdf_link: 'document',
++}
 +
 +// Đuôi tệp viết thường, có dấu chấm ('.mp4'); '' nếu không có
 +export function fileExt(name) {
@@ -2854,8 +2864,8 @@ index 0000000..38540ec
 +// Ô xem trước vẽ gì theo nền tảng đầu tiên chưa hủy: 'video', 'pdf' hoặc 'image'
 +export function previewKind(targets = []) {
 +  const t = (targets || []).find((x) => x && x.status !== 'Đã hủy')
-+  if (t?.post_format === 'fb_video') return 'video'
-+  if (t?.post_format === 'fb_pdf_link') return 'pdf'
++  if (NEED_FILE[t?.post_format] === 'video') return 'video'
++  if (NEED_FILE[t?.post_format] === 'document') return 'pdf'
 +  return 'image'
 +}
 +
@@ -2897,10 +2907,10 @@ index 0000000..cbed91c
 +}
 diff --git a/frontend/tests/unit/marketingMedia.test.js b/frontend/tests/unit/marketingMedia.test.js
 new file mode 100644
-index 0000000..70c9c85
+index 0000000..7d469b7
 --- /dev/null
 +++ b/frontend/tests/unit/marketingMedia.test.js
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,177 @@
 +import { describe, expect, it } from 'vitest'
 +import {
 +  attachmentChoices,
@@ -2998,6 +3008,21 @@ index 0000000..70c9c85
 +      { target: 'T2', platform: 'Facebook', slot: 'document' },
 +    ])
 +  })
++  it('định dạng Zalo cũng cần tệp', () => {
++    expect(
++      missingFiles(
++        [
++          { name: 'Z1', platform: 'Zalo OA', post_format: 'zalo_video', status: 'Chờ duyệt' },
++          { name: 'Z2', platform: 'Zalo OA', post_format: 'zalo_pdf_link', status: 'Chờ duyệt' },
++          { name: 'Z3', platform: 'Zalo OA', post_format: 'zalo_article', status: 'Chờ duyệt' },
++        ],
++        {},
++      ),
++    ).toEqual([
++      { target: 'Z1', platform: 'Zalo OA', slot: 'video' },
++      { target: 'Z2', platform: 'Zalo OA', slot: 'document' },
++    ])
++  })
 +  it('đủ tệp thì rỗng', () => {
 +    expect(missingFiles(targets, { video: '/files/a.mp4', document: '/files/a.pdf' })).toEqual([])
 +    expect(missingFiles(null, null)).toEqual([])
@@ -3037,6 +3062,9 @@ index 0000000..70c9c85
 +      ]),
 +    ).toBe('pdf')
 +    expect(previewKind([{ post_format: 'fb_photo', status: 'Chờ duyệt' }])).toBe('image')
++    expect(previewKind([{ post_format: 'zalo_video', status: 'Chờ duyệt' }])).toBe('video')
++    expect(previewKind([{ post_format: 'zalo_pdf_link', status: 'Chờ duyệt' }])).toBe('pdf')
++    expect(previewKind([{ post_format: 'zalo_article', status: 'Chờ duyệt' }])).toBe('image')
 +    expect(previewKind([])).toBe('image')
 +  })
 +})

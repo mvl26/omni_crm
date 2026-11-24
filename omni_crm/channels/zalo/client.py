@@ -76,8 +76,10 @@ class ZaloClient:
 		body: dict | None = None,
 		files: dict | None = None,
 		timeout: int | None = None,
+		headers: dict | None = None,
 	) -> dict:
-		"""Gọi API, trả phần `data` của phản hồi; token lỗi thì làm mới một lần rồi thử lại. `files`: multipart."""
+		"""Gọi API, trả phần `data` của phản hồi; token lỗi thì làm mới một lần rồi thử lại. `files`: multipart.
+		`headers`: header thêm (ví dụ `token` của bước kiểm video bài viết, ADR 0035)."""
 		if flags.sandbox():  # chốt chặn cuối: sandbox không có HTTP ra Zalo
 			raise ZaloError(None, "permanent", _("Chế độ thử (sandbox) đang bật: không gọi API Zalo"))
 		refreshed = False
@@ -86,13 +88,13 @@ class ZaloClient:
 		while True:
 			tok = self._access_token()
 			try:
-				headers = {"access_token": tok}
+				sent_headers = {**(headers or {}), "access_token": tok}
 				if files is None:
-					headers["Content-Type"] = "application/json"
+					sent_headers["Content-Type"] = "application/json"
 				resp = requests.request(
 					method,
 					config.get("api_base") + path,
-					headers=headers,
+					headers=sent_headers,
 					params=params,
 					data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None,
 					files=files,

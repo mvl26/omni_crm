@@ -28,7 +28,8 @@ class Payload:
 	tracking_url: str
 	images: list[str] = field(default_factory=list)  # URL công khai tuyệt đối, ảnh chính trước
 	video: str = ""  # URL công khai tuyệt đối của video đăng kèm (fb_video, ADR 0035)
-	document: str = ""  # URL công khai tuyệt đối của PDF đăng kèm (fb_pdf_link, ADR 0035)
+	document: str = ""  # URL công khai tuyệt đối của PDF đăng kèm (fb_pdf_link, zalo_pdf_link, ADR 0035)
+	video_file: str = ""  # địa chỉ tệp video trong CRM (zalo_video: đọc tệp rồi tải lên Zalo)
 
 	@property
 	def marker(self) -> str:
@@ -43,7 +44,9 @@ class Payload:
 
 # Facebook nhận nhiều loại hơn; giữ hai loại phổ biến mà máy quay và điện thoại đều ra
 VIDEO_EXTS = (".mp4", ".mov")
+ZALO_VIDEO_EXTS = (".mp4",)  # Zalo nhận MP4 (thử thật 23/11/2026; nguồn cộng đồng ghi thêm AVI)
 PDF_EXTS = (".pdf",)
+ZALO_FORMATS = ("zalo_article", "zalo_video", "zalo_pdf_link")
 
 
 def public_file_url(file_url: str | None, exts: tuple[str, ...], label: str) -> str:
@@ -105,12 +108,16 @@ def build(target_name: str) -> Payload:
 	item = frappe.get_doc("Omni Content Item", t.content_item)
 	raw_images = [item.media] if item.media else []
 	raw_images += [m.image for m in item.get("media_items") or [] if m.image]
-	needs_images = t.post_format in ("fb_photo", "fb_multi_photo", "zalo_article")
+	needs_images = t.post_format in ("fb_photo", "fb_multi_photo", *ZALO_FORMATS)
 	images = [public_image_url(u) for u in raw_images] if needs_images else []
-	video = public_file_url(item.get("video"), VIDEO_EXTS, "video") if t.post_format == "fb_video" else ""
+	video = ""
+	if t.post_format == "fb_video":
+		video = public_file_url(item.get("video"), VIDEO_EXTS, "video")
+	elif t.post_format == "zalo_video":
+		video = public_file_url(item.get("video"), ZALO_VIDEO_EXTS, "video")
 	document = (
 		public_file_url(item.get("document"), PDF_EXTS, "tài liệu PDF")
-		if t.post_format == "fb_pdf_link"
+		if t.post_format in ("fb_pdf_link", "zalo_pdf_link")
 		else ""
 	)
 	payload = Payload(
@@ -124,6 +131,7 @@ def build(target_name: str) -> Payload:
 		images=images,
 		video=video,
 		document=document,
+		video_file=str(item.get("video") or "") if t.post_format == "zalo_video" else "",
 	)
 	validate(payload)
 	return payload
@@ -143,7 +151,11 @@ def validate(p: Payload) -> None:
 		raise PublishValidationError(_("Bài video Facebook chưa có video"))
 	if p.post_format == "fb_pdf_link" and not p.document:
 		raise PublishValidationError(_("Bài PDF Facebook chưa có tài liệu PDF"))
-	if p.post_format == "zalo_article":
+	if p.post_format == "zalo_video" and not p.video:
+		raise PublishValidationError(_("Bài viết video Zalo OA chưa có video"))
+	if p.post_format == "zalo_pdf_link" and not p.document:
+		raise PublishValidationError(_("Bài viết Zalo OA có link PDF chưa có tài liệu PDF"))
+	if p.post_format in ZALO_FORMATS:
 		if not p.images:
 			raise PublishValidationError(_("Bài viết Zalo OA thiếu ảnh bìa"))
 		if not p.title:

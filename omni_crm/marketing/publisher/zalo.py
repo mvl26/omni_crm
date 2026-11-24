@@ -7,6 +7,13 @@ VERIFY (chưa đọc được tài liệu chính thức developers.zalo.me, theo
 - `POST /v2.0/article/verify` {token} -> data.article_id khi xử lý xong (đang xử lý thì chưa có)
 - `GET /v2.0/article/getslice?offset=0&limit=10&type=normal` -> data.medias[] (id, title, create_date...)
 Token cần quyền quản lý bài viết của OA.
+
+ADR 0035 (Zalo), đã thử trên OA thật 23/11/2026 (spd/docs/35 mục 11):
+- zalo_video: `POST /v2.0/article/upload_video/preparevideo` (multipart `file`, MP4) -> data.token;
+  `GET /v2.0/article/upload_video/verify` (header `token`) -> status (1 sẵn sàng, 3 đang xử lý; 2, 4, 5 hỏng),
+  video_id; rồi `article/create` {type:"video", title, description, video_id, avatar, status, comment} như bài thường.
+- zalo_pdf_link: bài viết thường, nội dung có thêm link tới PDF công khai của CRM.
+- Số liệu: `GET /v2.0/article/getdetail?id=` -> total_view, total_like, total_comment, total_share.
 """
 
 from __future__ import annotations
@@ -29,6 +36,10 @@ AUTHOR = "Miyano"
 POLL_SECONDS = 5
 PROCESSING_CODE = -214  # "Media is being processed. Please wait for a moment" (thấy thật 17/11/2026)
 POLL_MAX_SECONDS = 120  # ~2 phút; quá thì ProviderError (lần sau đối chiếu trước khi đăng lại)
+VIDEO_MAX_BYTES = 50 * 1024 * 1024  # Zalo nhận video bài viết tới 50 MB (nguồn cộng đồng)
+VIDEO_POLL_MAX_SECONDS = 300  # thử thật: video 6 giây xử lý xong trong vài giây
+VIDEO_READY = 1
+VIDEO_BROKEN = {2: "bị khóa", 4: "lỗi", 5: "đã xóa"}
 
 
 def _client(channel: str):
@@ -107,7 +118,7 @@ def short_description(caption: str | None) -> str:
 	return out + "…"
 
 
-def body_html(caption: str | None, tracking_url: str = "") -> str:
+def body_html(caption: str | None, tracking_url: str = "", document: str = "") -> str:
 	"""Nội dung bài dạng HTML (thuần): Zalo gộp mọi xuống dòng của văn bản thường thành một đoạn (thấy thật
 	17/11/2026), nên mỗi đoạn là một <p>, xuống dòng trong đoạn là <br>, link theo dõi là thẻ <a> ở cuối.
 	# VERIFY: chưa đọc được tài liệu chính thức về các thẻ HTML Zalo cho phép trong nội dung bài viết.
@@ -115,6 +126,10 @@ def body_html(caption: str | None, tracking_url: str = "") -> str:
 	text = (caption or "").replace("\r\n", "\n").strip()
 	paragraphs = [b.strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
 	parts = ["<p>" + "<br>".join(escape(line.strip()) for line in b.split("\n")) + "</p>" for b in paragraphs]
+	if (
+		document
+	):  # zalo_pdf_link (ADR 0035): bài viết OA không đính kèm được PDF, để link tới PDF công khai của CRM
+		parts.append(f'<p><a href="{escape(document, quote=True)}">{escape(_("Xem tài liệu PDF"))}</a></p>')
 	if tracking_url:
 		link = escape(tracking_url, quote=True)
 		parts.append(f'<p><a href="{link}">{link}</a></p>')
@@ -123,7 +138,8 @@ def body_html(caption: str | None, tracking_url: str = "") -> str:
 
 def article_body(p: Payload) -> dict:
 	"""Yêu cầu tạo bài viết OA (thuần). Link theo dõi nằm trong nội dung và tracking_link (để đối chiếu)."""
-	body = [{"type": "text", "content": body_html(p.caption, p.tracking_url)}]
+	document = p.document if p.post_format == "zalo_pdf_link" else ""
+	body = [{"type": "text", "content": body_html(p.caption, p.tracking_url, document)}]
 	body += [{"type": "image", "url": u} for u in p.images[1:]]
 	desc = short_description(p.caption)
 	return {
@@ -139,6 +155,48 @@ def article_body(p: Payload) -> dict:
 	}
 
 
+def video_article_body(p: Payload, video_id: str) -> dict:
+	"""Yêu cầu tạo bài viết video (thuần). Bài video không có nội dung dài: mô tả là caption rút gọn, ảnh đại diện là
+	ảnh bìa của bài."""
+	return {
+		"type": "video",
+		"title": p.title,
+		"description": short_description(p.caption),
+		"video_id": video_id,
+		"avatar": p.images[0],
+		"status": "show",
+		"comment": "show",
+	}
+
+
+def video_bytes(file_url: str) -> tuple[str, bytes]:
+	"""(tên tệp, nội dung) của video đăng kèm: đọc trên đĩa hoặc trên kho S3 (ADR 0033). Ném PublishValidationError."""
+	from omni_crm.marketing import s3_media
+
+	name = frappe.db.get_value("File", {"file_url": file_url, "is_private": 0, "is_folder": 0}, "name")
+	if not name:
+		raise PublishValidationError(
+			_("Không tìm thấy video công khai {0}").format(file_url.rsplit("/", 1)[-1])
+		)
+	doc = frappe.get_doc("File", name)
+	size = int(doc.file_size or 0)
+	if size > VIDEO_MAX_BYTES:
+		raise PublishValidationError(
+			_("Video {0} MB, Zalo nhận tối đa {1} MB").format(
+				round(size / 1048576, 1), VIDEO_MAX_BYTES // 1048576
+			)
+		)
+	try:
+		data = s3_media.file_content(doc)
+	except Exception as e:
+		raise ProviderError(_("Không đọc được video trong CRM ({0})").format(type(e).__name__)) from None
+	if len(data) > VIDEO_MAX_BYTES:
+		raise PublishValidationError(
+			_("Video lớn hơn {0} MB: Zalo không nhận").format(VIDEO_MAX_BYTES // 1048576)
+		)
+	return (doc.file_name or "video.mp4"), data
+
+
 class ZaloAdapter(Adapter):
 	platform = "Zalo OA"
 
@@ -146,7 +204,10 @@ class ZaloAdapter(Adapter):
 		if not payload.channel:
 			raise TerminalError(_("Chưa chọn kênh Zalo OA"))
 		client = _client(payload.channel)
-		body = article_body(payload)
+		if payload.post_format == "zalo_video":
+			body = video_article_body(payload, self._upload_video(client, payload, sleep))
+		else:
+			body = article_body(payload)
 		try:
 			created = client._request("POST", config.get("article_create_path"), body=body)
 		except ZaloError as e:
@@ -174,13 +235,52 @@ class ZaloAdapter(Adapter):
 			sleep(POLL_SECONDS)
 			waited += POLL_SECONDS
 
+	def _upload_video(self, client, payload: Payload, sleep) -> str:
+		"""Tải video lên Zalo rồi chờ xử lý xong; trả video_id. Chưa tạo bài nên lỗi ở đây thử lại an toàn."""
+		name, data = video_bytes(payload.video_file)
+		try:
+			prepared = client._request(
+				"POST",
+				config.get("article_video_prepare_path"),
+				files={"file": (name, data, "video/mp4")},
+				timeout=config.get("article_video_timeout"),
+			)
+		except ZaloError as e:
+			raise to_publish_error(e, "tải video") from None
+		token = str((prepared or {}).get("token") or "")
+		if not token:
+			raise ProviderError(_("Zalo không trả mã tải video"))
+		waited = 0
+		while True:
+			try:
+				info = (
+					client._request("GET", config.get("article_video_verify_path"), headers={"token": token})
+					or {}
+				)
+			except ZaloError as e:
+				raise to_publish_error(e, "kiểm tra video") from None
+			status = info.get("status")
+			if status == VIDEO_READY and info.get("video_id"):
+				return str(info["video_id"])
+			if status in VIDEO_BROKEN:
+				raise PublishValidationError(
+					_("Zalo không nhận video ({0}): {1}").format(
+						VIDEO_BROKEN[status], str(info.get("status_message") or "")[:200]
+					)
+				)
+			if waited >= VIDEO_POLL_MAX_SECONDS:
+				raise ProviderError(_("Zalo xử lý video quá 5 phút"))
+			sleep(POLL_SECONDS)
+			waited += POLL_SECONDS
+
 	def reconcile(self, payload: Payload, since_minutes: int = 30) -> PublishResult | None:
 		"""Bài viết gần nhất cùng tiêu đề (danh sách bài viết không trả nội dung: khớp theo tiêu đề)."""
 		if not payload.channel:
 			return None
+		kind = "video" if payload.post_format == "zalo_video" else "normal"
 		try:
 			data = _client(payload.channel)._request(
-				"GET", config.get("article_list_path"), params={"offset": 0, "limit": 10, "type": "normal"}
+				"GET", config.get("article_list_path"), params={"offset": 0, "limit": 10, "type": kind}
 			)
 		except ZaloError as e:
 			raise to_publish_error(e) from None
@@ -193,3 +293,31 @@ class ZaloAdapter(Adapter):
 				continue  # bài cũ trùng tiêu đề: không nhận nhầm
 			return PublishResult(external_post_id=str(row.get("id") or ""))
 		return None
+
+	def fetch_insights(self, channel: str, external_post_id: str) -> dict[str, int | None]:
+		"""Số liệu bài viết OA (ADR 0035): lượt xem, thích, bình luận, chia sẻ từ `article/getdetail` (thử thật
+		23/11/2026). Bài video: lượt xem cũng là lượt xem video. Zalo không có tiếp cận, lượt bấm: để trống."""
+		try:
+			data = (
+				_client(channel)._request(
+					"GET", config.get("article_detail_path"), params={"id": external_post_id}
+				)
+				or {}
+			)
+		except ZaloError as e:
+			raise to_publish_error(e) from None
+
+		def num(key: str) -> int | None:
+			value = data.get(key)
+			return int(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+		views = num("total_view")
+		return {
+			"reach": None,
+			"impressions": views,
+			"likes": num("total_like"),
+			"comments": num("total_comment"),
+			"shares": num("total_share"),
+			"clicks": None,
+			"video_views": views if data.get("type") == "video" else None,
+		}

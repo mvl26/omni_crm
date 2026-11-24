@@ -20,9 +20,14 @@ ITEM = "Omni Content Item"
 TARGET = "Omni Content Target"
 CAMPAIGN = "Omni Campaign"
 PLACEHOLDER = "[cần bổ sung]"
-NEED_IMAGE = {"fb_photo": 1, "fb_multi_photo": 2, "zalo_article": 1}
+NEED_IMAGE = {"fb_photo": 1, "fb_multi_photo": 2, "zalo_article": 1, "zalo_video": 1, "zalo_pdf_link": 1}
 # Định dạng cần tệp đăng kèm (ADR 0035): ô của bài phải có tệp trước khi duyệt
-NEED_FILE = {"fb_video": ("video", "video"), "fb_pdf_link": ("document", "tài liệu PDF")}
+NEED_FILE = {
+	"fb_video": ("video", "video"),
+	"fb_pdf_link": ("document", "tài liệu PDF"),
+	"zalo_video": ("video", "video"),
+	"zalo_pdf_link": ("document", "tài liệu PDF"),
+}
 
 
 def _check_media(doc, item: str) -> None:
