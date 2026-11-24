@@ -79,7 +79,7 @@ def post_rows(f: dict) -> list[dict]:
 			group_concat(distinct t.platform order by t.platform separator ', ') as platforms,
 			min(t.scheduled_at) as scheduled_at,
 			{_metric("reach")} as reach, {_metric("impressions")} as impressions,
-			{_metric("clicks")} as clicks, {_engagement()} as engagement,
+			{_metric("clicks")} as clicks, {_engagement()} as engagement, {_metric("video_views")} as video_views,
 			sum(t.status = %(ok)s) as ok_targets, sum(t.status = %(failed)s) as failed_targets
 		from `tab{ITEM}` i join `tab{TARGET}` t on t.content_item = i.name
 		where {where}
@@ -169,6 +169,7 @@ def build(filters: dict | str | None) -> dict[str, Any]:
 				"reach": None if r.reach is None else int(r.reach),
 				"engagement": None if r.engagement is None else int(r.engagement),
 				"clicks": None if r.clicks is None else int(r.clicks),
+				"video_views": None if r.video_views is None else int(r.video_views),
 				"leads": int(leads["by_item"].get(r.name, 0)),
 				"status": r.status,
 			}
@@ -203,6 +204,7 @@ def build(filters: dict | str | None) -> dict[str, Any]:
 			"success_rate": round(100 * ok / (ok + failed), 1) if (ok + failed) else None,
 			"reach": _sum([p["reach"] for p in posts]),
 			"engagement": _sum([p["engagement"] for p in posts]),
+			"video_views": _sum([p["video_views"] for p in posts]),
 			"leads": leads["leads"],
 			"deals": leads["deals"],
 		},
@@ -237,6 +239,7 @@ def to_xlsx(data: dict) -> bytes:
 		(_("Tỷ lệ đăng thành công (%)"), "success_rate"),
 		(_("Lượt tiếp cận"), "reach"),
 		(_("Lượt tương tác"), "engagement"),
+		(_("Lượt xem video"), "video_views"),
 		(_("Lead từ chiến dịch"), "leads"),
 		(_("Lead đã thành Deal"), "deals"),
 	):
@@ -246,13 +249,13 @@ def to_xlsx(data: dict) -> bytes:
 	ws = wb.create_sheet("Bai dang")
 	ws.append(
 		[_("Bài viết"), _("Chiến dịch"), _("Kênh"), _("Trụ cột"), _("Giai đoạn"), _("Giờ đăng"),
-		 _("Tiếp cận"), _("Tương tác"), _("Lượt bấm"), _("Lead"), _("Trạng thái")]
+		 _("Tiếp cận"), _("Tương tác"), _("Lượt bấm"), _("Lượt xem video"), _("Lead"), _("Trạng thái")]
 	)  # fmt: skip
 	for p in data["posts"]:
 		ws.append(
 			[p["title"], p["campaign"], p["platforms"], _cell(p["pillar"]), _cell(p["funnel_stage"]),
 			 str(p["scheduled_at"] or ""), _cell(p["reach"]), _cell(p["engagement"]), _cell(p["clicks"]),
-			 p["leads"], p["status"]]
+			 _cell(p["video_views"]), p["leads"], p["status"]]
 		)  # fmt: skip
 	ws = wb.create_sheet("Tru cot va pheu")
 	ws.append([_("Trụ cột"), _("Số bài"), _("Tương tác"), _("Lead")])

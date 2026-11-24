@@ -1017,10 +1017,10 @@ index 3efc194..ac1fc77 100644
  
 diff --git a/frontend/src/composables/marketing.js b/frontend/src/composables/marketing.js
 new file mode 100644
-index 0000000..39a07de
+index 0000000..4a34c31
 --- /dev/null
 +++ b/frontend/src/composables/marketing.js
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,108 @@
 +// Marketing Hub (omni_crm, V3-10 Prompt 3): tiện ích dùng chung cho các trang Marketing.
 +import { call, frappeRequest, toast } from 'frappe-ui'
 +import { serverMessageList } from '@/utils/serverMessages'
@@ -1079,6 +1079,9 @@ index 0000000..39a07de
 +    { label: 'Bài có link', value: 'fb_link' },
 +    { label: 'Một ảnh', value: 'fb_photo' },
 +    { label: 'Nhiều ảnh', value: 'fb_multi_photo' },
++    // ADR 0035: cần tệp ở ô Video / Tài liệu PDF của bài
++    { label: 'Video', value: 'fb_video' },
++    { label: 'Bài có link tới PDF', value: 'fb_pdf_link' },
 +  ],
 +  'Zalo OA': [{ label: 'Bài viết OA', value: 'zalo_article' }],
 +  TikTok: [{ label: 'Video (chưa hỗ trợ)', value: 'tiktok_video' }],
@@ -1324,7 +1327,7 @@ index 0000000..a39d2c5
 +</script>
 diff --git a/frontend/src/pages/marketing/MarketingCampaign.vue b/frontend/src/pages/marketing/MarketingCampaign.vue
 new file mode 100644
-index 0000000..7bc7122
+index 0000000..d3aa80c
 --- /dev/null
 +++ b/frontend/src/pages/marketing/MarketingCampaign.vue
 @@ -0,0 +1,206 @@
@@ -1412,7 +1415,7 @@ index 0000000..7bc7122
 +            <FormControl v-model="draft.channel_account" type="select" label="Kênh" :options="channelOptions" />
 +            <FormControl v-model="draft.when" type="datetime-local" label="Giờ đăng" />
 +          </div>
-+          <p class="text-p-sm text-ink-gray-5">Bài mới ở trạng thái Nháp. Mở bài để chấm điểm AI, thêm ảnh và gửi duyệt.</p>
++          <p class="text-p-sm text-ink-gray-5">Bài mới ở trạng thái Nháp. Mở bài để chấm điểm AI, thêm ảnh (hoặc video, PDF) và gửi duyệt.</p>
 +        </div>
 +      </template>
 +      <template #actions>
@@ -1913,10 +1916,10 @@ index 0000000..2116327
 +</script>
 diff --git a/frontend/src/pages/marketing/MarketingPost.vue b/frontend/src/pages/marketing/MarketingPost.vue
 new file mode 100644
-index 0000000..432cc7f
+index 0000000..8721a1d
 --- /dev/null
 +++ b/frontend/src/pages/marketing/MarketingPost.vue
-@@ -0,0 +1,432 @@
+@@ -0,0 +1,586 @@
 +<template>
 +  <div class="flex h-full flex-col overflow-hidden">
 +    <LayoutHeader>
@@ -1999,7 +2002,7 @@ index 0000000..432cc7f
 +              </div>
 +              <div v-if="d.can_edit" class="flex items-center gap-2">
 +                <Button label="Lưu nội dung" variant="solid" :disabled="!dirty" :loading="busy === 'save'" @click="save" />
-+                <span class="text-p-sm text-ink-gray-5">Sửa tiêu đề / caption / ảnh sau khi chấm sẽ phải chấm lại.</span>
++                <span class="text-p-sm text-ink-gray-5">Sửa tiêu đề / caption / ảnh / video / PDF sau khi chấm sẽ phải chấm lại.</span>
 +              </div>
 +            </div>
 +          </section>
@@ -2034,6 +2037,69 @@ index 0000000..432cc7f
 +            </div>
 +          </section>
 +
++          <!-- Video và tài liệu PDF đăng kèm (ADR 0035) -->
++          <section v-if="fileSlotsOn" class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-1 text-base font-medium text-ink-gray-8">Video và tài liệu PDF</h3>
++            <p class="mb-3 text-p-sm text-ink-gray-5">
++              Cho Facebook định dạng "Video" (MP4, MOV) hoặc "Bài có link tới PDF". Tệp tải lên ở chế độ công khai: ai có
++              link đều mở được.
++            </p>
++            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
++              <div v-for="s in slots" :key="s.key" class="flex min-w-0 flex-col gap-2">
++                <div class="text-p-sm font-medium text-ink-gray-7">{{ s.title }}</div>
++                <template v-if="s.url">
++                  <video
++                    v-if="s.key === 'video'"
++                    :src="s.url"
++                    controls
++                    preload="metadata"
++                    class="max-h-56 w-full rounded border border-outline-gray-2 bg-black"
++                  />
++                  <div class="flex min-w-0 items-center gap-1 text-p-sm">
++                    <a :href="s.url" target="_blank" rel="noopener noreferrer" class="truncate text-ink-blue-3 underline">
++                      {{ s.name }}
++                    </a>
++                    <Tooltip v-if="d.can_edit" text="Gỡ khỏi bài (tệp vẫn còn trong CRM)">
++                      <Button size="sm" variant="ghost" icon="x" :loading="busy === s.key" @click="setFile(s.key, null)" />
++                    </Tooltip>
++                  </div>
++                </template>
++                <div v-else-if="s.raw" class="break-all text-p-sm text-ink-red-3">
++                  Địa chỉ tệp không hợp lệ: {{ s.raw }}
++                  <Button v-if="d.can_edit" size="sm" variant="ghost" icon="x" :loading="busy === s.key" @click="setFile(s.key, null)" />
++                </div>
++                <div v-else class="text-p-base text-ink-gray-5">Chưa có {{ s.label }}.</div>
++                <div v-if="d.can_edit" class="flex flex-wrap items-center gap-2">
++                  <FileUploader
++                    :fileTypes="s.accept"
++                    :uploadArgs="uploadArgs(s.key)"
++                    :validateFile="(f) => checkFile(s.key, f)"
++                    @success="(f) => setFile(s.key, f.file_url)"
++                  >
++                    <template #default="{ openFileSelector, uploading, progress, error }">
++                      <Button
++                        :label="uploading ? `Đang tải ${progress}%` : s.url ? 'Thay tệp' : `Tải ${s.label} lên`"
++                        icon-left="upload"
++                        :disabled="uploading || busy === s.key"
++                        @click="openFileSelector"
++                      />
++                      <div v-if="error" class="mt-1 text-p-sm text-ink-red-3">{{ error }}</div>
++                    </template>
++                  </FileUploader>
++                  <FormControl
++                    v-if="s.choices.length"
++                    type="select"
++                    :options="s.choices"
++                    placeholder="Chọn tệp đã đính kèm…"
++                    :modelValue="''"
++                    :disabled="busy === s.key"
++                    @update:modelValue="(v) => v && setFile(s.key, v)"
++                  />
++                </div>
++              </div>
++            </div>
++          </section>
++
 +          <!-- Nền tảng -->
 +          <section class="rounded-lg border border-outline-gray-2 p-4">
 +            <div class="mb-3 flex items-center justify-between">
@@ -2055,6 +2121,9 @@ index 0000000..432cc7f
 +                    icon="edit-2"
 +                    @click="openTarget(t)"
 +                  />
++                </div>
++                <div v-if="needsFile(t)" class="text-p-sm text-ink-red-3">
++                  Chưa có {{ FILE_SLOTS[NEED_FILE[t.post_format]].label }}: thêm ở mục "Video và tài liệu PDF" trước khi duyệt.
 +                </div>
 +                <div v-if="t.permalink" class="text-p-sm">
 +                  <a :href="t.permalink" target="_blank" rel="noopener" class="text-ink-blue-3 underline">Xem bài đã đăng</a>
@@ -2103,7 +2172,27 @@ index 0000000..432cc7f
 +              </div>
 +              <div class="whitespace-pre-wrap px-3 pb-3 text-p-sm text-ink-gray-8">{{ form.caption || '(chưa có caption)' }}</div>
 +              <div v-if="previewLink" class="break-all px-3 pb-3 text-p-sm text-ink-blue-3">{{ previewLink }}</div>
-+              <img v-if="images[0]" :src="images[0].url" class="max-h-72 w-full object-cover" />
++              <video
++                v-if="pKind === 'video' && fileUrl('video')"
++                :src="fileUrl('video')"
++                controls
++                preload="metadata"
++                class="max-h-72 w-full bg-black"
++              />
++              <a
++                v-else-if="pKind === 'pdf' && fileUrl('document')"
++                :href="fileUrl('document')"
++                target="_blank"
++                rel="noopener noreferrer"
++                class="flex items-center gap-2 border-t border-outline-gray-2 bg-surface-gray-1 px-3 py-3 text-p-sm text-ink-gray-8"
++              >
++                <FeatherIcon name="file-text" class="h-4 w-4 shrink-0 text-ink-gray-6" />
++                <span class="truncate">{{ slots.find((s) => s.key === 'document')?.name }}</span>
++              </a>
++              <img v-else-if="pKind === 'image' && images[0]" :src="images[0].url" class="max-h-72 w-full object-cover" />
++              <div v-else-if="pKind !== 'image'" class="border-t border-outline-gray-2 px-3 py-3 text-p-sm text-ink-gray-5">
++                (chưa có {{ pKind === 'video' ? 'video' : 'tài liệu PDF' }})
++              </div>
 +            </div>
 +          </section>
 +
@@ -2138,7 +2227,15 @@ index 0000000..432cc7f
 +            :options="['Facebook', 'Zalo OA']"
 +            :disabled="!!tdraft.name"
 +          />
-+          <FormControl v-model="tdraft.post_format" type="select" label="Định dạng" :options="FORMATS[tdraft.platform]" />
++          <FormControl
++            v-model="tdraft.post_format"
++            type="select"
++            label="Định dạng"
++            :options="formatOptions(FORMATS[tdraft.platform], item)"
++          />
++          <p v-if="dialogNeed" class="text-p-sm text-ink-amber-4">
++            Bài chưa có {{ dialogNeed }}: tải lên ở mục "Video và tài liệu PDF" trước khi duyệt.
++          </p>
 +          <FormControl v-model="tdraft.channel_account" type="select" label="Kênh" :options="channelOptions" />
 +          <FormControl v-model="tdraft.when" type="datetime-local" label="Giờ đăng" />
 +        </div>
@@ -2152,7 +2249,7 @@ index 0000000..432cc7f
 +
 +<script setup>
 +import LayoutHeader from '@/components/LayoutHeader.vue'
-+import { Badge, Dialog, FormControl, FileUploader, Tooltip, createResource, call, toast } from 'frappe-ui'
++import { Badge, Dialog, FeatherIcon, FormControl, FileUploader, Tooltip, createResource, call, toast } from 'frappe-ui'
 +import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 +import { globalStore } from '@/stores/global'
 +import {
@@ -2169,6 +2266,18 @@ index 0000000..432cc7f
 +  errorText,
 +  callShowMessages,
 +} from '@/composables/marketing'
++import {
++  FILE_SLOTS,
++  NEED_FILE,
++  attachmentChoices,
++  checkFile,
++  fileName,
++  fileSlotsSupported,
++  formatOptions,
++  missingFiles,
++  previewKind,
++  safeFileUrl,
++} from '@/utils/marketingMedia'
 +
 +const props = defineProps({ name: { type: String, required: true } })
 +const { $socket } = globalStore()
@@ -2218,12 +2327,18 @@ index 0000000..432cc7f
 +  })
 +}
 +
++// Ô chữ đã sửa mà chưa lưu
++function changedValues() {
++  const values = {}
++  FIELDS.forEach((f) => {
++    if ((form[f] || '') !== (item.value[f] || '')) values[f] = form[f] || null
++  })
++  return values
++}
++
 +function save() {
 +  return run('save', async () => {
-+    const values = {}
-+    FIELDS.forEach((f) => {
-+      if ((form[f] || '') !== (item.value[f] || '')) values[f] = form[f] || null
-+    })
++    const values = changedValues()
 +    await callShowMessages('frappe.client.set_value', { doctype: 'Omni Content Item', name: props.name, fieldname: values })
 +    toast.success('Đã lưu')
 +    detail.reload()
@@ -2276,6 +2391,43 @@ index 0000000..432cc7f
 +  })
 +}
 +
++// Video và tài liệu PDF đăng kèm (ADR 0035): ô `video`, `document` của bài
++const fileSlotsOn = computed(() => fileSlotsSupported(item.value))
++const slots = computed(() =>
++  Object.entries(FILE_SLOTS).map(([key, s]) => {
++    const raw = item.value?.[s.field] || ''
++    return {
++      key,
++      ...s,
++      raw,
++      url: safeFileUrl(raw),
++      name: fileName(raw, d.value?.files),
++      choices: attachmentChoices(d.value?.files, key, raw),
++    }
++  }),
++)
++function fileUrl(key) {
++  return safeFileUrl(item.value?.[FILE_SLOTS[key].field])
++}
++// Gắn vào bài, đúng ô, công khai: máy chủ chuyển lên kho S3 khi lưu bài; không lẫn với thanh Đính kèm
++function uploadArgs(key) {
++  return { private: false, doctype: 'Omni Content Item', docname: props.name, fieldname: FILE_SLOTS[key].field }
++}
++function setFile(key, url) {
++  const slot = FILE_SLOTS[key]
++  return run(key, async () => {
++    // lưu luôn chữ đang sửa: tải lại trang bài sẽ ghi đè ô soạn
++    const values = { ...changedValues(), [slot.field]: url || null }
++    await callShowMessages('frappe.client.set_value', { doctype: 'Omni Content Item', name: props.name, fieldname: values })
++    toast.success(url ? `Đã gắn ${slot.label} vào bài` : `Đã gỡ ${slot.label} khỏi bài`)
++    detail.reload()
++  })
++}
++function needsFile(t) {
++  return fileSlotsOn.value && missingFiles([t], item.value).length > 0
++}
++const pKind = computed(() => (fileSlotsOn.value ? previewKind(d.value?.targets) : 'image'))
++
 +// Nền tảng
 +const channels = createResource({ url: API + 'get_social_channels', auto: true })
 +function channelName(name) {
@@ -2297,6 +2449,11 @@ index 0000000..432cc7f
 +
 +const showTarget = ref(false)
 +const tdraft = reactive({})
++// Định dạng đang chọn cần tệp mà bài chưa có (ADR 0035)
++const dialogNeed = computed(() => {
++  const key = NEED_FILE[tdraft.post_format]
++  return key && fileSlotsOn.value && !item.value?.[key] ? FILE_SLOTS[key].label : ''
++})
 +function openTarget(t) {
 +  Object.assign(tdraft, {
 +    name: t?.name || '',
@@ -2351,10 +2508,10 @@ index 0000000..432cc7f
 +</script>
 diff --git a/frontend/src/pages/marketing/MarketingReport.vue b/frontend/src/pages/marketing/MarketingReport.vue
 new file mode 100644
-index 0000000..ca7eaab
+index 0000000..9da812a
 --- /dev/null
 +++ b/frontend/src/pages/marketing/MarketingReport.vue
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,192 @@
 +<template>
 +  <div class="flex h-full flex-col overflow-hidden">
 +    <LayoutHeader>
@@ -2441,12 +2598,13 @@ index 0000000..ca7eaab
 +                  <th class="text-right font-normal">Tiếp cận</th>
 +                  <th class="text-right font-normal">Tương tác</th>
 +                  <th class="text-right font-normal">Lượt bấm</th>
++                  <th class="text-right font-normal">Xem video</th>
 +                  <th class="text-right font-normal">Lead</th>
 +                  <th class="text-right font-normal">Trạng thái</th>
 +                </tr>
 +              </thead>
 +              <tbody>
-+                <tr v-if="!r.posts.length"><td colspan="10" class="py-2 text-ink-gray-5">Không có bài trong bộ lọc.</td></tr>
++                <tr v-if="!r.posts.length"><td colspan="11" class="py-2 text-ink-gray-5">Không có bài trong bộ lọc.</td></tr>
 +                <tr v-for="p in r.posts" :key="p.name" class="border-t border-outline-gray-1">
 +                  <td class="max-w-[260px] truncate py-1">
 +                    <router-link :to="{ name: 'Marketing Post', params: { name: p.name } }" class="hover:underline">
@@ -2460,6 +2618,7 @@ index 0000000..ca7eaab
 +                  <td class="text-right">{{ dash(p.reach) }}</td>
 +                  <td class="text-right">{{ dash(p.engagement) }}</td>
 +                  <td class="text-right">{{ dash(p.clicks) }}</td>
++                  <td class="text-right">{{ dash(p.video_views) }}</td>
 +                  <td class="text-right">{{ p.leads }}</td>
 +                  <td class="text-right"><Badge :label="p.status" :theme="ITEM_THEME[p.status] || 'gray'" /></td>
 +                </tr>
@@ -2525,6 +2684,7 @@ index 0000000..ca7eaab
 +    { label: 'Tỷ lệ đăng thành công', value: dash(c.success_rate, '%') },
 +    { label: 'Lượt tiếp cận', value: dash(c.reach) },
 +    { label: 'Lượt tương tác', value: dash(c.engagement) },
++    { label: 'Lượt xem video', value: dash(c.video_views) },
 +    { label: 'Lead từ chiến dịch', value: dash(c.leads) },
 +    { label: 'Lead đã thành Deal', value: dash(c.deals) },
 +  ]
@@ -2588,6 +2748,127 @@ index 3ae5d43..6547151 100644
    {
      path: '/welcome',
      name: 'Welcome',
+diff --git a/frontend/src/utils/marketingMedia.js b/frontend/src/utils/marketingMedia.js
+new file mode 100644
+index 0000000..38540ec
+--- /dev/null
++++ b/frontend/src/utils/marketingMedia.js
+@@ -0,0 +1,115 @@
++// Trang bài marketing: video và tài liệu PDF đăng kèm (ADR 0035). Hàm thuần, test ở tests/unit/marketingMedia.test.js.
++// Khớp máy chủ: content.VIDEO_EXTS, content.PDF_EXTS, approval.NEED_FILE, ô `video` và `document` của Omni Content Item.
++
++export const FILE_SLOTS = {
++  video: {
++    field: 'video',
++    label: 'video',
++    title: 'Video',
++    exts: ['.mp4', '.mov'],
++    accept: 'video/mp4,video/quicktime,.mp4,.mov',
++  },
++  document: {
++    field: 'document',
++    label: 'tài liệu PDF',
++    title: 'Tài liệu PDF',
++    exts: ['.pdf'],
++    accept: 'application/pdf,.pdf',
++  },
++}
++
++// Định dạng nào cần ô nào có tệp trước khi duyệt
++export const NEED_FILE = { fb_video: 'video', fb_pdf_link: 'document' }
++
++// Đuôi tệp viết thường, có dấu chấm ('.mp4'); '' nếu không có
++export function fileExt(name) {
++  const base = String(name || '')
++    .split(/[?#]/)[0]
++    .split('/')
++    .pop()
++  const i = base.lastIndexOf('.')
++  return i > 0 ? base.slice(i).toLowerCase() : ''
++}
++
++// Chỉ nhận địa chỉ tệp của CRM (/files/, /omni-media/) hoặc https; còn lại trả '' để không vẽ liên kết lạ.
++// Tên tệp của Frappe hay có dấu cách ("/files/Bảng giá.pdf"): cho dấu cách, chặn xuống dòng và ký tự điều khiển.
++export function safeFileUrl(url) {
++  const u = String(url || '').trim()
++  // eslint-disable-next-line no-control-regex
++  if (!u || /[\x00-\x1f\x7f]/.test(u) || u.includes('..')) return ''
++  if (/^\/(files|omni-media)\/[^/]/.test(u) && !u.includes('//')) return u
++  if (/^https:\/\/[^/\s]+\//.test(u)) return u
++  return ''
++}
++
++// Tên để hiện: tên gốc của dòng File (tệp đã chuyển lên MinIO đổi địa chỉ nhưng giữ tên), không có thì lấy từ địa chỉ
++export function fileName(url, files = []) {
++  const row = (files || []).find((f) => f && f.file_url === url)
++  if (row?.file_name) return row.file_name
++  const base = String(url || '')
++    .split(/[?#]/)[0]
++    .split('/')
++    .pop()
++  try {
++    return decodeURIComponent(base)
++  } catch {
++    return base
++  }
++}
++
++// Lỗi khi chọn tệp (chưa tải lên): '' nếu được
++export function checkFile(slotKey, file) {
++  const slot = FILE_SLOTS[slotKey]
++  if (!slot || !file) return 'Không có tệp'
++  if (!slot.exts.includes(fileExt(file.name))) {
++    const big = slot.label[0].toUpperCase() + slot.label.slice(1)
++    return `${big} phải là tệp ${slot.exts.map((e) => e.slice(1).toUpperCase()).join(', ')}`
++  }
++  return ''
++}
++
++// Nền tảng chưa hủy cần tệp mà bài chưa có: [{ target, platform, slot }]
++export function missingFiles(targets = [], item = {}) {
++  const out = []
++  for (const t of targets || []) {
++    const slot = NEED_FILE[t?.post_format]
++    if (slot && t.status !== 'Đã hủy' && !item?.[slot]) out.push({ target: t.name, platform: t.platform, slot })
++  }
++  return out
++}
++
++// Tệp đã gắn vào bài (thanh Đính kèm trên Desk) dùng được cho ô `slotKey`: công khai, đúng đuôi, địa chỉ an toàn,
++// khác tệp đang dùng. [{ label, value }]
++export function attachmentChoices(files = [], slotKey, current = '') {
++  const slot = FILE_SLOTS[slotKey]
++  if (!slot) return []
++  const seen = new Set()
++  const out = []
++  for (const f of files || []) {
++    const url = safeFileUrl(f?.file_url)
++    if (!url || f.is_private || url === current || seen.has(url)) continue
++    if (!slot.exts.includes(fileExt(f.file_name || url)) || !slot.exts.includes(fileExt(url))) continue
++    seen.add(url)
++    out.push({ label: f.file_name || fileName(url), value: url })
++  }
++  return out
++}
++
++// Ô xem trước vẽ gì theo nền tảng đầu tiên chưa hủy: 'video', 'pdf' hoặc 'image'
++export function previewKind(targets = []) {
++  const t = (targets || []).find((x) => x && x.status !== 'Đã hủy')
++  if (t?.post_format === 'fb_video') return 'video'
++  if (t?.post_format === 'fb_pdf_link') return 'pdf'
++  return 'image'
++}
++
++// Máy chủ đã có ô video và tài liệu (đã áp bản vá ADR 0035 và migrate): item_detail trả cả hai khóa, kể cả khi rỗng
++export function fileSlotsSupported(item) {
++  return !!item && 'video' in item && 'document' in item
++}
++
++// Định dạng cho hộp chọn: máy chủ chưa có hai ô đó thì ẩn hai định dạng cần tệp
++export function formatOptions(formats = [], item = null) {
++  const supported = fileSlotsSupported(item)
++  return (formats || []).filter((f) => supported || !NEED_FILE[f.value])
++}
 diff --git a/frontend/src/utils/serverMessages.js b/frontend/src/utils/serverMessages.js
 new file mode 100644
 index 0000000..cbed91c
@@ -2614,6 +2895,171 @@ index 0000000..cbed91c
 +  }
 +  return out
 +}
+diff --git a/frontend/tests/unit/marketingMedia.test.js b/frontend/tests/unit/marketingMedia.test.js
+new file mode 100644
+index 0000000..70c9c85
+--- /dev/null
++++ b/frontend/tests/unit/marketingMedia.test.js
+@@ -0,0 +1,159 @@
++import { describe, expect, it } from 'vitest'
++import {
++  attachmentChoices,
++  checkFile,
++  fileExt,
++  fileName,
++  fileSlotsSupported,
++  formatOptions,
++  missingFiles,
++  previewKind,
++  safeFileUrl,
++} from '@/utils/marketingMedia'
++
++// ADR 0035: video và PDF đăng kèm trên trang bài marketing (/crm)
++describe('fileExt', () => {
++  it('đuôi viết thường, bỏ query và thư mục', () => {
++    expect(fileExt('Clip Tết.MP4')).toBe('.mp4')
++    expect(fileExt('/files/a.b/c.pdf?x=1#y')).toBe('.pdf')
++    expect(fileExt('/omni-media/OCI0001-0123456789abcdef0123456789abcdef.mov')).toBe('.mov')
++  })
++  it('không đuôi hoặc tên bắt đầu bằng dấu chấm thì rỗng', () => {
++    expect(fileExt('README')).toBe('')
++    expect(fileExt('.mp4')).toBe('')
++    expect(fileExt('')).toBe('')
++    expect(fileExt(null)).toBe('')
++  })
++})
++
++describe('safeFileUrl', () => {
++  it('nhận tệp của CRM và https', () => {
++    expect(safeFileUrl('/files/clip.mp4')).toBe('/files/clip.mp4')
++    expect(safeFileUrl('/omni-media/OCI1-0123456789abcdef0123456789abcdef.pdf')).toBe(
++      '/omni-media/OCI1-0123456789abcdef0123456789abcdef.pdf',
++    )
++    expect(safeFileUrl('https://cdn.example.com/a.pdf')).toBe('https://cdn.example.com/a.pdf')
++  })
++  it('nhận tên tệp có dấu cách, tiếng Việt (tên Frappe giữ nguyên)', () => {
++    expect(safeFileUrl('/files/UI035 Bảng giá.pdf')).toBe('/files/UI035 Bảng giá.pdf')
++  })
++  it('chặn javascript:, http, tệp riêng tư, đường lạ', () => {
++    for (const u of [
++      'javascript:alert(1)',
++      'http://x.com/a.pdf',
++      '//evil.com/a.pdf',
++      '/private/files/a.pdf',
++      '/files/../a.pdf',
++      '/files//a.pdf',
++      '/files/a\nb.pdf',
++      '/files/a\tb.pdf',
++      '/app/file',
++      'https://',
++      '',
++      null,
++    ]) {
++      expect(safeFileUrl(u)).toBe('')
++    }
++  })
++})
++
++describe('fileName', () => {
++  it('ưu tiên tên gốc của dòng File (tệp đã chuyển lên MinIO)', () => {
++    const url = '/omni-media/OCI1-0123456789abcdef0123456789abcdef.mp4'
++    expect(fileName(url, [{ file_url: url, file_name: 'Clip khai trương.mp4' }])).toBe('Clip khai trương.mp4')
++  })
++  it('không có dòng File thì giải mã tên trong địa chỉ', () => {
++    expect(fileName('/files/T%C3%A0i%20li%E1%BB%87u.pdf')).toBe('Tài liệu.pdf')
++    expect(fileName('/files/a%ZZ.pdf')).toBe('a%ZZ.pdf')
++  })
++})
++
++describe('checkFile', () => {
++  it('video chỉ MP4, MOV; PDF chỉ PDF', () => {
++    expect(checkFile('video', { name: 'a.MOV' })).toBe('')
++    expect(checkFile('video', { name: 'a.mp4' })).toBe('')
++    expect(checkFile('video', { name: 'a.webm' })).toBe('Video phải là tệp MP4, MOV')
++    expect(checkFile('document', { name: 'a.pdf' })).toBe('')
++    expect(checkFile('document', { name: 'a.docx' })).toBe('Tài liệu PDF phải là tệp PDF')
++  })
++  it('thiếu tệp hoặc ô lạ', () => {
++    expect(checkFile('video', null)).toBe('Không có tệp')
++    expect(checkFile('anh', { name: 'a.mp4' })).toBe('Không có tệp')
++  })
++})
++
++describe('missingFiles', () => {
++  const targets = [
++    { name: 'T1', platform: 'Facebook', post_format: 'fb_video', status: 'Chờ duyệt' },
++    { name: 'T2', platform: 'Facebook', post_format: 'fb_pdf_link', status: 'Chờ duyệt' },
++    { name: 'T3', platform: 'Facebook', post_format: 'fb_link', status: 'Chờ duyệt' },
++    { name: 'T4', platform: 'Facebook', post_format: 'fb_video', status: 'Đã hủy' },
++  ]
++  it('liệt kê nền tảng chưa hủy cần tệp mà bài chưa có', () => {
++    expect(missingFiles(targets, { video: null, document: '' })).toEqual([
++      { target: 'T1', platform: 'Facebook', slot: 'video' },
++      { target: 'T2', platform: 'Facebook', slot: 'document' },
++    ])
++  })
++  it('đủ tệp thì rỗng', () => {
++    expect(missingFiles(targets, { video: '/files/a.mp4', document: '/files/a.pdf' })).toEqual([])
++    expect(missingFiles(null, null)).toEqual([])
++  })
++})
++
++describe('attachmentChoices', () => {
++  const files = [
++    { file_name: 'Clip.mp4', file_url: '/omni-media/OCI1-0123456789abcdef0123456789abcdef.mp4', is_private: 0 },
++    { file_name: 'Bí mật.mp4', file_url: '/private/files/bi-mat.mp4', is_private: 1 },
++    { file_name: 'Bảng giá.pdf', file_url: '/files/Bảng giá.pdf', is_private: 0 },
++    { file_name: 'Ảnh.png', file_url: '/files/anh.png', is_private: 0 },
++    { file_name: 'Đổi đuôi.mp4', file_url: '/files/doi-duoi.html', is_private: 0 },
++    { file_name: 'Lạ.pdf', file_url: 'javascript:alert(1)//.pdf', is_private: 0 },
++    { file_name: 'Clip.mp4', file_url: '/omni-media/OCI1-0123456789abcdef0123456789abcdef.mp4', is_private: 0 },
++  ]
++  it('chỉ tệp công khai, đúng đuôi, địa chỉ an toàn, không trùng', () => {
++    expect(attachmentChoices(files, 'video')).toEqual([
++      { label: 'Clip.mp4', value: '/omni-media/OCI1-0123456789abcdef0123456789abcdef.mp4' },
++    ])
++    expect(attachmentChoices(files, 'document')).toEqual([{ label: 'Bảng giá.pdf', value: '/files/Bảng giá.pdf' }])
++  })
++  it('bỏ tệp đang dùng; ô lạ thì rỗng', () => {
++    expect(attachmentChoices(files, 'document', '/files/Bảng giá.pdf')).toEqual([])
++    expect(attachmentChoices(files, 'anh')).toEqual([])
++    expect(attachmentChoices(null, 'video')).toEqual([])
++  })
++})
++
++describe('previewKind', () => {
++  it('theo nền tảng đầu tiên chưa hủy', () => {
++    expect(previewKind([{ post_format: 'fb_video', status: 'Chờ duyệt' }])).toBe('video')
++    expect(
++      previewKind([
++        { post_format: 'fb_video', status: 'Đã hủy' },
++        { post_format: 'fb_pdf_link', status: 'Đã lên lịch' },
++      ]),
++    ).toBe('pdf')
++    expect(previewKind([{ post_format: 'fb_photo', status: 'Chờ duyệt' }])).toBe('image')
++    expect(previewKind([])).toBe('image')
++  })
++})
++
++describe('formatOptions', () => {
++  const fb = [
++    { label: 'Bài có link', value: 'fb_link' },
++    { label: 'Video', value: 'fb_video' },
++    { label: 'Bài có link tới PDF', value: 'fb_pdf_link' },
++  ]
++  it('máy chủ có ô video và tài liệu thì hiện đủ', () => {
++    expect(formatOptions(fb, { video: null, document: null })).toEqual(fb)
++  })
++  it('nhận biết máy chủ có hai ô tệp', () => {
++    expect(fileSlotsSupported({ video: null, document: null })).toBe(true)
++    expect(fileSlotsSupported({ video: null })).toBe(false)
++    expect(fileSlotsSupported(undefined)).toBe(false)
++  })
++  it('máy chủ chưa áp bản vá thì ẩn định dạng cần tệp', () => {
++    expect(formatOptions(fb, { media: null })).toEqual([{ label: 'Bài có link', value: 'fb_link' }])
++    expect(formatOptions(fb, null)).toEqual([{ label: 'Bài có link', value: 'fb_link' }])
++  })
++})
 diff --git a/frontend/tests/unit/marketingServerMessages.test.js b/frontend/tests/unit/marketingServerMessages.test.js
 new file mode 100644
 index 0000000..796f6de

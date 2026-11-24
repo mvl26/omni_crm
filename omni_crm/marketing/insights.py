@@ -19,7 +19,7 @@ from omni_crm.pipeline.retry import redact
 
 TARGET = "Omni Content Target"
 WINDOW_DAYS = 30
-METRICS = ("reach", "impressions", "likes", "comments", "shares", "clicks")
+METRICS = ("reach", "impressions", "likes", "comments", "shares", "clicks", "video_views")
 LAST_RUN_KEY = "omni:mk:insights_last_run"
 
 

@@ -204,6 +204,9 @@ class TestFacebookVideoAdapter(FrappeTestCase):
 		self.assertTrue(args[1].startswith("https://graph.facebook.com/"))
 		self.assertTrue(args[1].endswith("/320320/feed"))
 		self.assertEqual(kwargs["data"]["link"], video_payload().document)
+		self.assertEqual(
+			kwargs["timeout"], facebook.LINK_TIMEOUT, "Facebook tải PDF dựng thẻ xem trước: chờ lâu hơn"
+		)
 
 	def test_video_permission_error_is_terminal(self):
 		from omni_crm.marketing.publisher.errors import TerminalError
@@ -253,13 +256,185 @@ class TestFacebookVideoAdapter(FrappeTestCase):
 		):
 			self.assertEqual(self.ad.fetch_permalink(video_payload(), "320_1"), "https://fb.com/x")
 
-	def test_video_insights_only_reactions_and_comments(self):
-		body = {"reactions": {"summary": {"total_count": 4}}, "comments": {"summary": {"total_count": 2}}}
-		with mock.patch("requests.request", return_value=FakeResp(200, body)) as req:
-			out = self.ad.fetch_insights("kenh", "1548814027082620")
-		self.assertEqual((out["likes"], out["comments"]), (4, 2))
-		self.assertIsNone(out["shares"])
-		self.assertEqual(req.call_count, 1, "không gọi insights của bài Trang cho video")
+	def test_video_insights_read_on_page_post_of_video(self):
+		"""T3 23/11/2026: post_id của nút video là số trần, mã bài Trang là <page>_<số>; cảm xúc, bình luận, chia sẻ
+		và tiếp cận đọc trên bài đó; lượt xem video trên video_insights; không hỏi reactions trên nút video."""
+		calls = []
+		out = self._insights(
+			calls, {("1548814027082620", "post_id"): FakeResp(200, {"post_id": "122175987854723505"})}
+		)
+		self.assertEqual((out["likes"], out["comments"], out["shares"]), (4, 2, 6))
+		self.assertEqual(out["video_views"], 321)
+		self.assertEqual((out["reach"], out["impressions"], out["clicks"]), (900, 1500, 40))
+		self.assertIn(("320320_122175987854723505/insights", "post_media_view"), calls)
+		metrics = [m for _p, m in calls if m]
+		for gone in ("post_impressions", "post_impressions_unique", "total_video_impressions"):
+			self.assertNotIn(gone, metrics, "Meta đã gỡ")
+		self.assertNotIn(("1548814027082620", facebook.REACTION_FIELDS), calls)
+
+	def test_reel_uses_reel_plays_when_video_views_empty(self):
+		calls = []
+		out = self._insights(calls, {}, values={"total_video_views": None, "fb_reels_total_plays": 55})
+		self.assertEqual(out["video_views"], 55)
+		self.assertEqual(out["reach"], 900, "không có post_id thì dùng <page>_<video>")
+		self.assertIn(("320320_1548814027082620/insights", "post_total_media_view_unique"), calls)
+
+	def test_no_page_post_reads_likes_and_comments_on_video(self):
+		calls = []
+		bad = FakeResp(400, {"error": {"code": 100, "message": "x"}})
+		out = self._insights(
+			calls, {("1548814027082620", "post_id"): bad, ("320320_1548814027082620", "id"): bad}
+		)
+		self.assertEqual((out["likes"], out["comments"], out["shares"]), (8, 1, 3))
+		self.assertEqual(out["video_views"], 321)
+		self.assertIsNone(out["reach"])
+		self.assertFalse(
+			any(p.endswith("/insights") for p, _m in calls), "không có bài Trang: không gọi insights"
+		)
+
+	def test_post_metric_removed_by_meta_only_blanks_that_number(self):
+		calls = []
+		out = self._insights(
+			calls,
+			{
+				("320320_5/insights", "post_clicks"): FakeResp(
+					400, {"error": {"code": 100, "message": "invalid metric"}}
+				)
+			},
+			post="320320_5",
+		)
+		self.assertEqual((out["likes"], out["comments"], out["shares"]), (4, 2, 6))
+		self.assertEqual((out["reach"], out["impressions"]), (900, 1500))
+		self.assertIsNone(out["clicks"])
+		self.assertIsNone(out["video_views"])
+
+	def test_without_read_user_content_post_numbers_come_from_insights(self):
+		"""T3 23/11/2026: token chưa có pages_read_user_content (lỗi mã 10 khi đọc reactions, comments của bài)."""
+		calls = []
+		denied = FakeResp(400, {"error": {"code": 10, "message": "requires pages_read_user_content"}})
+		out = self._insights(
+			calls, {("320320_5", f"shares,{facebook.REACTION_FIELDS}"): denied}, post="320320_5"
+		)
+		self.assertEqual((out["likes"], out["comments"], out["shares"]), (4, 2, 1))
+		self.assertEqual((out["reach"], out["impressions"], out["clicks"]), (900, 1500, 40))
+		self.assertIn(("320320_5", "id"), calls, "bài còn và token dùng được: kiểm bằng trường id")
+
+	def test_reel_without_read_user_content_keeps_likes_comments_of_video(self):
+		calls = []
+		denied = FakeResp(400, {"error": {"code": 10, "message": "requires pages_read_user_content"}})
+		out = self._insights(
+			calls,
+			{
+				("1548814027082620", "post_id"): FakeResp(200, {"post_id": "122175987854723505"}),
+				("320320_122175987854723505", f"shares,{facebook.REACTION_FIELDS}"): denied,
+			},
+			values={"total_video_views": None, "fb_reels_total_plays": 13},
+		)
+		self.assertEqual((out["likes"], out["comments"]), (8, 1), "tương tác Reel không vào metric bài Trang")
+		self.assertEqual((out["shares"], out["video_views"]), (1, 13))
+		self.assertEqual(out["impressions"], 1500)
+
+	def test_deleted_post_or_broken_token_still_raises_for_sync_log(self):
+		from omni_crm.marketing.publisher.errors import PublishError
+
+		calls = []
+		denied = FakeResp(400, {"error": {"code": 10, "message": "requires pages_read_user_content"}})
+		gone = FakeResp(400, {"error": {"code": 190, "message": "token expired"}})
+		with self.assertRaises(PublishError):
+			self._insights(
+				calls,
+				{("320320_5", f"shares,{facebook.REACTION_FIELDS}"): denied, ("320320_5", "id"): gone},
+				post="320320_5",
+			)
+
+	def _insights(self, calls, special, post="1548814027082620", values=None):
+		metric_values = {
+			"total_video_views": 321,
+			"fb_reels_total_plays": 99,
+			"total_video_stories_by_action_type": {"share": 3, "like": 5, "comment": 2},
+			"post_total_media_view_unique": 900,
+			"post_media_view": 1500,
+			"post_clicks": 40,
+			"post_reactions_by_type_total": {"like": 3, "love": 1},
+			"post_activity_by_action_type": {"comment": 2, "share": 1},
+			**(values or {}),
+		}
+
+		def fake(method, url, params=None, **kw):
+			path = url.split("/v", 1)[1].split("/", 1)[1]
+			params = params or {}
+			metric = params.get("metric", "")
+			fields = params.get("fields", "")
+			calls.append((path, metric or fields))
+			key = (path, metric or fields)
+			if key in special:
+				return special[key]
+			if metric:
+				value = metric_values.get(metric)
+				rows = (
+					[]
+					if value is None
+					else [{"name": metric, "period": "lifetime", "values": [{"value": value}]}]
+				)
+				return FakeResp(200, {"data": rows})
+			if fields in ("id", "post_id"):
+				return FakeResp(200, {"id": path})
+			if fields == facebook.VIDEO_EDGE_FIELDS:
+				return FakeResp(
+					200,
+					{"likes": {"summary": {"total_count": 8}}, "comments": {"summary": {"total_count": 1}}},
+				)
+			return FakeResp(
+				200,
+				{
+					"reactions": {"summary": {"total_count": 4}},
+					"comments": {"summary": {"total_count": 2}},
+					"shares": {"count": 6},
+				},
+			)
+
+		with mock.patch("requests.request", side_effect=fake):
+			return self.ad.fetch_insights("kenh", post)
+
+
+class TestVideoMetricsSaved(VideoCase):
+	"""Lượt xem video lưu vào cột mới, có trong báo cáo marketing và tệp Excel."""
+
+	def test_sync_and_report(self):
+		from omni_crm.marketing import insights, report
+
+		item, target = self.item_with("fb_video", video=self.file(".mp4"))
+		frappe.db.set_value(
+			"Omni Content Target",
+			target,
+			{
+				"status": rules.T_SUCCESS,
+				"external_post_id": "1548814027082620",
+				"published_at": now_datetime(),
+			},
+		)
+		data = {"likes": 4, "comments": 2, "shares": 3, "video_views": 321, "reach": None}
+		with mock.patch.object(insights, "get_adapter") as adapter:
+			adapter.return_value.fetch_insights.return_value = data
+			insights.sync_target({"name": target, "platform": rules.FACEBOOK, "channel_account": self.meta,
+				"external_post_id": "1548814027082620"})  # fmt: skip
+		row = frappe.db.get_value(
+			"Omni Content Target", target, ["video_views", "insights_fields"], as_dict=True
+		)
+		self.assertEqual(row.video_views, 321)
+		self.assertIn("video_views", row.insights_fields.split(","))
+		self.assertNotIn("reach", row.insights_fields.split(","))
+		campaign = frappe.db.get_value(ITEM, item, "campaign")
+		built = report.build({"campaign": campaign})
+		self.assertEqual(built["cards"]["video_views"], 321)
+		self.assertEqual(built["posts"][0]["video_views"], 321)
+		self.assertIsNone(built["posts"][0]["reach"])
+		from io import BytesIO
+
+		from openpyxl import load_workbook
+
+		wb = load_workbook(BytesIO(report.to_xlsx(built)))
+		self.assertIn("Lượt xem video", [c.value for c in wb["Bai dang"][1]])
 
 
 class TestVideoFieldOnS3(MediaCase):
@@ -307,3 +482,60 @@ class TestVideoFieldOnS3(MediaCase):
 		frappe.db.commit()
 		self.assertTrue(frappe.db.get_value(ITEM, name, "video").startswith("/private/files/"))
 		self.assertEqual(self.s3.objects, {})
+
+
+class TestCrmPageFlow(MediaCase):
+	"""Trang bài trên /crm (bản vá giao diện 0002): tải tệp gắn đúng ô rồi `frappe.client.set_value`; hoặc chọn tệp đã
+	đính kèm trên Desk. `item_detail` trả hai ô mới và danh sách tệp của bài (tên gốc theo địa chỉ hiện tại)."""
+
+	def setUp(self):
+		super().setUp()
+		configure()
+
+	def test_upload_to_field_then_set_value(self):
+		from frappe.client import set_value
+
+		from omni_crm.marketing import views
+
+		name = self.item()
+		f = self.upload(
+			ext=".mp4",
+			content=MP4 + frappe.generate_hash(length=6).encode(),
+			attach={"attached_to_doctype": ITEM, "attached_to_name": name, "attached_to_field": "video"},
+		)
+		set_value(ITEM, name, {"video": f.file_url, "caption": "Chữ đang sửa dở"})
+		frappe.db.commit()
+		url = frappe.db.get_value(ITEM, name, "video")
+		self.assertTrue(s3_media.is_public_url(url), "lưu bài thì video chuyển lên kho S3")
+		info = views.item_detail(name)
+		self.assertEqual(info["item"]["video"], url)
+		self.assertIn("document", info["item"])
+		self.assertEqual(info["item"]["caption"], "Chữ đang sửa dở")
+		row = next(r for r in info["files"] if r.file_url == url)
+		self.assertEqual(row.file_name, f.file_name)
+		self.assertEqual(row.attached_to_field, "video")
+		self.assertEqual(row.is_private, 0)
+
+	def test_pick_desk_attachment_already_on_s3(self):
+		from frappe.client import set_value
+
+		from omni_crm.marketing import views
+
+		name = self.item()
+		f = self.upload(
+			ext=".mp4",
+			content=MP4 + frappe.generate_hash(length=6).encode(),
+			attach={"attached_to_doctype": ITEM, "attached_to_name": name},
+		)
+		moved = frappe.db.get_value("File", f.name, "file_url")
+		self.assertTrue(s3_media.is_public_url(moved), "thanh Đính kèm: chuyển ngay khi tải lên (mức 2)")
+		self.assertIn(moved, [r.file_url for r in views.item_detail(name)["files"]])
+		set_value(ITEM, name, {"video": moved})
+		frappe.db.commit()
+		self.assertEqual(
+			frappe.db.get_value(ITEM, name, "video"), moved, "không chuyển lại, không đổi địa chỉ"
+		)
+		set_value(ITEM, name, {"caption": "Lưu lại lần nữa"})
+		frappe.db.commit()
+		self.assertEqual(frappe.db.get_value(ITEM, name, "video"), moved)
+		self.assertEqual(frappe.db.get_value("File", f.name, "file_url"), moved)

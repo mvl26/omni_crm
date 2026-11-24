@@ -38,6 +38,8 @@ API_BASE = "https://graph.facebook.com"
 VIDEO_BASE = "https://graph-video.facebook.com"  # Meta nhận tải video ở máy riêng
 TIMEOUT = 10  # giây (CLAUDE.md mục 3); thử lại do bộ lập lịch lo (1, 5, 15 phút)
 VIDEO_TIMEOUT = 120  # với file_url, Facebook tải video về trong lúc trả lời: lâu hơn bài thường
+# Bài có link tới PDF: Facebook tải PDF về dựng thẻ xem trước trong lúc trả lời (T3 23/11/2026: quá 10 giây)
+LINK_TIMEOUT = 60
 TRANSIENT_CODES = frozenset({1, 2, 4, 17, 32, 341, 368, 613})
 TOKEN_CODES = frozenset({10, 102, 190}) | frozenset(range(200, 300))
 
@@ -152,7 +154,11 @@ class FacebookAdapter(Adapter):
 			post_id = str(body.get("id") or "")  # video id; bài trên Trang có sau khi Facebook xử lý xong
 		elif payload.post_format == "fb_pdf_link":
 			body = self._call(
-				"POST", f"{page_id}/feed", token, {"message": message, "link": payload.document}
+				"POST",
+				f"{page_id}/feed",
+				token,
+				{"message": message, "link": payload.document},
+				timeout=LINK_TIMEOUT,
 			)
 			post_id = str(body.get("id") or "")
 		else:
@@ -198,56 +204,105 @@ class FacebookAdapter(Adapter):
 		return None
 
 	def fetch_insights(self, channel: str, external_post_id: str) -> dict[str, int | None]:
-		"""Số liệu một bài Trang. Tương tác (cảm xúc, bình luận, chia sẻ) đọc bằng quyền pages_read_engagement;
-		tiếp cận / hiển thị / lượt bấm cần read_insights, thiếu quyền thì để None (giao diện hiện "—").
-		Video (mã không có `_`, ADR 0035): chỉ cảm xúc và bình luận; các số khác để None.
+		"""Số liệu một bài Trang (ADR 0035, đã thử trên Page thật ở bước T3 ngày 23/11/2026, Graph v26).
+
+		- Tiếp cận `post_total_media_view_unique`, lượt xem `post_media_view` (cột `impressions`: Meta thay
+		  impressions bằng views, gỡ post_impressions* sau v25), lượt bấm `post_clicks`: quyền read_insights.
+		- Cảm xúc, bình luận, chia sẻ: đọc trường của bài khi token có pages_read_user_content (số tức thời); không có
+		  quyền đó (token hiện tại) thì đọc metric `post_reactions_by_type_total`, `post_activity_by_action_type`.
+		- Video (mã không có `_`; Facebook hiện video thành Reel): lượt xem `total_video_views`, Reel thì
+		  `fb_reels_total_plays`; thích, bình luận đọc trên nút video (tương tác Reel không vào metric của bài Trang);
+		  các số khác đọc trên bài Trang `<page>_<post_id>` chứa video.
+		Mỗi metric một lần gọi: metric bị Meta gỡ hoặc thiếu quyền chỉ để trống số đó (giao diện hiện "—").
 		"""
-		_page_id, token = self._page(channel)
+		page_id, token = self._page(channel)
 		out: dict[str, int | None] = dict.fromkeys(INSIGHT_KEYS)
-		if "_" not in str(external_post_id):
-			# VERIFY: reactions/comments summary trên nút video (Graph API bản đang dùng)
-			try:
-				body = self._call(
-					"GET",
-					external_post_id,
-					token,
-					params={
-						"fields": "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
-					},
-				)
-			except PublishError:
+		post_id: str | None = str(external_post_id)
+		video = "_" not in post_id
+		if video:
+			video_id = post_id
+			out["video_views"] = self._video_views(video_id, token)
+			self._video_edges(video_id, token, out)
+			post_id = self._video_post_id(page_id, video_id, token)
+			if not post_id:
 				return out
+		self._post_engagement(post_id, token, out, video)
+		for metric, key in INSIGHT_METRICS.items():
+			value = _int(self._metric_value(f"{post_id}/insights", token, metric))
+			if value is not None:
+				out[key] = value
+		return out
+
+	def _post_engagement(self, post_id: str, token: str, out: dict, video: bool) -> None:
+		"""Cảm xúc, bình luận, chia sẻ của bài Trang. Bài thường: bài đã xóa hoặc token hỏng thì ném lỗi (job đồng bộ
+		ghi lỗi), như trước."""
+		# VERIFY (T3 23/11/2026): đọc reactions/comments của bài cần pages_read_user_content, token chưa có (lỗi mã 10)
+		body = self._get_or_none(post_id, token, {"fields": f"shares,{REACTION_FIELDS}"})
+		if body is not None:
 			out["likes"] = _total(body.get("reactions"))
 			out["comments"] = _total(body.get("comments"))
-			return out
-		# VERIFY: trường summary của reactions/comments và shares.count trên Graph API bản đang dùng
-		body = self._call(
-			"GET",
-			external_post_id,
-			token,
-			params={
-				"fields": "shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
-			},
+			out["shares"] = int((body.get("shares") or {}).get("count") or 0)
+			return
+		if not video:
+			self._call("GET", post_id, token, params={"fields": "id"})
+		reactions = self._metric_value(f"{post_id}/insights", token, "post_reactions_by_type_total")
+		activity = self._metric_value(f"{post_id}/insights", token, "post_activity_by_action_type")
+		if isinstance(reactions, dict) and out["likes"] is None:
+			out["likes"] = sum(_int(v) or 0 for v in reactions.values())
+		if isinstance(activity, dict):
+			if out["comments"] is None:
+				out["comments"] = _int(activity.get("comment")) or 0
+			out["shares"] = _int(activity.get("share")) or 0
+
+	def _video_views(self, video_id: str, token: str) -> int | None:
+		"""Lượt xem video (từ 3 giây); Reel không có số này (T3: rỗng) thì lấy lượt phát của Reel (gồm phát lại)."""
+		for metric in ("total_video_views", "fb_reels_total_plays"):
+			value = _int(self._metric_value(f"{video_id}/video_insights", token, metric))
+			if value is not None:
+				return value
+		return None
+
+	def _video_edges(self, video_id: str, token: str, out: dict) -> None:
+		"""Thích, bình luận trên nút video (nút video không có `reactions`); chia sẻ từ video_insights nếu có."""
+		body = self._get_or_none(video_id, token, {"fields": VIDEO_EDGE_FIELDS})
+		if body is not None:
+			out["likes"] = _total(body.get("likes"))
+			out["comments"] = _total(body.get("comments"))
+		stories = self._metric_value(
+			f"{video_id}/video_insights", token, "total_video_stories_by_action_type"
 		)
-		out["likes"] = _total(body.get("reactions"))
-		out["comments"] = _total(body.get("comments"))
-		out["shares"] = int((body.get("shares") or {}).get("count") or 0)
+		if isinstance(stories, dict):
+			out["shares"] = _int(stories.get("share")) or 0
+
+	def _get_or_none(self, path: str, token: str, params: dict) -> dict | None:
+		"""GET; lỗi của Graph (metric bị gỡ, thiếu quyền, trường không có) -> None, không ném."""
 		try:
-			# VERIFY: tên metric post_impressions / post_impressions_unique / post_clicks (Meta đổi tên metric định kỳ)
-			ins = self._call(
-				"GET",
-				f"{external_post_id}/insights",
-				token,
-				params={"metric": "post_impressions,post_impressions_unique,post_clicks"},
-			)
+			return self._call("GET", path, token, params=params)
 		except PublishError:
-			return out  # thiếu read_insights: giữ số tương tác, phần còn lại để trống
-		for row in ins.get("data") or []:
-			key = INSIGHT_METRICS.get(row.get("name"))
+			return None
+
+	def _metric_value(self, path: str, token: str, metric: str) -> Any:
+		"""Giá trị trọn đời của một metric (`values[0].value`: số, hoặc dict với metric theo loại); None nếu không có."""
+		body = self._get_or_none(path, token, {"metric": metric, "period": "lifetime"})
+		for row in (body or {}).get("data") or []:
 			values = row.get("values") or []
-			if key and values:
-				out[key] = int(values[0].get("value") or 0)
-		return out
+			if row.get("name") == metric and values:
+				return values[0].get("value")
+		return None
+
+	def _video_post_id(self, page_id: str, video_id: str, token: str) -> str | None:
+		"""Mã bài Trang chứa video, theo đúng mã Graph trả về. Trường `post_id` của nút video (không có trong tài
+		liệu Meta) trả số trần, ví dụ `122175987854723505` (T3 23/11/2026): mã bài là `<page>_<số đó>`. Không có thì
+		thử `<page>_<video>`. Không tìm được thì None."""
+		body = self._get_or_none(video_id, token, {"fields": "post_id"})
+		raw = str((body or {}).get("post_id") or "")
+		candidates = [raw if "_" in raw else f"{page_id}_{raw}"] if raw else []
+		candidates.append(f"{page_id}_{video_id}")
+		for candidate in dict.fromkeys(candidates):
+			found = str((self._get_or_none(candidate, token, {"fields": "id"}) or {}).get("id") or "")
+			if "_" in found:
+				return found
+		return None
 
 	def fetch_permalink(self, payload: Payload, external_post_id: str) -> str:
 		_page_id, token = self._page(payload.channel)
@@ -272,12 +327,25 @@ def _epoch(value: Any) -> int | None:
 		return None
 
 
-INSIGHT_KEYS = ("reach", "impressions", "likes", "comments", "shares", "clicks")
+INSIGHT_KEYS = ("reach", "impressions", "likes", "comments", "shares", "clicks", "video_views")
+# Metric của bài Trang (Graph v26). VERIFY (T3): tên do Meta đổi định kỳ; post_impressions* đã bị gỡ sau v25.
 INSIGHT_METRICS = {
-	"post_impressions_unique": "reach",
-	"post_impressions": "impressions",
+	"post_total_media_view_unique": "reach",
+	"post_media_view": "impressions",
 	"post_clicks": "clicks",
 }
+REACTION_FIELDS = "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
+VIDEO_EDGE_FIELDS = "likes.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
+
+
+def _int(value: Any) -> int | None:
+	"""Số nguyên từ giá trị metric; dict / chuỗi lạ / None -> None."""
+	if isinstance(value, bool) or value is None:
+		return None
+	try:
+		return int(value)
+	except (TypeError, ValueError):
+		return None
 
 
 def _total(block: Any) -> int | None:

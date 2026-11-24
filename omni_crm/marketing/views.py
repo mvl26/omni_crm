@@ -152,7 +152,20 @@ def item_detail(name: str) -> dict[str, Any]:
 		"is_manager": roles.is_manager(),
 		"can_edit": roles.can_edit() and doc.status in (rules.I_DRAFT, rules.I_REVIEW),
 		"dry_run": mk_settings.dry_run(),
+		"files": item_files(name),
 	}
+
+
+def item_files(name: str) -> list[dict[str, Any]]:
+	"""Tệp gắn vào bài (thanh Đính kèm trên Desk, ô video / tài liệu): trang bài trên /crm hiện tên gốc và cho chọn
+	tệp đã đính kèm làm video / PDF đăng kèm (ADR 0035). Người gọi đã kiểm quyền đọc bài."""
+	return frappe.get_all(
+		"File",
+		filters={"attached_to_doctype": ITEM, "attached_to_name": name, "is_folder": 0},
+		fields=["name", "file_name", "file_url", "is_private", "file_size", "attached_to_field"],
+		order_by="creation desc",
+		limit=100,
+	)
 
 
 def approve_campaign(name: str) -> list[dict[str, Any]]:

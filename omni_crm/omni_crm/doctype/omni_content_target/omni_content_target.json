@@ -1,7 +1,7 @@
 {
  "actions": [],
  "creation": "2026-11-13 10:00:00.000000",
- "modified": "2026-11-23 13:00:00.000000",
+ "modified": "2026-11-23 16:00:00.000000",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "doctype": "DocType",
@@ -34,6 +34,7 @@
   "sec_stats",
   "reach",
   "impressions",
+  "video_views",
   "likes",
   "col3",
   "comments",
@@ -200,7 +201,16 @@
    "fieldtype": "Int",
    "label": "Lượt hiển thị",
    "read_only": 1,
-   "no_copy": 1
+   "no_copy": 1,
+   "description": "Lượt xem bài (post_media_view): từ 11/2025 Meta thay lượt hiển thị bằng lượt xem"
+  },
+  {
+   "fieldname": "video_views",
+   "fieldtype": "Int",
+   "label": "Lượt xem video",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Bài video Facebook: lượt xem từ 3 giây (total_video_views)"
   },
   {
    "fieldname": "likes",
