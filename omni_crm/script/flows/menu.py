@@ -11,7 +11,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import cint, now_datetime
+from frappe.utils import cint, get_datetime, now_datetime
 
 from omni_crm import flags
 from omni_crm.script import engine, router, send, state, store, switch
@@ -136,6 +136,8 @@ def on_text(ctx: RouteContext) -> None:
 		collect._clear_flow(ctx)  # luật 13: phiên mới, câu hỏi dở của phiên trước không còn hiệu lực
 		state.update_state(ctx.identity, demo_wait=None, handoff_phone_tries=None)
 		flow, st = "", engine.script_state(ctx)
+	if text and _postpones(ctx, text, flow):  # "để lúc khác anh nhắn lại": rời việc đang dở, không hỏi tiếp
+		return
 	handler = engine._state_handlers.get(flow)
 	if handler is not None and _side_talk(ctx, text, st):
 		return
@@ -423,12 +425,34 @@ def _tap(ctx: RouteContext, target: str) -> None:
 THINKING_KEY = "_thinking"
 
 
+THINKING_AFTER_CONF = "omni_script_thinking_after"  # site_config: số giây khách đã chờ thì mới gửi câu báo chờ
+THINKING_AFTER = 20
+
+
+def thinking_after() -> int:
+	raw = frappe.conf.get(THINKING_AFTER_CONF)
+	return THINKING_AFTER if raw is None else cint(raw)
+
+
+def _waited_seconds(ctx: RouteContext) -> float:
+	"""Số giây từ tin ĐẦU của lượt này tới giờ; không đọc được thì coi như đã chờ lâu (vẫn báo chờ)."""
+	try:
+		first = frappe.db.sql(
+			"select min(received_at) from `tabOmni Inbound Message` where batch_id=%s and event_type='message'", ctx.batch_id
+		)[0][0]
+		return (now_datetime() - get_datetime(first)).total_seconds() if first else 9999.0
+	except Exception:
+		return 9999.0
+
+
 def thinking(ctx: RouteContext) -> None:
 	"""Gửi câu "Miyano đang suy nghĩ…" một lần cho lượt này (xem `send.send_thinking`). Không bao giờ ném lỗi."""
 	if ctx.state.get(THINKING_KEY):
 		return
 	ctx.state[THINKING_KEY] = True
 	try:
+		if _waited_seconds(ctx) < thinking_after():
+			return  # khách mới chờ ít: câu trả lời sắp tới, không cần thêm một tin báo chờ (thử 25/11: 63/140 tin là tin chờ)
 		send.send_thinking(ctx.identity)
 	except Exception as e:
 		frappe.logger("omni").info("omni script: không gửi được câu báo chờ (%s)", type(e).__name__)
@@ -697,6 +721,30 @@ def _reply_with_menu(ctx: RouteContext, lead_in: str) -> bool:
 	return False
 
 
+NODE_LATER = "TAM_DUNG"
+
+
+def _postpones(ctx: RouteContext, text: str, flow: str) -> bool:
+	"""Bot đang hỏi dở (hoặc vừa đọc lại) mà khách nói để lúc khác: bỏ việc đang dở, chào, KHÔNG hỏi tiếp câu cũ."""
+	try:
+		from omni_crm.script import classify
+		from omni_crm.script.flows import collect
+
+		mid = flow or str(ctx.state.get("script_node") or "").startswith(MID_FLOW_PREFIXES)
+		if not mid or not classify.is_postpone(text):
+			return False
+		hit = classify.classify_by_rules(text, ctx.state)
+		if hit and hit[0] not in (UNCLEAR, "KHONG_CAN"):  # câu còn nêu rõ một ý khác (gặp người, dừng nhắn…): để ý đó xử lý
+			return False
+		collect._clear_flow(ctx)
+		state.update_state(ctx.identity, demo_wait=None, demo_at=None, demo_edit=None, demo_resched=None, demo_confirmed=None, handoff_phone_tries=None, **{TODO_KEY: None})
+		state.reset_reask(ctx.identity)
+		return bool(engine.run_node(ctx, NODE_LATER))
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không xử lý được lời hẹn lúc khác (%s)", type(e).__name__)
+		return False
+
+
 def _polite_decline(text: str) -> bool:
 	try:
 		from omni_crm.script import classify
@@ -841,6 +889,25 @@ def _plain_with(ctx: RouteContext, code: str, extra: dict) -> str:
 	except Exception:
 		return ""
 	return rendered[0] if rendered else ""
+
+
+def answer_if_known(ctx: RouteContext, questions: list) -> bool:
+	"""Trả lời phần câu hỏi đi kèm một lời xác nhận ("ok đúng rồi, bên em ở đâu vậy") NẾU Kho tri thức có câu trả lời
+	được phép tự gửi; không có thì im (ô chốt gửi ngay sau đó đã nói bước tiếp theo). Không bao giờ ném lỗi."""
+	try:
+		text = "\n".join(str(q).strip() for q in (questions or [])[:3] if str(q).strip())
+		if not text:
+			return False
+		res = kb_draft(ctx, question=text)
+		if res and res["action"] == "Reply" and (res["text"] or "").strip() and _kb_auto_send(ctx, res):
+			if send.send_text(ctx.identity, res["text"], code=KB_CODE):
+				router._mark(ctx.batch_id)
+				return True
+	except Exception as e:
+		if type(e).__name__ == "Superseded":
+			raise
+		frappe.logger("omni").info("omni script: không trả lời được câu hỏi kèm xác nhận (%s)", type(e).__name__)
+	return False
 
 
 def _answer_questions(ctx: RouteContext, questions: list) -> None:

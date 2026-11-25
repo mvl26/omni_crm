@@ -744,6 +744,7 @@ def _quote_confirmed(ctx: RouteContext, arg: str = "", node: dict | None = None)
 	return done
 
 
+_BUT = re.compile(r"(?<![\wà-ỹ])(?:nhưng|mà|tuy nhiên|chỉ là|sửa|đổi|thêm|bỏ|bớt|thay|nhầm|sai|không phải|chưa đúng)(?![\wà-ỹ])")
 _YES_QUOTE = re.compile(r"^(?:dạ[\s,]*)?(?:đúng|chuẩn|chính xác|ok|oke|okay|được|đồng ý|xác nhận|vâng|ừ|uh)(?![\wÀ-ỹ])", re.I)
 
 
@@ -759,12 +760,18 @@ def on_readback_text(ctx: RouteContext) -> bool:
 	from omni_crm.script.flows import menu
 
 	code, _conf = menu.classify_text(ctx)
-	slots = (ctx.state.get("_classify_detail") or {}).get("slots") or {}
+	detail = ctx.state.get("_classify_detail") or {}
+	slots = detail.get("slots") or {}
 	changed = False
 	for field, value in slots.items():
 		if field in PREFILL_FIELDS and str(value or "").strip():
 			save_answer(ctx, field, str(value), typed=True)
 			changed = True
+	if not changed and _YES_QUOTE.match(text) and not _BUT.search(text.lower()):
+		# "ok đúng rồi, bao giờ có báo giá vậy e": lời xác nhận kèm câu hỏi, không sửa mục nào → trả lời (nếu kho có) rồi chốt
+		menu.answer_if_known(ctx, detail.get("questions") or [])
+		_quote_confirmed(ctx)
+		return True
 	if changed:
 		ctx.state.pop(ACK_KEY, None)
 		state.update_state(ctx.identity, flow=None)

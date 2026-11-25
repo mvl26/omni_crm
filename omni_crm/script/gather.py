@@ -22,7 +22,7 @@ INBOUND = "Omni Inbound Message"
 IDENTITY = "Omni Identity"
 METHOD = "omni_crm.script.gather.run"
 MAX_WAIT = 60  # trần tổng thời gian đợi gom tin của một lượt (giây)
-NOTICE_AFTER = 10  # đợi quá bấy nhiêu giây kể từ tin đầu của lượt thì báo khách đang xem
+NOTICE_AFTER = 20  # đợi quá bấy nhiêu giây kể từ tin đầu của lượt thì báo khách đang xem
 POLL = 2
 UNFINISHED = re.compile(r"(?:(?<![\wÀ-ỹ])(?:là|và|với|thì|mà|nhưng|hoặc|hay)|[,…]|\.\.\.)\s*$", re.I)
 
@@ -43,8 +43,13 @@ def is_tap(text: str | None) -> bool:
 	return raw.startswith("#") and " " not in raw
 
 
+QUICK_PICK = re.compile(r"^\s*(?:menu|\d[.)]?)\s*$", re.I)
+
+
 def _label_tap(identity_key: str | None, text: str | None) -> bool:
 	"""Zalo gửi về CHỮ TRÊN NÚT khi khách bấm nút (xem `script.buttons`): cũng là bấm nút, không cần đợi."""
+	if QUICK_PICK.match(text or ""):
+		return True  # gõ "1", "2." hoặc "menu": cũng là một lần chọn, trả lời ngay
 	if not identity_key:
 		return False
 	from omni_crm.script import buttons

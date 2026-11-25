@@ -221,7 +221,13 @@ _ERASE_RE = _compile(ERASE_PATTERNS)
 _BOT_RE = _compile(BOT_PATTERNS)
 _HUMAN_RE = _compile(HUMAN_PATTERNS)
 # phủ định: "anh không muốn gặp nhân viên", "khỏi cần gọi" — KHÔNG phải yêu cầu gặp người
-_NO_HUMAN_RE = re.compile(r"\b(?:khong|khoi|dung|thoi)\s+(?:can |muon |phai |can phai )?(?:gap|goi|noi chuyen|chuyen|ket noi)\b")
+# kể cả phủ định kiểu nói: "anh có cần gặp nhân viên đâu", "đâu có cần gặp", "ai bảo gặp nhân viên"
+_NO_HUMAN_RE = re.compile(
+	r"\b(?:khong|khoi|dung|thoi)\s+(?:can |muon |phai |can phai )?(?:gap|goi|noi chuyen|chuyen|ket noi)\b"
+	r"|\b(?:dau|nao) (?:co )?(?:can|muon|doi|bao)\b"
+	r"|\bco (?:can|muon|doi|bao|noi)\b.*\bdau\b"
+	r"|\bai (?:bao|can|muon|doi)\b"
+)
 _COMPLAINT_RE = _compile(COMPLAINT_PATTERNS)
 _NEED_HUMAN_RE = _compile(NEED_HUMAN_PATTERNS)
 _QUOTE_RE = re.compile("^(?:" + "|".join(f"(?:{p})" for p in QUOTE_EXACT) + ")$")
@@ -266,6 +272,25 @@ def is_ack_only(text: str | None) -> bool:
 		return False
 	joined = " ".join(words)
 	return bool(_ACK_CORE.intersection(words)) or any(p in joined for p in ("cam on", "duoc roi", "dung roi"))
+
+
+POSTPONE_PATTERNS = (
+	r"\b(?:luc|khi|hom|bua|dip|lan) khac\b",
+	r"\b(?:nhan|lien he|goi|bao|hoi|trao doi|quay) lai (?:sau|em sau|ben em sau)\b",
+	r"\b(?:hoi|ban|trao doi|xin y kien)(?: lai)?(?: voi| them)? (?:sep|giam doc|lanh dao|ban giam doc|cap tren|noi bo|ke toan|phong)\b",
+	r"\bde (?:[a-z]+ ){0,2}(?:xem|tinh|can nhac|suy nghi|ban|hoi)(?: [a-z]+){0,2} (?:da|sau|lai)\b",
+	r"\bkhi nao can\b",
+)  # KHÔNG gồm "để sau" / "chưa cần" trơ trọi: đó thường là câu trả lời bỏ qua MỘT câu hỏi ("số lượng để sau")
+_POSTPONE_RE = re.compile("|".join(POSTPONE_PATTERNS))
+
+
+def is_postpone(text: str | None) -> bool:
+	"""Khách nói để lúc khác ("thôi để a hỏi sếp đã, lúc khác a nhắn lại", "để tính sau") — thuần. Tin dài quá 25 từ
+	hoặc có dấu hỏi thì không xét (có thể là một ý khác kèm theo)."""
+	if not isinstance(text, str) or "?" in text:
+		return False
+	folded = fold(text)
+	return 0 < len(folded.split()) <= 25 and bool(_POSTPONE_RE.search(folded))
 
 
 def is_polite_decline(text: str | None) -> bool:

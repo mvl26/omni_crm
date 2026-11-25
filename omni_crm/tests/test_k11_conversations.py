@@ -332,10 +332,11 @@ for i, t in enumerate(["thứ sáu 15h", "20/11 lúc 8h", "thứ 6 tuần sau 9h
 for i, t in enumerate(["thứ bảy 9h", "chủ nhật 10h", "thứ sáu 20h", "thứ sáu 12h"]):
 	add(f"f5_other_time_not_working_{i}", [*OTHER, t], [not_says("kín lịch"), no_handoff()], R_FULL)
 add("f5_other_time_no_hour", [*OTHER, "sáng mai"], [no_handoff(), clear()], "D6: gõ ngày không kèm giờ ('sáng mai') -> chuyển nhân viên và tạm dừng bot, không hỏi lại giờ")
-add("f5_other_time_too_soon", [*OTHER, "hôm nay 11h"], [handoff(), no_booking])
+# 25/11: giờ quá sát / đã qua / không đọc được → đưa khung giờ để chọn, KHÔNG chuyển nhân viên (bản thử 25/11, lỗ hổng 1)
+add("f5_other_time_too_soon", [*OTHER, "hôm nay 11h"], [ends("DEMO_KHUNGGIO"), no_handoff(), no_booking])
 # 19/11: chưa đọc được giờ -> xin lại đủ ngày giờ một lần (lần sau mới chuyển nhân viên); "lúc nào cũng được" -> đề xuất lại khung
 add("f5_other_time_past", [*OTHER, "9h hôm qua"], [ends("DEMO_GIOKHAC_LAI"), no_booking])
-add("f5_other_time_past_twice", [*OTHER, "9h hôm qua", "9h hôm qua"], [handoff(), no_booking])
+add("f5_other_time_past_twice", [*OTHER, "9h hôm qua", "9h hôm qua"], [ends("DEMO_KHUNGGIO"), no_handoff(), no_booking])
 add("f5_other_time_anytime", [*OTHER, "lúc nào cũng được"], [ends("DEMO_KHUNGGIO"), no_booking])
 add("f5_retap_slot_after_booking", [*BOOKED, ("age",), "#DEMO_KHUNG_2"], [lacks("DEMO_KHUNGGIO")], R_REBOOK)
 add("f5_retap_format_after_booking", [*BOOKED, "#DEMO_HT_TRUCTIEP"], [lacks("DEMO_KHUNGGIO")], R_REBOOK)

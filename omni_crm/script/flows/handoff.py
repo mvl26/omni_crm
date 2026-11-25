@@ -691,8 +691,10 @@ def customer_cancels(ctx: RouteContext) -> bool:
 
 
 WAITING_CONF = "omni_script_answer_waiting"  # site_config: 1 = trong lúc chờ nhân viên bot vẫn trả lời (luật 10)
-WAITING_ACTIONS = ("DEMO", "BAOGIA", "TAILIEU")  # yêu cầu mới rõ ràng: bot làm tiếp, việc gặp nhân viên vẫn mở
+# yêu cầu mới rõ ràng: bot làm tiếp, việc gặp nhân viên vẫn mở
+WAITING_ACTIONS = ("DEMO", "BAOGIA", "TAILIEU", "DOI_LICH", "HUY_LICH", "MENU_VATTU", "MENU_PHANMEM", "MENU_SPD")
 WAITING_MIN_CONF = 0.9
+WAITING_NO_STAFF_CONF = 0.8  # khách đã nói rõ không cần nhân viên: việc nêu kèm chỉ cần chắc ở mức đổi luồng
 
 
 def while_waiting(ctx: RouteContext) -> str:
@@ -722,17 +724,65 @@ def while_waiting(ctx: RouteContext) -> str:
 		finally:
 			frappe.flags.pop(send.WAITING_FLAG, None)
 		return "answered"
-	if code in WAITING_ACTIONS and float(conf or 0) >= WAITING_MIN_CONF:
-		if ctx.lead:
-			bot_handoff.resume_lead(ctx.lead)
-		frappe.db.set_value(IDENTITY, ctx.identity, "bot_paused_until", None, update_modified=False)
-		state.update_state(ctx.identity, handoff=None, flow=None, handoff_phone_tries=None, pause_pending=None)
-		note = _("Trong lúc chờ nhân viên, khách nêu yêu cầu mới; bot xử lý tiếp. Yêu cầu gặp nhân viên vẫn cần được phản hồi.")
-		tasks.append_note(info.get("task"), note)
-		if ctx.lead:
-			bot_handoff.note_on_lead(ctx.lead, note)
+	# "ủa anh có cần gặp nhân viên đâu, anh chỉ muốn đổi lịch demo thôi mà": khách nói rõ không cần người và nêu việc
+	# muốn làm → bot làm việc đó (không đưa về menu chính)
+	no_staff = "KHONG_GAP_NGUOI" in (detail.get("intents") or [])
+	need = WAITING_NO_STAFF_CONF if no_staff else WAITING_MIN_CONF
+	act = code if code in WAITING_ACTIONS and float(conf or 0) >= need else ""
+	if not act and no_staff:
+		ideas = (ctx.state.get(menu.READING_KEY) or {}).get("cac_y") or []
+		best = max(
+			(i for i in ideas if isinstance(i, dict) and i.get("y_dinh") in WAITING_ACTIONS and float(i.get("do_tin_cay") or 0) >= need),
+			key=lambda i: float(i.get("do_tin_cay") or 0),
+			default=None,
+		)
+		if best:
+			act = best["y_dinh"]
+			ctx.state[menu.CLASSIFIED_KEY] = (act, float(best.get("do_tin_cay") or 0))
+			ctx.state[menu.DETAIL_KEY] = {**detail, "code": act, "confidence": float(best.get("do_tin_cay") or 0)}
+	if act or no_staff:
+		_resume_for_customer(
+			ctx,
+			info,
+			_("Khách báo không cần gặp nhân viên; bot xử lý tiếp việc khách nêu.")
+			if no_staff
+			else _("Trong lúc chờ nhân viên, khách nêu yêu cầu mới; bot xử lý tiếp. Yêu cầu gặp nhân viên vẫn cần được phản hồi."),
+		)
 		return "resumed"
 	return ""
+
+
+def _resume_for_customer(ctx: RouteContext, info: dict, note: str) -> None:
+	if ctx.lead:
+		bot_handoff.resume_lead(ctx.lead)
+	frappe.db.set_value(IDENTITY, ctx.identity, "bot_paused_until", None, update_modified=False)
+	state.update_state(ctx.identity, handoff=None, flow=None, handoff_phone_tries=None, pause_pending=None)
+	tasks.append_note(info.get("task"), note)
+	if ctx.lead:
+		bot_handoff.note_on_lead(ctx.lead, note)
+
+
+STAFF_BUTTON_PREFIXES = ("GAP_NHANVIEN", "GAP_NV")
+
+
+def tap_while_waiting(ctx: RouteContext) -> bool:
+	"""Khách đang chờ nhân viên, CHƯA ai trả lời, mà BẤM một nút khác (menu, báo giá, tài liệu…): bot làm tiếp theo
+	nút đó thay vì im cho tới khi hết thời gian chờ. Bấm lại nút gặp nhân viên thì vẫn chờ. True nếu đã mở lại bot."""
+	if not cint(frappe.conf.get(WAITING_CONF) or 0):
+		return False
+	code = str(ctx.payload_code or "")
+	if not code or code.startswith(STAFF_BUTTON_PREFIXES):
+		return False
+	info = _handoff_state(ctx.identity)
+	if not info.get("at"):
+		return False
+	since = get_datetime(info["at"])
+	if _staff_replied(ctx.identity, since) or (ctx.lead and send.staff_replied_after(ctx.lead, since)):
+		return False
+	_resume_for_customer(
+		ctx, info, _("Trong lúc chờ nhân viên, khách bấm nút khác; bot xử lý tiếp. Yêu cầu gặp nhân viên vẫn cần được phản hồi.")
+	)
+	return True
 
 
 # --- Trả lại cho bot ----------------------------------------------------------------------------------------------

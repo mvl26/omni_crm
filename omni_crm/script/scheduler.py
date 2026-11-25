@@ -662,8 +662,14 @@ def _demo_blocked(
 def _deliver(row, lead: dict, payload: dict, choice: dict, now: datetime) -> tuple[str, str | None, dict]:
 	kind = row.kind
 	service = current_service(row.identity, row.lead, lead)
+	extra = {**payload, **store.as_dict(payload.get("vars"))}
+	if kind in DEMO_KINDS and row.identity:  # tin nhắc lịch demo: dịch vụ của LỊCH đã đặt, không phải dịch vụ khách vừa nói tới
+		booked = cstr(state.get(row.identity)["script_state"].get("demo_service")).strip().upper()
+		if booked:
+			service = booked
+			extra.setdefault("dich_vu", SERVICE_LABEL.get(booked, ""))
 	code = variant(_node_code(row, lead, now), service)
-	values = variables_for(row.identity, row.lead, {**payload, **store.as_dict(payload.get("vars"))})
+	values = variables_for(row.identity, row.lead, extra)
 	if choice["kind"] == "chat":
 		lacking = missing_variables(code, values)
 		sent = None if lacking else send.send_node(row.identity, code, values, purpose="followup")

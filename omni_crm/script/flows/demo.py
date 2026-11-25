@@ -289,10 +289,13 @@ _WEEKDAYS = {
 	"7": 5,
 }
 _RE_DATE = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[/\-]|tháng)\s*(\d{1,2})(?:\s*(?:[/\-]|năm)\s*(\d{4}))?(?!\d)")
-_RE_WEEKDAY = re.compile(r"thứ\s*(hai|ba|tư|tu|năm|nam|sáu|sau|bảy|bay|[2-7])(?![\wÀ-ỹ])")
+_RE_WEEKDAY = re.compile(
+	r"(?:thứ\s*|(?<![\wÀ-ỹ])thu\s*(?=[2-7])|(?<![\wÀ-ỹ])t\s?(?=[2-7]))(hai|ba|tư|tu|năm|nam|sáu|sau|bảy|bay|[2-7])(?![\wÀ-ỹ])"
+)  # "thứ 6", "thu 6", "t6"
 _RE_SUNDAY = re.compile(r"chủ nhật|(?<![\wÀ-ỹ])cn(?![\wÀ-ỹ])")
 _RE_TIME = re.compile(r"(?<!\d)(\d{1,2})\s*(?:h(?![a-zà-ỹ])|giờ|:)\s*(\d{1,2})?(?!\d)")
-_RE_BARE_HOUR = re.compile(r"(?<!\d)(\d{1,2})\s*(?=sáng|chiều|tối|trưa)")
+_RE_BARE_HOUR = re.compile(r"(?<!\d)(\d{1,2})\s*(?:rưỡi\s*)?(?=sáng|chiều|tối|trưa)")  # "9 sáng", "10 rưỡi sáng"
+_RE_CHANGE_TO = re.compile(r"(?:đổi|chuyển|dời|lùi|hoãn|sửa)[^.;!?]*?\s(?:sang|thành|qua|lại)\s|(?<![\wÀ-ỹ])(?:sang|thành)\s")
 _RE_RELATIVE = (
 	(re.compile(r"hôm nay|(?<![\wÀ-ỹ])nay(?![\wÀ-ỹ])"), 0),
 	(re.compile(r"ngày kia|(?<![\wÀ-ỹ])mốt(?![\wÀ-ỹ])"), 2),
@@ -304,6 +307,11 @@ def parse_time(text: str | None, now: datetime | None = None) -> datetime | None
 	"""Ngày giờ khách gõ ("9h30 thứ 5", "14:00 ngày 20/11", "sáng mai 10 giờ"); thiếu ngày hoặc giờ, hoặc không đọc được → None."""
 	now = now or _now()
 	raw = " " + unicodedata.normalize("NFC", cstr(text)).lower() + " "
+	moved = list(_RE_CHANGE_TO.finditer(raw))
+	if moved:  # "thứ 6 anh bận, đổi sang 9h sáng chủ nhật": ngày giờ MỚI nằm sau chữ "sang", không phải ngày nêu đầu câu
+		tail = parse_time(raw[moved[-1].end() :], now)
+		if tail:
+			return tail
 	day, rest = _parse_day(raw, now.date())
 	if not day:
 		return None
@@ -319,6 +327,76 @@ def parse_time(text: str | None, now: datetime | None = None) -> datetime | None
 	if hour > 23 or minute > 59:
 		return None
 	return datetime.combine(day, time(hour, minute))
+
+
+_RE_ISO = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
+_RE_HM = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[:h]|giờ)\s*(\d{2})?(?!\d)")
+
+
+def reading_time(when: dict | None, now: datetime, old: datetime | None = None) -> datetime | None:
+	"""Ngày giờ demo từ ô `thoi_gian_demo` của bản đọc hiểu (thuần): `ngay` (yyyy-mm-dd hoặc d/m) hay `thu` + `tuan`,
+	và `gio` (HH:MM). Thiếu ngày hoặc giờ thì lấy phần thiếu từ lịch đang có (`old`); vẫn thiếu → None."""
+	if not isinstance(when, dict):
+		return None
+	day = None
+	raw_day = cstr(when.get("ngay")).strip()
+	m = _RE_ISO.search(raw_day)
+	try:
+		if m:
+			day = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+		elif raw_day:
+			day = _parse_day(f" {raw_day.lower()} ", now.date())[0]
+	except ValueError:
+		day = None
+	weekday = when.get("thu")
+	if not day and isinstance(weekday, int) and not isinstance(weekday, bool) and 2 <= weekday <= 8:
+		target = weekday - 2  # thứ Hai = 2 ... Chủ nhật = 8
+		if when.get("tuan") == "SAU":
+			day = now.date() - timedelta(days=now.weekday()) + timedelta(days=7 + target)
+		else:
+			day = now.date() + timedelta(days=(target - now.weekday()) % 7 or 7)
+	clock = None
+	m = _RE_HM.search(cstr(when.get("gio")).lower())
+	if m and int(m.group(1)) <= 23 and int(m.group(2) or 0) <= 59:
+		clock = time(int(m.group(1)), int(m.group(2) or 0))
+	if day and day < now.date():
+		return None
+	if day and clock:
+		return datetime.combine(day, clock)
+	if old and (day or clock):
+		return datetime.combine(day or old.date(), clock or old.time())
+	return None
+
+
+def _reading_when(ctx: RouteContext, old: datetime | None = None) -> datetime | None:
+	"""Ngày giờ demo theo bước đọc hiểu của lượt này (gọi bước hiểu nếu lượt chưa có). Lỗi / không có → None."""
+	try:
+		from omni_crm.script.flows import menu
+
+		if not menu._understand_on():
+			return None
+		menu.classify_text(ctx)
+		reading = ctx.state.get(menu.READING_KEY) or {}
+		return reading_time((reading.get("slots") or {}).get("thoi_gian_demo"), _now(), old)
+	except Exception as e:
+		if type(e).__name__ == "Superseded":
+			raise
+		frappe.logger("omni").info("omni script demo: không lấy được giờ từ bước đọc hiểu (%s)", type(e).__name__)
+		return None
+
+
+def _several_days(text: str | None) -> bool:
+	"""Câu nêu từ hai mốc ngày trở lên ("thứ 6 bận, sang chủ nhật"): mẫu chữ dễ bắt nhầm, nên hỏi bước đọc hiểu."""
+	raw = " " + unicodedata.normalize("NFC", cstr(text)).lower() + " "
+	return len(_RE_WEEKDAY.findall(raw)) + len(_RE_SUNDAY.findall(raw)) + len(_RE_DATE.findall(raw)) >= 2
+
+
+def typed_time(ctx: RouteContext, old: datetime | None = None) -> datetime | None:
+	"""Ngày giờ khách gõ trong lượt: mẫu chữ trước; không đọc được hoặc câu có nhiều mốc ngày thì theo bước đọc hiểu."""
+	by_rule = parse_time(ctx.text, _now())
+	if by_rule and not _several_days(ctx.text):
+		return by_rule
+	return _reading_when(ctx, old) or by_rule
 
 
 def _parse_day(raw: str, today: date) -> tuple[date | None, str]:
@@ -365,6 +443,8 @@ def book(
 	now = now or _now()
 	service = service or scheduler.current_service(identity, lead)
 	release(identity, lead, _("Đổi lịch demo"), new_start=start)
+	if identity and service:
+		state.update_state(identity, demo_service=service)  # tin nhắc lịch về sau nói đúng dịch vụ của buổi demo này
 	user = demo_user(service)
 	label = scheduler.SERVICE_LABEL.get(service, service or "")
 	lead_name = frappe.db.get_value(LEAD, lead, "lead_name") or lead
@@ -514,7 +594,7 @@ def release(
 	if journey and frappe.db.get_value(LEAD, lead, "omni_journey_status") == JOURNEY_BOOKED:
 		state.set_journey(lead, journey)
 	if identity:
-		state.update_state(identity, demo_event=None, demo_task=None, demo_at=None)
+		state.update_state(identity, demo_event=None, demo_task=None, demo_at=None, demo_service=None)
 	return bool(old_at or open_events)
 
 
@@ -560,6 +640,9 @@ def _close_invite_tasks(lead: str, names: set, old_at, reason: str, new_start: d
 
 def _send(ctx: RouteContext, code: str, extra: dict | None = None) -> str | None:
 	"""Gửi ô `code` (đủ biến mới gửi) và ghi ô đang đứng."""
+	booked_service = _st(ctx.identity).get("demo_service")
+	if booked_service and "dich_vu" not in (extra or {}):  # đã có lịch: nói đúng dịch vụ của LỊCH, không phải dịch vụ đang nói tới
+		extra = {**(extra or {}), "dich_vu": scheduler.SERVICE_LABEL.get(booked_service, "")}
 	values = scheduler.variables_for(ctx.identity, ctx.lead, extra)
 	if scheduler.missing_variables(code, values):
 		return None
@@ -569,7 +652,15 @@ def _send(ctx: RouteContext, code: str, extra: dict | None = None) -> str | None
 	return name
 
 
+def _service_of_booking(identity: str) -> str:
+	"""Dịch vụ của lịch demo đang có (ghi lúc chốt lịch); chưa có lịch → ""."""
+	return cstr(_st(identity).get("demo_service"))
+
+
 def _service(ctx: RouteContext) -> str:
+	st = _st(ctx.identity)
+	if st.get("demo_resched") and st.get("demo_service"):
+		return st["demo_service"]  # đang đổi lịch: vẫn là buổi demo của dịch vụ đã đặt
 	return scheduler.current_service(ctx.identity, ctx.lead)
 
 
@@ -880,7 +971,7 @@ def start_with(ctx: RouteContext, mode_code: str) -> bool:
 	scheduler.on_inbound(ctx.identity, ctx.lead)
 	_reset(ctx.identity)
 	state.update_state(ctx.identity, demo_mode=mode)
-	start = parse_time(ctx.text, _now())
+	start = typed_time(ctx)
 	if start and in_booking_range(start, _now()):
 		choose(ctx, start)
 	else:
@@ -948,6 +1039,11 @@ def on_text(ctx: RouteContext) -> bool:
 			if _small_talk(ctx.text):  # chào / ok / sticker: gửi lại danh sách khung giờ, không về menu chính
 				propose(ctx)
 				return True
+			understood = _reading_when(ctx)  # "3h chiều t6 này", "10 ruoi sang thu 2 tuan sau": theo bước đọc hiểu
+			if understood and in_booking_range(understood, _now()):
+				scheduler.on_inbound(ctx.identity, ctx.lead)
+				choose(ctx, understood)
+				return True
 			if _parse_day(" " + cstr(ctx.text).lower() + " ", _now().date())[0]:  # mới nêu ngày: xin thêm giờ
 				state.update_state(ctx.identity, flow=FLOW, demo_wait="time", demo_time_asked=1)
 				return bool(_send(ctx, NODE_TIME_AGAIN) or _send(ctx, NODE_OTHER_TIME))
@@ -955,7 +1051,7 @@ def on_text(ctx: RouteContext) -> bool:
 		wait = "time"
 	scheduler.on_inbound(ctx.identity, ctx.lead)
 	if wait == "time":
-		start = parse_time(ctx.text, _now())
+		start = typed_time(ctx)
 		if not start and _ANYTIME.search(cstr(ctx.text).lower()):  # "lúc nào cũng được": đề xuất lại các khung trống
 			propose(ctx)
 			return True
@@ -964,10 +1060,10 @@ def on_text(ctx: RouteContext) -> bool:
 			if _send(ctx, NODE_TIME_AGAIN):
 				return True
 		state.update_state(ctx.identity, demo_time_asked=None)
-		if not start:
-			_handoff(ctx, _("Khách gõ giờ demo mà bot không đọc được"))
-		elif not in_booking_range(start, _now()):
-			_handoff(ctx, _("Khách muốn demo trong vòng 2 giờ tới hoặc xa hơn 45 ngày"))
+		if not start or not in_booking_range(start, _now()):
+			# không đọc được giờ, hoặc giờ quá sát / quá xa: đưa các khung trống để khách chọn, KHÔNG chuyển nhân viên
+			# (hết khung trống thì `propose` mới chuyển)
+			propose(ctx)
 		else:
 			choose(ctx, start)
 	elif wait == "attendees":
@@ -1047,6 +1143,8 @@ def _edit_from_text(ctx: RouteContext, st: dict) -> bool:
 		return True
 	old = get_datetime(st.get("demo_at")) if st.get("demo_at") else None
 	new = parse_time(text, _now())
+	if _several_days(text) or (not new and len(text.split()) >= 4 and re.search(r"\d|thứ|chủ nhật|mai|mốt|sáng|chiều", text.lower())):
+		new = _reading_when(ctx, old) or new  # câu dài / nhiều mốc ngày: theo bước đọc hiểu
 	if not new and old:
 		m = _HOUR_IN_TEXT.search(text.lower())
 		if m:  # chỉ nêu giờ ("sửa giờ thành 3 giờ chiều"): giữ ngày đã chọn
@@ -1069,6 +1167,15 @@ def _edit_from_text(ctx: RouteContext, st: dict) -> bool:
 	if count:
 		state.update_state(ctx.identity, demo_attendees=count)
 		return read_back(ctx)
+	if _YES.match(text):  # "ok đúng rồi, bên em có hỗ trợ cài đặt không": xác nhận kèm câu hỏi, không sửa mục nào
+		from omni_crm.script.flows import collect, menu
+
+		if not collect._BUT.search(text.lower()):
+			if menu._understand_on():
+				menu.classify_text(ctx)
+				menu.answer_if_known(ctx, (ctx.state.get(menu.DETAIL_KEY) or {}).get("questions") or [])
+			_on_confirmed(ctx)
+			return True
 	return False
 
 
@@ -1132,7 +1239,7 @@ def _reschedule_keeping(ctx: RouteContext) -> bool:
 		demo_at=None,
 	)
 	text = cstr(ctx.text) if not ctx.payload_code or ctx.payload_code != "DEMO_DOILICH" or len(cstr(ctx.text)) > 12 else ""
-	start = parse_time(text, _now()) if text else None
+	start = typed_time(ctx, get_datetime(row.omni_demo_at)) if text else None  # chỉ nêu ngày mới: giữ giờ của lịch cũ
 	if start and in_booking_range(start, _now()):
 		choose(ctx, start)
 		return True

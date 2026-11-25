@@ -309,12 +309,12 @@ class TestFlow(DemoCase):
 
 		demo.handle(self.ctx("DEMO_GIOKHAC"))
 		self.assertTrue(demo.on_text(self.ctx(text="hôm nào anh rảnh thì báo")))
-		# 19/11: chưa đọc được -> xin lại đủ ngày giờ đúng MỘT lần, lần sau mới chuyển nhân viên
+		# 19/11: chưa đọc được -> xin lại đủ ngày giờ đúng MỘT lần; 25/11: lần sau đưa khung giờ để chọn, KHÔNG chuyển nhân viên
 		self.assertEqual(self.nodes_sent()[-1], "DEMO_GIOKHAC_LAI")
 		self.handoff.start.assert_not_called()
 		self.assertTrue(demo.on_text(self.ctx(text="hôm nào anh rảnh thì báo")))
-		self.handoff.start.assert_called_once()
-		self.assertNotIn("demo_wait", self.st())
+		self.handoff.start.assert_not_called()
+		self.assertEqual(self.nodes_sent()[-1], "DEMO_KHUNGGIO")
 
 	def test_missing_email_is_asked_before_confirm(self):
 		frappe.db.set_value(LEAD, self.lead1, "email", None)
@@ -383,11 +383,12 @@ class TestFlow(DemoCase):
 		self.assertEqual(len(self.tasks.notes), 1)
 		self.assertIn("CHƯA gửi được câu xác nhận", self.tasks.notes[0][1])
 
-	def test_too_soon_typed_time_goes_to_staff(self):
+	def test_too_soon_typed_time_offers_slots_not_staff(self):
 		soon = demo._now() + timedelta(hours=1)
 		demo.handle(self.ctx("DEMO_GIOKHAC"))
 		demo.on_text(self.ctx(text=f"{soon.strftime('%d/%m/%Y')} lúc {soon.hour}:{soon.minute:02d}"))
-		self.handoff.start.assert_called_once()
+		self.handoff.start.assert_not_called()  # 25/11: giờ quá sát → đưa khung giờ để chọn
+		self.assertEqual(self.nodes_sent()[-1], "DEMO_KHUNGGIO")
 		self.assertIsNone(frappe.db.get_value(LEAD, self.lead1, "omni_demo_at"))
 
 	def test_vattu_has_no_demo(self):

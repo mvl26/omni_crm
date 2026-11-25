@@ -309,7 +309,8 @@ def handle_batch(batch_id: str) -> bool:
 			return True
 		if waiting == "resumed":
 			code = send.block_code(ctx.identity)
-			ctx.state = state.get(ctx.identity)
+			kept = {k: v for k, v in ctx.state.items() if str(k).startswith("_")}  # kết quả đọc hiểu của lượt: không gọi AI lần hai
+			ctx.state = {**state.get(ctx.identity), **kept}
 	if code in SILENT_STOPS or _sale_replied(ctx):  # nhân viên đang xử lý: bot im lặng
 		_mark(batch_id)
 		return True
@@ -368,13 +369,15 @@ def check_superseded(ctx: RouteContext) -> None:
 
 def _answer_while_waiting(ctx: RouteContext) -> str:
 	"""Xem `flows.handoff.while_waiting`: "answered" | "resumed" | "" (bot im như cũ). Lỗi → ""."""
-	if ctx.event_type != "message" or ctx.payload_code or not (ctx.text or "").strip():
+	if ctx.event_type != "message" or not (ctx.payload_code or (ctx.text or "").strip()):
 		return ""
 	try:
 		load_flows()
 		from omni_crm.script.flows import handoff
 
 		frappe.flags[send.BATCH_FLAG] = ctx.batch_id
+		if ctx.payload_code:
+			return "resumed" if handoff.tap_while_waiting(ctx) else ""
 		return handoff.while_waiting(ctx) or ""
 	except Superseded:
 		raise

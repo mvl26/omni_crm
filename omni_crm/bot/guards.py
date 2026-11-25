@@ -222,6 +222,9 @@ def norm(text: str | None) -> str:
 	"""
 	t = unicodedata.normalize("NFKC", text or "").lower()
 	t = re.sub(r"(?<=\d)[.,](?=\d{3}(?!\d))", "", t)
+	# giờ dạng "8:00": giữ thành một từ kết thúc bằng chữ, không thì bước dính đơn vị bên dưới dán nó vào từ đứng sau
+	# ("8:00 đến" -> "8 00đến") và mốc giờ có nguyên văn trong kho vẫn bị coi là không có
+	t = re.sub(r"(?<!\d)(\d{1,2}):(\d{2})(?!\d)", r"\1h\2m", t)
 	t = re.sub(r"[^\w\s%$]", " ", t)
 	t = re.sub(r"(?<=\d)\s+(?=[^\W\d_]|[%$])", "", t)
 	return re.sub(r"\s+", " ", t).strip()

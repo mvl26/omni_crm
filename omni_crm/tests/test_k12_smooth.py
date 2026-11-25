@@ -353,6 +353,9 @@ class TestThinking(FlowCase):
 		old = frappe.conf.get("omni_script_thinking")
 		frappe.conf["omni_script_thinking"] = 1
 		self.addCleanup(lambda: frappe.conf.__setitem__("omni_script_thinking", old))
+		old_after = frappe.conf.get("omni_script_thinking_after")
+		frappe.conf["omni_script_thinking_after"] = 0  # test này kiểm chính câu báo chờ: báo ngay, không đợi đủ 20 giây
+		self.addCleanup(lambda: frappe.conf.__setitem__("omni_script_thinking_after", old_after))
 
 	def test_typed_message_that_needs_ai_gets_the_wait_line_first(self):
 		self.greeted()

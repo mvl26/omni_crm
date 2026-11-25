@@ -1,558 +1,571 @@
 [
-	{
-		"code": "REASK_LUACHON",
-		"title": "Câu dẫn khi hỏi lại đúng câu đang hỏi (khách gõ chưa rõ lựa chọn)",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"text": "Dạ, Miyano chưa rõ lựa chọn của anh/chị, anh/chị chọn lại giúp Miyano ạ.",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"notes": "Không gửi riêng: ghép lên đầu câu hỏi đang hỏi dở khi bot chưa hiểu câu khách gõ, thay cho việc đưa khách về menu chính. Tắt ô này thì bot gửi lại câu hỏi mà không có câu dẫn."
-	},
-	{
-		"code": "CHAO_LAI",
-		"title": "Câu dẫn khi khách cũ chỉ chào (Alo, hi, em ơi)",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"text": "Dạ, Miyano chào anh/chị {ten} ạ.",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách đã từng nhắn chỉ gõ lời chào."
-	},
-	{
-		"code": "DA_VANG",
-		"title": "Đáp lại khi khách chỉ nói ok / vâng / cảm ơn",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"text": "Dạ vâng ạ. Anh/chị cần Miyano hỗ trợ thêm gì cứ nhắn giúp Miyano nhé.",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"notes": "Gửi khi khách đã từng nhắn chỉ gõ ok / vâng / cảm ơn và bot không còn câu hỏi nào đang chờ chọn. Tắt ô này thì bot quay về câu hỏi lại như cũ."
-	},
-	{
-		"code": "DA_VANG_NGAN",
-		"title": "Câu dẫn \"Dạ vâng ạ.\" trước khi hỏi lại câu đang dở",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ vâng ạ.",
-		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở khi khách chỉ gõ ok / vâng giữa chừng."
-	},
-	{
-		"code": "HOI_TIEP_CAUDO",
-		"title": "Câu dẫn khi quay lại câu đang hỏi dở",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, Miyano xin phép hỏi tiếp câu đang dở ạ.",
-		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở sau khi bot trả lời câu hỏi chen ngang, hoặc khi khách gửi sticker / dấu hỏi giữa chừng."
-	},
-	{
-		"code": "DEMO_NGOAIGIO",
-		"title": "Demo – giờ khách muốn là ngày nghỉ / ngoài giờ làm việc",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, Miyano nhận lịch demo từ thứ Hai đến thứ Sáu, trong giờ làm việc ạ. Miyano đề xuất khung gần nhất là {khung_1}, anh/chị thấy có phù hợp không ạ?",
-		"buttons": [
-			{
-				"label": "Đồng ý",
-				"target": "DEMO_KHUNG_1"
-			},
-			{
-				"label": "Giờ khác",
-				"target": "DEMO_GIOKHAC"
-			}
-		],
-		"action": "demo:slots",
-		"notes": "Thay cho câu 'đã kín lịch' khi giờ khách gõ rơi vào thứ Bảy, Chủ nhật, ngoài giờ hoặc giờ nghỉ trưa."
-	},
-	{
-		"code": "DEMO_GIOKHAC_LAI",
-		"title": "Demo – xin lại đủ ngày và giờ",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, anh/chị cho Miyano xin cả ngày và giờ cụ thể ạ, ví dụ: 14h thứ Năm tuần sau.",
-		"buttons": [],
-		"action": "",
-		"notes": "Gửi một lần khi khách mới nêu ngày ('sáng mai') hoặc bot chưa đọc được giờ; lần sau vẫn chưa đọc được thì chuyển nhân viên."
-	},
-	{
-		"code": "DEMO_DACOLICH",
-		"title": "Demo – khách đã có lịch mà mở đặt lịch lần nữa",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, anh/chị đang có lịch demo vào {thu_ngay}, {gio_bat_dau}. Anh/chị muốn đổi hay huỷ lịch này ạ?",
-		"buttons": [
-			{
-				"label": "Đổi lịch",
-				"target": "DEMO_DOILICH"
-			},
-			{
-				"label": "Huỷ lịch",
-				"target": "DEMO_HUY"
-			},
-			{
-				"label": "Giữ lịch này",
-				"target": "KHONG_CAMON"
-			}
-		],
-		"action": "",
-		"notes": "Tránh việc bấm lại nút cũ làm lịch đã chốt bị thay mà khách không biết."
-	},
-	{
-		"code": "C4_XOADULIEU_GHINHAN",
-		"title": "Ghi nhận yêu cầu xoá dữ liệu (khi ô hướng dẫn C4_XOADULIEU đang Tắt)",
-		"step": "C",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, Miyano đã ghi nhận yêu cầu xoá dữ liệu của anh/chị. Bộ phận phụ trách sẽ liên hệ hỗ trợ anh/chị ạ.",
-		"buttons": [],
-		"action": "",
-		"notes": "Chỉ gửi khi C4_XOADULIEU không gửi được (chưa có link hướng dẫn). Việc cho người phụ trách tuân thủ vẫn được tạo như cũ."
-	},
-	{
-		"code": "DA_NHAN_LIENHE",
-		"title": "Câu dẫn khi khách tự gửi số điện thoại / email",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, Miyano đã ghi nhận thông tin liên hệ của anh/chị ạ.",
-		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách chỉ nhắn số điện thoại / email lúc bot không hỏi."
-	},
-	{
-		"code": "DA_NHAN_TEP",
-		"title": "Câu dẫn khi khách gửi tệp / ảnh không kèm chữ",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 19/11/2026",
-		"text": "Dạ, Miyano đã nhận tệp anh/chị gửi ạ.",
-		"notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách gửi tệp / ảnh mà bot chưa biết để làm gì. Tệp vẫn được lưu cho nhân viên."
-	},
-	{
-		"code": "BG_GIAOHANG_XACNHAN",
-		"title": "Báo giá – khách hỏi có giao kịp thời gian mình cần không",
-		"step": "3",
-		"service": "VATTU",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"text": "Nhân viên Miyano sẽ xác nhận thời gian giao hàng khi gửi báo giá ạ.",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026",
-		"notes": "Không gửi riêng: ghép sau câu xác nhận thông tin khi khách trả lời thời gian cần hàng kèm câu hỏi (\"thứ 3 tuần sau được không em\"). Bot không tự cam kết thời gian giao."
-	},
-	{
-		"code": "GAP_NV_CHUAKIP",
-		"title": "Câu dẫn khi nhân viên chưa trả lời sau 10 phút (bot hoạt động lại)",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"text": "Dạ, nhân viên Miyano hiện chưa phản hồi kịp, Miyano xin lỗi vì để anh/chị chờ. Miyano đã báo lại bộ phận phụ trách và tiếp tục hỗ trợ anh/chị ngay ạ.",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026",
-		"notes": "Không gửi riêng: ghép lên đầu câu xin số điện thoại (khách chưa có số) hoặc menu chính (khách đã có số) khi đã chuyển nhân viên 10 phút trong giờ mà chưa ai trả lời. Bot hoạt động lại ngay sau câu này."
-	},
-	{
-		"code": "DEMO_CHONSANPHAM",
-		"title": "Demo – hỏi khách muốn xem demo sản phẩm nào",
-		"step": "2",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026",
-		"text": "Dạ, anh/chị muốn xem demo sản phẩm nào ạ?",
-		"buttons": [
-			{
-				"label": "Phần mềm SupplyCore",
-				"target": "DEMO_PHANMEM"
-			},
-			{
-				"label": "Hệ thống SPD",
-				"target": "DEMO_SPD"
-			}
-		],
-		"action": "need:Demo",
-		"notes": "Gửi khi khách GÕ muốn đặt lịch demo mà chưa rõ sản phẩm (chưa chọn dịch vụ, hoặc đang ở Vật tư – không có demo)."
-	},
-	{
-		"code": "GAP_NV_HUY",
-		"title": "Câu dẫn khi khách báo không cần gặp nhân viên nữa",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026",
-		"text": "Dạ vâng ạ, Miyano tiếp tục hỗ trợ anh/chị.",
-		"buttons": [],
-		"action": "",
-		"notes": "Không gửi riêng: ghép lên đầu menu chính khi khách đang chờ nhân viên (chưa ai trả lời) mà nhắn không muốn / không cần gặp nhân viên. Bot hoạt động lại ngay."
-	},
-	{
-		"code": "DANG_SUYNGHI",
-		"title": "Báo khách đợi khi bot đang nhờ AI hiểu ý / soạn câu",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"text": "Miyano đang suy nghĩ để trả lời, anh/chị vui lòng đợi ạ.",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026",
-		"notes": "Gửi ngay khi khách gõ một câu mà bot phải nhờ AI (mất vài giây). Bấm nút / gõ số được trả lời tức thì nên không gửi câu này. Bật bằng site_config omni_script_thinking = 1; tắt ô này cũng là tắt."
-	},
-	{
-		"code": "CHUA_GHI_DUOC",
-		"title": "Câu dẫn khi tin khách không phải thông tin của câu đang hỏi (không ghi, hỏi lại)",
-		"step": "3",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 1)",
-		"text": "Dạ, Miyano xin lỗi, Miyano chưa ghi được thông tin này.",
-		"buttons": [],
-		"action": "",
-		"notes": "Không gửi riêng: ghép lên đầu câu đang hỏi khi tin khách không phải giá trị của ô đó (một câu nói, câu hỏi, hoặc AI chưa chắc). Hỏi lại tối đa 2 lần, lần thứ ba mời gặp nhân viên."
-	},
-	{
-		"code": "GAP_NV_XACNHAN",
-		"title": "Hỏi xác nhận trước khi chuyển nhân viên (khi bot chưa chắc khách cần người)",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 1)",
-		"text": "Dạ, anh/chị muốn Miyano chuyển cho nhân viên tư vấn hỗ trợ trực tiếp không ạ?",
-		"buttons": [
-			{
-				"label": "Gặp nhân viên",
-				"target": "GAP_NHANVIEN"
-			},
-			{
-				"label": "Không cần",
-				"target": "KHONG_CAMON"
-			}
-		],
-		"action": "",
-		"notes": "Gửi khi AI đoán khách cần người với độ chắc chắn dưới 0,9 và khách không nói rõ. Khách nói rõ ('cho gặp nhân viên') thì chuyển ngay, không hỏi."
-	},
-	{
-		"code": "XINLOI_CHO",
-		"title": "Câu dẫn khi khách giục / nhắc câu chưa được trả lời",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
-		"text": "Dạ, Miyano xin lỗi đã để anh/chị chờ ạ.",
-		"notes": "Không gửi riêng: ghép lên đầu câu trả lời còn nợ hoặc câu đang hỏi dở khi khách giục ('Sao k trả lời', 'alo alo')."
-	},
-	{
-		"code": "KB_GHINHAN",
-		"title": "Câu hỏi ngoài Kho tri thức: nói rõ chưa có thông tin, ghi cho chuyên viên (không tạm dừng bot)",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
-		"text": "Dạ, câu này Miyano chưa có thông tin chính xác. Miyano đã ghi lại để chuyên viên trả lời anh/chị trong giờ làm việc ạ.",
-		"notes": "Thay cho việc chuyển nhân viên và tạm dừng bot khi Kho tri thức chưa có câu trả lời. Câu hỏi được ghi vào trường 'câu hỏi chưa trả lời' của Lead. Sau câu này bot hỏi tiếp câu đang dở (nếu có)."
-	},
-	{
-		"code": "HOI_LAM_RO",
-		"title": "Hỏi làm rõ khi tin của khách có hai cách hiểu dẫn tới hai việc khác nhau",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
-		"text": "Dạ, để Miyano làm đúng ý, {cau_hoi}",
-		"notes": "{cau_hoi} do hệ thống ghép từ hai cách hiểu của bước đọc hiểu, ví dụ: anh/chị muốn đổi lịch demo, hay đổi ngày nhận hàng ạ? Bot không ghi gì và không đổi luồng cho tới khi khách trả lời. Tối đa 2 lần cho một câu."
-	},
-	{
-		"code": "DANG_GHI_NHAN",
-		"title": "Đọc lại điều bot đã ghi được (ghép sau câu 'chưa ghi được')",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
-		"text": "Miyano đang ghi nhận: {thong_tin}.",
-		"notes": "Không gửi riêng. {thong_tin} ghép từ các thông tin đã thu (đã qua bộ lọc: ngắn, không link, không số tiền)."
-	},
-	{
-		"code": "GHINHAN_THEM",
-		"title": "Câu dẫn khi khách nhắn nhiều việc trong một tin (ghi nhận việc sẽ làm sau)",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
-		"text": "Dạ, Miyano đã ghi nhận anh/chị còn cần {viec}; xong phần này Miyano hỗ trợ tiếp ạ.",
-		"notes": "Không gửi riêng: ghép lên đầu tin của việc chính. {viec} ghép từ bảng cố định (nhận tài liệu / đặt lịch demo / báo giá + tên dịch vụ), không dùng chữ của AI."
-	},
-	{
-		"code": "TIEP_VIEC",
-		"title": "Câu dẫn khi bot mở việc khách đã nhắn từ trước",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
-		"text": "Dạ, tiếp theo là việc anh/chị đã nhắn lúc trước: {viec}.",
-		"notes": "Không gửi riêng: ghép lên đầu ô mở việc đó, thay cho câu 'còn cần hỗ trợ gì thêm'. Việc xếp hàng quá 120 phút thì bỏ."
-	},
-	{
-		"code": "DEMO_DOCLAI",
-		"title": "Demo – đọc lại cho khách xác nhận trước khi chốt lịch",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"text": "Dạ, Miyano đọc lại để anh/chị kiểm tra: demo {dich_vu}, hình thức {hinh_thuc}, {thu_ngay} lúc {gio_bat_dau}, {so_nguoi}. Anh/chị xác nhận giúp Miyano ạ.",
-		"buttons": [
-			{
-				"label": "Đúng rồi",
-				"target": "DEMO_CHOT"
-			},
-			{
-				"label": "Sửa lại",
-				"target": "DEMO_SUA"
-			}
-		],
-		"action": "",
-		"notes": "Lịch CHƯA được chốt cho tới khi khách bấm Đúng rồi (hoặc gõ đúng rồi / ok). Khách gõ mục cần sửa (vd 'sửa giờ thành 3 giờ chiều') thì chỉ mục đó đổi và bot đọc lại lần nữa. Bật bằng site_config omni_script_readback."
-	},
-	{
-		"code": "DEMO_SUA_GI",
-		"title": "Demo – khách bấm Sửa lại: hỏi sửa mục nào",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"text": "Dạ, anh/chị muốn sửa mục nào ạ? Anh/chị có thể bấm nút hoặc nhắn luôn nội dung cần sửa, ví dụ: đổi sang 3 giờ chiều.",
-		"buttons": [
-			{
-				"label": "Ngày giờ",
-				"target": "DEMO_GIOKHAC"
-			},
-			{
-				"label": "Số người",
-				"target": "DEMO_SUA_SONGUOI"
-			},
-			{
-				"label": "Hình thức",
-				"target": "DEMO_SUA_HT"
-			}
-		],
-		"action": "",
-		"notes": "Các mục khác giữ nguyên; sửa xong bot đọc lại lần nữa."
-	},
-	{
-		"code": "DEMO_CHON_SOM",
-		"title": "Demo – khách nói 'cái nào cũng được': báo khung sớm nhất đã chọn",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"text": "Dạ, Miyano xin chọn khung sớm nhất là {khung_1} ạ.",
-		"buttons": [],
-		"action": "",
-		"notes": "Gửi trước câu hỏi số người; lịch vẫn chưa chốt cho tới bước đọc lại."
-	},
-	{
-		"code": "BG_DOCLAI",
-		"title": "Báo giá – đọc lại cho khách xác nhận trước khi gửi yêu cầu cho nhân viên",
-		"step": "3",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"text": "Dạ, Miyano đọc lại để anh/chị kiểm tra: {thong_tin}. Anh/chị xác nhận giúp Miyano ạ.",
-		"buttons": [
-			{
-				"label": "Đúng rồi",
-				"target": "BG_CHOT"
-			},
-			{
-				"label": "Sửa lại",
-				"target": "BG_SUA_GI"
-			}
-		],
-		"action": "",
-		"notes": "Yêu cầu báo giá CHƯA được gửi cho nhân viên cho tới khi khách xác nhận. Bật bằng site_config omni_script_readback."
-	},
-	{
-		"code": "BG_CHOT",
-		"title": "Báo giá – khách xác nhận tin đọc lại",
-		"step": "3",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"text": "",
-		"buttons": [],
-		"action": "quote_confirmed",
-		"notes": "Không có chữ: chạy bước gửi yêu cầu như cũ."
-	},
-	{
-		"code": "BG_SUA_GI",
-		"title": "Báo giá – khách muốn sửa: hỏi nội dung cần sửa",
-		"step": "3",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"text": "Dạ, anh/chị nhắn giúp Miyano nội dung cần sửa ạ, ví dụ: số lượng 300 đôi.",
-		"buttons": [],
-		"action": "quote_edit",
-		"notes": "Khách nhắn mục cần sửa, bot sửa đúng mục đó rồi đọc lại lần nữa."
-	},
-	{
-		"code": "DEMO_CHOT",
-		"title": "Demo – khách bấm Đúng rồi ở tin đọc lại",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"step": "4",
-		"text": "",
-		"buttons": [],
-		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
-		"action": "demo:button"
-	},
-	{
-		"code": "DEMO_SUA",
-		"title": "Demo – khách bấm Sửa lại ở tin đọc lại",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"step": "4",
-		"text": "",
-		"buttons": [],
-		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
-		"action": "demo:button"
-	},
-	{
-		"code": "DEMO_SUA_SONGUOI",
-		"title": "Demo – sửa số người",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"step": "4",
-		"text": "",
-		"buttons": [],
-		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
-		"action": "demo:button"
-	},
-	{
-		"code": "DEMO_SUA_HT",
-		"title": "Demo – sửa hình thức",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
-		"step": "4",
-		"text": "",
-		"buttons": [],
-		"notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
-		"action": "demo:button"
-	},
-	{
-		"code": "KB_CHODUYET",
-		"title": "Câu giữ chân khi câu trả lời đang chờ nhân viên duyệt",
-		"step": "1",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"buttons": [],
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 6, luật 9)",
-		"text": "Dạ, Miyano đã nhận câu hỏi của anh/chị. Chuyên viên Miyano sẽ kiểm tra và trả lời anh/chị trong giờ làm việc ạ.",
-		"notes": "Gửi khi bot đã soạn câu trả lời nhưng nhóm câu hỏi đó cần nhân viên duyệt trước khi gửi. Không hứa thời gian cụ thể."
-	},
-	{
-		"code": "DEMO_NGOAIGIO_3",
-		"title": "Demo – giờ khách muốn nằm ngoài giờ làm việc: đề xuất 3 khung gần nhất",
-		"step": "4",
-		"service": "",
-		"channel": "Tất cả",
-		"status": "Đang dùng",
-		"action": "",
-		"source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 7, luật 8)",
-		"text": "Dạ, giờ anh/chị chọn nằm ngoài giờ Miyano nhận lịch demo (thứ Hai đến thứ Sáu, trong giờ làm việc) ạ. Miyano đề xuất 3 khung gần nhất, anh/chị chọn giúp Miyano một khung phù hợp ạ:",
-		"buttons": [
-			{
-				"label": "{khung_1}",
-				"target": "DEMO_KHUNG_1"
-			},
-			{
-				"label": "{khung_2}",
-				"target": "DEMO_KHUNG_2"
-			},
-			{
-				"label": "{khung_3}",
-				"target": "DEMO_KHUNG_3"
-			},
-			{
-				"label": "Giờ khác",
-				"target": "DEMO_GIOKHAC"
-			}
-		],
-		"notes": "Thay cho DEMO_NGOAIGIO (1 khung) khi công tắc omni_script_readback bật."
-	}
+ {
+  "code": "REASK_LUACHON",
+  "title": "Câu dẫn khi hỏi lại đúng câu đang hỏi (khách gõ chưa rõ lựa chọn)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano chưa rõ lựa chọn của anh/chị, anh/chị chọn lại giúp Miyano ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "notes": "Không gửi riêng: ghép lên đầu câu hỏi đang hỏi dở khi bot chưa hiểu câu khách gõ, thay cho việc đưa khách về menu chính. Tắt ô này thì bot gửi lại câu hỏi mà không có câu dẫn."
+ },
+ {
+  "code": "CHAO_LAI",
+  "title": "Câu dẫn khi khách cũ chỉ chào (Alo, hi, em ơi)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, Miyano chào anh/chị {ten} ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách đã từng nhắn chỉ gõ lời chào."
+ },
+ {
+  "code": "DA_VANG",
+  "title": "Đáp lại khi khách chỉ nói ok / vâng / cảm ơn",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ vâng ạ. Anh/chị cần Miyano hỗ trợ thêm gì cứ nhắn giúp Miyano nhé.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "notes": "Gửi khi khách đã từng nhắn chỉ gõ ok / vâng / cảm ơn và bot không còn câu hỏi nào đang chờ chọn. Tắt ô này thì bot quay về câu hỏi lại như cũ."
+ },
+ {
+  "code": "DA_VANG_NGAN",
+  "title": "Câu dẫn \"Dạ vâng ạ.\" trước khi hỏi lại câu đang dở",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ vâng ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở khi khách chỉ gõ ok / vâng giữa chừng."
+ },
+ {
+  "code": "HOI_TIEP_CAUDO",
+  "title": "Câu dẫn khi quay lại câu đang hỏi dở",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, Miyano xin phép hỏi tiếp câu đang dở ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu câu đang hỏi dở sau khi bot trả lời câu hỏi chen ngang, hoặc khi khách gửi sticker / dấu hỏi giữa chừng."
+ },
+ {
+  "code": "DEMO_NGOAIGIO",
+  "title": "Demo – giờ khách muốn là ngày nghỉ / ngoài giờ làm việc",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, Miyano nhận lịch demo từ thứ Hai đến thứ Sáu, trong giờ làm việc ạ. Miyano đề xuất khung gần nhất là {khung_1}, anh/chị thấy có phù hợp không ạ?",
+  "buttons": [
+   {
+    "label": "Đồng ý",
+    "target": "DEMO_KHUNG_1"
+   },
+   {
+    "label": "Giờ khác",
+    "target": "DEMO_GIOKHAC"
+   }
+  ],
+  "action": "demo:slots",
+  "notes": "Thay cho câu 'đã kín lịch' khi giờ khách gõ rơi vào thứ Bảy, Chủ nhật, ngoài giờ hoặc giờ nghỉ trưa."
+ },
+ {
+  "code": "DEMO_GIOKHAC_LAI",
+  "title": "Demo – xin lại đủ ngày và giờ",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, anh/chị cho Miyano xin cả ngày và giờ cụ thể ạ, ví dụ: 14h thứ Năm tuần sau.",
+  "buttons": [],
+  "action": "",
+  "notes": "Gửi một lần khi khách mới nêu ngày ('sáng mai') hoặc bot chưa đọc được giờ; lần sau vẫn chưa đọc được thì chuyển nhân viên."
+ },
+ {
+  "code": "DEMO_DACOLICH",
+  "title": "Demo – khách đã có lịch mà mở đặt lịch lần nữa",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, anh/chị đang có lịch demo vào {thu_ngay}, {gio_bat_dau}. Anh/chị muốn đổi hay huỷ lịch này ạ?",
+  "buttons": [
+   {
+    "label": "Đổi lịch",
+    "target": "DEMO_DOILICH"
+   },
+   {
+    "label": "Huỷ lịch",
+    "target": "DEMO_HUY"
+   },
+   {
+    "label": "Giữ lịch này",
+    "target": "KHONG_CAMON"
+   }
+  ],
+  "action": "",
+  "notes": "Tránh việc bấm lại nút cũ làm lịch đã chốt bị thay mà khách không biết."
+ },
+ {
+  "code": "C4_XOADULIEU_GHINHAN",
+  "title": "Ghi nhận yêu cầu xoá dữ liệu (khi ô hướng dẫn C4_XOADULIEU đang Tắt)",
+  "step": "C",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, Miyano đã ghi nhận yêu cầu xoá dữ liệu của anh/chị. Bộ phận phụ trách sẽ liên hệ hỗ trợ anh/chị ạ.",
+  "buttons": [],
+  "action": "",
+  "notes": "Chỉ gửi khi C4_XOADULIEU không gửi được (chưa có link hướng dẫn). Việc cho người phụ trách tuân thủ vẫn được tạo như cũ."
+ },
+ {
+  "code": "DA_NHAN_LIENHE",
+  "title": "Câu dẫn khi khách tự gửi số điện thoại / email",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, Miyano đã ghi nhận thông tin liên hệ của anh/chị ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách chỉ nhắn số điện thoại / email lúc bot không hỏi."
+ },
+ {
+  "code": "DA_NHAN_TEP",
+  "title": "Câu dẫn khi khách gửi tệp / ảnh không kèm chữ",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 19/11/2026",
+  "text": "Dạ, Miyano đã nhận tệp anh/chị gửi ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu menu chính (hoặc câu đang hỏi dở) khi khách gửi tệp / ảnh mà bot chưa biết để làm gì. Tệp vẫn được lưu cho nhân viên."
+ },
+ {
+  "code": "BG_GIAOHANG_XACNHAN",
+  "title": "Báo giá – khách hỏi có giao kịp thời gian mình cần không",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Nhân viên Miyano sẽ xác nhận thời gian giao hàng khi gửi báo giá ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026",
+  "notes": "Không gửi riêng: ghép sau câu xác nhận thông tin khi khách trả lời thời gian cần hàng kèm câu hỏi (\"thứ 3 tuần sau được không em\"). Bot không tự cam kết thời gian giao."
+ },
+ {
+  "code": "GAP_NV_CHUAKIP",
+  "title": "Câu dẫn khi nhân viên chưa trả lời sau 10 phút (bot hoạt động lại)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Dạ, nhân viên Miyano hiện chưa phản hồi kịp, Miyano xin lỗi vì để anh/chị chờ. Miyano đã báo lại bộ phận phụ trách và tiếp tục hỗ trợ anh/chị ngay ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026",
+  "notes": "Không gửi riêng: ghép lên đầu câu xin số điện thoại (khách chưa có số) hoặc menu chính (khách đã có số) khi đã chuyển nhân viên 10 phút trong giờ mà chưa ai trả lời. Bot hoạt động lại ngay sau câu này."
+ },
+ {
+  "code": "DEMO_CHONSANPHAM",
+  "title": "Demo – hỏi khách muốn xem demo sản phẩm nào",
+  "step": "2",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026",
+  "text": "Dạ, anh/chị muốn xem demo sản phẩm nào ạ?",
+  "buttons": [
+   {
+    "label": "Phần mềm SupplyCore",
+    "target": "DEMO_PHANMEM"
+   },
+   {
+    "label": "Hệ thống SPD",
+    "target": "DEMO_SPD"
+   }
+  ],
+  "action": "need:Demo",
+  "notes": "Gửi khi khách GÕ muốn đặt lịch demo mà chưa rõ sản phẩm (chưa chọn dịch vụ, hoặc đang ở Vật tư – không có demo)."
+ },
+ {
+  "code": "GAP_NV_HUY",
+  "title": "Câu dẫn khi khách báo không cần gặp nhân viên nữa",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026",
+  "text": "Dạ vâng ạ, Miyano tiếp tục hỗ trợ anh/chị.",
+  "buttons": [],
+  "action": "",
+  "notes": "Không gửi riêng: ghép lên đầu menu chính khi khách đang chờ nhân viên (chưa ai trả lời) mà nhắn không muốn / không cần gặp nhân viên. Bot hoạt động lại ngay."
+ },
+ {
+  "code": "DANG_SUYNGHI",
+  "title": "Báo khách đợi khi bot đang nhờ AI hiểu ý / soạn câu",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "text": "Miyano đang suy nghĩ để trả lời, anh/chị vui lòng đợi ạ.",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026",
+  "notes": "Gửi ngay khi khách gõ một câu mà bot phải nhờ AI (mất vài giây). Bấm nút / gõ số được trả lời tức thì nên không gửi câu này. Bật bằng site_config omni_script_thinking = 1; tắt ô này cũng là tắt."
+ },
+ {
+  "code": "CHUA_GHI_DUOC",
+  "title": "Câu dẫn khi tin khách không phải thông tin của câu đang hỏi (không ghi, hỏi lại)",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 1)",
+  "text": "Dạ, Miyano xin lỗi, Miyano chưa ghi được thông tin này.",
+  "buttons": [],
+  "action": "",
+  "notes": "Không gửi riêng: ghép lên đầu câu đang hỏi khi tin khách không phải giá trị của ô đó (một câu nói, câu hỏi, hoặc AI chưa chắc). Hỏi lại tối đa 2 lần, lần thứ ba mời gặp nhân viên."
+ },
+ {
+  "code": "GAP_NV_XACNHAN",
+  "title": "Hỏi xác nhận trước khi chuyển nhân viên (khi bot chưa chắc khách cần người)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 1)",
+  "text": "Dạ, anh/chị muốn Miyano chuyển cho nhân viên tư vấn hỗ trợ trực tiếp không ạ?",
+  "buttons": [
+   {
+    "label": "Gặp nhân viên",
+    "target": "GAP_NHANVIEN"
+   },
+   {
+    "label": "Không cần",
+    "target": "KHONG_CAMON"
+   }
+  ],
+  "action": "",
+  "notes": "Gửi khi AI đoán khách cần người với độ chắc chắn dưới 0,9 và khách không nói rõ. Khách nói rõ ('cho gặp nhân viên') thì chuyển ngay, không hỏi."
+ },
+ {
+  "code": "XINLOI_CHO",
+  "title": "Câu dẫn khi khách giục / nhắc câu chưa được trả lời",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+  "text": "Dạ, Miyano xin lỗi đã để anh/chị chờ ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu câu trả lời còn nợ hoặc câu đang hỏi dở khi khách giục ('Sao k trả lời', 'alo alo')."
+ },
+ {
+  "code": "KB_GHINHAN",
+  "title": "Câu hỏi ngoài Kho tri thức: nói rõ chưa có thông tin, ghi cho chuyên viên (không tạm dừng bot)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+  "text": "Dạ, câu này Miyano chưa có thông tin chính xác. Miyano đã ghi lại để chuyên viên trả lời anh/chị trong giờ làm việc ạ.",
+  "notes": "Thay cho việc chuyển nhân viên và tạm dừng bot khi Kho tri thức chưa có câu trả lời. Câu hỏi được ghi vào trường 'câu hỏi chưa trả lời' của Lead. Sau câu này bot hỏi tiếp câu đang dở (nếu có)."
+ },
+ {
+  "code": "HOI_LAM_RO",
+  "title": "Hỏi làm rõ khi tin của khách có hai cách hiểu dẫn tới hai việc khác nhau",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+  "text": "Dạ, để Miyano làm đúng ý, {cau_hoi}",
+  "notes": "{cau_hoi} do hệ thống ghép từ hai cách hiểu của bước đọc hiểu, ví dụ: anh/chị muốn đổi lịch demo, hay đổi ngày nhận hàng ạ? Bot không ghi gì và không đổi luồng cho tới khi khách trả lời. Tối đa 2 lần cho một câu."
+ },
+ {
+  "code": "DANG_GHI_NHAN",
+  "title": "Đọc lại điều bot đã ghi được (ghép sau câu 'chưa ghi được')",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 4)",
+  "text": "Miyano đang ghi nhận: {thong_tin}.",
+  "notes": "Không gửi riêng. {thong_tin} ghép từ các thông tin đã thu (đã qua bộ lọc: ngắn, không link, không số tiền)."
+ },
+ {
+  "code": "GHINHAN_THEM",
+  "title": "Câu dẫn khi khách nhắn nhiều việc trong một tin (ghi nhận việc sẽ làm sau)",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
+  "text": "Dạ, Miyano đã ghi nhận anh/chị còn cần {viec}; xong phần này Miyano hỗ trợ tiếp ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu tin của việc chính. {viec} ghép từ bảng cố định (nhận tài liệu / đặt lịch demo / báo giá + tên dịch vụ), không dùng chữ của AI."
+ },
+ {
+  "code": "TIEP_VIEC",
+  "title": "Câu dẫn khi bot mở việc khách đã nhắn từ trước",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 23/11/2026 (tin nhiều nội dung)",
+  "text": "Dạ, tiếp theo là việc anh/chị đã nhắn lúc trước: {viec}.",
+  "notes": "Không gửi riêng: ghép lên đầu ô mở việc đó, thay cho câu 'còn cần hỗ trợ gì thêm'. Việc xếp hàng quá 120 phút thì bỏ."
+ },
+ {
+  "code": "DEMO_DOCLAI",
+  "title": "Demo – đọc lại cho khách xác nhận trước khi chốt lịch",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "text": "Dạ, Miyano đọc lại để anh/chị kiểm tra: demo {dich_vu}, hình thức {hinh_thuc}, {thu_ngay} lúc {gio_bat_dau}, {so_nguoi}. Anh/chị xác nhận giúp Miyano ạ.",
+  "buttons": [
+   {
+    "label": "Đúng rồi",
+    "target": "DEMO_CHOT"
+   },
+   {
+    "label": "Sửa lại",
+    "target": "DEMO_SUA"
+   }
+  ],
+  "action": "",
+  "notes": "Lịch CHƯA được chốt cho tới khi khách bấm Đúng rồi (hoặc gõ đúng rồi / ok). Khách gõ mục cần sửa (vd 'sửa giờ thành 3 giờ chiều') thì chỉ mục đó đổi và bot đọc lại lần nữa. Bật bằng site_config omni_script_readback."
+ },
+ {
+  "code": "DEMO_SUA_GI",
+  "title": "Demo – khách bấm Sửa lại: hỏi sửa mục nào",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "text": "Dạ, anh/chị muốn sửa mục nào ạ? Anh/chị có thể bấm nút hoặc nhắn luôn nội dung cần sửa, ví dụ: đổi sang 3 giờ chiều.",
+  "buttons": [
+   {
+    "label": "Ngày giờ",
+    "target": "DEMO_GIOKHAC"
+   },
+   {
+    "label": "Số người",
+    "target": "DEMO_SUA_SONGUOI"
+   },
+   {
+    "label": "Hình thức",
+    "target": "DEMO_SUA_HT"
+   }
+  ],
+  "action": "",
+  "notes": "Các mục khác giữ nguyên; sửa xong bot đọc lại lần nữa."
+ },
+ {
+  "code": "DEMO_CHON_SOM",
+  "title": "Demo – khách nói 'cái nào cũng được': báo khung sớm nhất đã chọn",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "text": "Dạ, Miyano xin chọn khung sớm nhất là {khung_1} ạ.",
+  "buttons": [],
+  "action": "",
+  "notes": "Gửi trước câu hỏi số người; lịch vẫn chưa chốt cho tới bước đọc lại."
+ },
+ {
+  "code": "BG_DOCLAI",
+  "title": "Báo giá – đọc lại cho khách xác nhận trước khi gửi yêu cầu cho nhân viên",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "text": "Dạ, Miyano đọc lại để anh/chị kiểm tra: {thong_tin}. Anh/chị xác nhận giúp Miyano ạ.",
+  "buttons": [
+   {
+    "label": "Đúng rồi",
+    "target": "BG_CHOT"
+   },
+   {
+    "label": "Sửa lại",
+    "target": "BG_SUA_GI"
+   }
+  ],
+  "action": "",
+  "notes": "Yêu cầu báo giá CHƯA được gửi cho nhân viên cho tới khi khách xác nhận. Bật bằng site_config omni_script_readback."
+ },
+ {
+  "code": "BG_CHOT",
+  "title": "Báo giá – khách xác nhận tin đọc lại",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "text": "",
+  "buttons": [],
+  "action": "quote_confirmed",
+  "notes": "Không có chữ: chạy bước gửi yêu cầu như cũ."
+ },
+ {
+  "code": "BG_SUA_GI",
+  "title": "Báo giá – khách muốn sửa: hỏi nội dung cần sửa",
+  "step": "3",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "text": "Dạ, anh/chị nhắn giúp Miyano nội dung cần sửa ạ, ví dụ: số lượng 300 đôi.",
+  "buttons": [],
+  "action": "quote_edit",
+  "notes": "Khách nhắn mục cần sửa, bot sửa đúng mục đó rồi đọc lại lần nữa."
+ },
+ {
+  "code": "DEMO_CHOT",
+  "title": "Demo – khách bấm Đúng rồi ở tin đọc lại",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "step": "4",
+  "text": "",
+  "buttons": [],
+  "notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+  "action": "demo:button"
+ },
+ {
+  "code": "DEMO_SUA",
+  "title": "Demo – khách bấm Sửa lại ở tin đọc lại",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "step": "4",
+  "text": "",
+  "buttons": [],
+  "notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+  "action": "demo:button"
+ },
+ {
+  "code": "DEMO_SUA_SONGUOI",
+  "title": "Demo – sửa số người",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "step": "4",
+  "text": "",
+  "buttons": [],
+  "notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+  "action": "demo:button"
+ },
+ {
+  "code": "DEMO_SUA_HT",
+  "title": "Demo – sửa hình thức",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 5)",
+  "step": "4",
+  "text": "",
+  "buttons": [],
+  "notes": "Mã nút, không có chữ: luồng demo xử lý (flows/demo.py).",
+  "action": "demo:button"
+ },
+ {
+  "code": "KB_CHODUYET",
+  "title": "Câu giữ chân khi câu trả lời đang chờ nhân viên duyệt",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 6, luật 9)",
+  "text": "Dạ, Miyano đã nhận câu hỏi của anh/chị. Chuyên viên Miyano sẽ kiểm tra và trả lời anh/chị trong giờ làm việc ạ.",
+  "notes": "Gửi khi bot đã soạn câu trả lời nhưng nhóm câu hỏi đó cần nhân viên duyệt trước khi gửi. Không hứa thời gian cụ thể."
+ },
+ {
+  "code": "DEMO_NGOAIGIO_3",
+  "title": "Demo – giờ khách muốn nằm ngoài giờ làm việc: đề xuất 3 khung gần nhất",
+  "step": "4",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "action": "",
+  "source_ref": "Yêu cầu 20/11/2026 (hiểu ngữ cảnh, bước 7, luật 8)",
+  "text": "Dạ, giờ anh/chị chọn nằm ngoài giờ Miyano nhận lịch demo (thứ Hai đến thứ Sáu, trong giờ làm việc) ạ. Miyano đề xuất 3 khung gần nhất, anh/chị chọn giúp Miyano một khung phù hợp ạ:",
+  "buttons": [
+   {
+    "label": "{khung_1}",
+    "target": "DEMO_KHUNG_1"
+   },
+   {
+    "label": "{khung_2}",
+    "target": "DEMO_KHUNG_2"
+   },
+   {
+    "label": "{khung_3}",
+    "target": "DEMO_KHUNG_3"
+   },
+   {
+    "label": "Giờ khác",
+    "target": "DEMO_GIOKHAC"
+   }
+  ],
+  "notes": "Thay cho DEMO_NGOAIGIO (1 khung) khi công tắc omni_script_readback bật."
+ },
+ {
+  "code": "TAM_DUNG",
+  "title": "Khách nói để lúc khác (đang dở một việc): dừng việc đang dở, chào",
+  "step": "1",
+  "service": "",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Thử nghiệm 25/11/2026 (lỗ hổng 3: khách không thoát được luồng)",
+  "text": "Dạ vâng ạ, Miyano tạm dừng ở đây và chưa gửi yêu cầu nào đi. Khi nào cần, anh/chị cứ nhắn cho Miyano nhé.",
+  "notes": "Gửi khi khách nói 'để lúc khác', 'để anh hỏi sếp đã', 'tính sau'... trong lúc bot đang hỏi dở. Việc đang dở bị bỏ, không tạo việc cho nhân viên."
+ }
 ]
