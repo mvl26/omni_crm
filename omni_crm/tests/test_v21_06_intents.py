@@ -142,7 +142,10 @@ class TestSchemaV3(FrappeTestCase):
 
 
 class TestGuardsByCode(ReplyTestCase):
-	"""Hỏi phí, Yêu cầu đề xuất, Khiếu nại luôn chuyển người dù AI trả action reply và dù nhóm không phải always_handoff."""
+	"""Yêu cầu đề xuất, Khiếu nại luôn chuyển người dù AI trả action reply và dù nhóm không phải always_handoff.
+
+	Hỏi phí (ý định của cả hội thoại): chỉ chuyển người khi lượt hiện tại nhắc giá/phí (chốt 2026-11-16, ADR 0031).
+	"""
 
 	def pin_v2(self):
 		original = frappe.db.get_single_value("Omni Settings", "analyze_prompt_version")
@@ -168,12 +171,18 @@ class TestGuardsByCode(ReplyTestCase):
 
 	def test_new_always_handoff_intents_block_a_reply(self):
 		self.pin_v2()
-		for intent in ALWAYS:
+		for intent in ("Yêu cầu đề xuất", "Khiếu nại"):
 			d = self.draft_for(intent, b2b_v3(intent=intent))
 			self.assertEqual(d.action, "Handoff", intent)
 			self.assertIn("handoff_topic:y_dinh_", d.guard_flags, intent)
 			self.assertFalse(d.draft_text, intent)
 		self.assertEqual(self.bot_outbound(), 0)
+
+	def test_fee_intent_from_history_does_not_block_a_knowledge_question(self):
+		self.pin_v2()
+		d = self.draft_for("Hỏi phí", b2b_v3(intent="Hỏi phí"))  # lượt này: "Cho hỏi giờ làm việc"
+		self.assertEqual(d.action, "Reply", d.guard_flags)
+		self.assertNotIn("y_dinh_", d.guard_flags or "")
 
 	def test_other_new_intents_follow_the_question_group(self):
 		self.pin_v2()
@@ -183,9 +192,20 @@ class TestGuardsByCode(ReplyTestCase):
 			self.assertNotIn("y_dinh_", d.guard_flags or "", intent)
 
 	def test_legacy_values_from_pinned_v1_still_handoff(self):
-		for intent in ("Hỏi giá", "Đặt hàng", "Khiếu nại"):
+		for intent in ("Đặt hàng", "Khiếu nại"):
 			d = self.draft_for(intent, b2b(intent=intent))
 			self.assertEqual(d.action, "Handoff", intent)
+
+	def test_fee_intent_needs_price_in_current_message(self):
+		for intent in ("Hỏi phí", "Hỏi giá"):
+			self.assertFalse(guards.guard_handoff_topic(False, intent=intent, customer_text="SPD là gì")[0])
+			blocked, reason = guards.guard_handoff_topic(
+				False, intent=intent, customer_text="Phí dịch vụ bao nhiêu?"
+			)
+			self.assertTrue(blocked)
+			self.assertIn("y_dinh_", reason)
+		for intent in ("Yêu cầu đề xuất", "Khiếu nại"):
+			self.assertTrue(guards.guard_handoff_topic(False, intent=intent, customer_text="SPD là gì")[0])
 
 	def test_guard_function_and_run_guards_for_each_intent(self):
 		for intent in (*NEW, "Hỏi giá", "Đặt hàng", "Tư vấn"):

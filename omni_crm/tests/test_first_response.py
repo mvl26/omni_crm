@@ -106,7 +106,14 @@ class TestRecording(FRCase):
 		self.make_out(status="Failed")
 		self.make_out(source="System")
 		self.assertIsNone(self.at())
-		self.make_out(source="Bot", sent_at=T0 + timedelta(minutes=9))
+		# V3-07: tin Bot không có nháp là kịch bản chatbot Zalo dội về (oa_echo): không phải phản hồi của mình
+		self.make_out(source="Bot", sent_at=T0 + timedelta(minutes=8))
+		self.assertIsNone(self.at())
+		row = {"lead": self.lead1, "status": "Sent", "is_sandbox": 0, "source": "Bot", "bot_draft": "NHAP-1"}
+		self.assertTrue(
+			first_response.counts_as_response(row)
+		)  # tin bot trả lời của chính hệ thống (có nháp)
+		self.make_out(source="Sale", sent_at=T0 + timedelta(minutes=9))
 		self.assertEqual(self.at(), T0 + timedelta(minutes=9))
 
 	def test_keeps_earliest_even_if_earlier_message_arrives_later(self):

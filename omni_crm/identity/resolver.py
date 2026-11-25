@@ -83,6 +83,8 @@ class Signals:
 	)  # MST khách tự khai trong hồ sơ kênh (không trích từ văn bản)
 	display_name: str | None = None
 	last_inbound_at: datetime | None = None
+	zalo_shared_phone: str | None = None  # V3-07: SĐT khách tự chia sẻ qua thẻ xin số Zalo (user_submit_info)
+	shared_name: str | None = None  # tên khách gõ trên thẻ: chỉ điền khi định danh chưa có tên
 
 	def lock_values(self) -> list[str]:
 		"""Mọi SĐT/email liên quan, đã sắp xếp (thứ tự cố định để không deadlock)."""
@@ -148,7 +150,10 @@ def collect_signals(msgs: list[Any]) -> Signals:
 			tax = None
 		_add(sig.tax_ids, tax)
 		name = (profile.get("display_name") or profile.get("name") or "").strip()
-		if name:
+		if profile.get("zalo_shared"):
+			sig.zalo_shared_phone = normalize_phone(profile.get("phone")) or sig.zalo_shared_phone
+			sig.shared_name = name or sig.shared_name
+		elif name:
 			sig.display_name = name
 		found = extract_contacts(m.text)
 		# Chữ ký email (adapter email tách riêng, không để trong text): cũng là tín hiệu trung bình.
@@ -242,6 +247,8 @@ def _get_or_create_identity(first: Any, sig: Signals) -> Any:
 	changed = not doc.name  # chưa có tên = bản ghi mới
 	if sig.display_name and doc.display_name != sig.display_name:
 		doc.display_name, changed = sig.display_name, True
+	elif sig.shared_name and not doc.display_name:
+		doc.display_name, changed = sig.shared_name, True
 	if sig.strong_phones and not doc.phone_e164:
 		doc.phone_e164, changed = sig.strong_phones[0], True
 	if sig.strong_emails and not doc.email_norm:
@@ -485,6 +492,42 @@ def _flag_org_ambiguity(lead: str, orgs: list[str], via: str, out: list[str]) ->
 	)
 
 
+def _strong_reason(sig: Signals) -> str:
+	"""Lý do nghi trùng khi trùng SĐT/email mạnh; khách vừa chia sẻ số qua thẻ Zalo thì nói rõ (V3-07)."""
+	if sig.zalo_shared_phone:
+		return _("Trùng số điện thoại từ Zalo (khách chia sẻ qua thẻ xin số), nhưng thuộc Lead khác")
+	return _("Cùng SĐT/email do kênh cung cấp, nhưng thuộc Lead khác")
+
+
+def note_shared_phone_conflict(lead: str, phone: str) -> bool:
+	"""Lead đã có SỐ KHÁC số khách vừa chia sẻ qua Zalo: không ghi đè, chỉ thêm MỘT bình luận nêu số mới (V3-07).
+
+	Chạy lại cùng sự kiện (Zalo gửi lặp) không thêm bình luận trùng. Trả True nếu vừa thêm bình luận.
+	"""
+	row = frappe.db.get_value(LEAD, lead, ["mobile_no", "phone"], as_dict=True) or {}
+	have = {p for p in (normalize_phone(row.get("mobile_no")), normalize_phone(row.get("phone"))) if p}
+	if not have or phone in have:
+		return False
+	content = _(
+		"Khách vừa chia sẻ số điện thoại {0} qua Zalo, khác số đang có trên Lead. Chưa ghi đè, người phụ trách quyết định."
+	).format(phone)
+	if frappe.db.exists(
+		"Comment",
+		{"reference_doctype": LEAD, "reference_name": lead, "comment_type": "Comment", "content": content},
+	):
+		return False
+	frappe.get_doc(
+		{
+			"doctype": "Comment",
+			"comment_type": "Comment",
+			"reference_doctype": LEAD,
+			"reference_name": lead,
+			"content": content,
+		}
+	).insert(ignore_permissions=True)
+	return True
+
+
 def _flag_shared(lead: str, others: list[str], reason: str, score: int, out: list[str]) -> None:
 	for other in others:
 		cand = duplicates.create_candidate(lead, other, reason, score)
@@ -522,7 +565,7 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 		_flag_shared(
 			lead,
 			others,
-			_("Cùng SĐT/email do kênh cung cấp, nhưng thuộc Lead khác"),
+			_strong_reason(sig),
 			SCORE_STRONG_SHARED,
 			res.candidates,
 		)
@@ -539,6 +582,8 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 			sig.strong_phones[0] if sig.strong_phones else None,
 			sig.strong_emails[0] if sig.strong_emails else None,
 		)
+		if sig.zalo_shared_phone:
+			note_shared_phone_conflict(lead, sig.zalo_shared_phone)
 	else:
 		# Bước 3-5
 		strong = find_leads(sig.strong_phones, sig.strong_emails, identity.name)
@@ -548,7 +593,7 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 			_flag_shared(
 				lead,
 				[x for x in strong if x != lead],
-				_("Cùng SĐT/email do kênh cung cấp, nhưng thuộc Lead khác"),
+				_strong_reason(sig),
 				SCORE_STRONG_SHARED,
 				res.candidates,
 			)
@@ -564,7 +609,7 @@ def _resolve_locked(msgs: list[Any], sig: Signals) -> Resolution:
 			_flag_shared(
 				lead,
 				[x for x in strong if x != lead],
-				_("Cùng SĐT/email do kênh cung cấp, nhưng thuộc Lead khác"),
+				_strong_reason(sig),
 				SCORE_STRONG_SHARED,
 				res.candidates,
 			)

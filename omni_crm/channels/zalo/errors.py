@@ -23,6 +23,10 @@ _TABLE: dict[int, tuple[str, str]] = {
 	-102: (PERMANENT, "Thiếu tham số bắt buộc khi gọi API Zalo"),
 	-108: (PERMANENT, "Mã tệp gửi Zalo không hợp lệ"),
 	-235: (PERMANENT, "Loại Official Account không hỗ trợ thao tác này"),
+	-224: (
+		PERMANENT,
+		"Gói OA hiện tại không hỗ trợ gửi tin qua API; hãy nhắn từ trang Zalo OA (oa.zalo.me/chat)",
+	),
 	-213: (PERMANENT, "Người dùng chưa quan tâm hoặc đã bỏ quan tâm OA"),
 	-230: (WINDOW, "Quá khung thời gian được gửi tin tư vấn cho người dùng này"),
 	-233: (WINDOW, "Quá khung thời gian được gửi tin tư vấn cho người dùng này"),
@@ -39,6 +43,7 @@ class ZaloError(Exception):
 		self.message_vi = message_vi
 		self.http_status = http_status
 		self.sent_ids: list[str] = []  # tin đã gửi được trước khi lỗi (khi tách tin dài)
+		self.raw_message = ""  # câu báo lỗi nguyên văn của Zalo (để chẩn đoán; không hiện cho khách)
 
 
 def classify(code: int | None, http_status: int | None = None) -> tuple[str, str]:
@@ -55,7 +60,9 @@ def classify(code: int | None, http_status: int | None = None) -> tuple[str, str
 	return PERMANENT, _("Zalo trả lỗi mã {0}").format(code)
 
 
-def to_error(code: int | None, http_status: int | None = None) -> ZaloError:
-	"""Dựng ZaloError từ mã lỗi/HTTP."""
+def to_error(code: int | None, http_status: int | None = None, raw_message: str = "") -> ZaloError:
+	"""Dựng ZaloError từ mã lỗi/HTTP; giữ câu báo lỗi gốc của Zalo (cắt 300 ký tự)."""
 	kind, msg = classify(code, http_status)
-	return ZaloError(code, kind, msg, http_status)
+	err = ZaloError(code, kind, msg, http_status)
+	err.raw_message = str(raw_message or "")[:300]
+	return err

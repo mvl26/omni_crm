@@ -35,7 +35,7 @@ Tên sự kiện cần xác nhận lại; bảng dưới là ánh xạ mong mu�
 | Sự kiện Zalo (tham khảo) | `event_type` nội bộ | Xử lý |
 | --- | --- | --- |
 | `user_send_text` | message | Văn bản → `text` |
-| `user_send_image`, `user_send_file`, `user_send_sticker`, `user_send_location`, `user_send_audio` | message | `text` = mô tả ngắn ("[Ảnh]", "[Tệp: tên]"); đính kèm vào `attachments` |
+| `user_send_image`, `user_send_gif`, `user_send_file`, `user_send_sticker`, `user_send_location`, `user_send_audio`, `user_send_video`, `user_send_link`, `user_send_business_card` (mọi `user_send_*` có `sender.id`) | message | `text` = mô tả ngắn ("[Ảnh]", "[GIF]", "[Tệp: tên]"...); đính kèm vào `attachments` dạng `{type, url, name, mime, thumb?}` (V3-05, ADR 0020) |
 | `user_submit_info` | user_info | SĐT, tên, địa chỉ khách gửi → `sender_profile`, tín hiệu **mạnh** |
 | `follow` / `unfollow` | follow / unfollow | Cập nhật `Omni Identity.is_follower`; follow tạo Lead **chỉ khi** cấu hình cho phép (mặc định: không tạo Lead chỉ vì follow) |
 | `oa_send_text`, `oa_send_image`… | oa_echo | Tin nhân viên gửi từ ứng dụng Zalo OA, không qua CRM → ghi vào dòng thời gian như tin ra `source = Sale (ngoài hệ thống)`; dùng làm "câu sale trả lời" để so với bot |
@@ -100,6 +100,21 @@ App `crm` hiển thị email, bình luận, cuộc gọi, ghi chú, công việc
 Đề xuất mặc định: **C + A** (A nếu CRM hiển thị được, nếu không thì C + B).
 
 **Đã chọn ở D1-06: C + A** (CRM hiển thị được Communication `Chat`; xem `docs/adr/0004-cach-hien-thi-hoi-thoai-zalo.md`).
+
+**Cập nhật V3-01 (ADR 0016): tab "Zalo" trong trang Lead/Deal.** Ngoại lệ có chủ đích duy nhất của quy tắc "không sửa `crm`": một patch **chỉ giao diện** (frontend) trên crm v1.73.0 thêm tab **Zalo** (cạnh Hoạt động/Email/WhatsApp) với:
+
+- Hội thoại dạng bong bóng: khách bên trái; nhân viên, bot và nhân viên trả lời ngoài hệ thống (`oa_echo`) bên phải; đường phân cách ngày, giờ từng tin; nhãn **Sale** / **Bot**; tin sandbox có nhãn "Thử nghiệm (sandbox), chưa gửi tới khách"; tin đang gửi/lỗi/bị chặn có dòng trạng thái; đính kèm là liên kết chỉ khi `http(s)://`; nội dung khách hiện bằng văn bản thuần (không HTML).
+- Khung soạn + nút **Gửi qua Zalo** luôn đi qua `omni_crm.api.zalo_tab.send` -> `inbox.send_zalo` -> Omni Outbound Message -> adapter Zalo (đúng kênh và định danh Zalo của Lead, kể cả khi Lead đã thành Deal). Mọi guard giữ nguyên ở máy chủ: sandbox, khung 48 giờ/7 ngày (xác nhận khi có phí), hạn mức, từ chối liên hệ, độ dài. Lead không có định danh Zalo: khung soạn khóa kèm giải thích; Lead có cả Zalo và email: chỉ gửi qua Zalo, không bao giờ gửi email từ tab này.
+- Cập nhật tức thời qua sự kiện realtime `omni_inbox_update` (chỉ có `{lead, channels}`, không có nội dung) và tải lại qua API có kiểm quyền; thăm dò dự phòng 60 giây.
+- Quyền: cần quyền trên tài liệu đang mở **và** trên Lead gốc (như Hộp thư). Tắt bằng `Omni Settings.zalo_tab_disabled` (docs/09). Chưa có trên giao diện di động của CRM.
+
+**Tin Zalo không còn ở tab Hoạt động/Email (V3-02, ADR 0017).** Mỗi tin Zalo OA vẫn là một `Communication` (`communication_medium = "Chat"`) nhưng `communication_type = "Chat"` nên CRM không liệt kê ở Hoạt động/Email; xem ở tab Zalo hoặc Hộp thư. Trạng thái liên lạc của Lead (Open/Replied) và phản hồi đầu tiên không đổi. Email vẫn ở tab Email. Bật `Omni Settings.zalo_in_activity_enabled` để tin mới hiện lại ở Hoạt động; tin cũ đổi bằng `omni_crm.ops.hide_zalo_activity.run` (dry-run mặc định, tham số `reverse`).
+
+**Nhắn từ trang chính thức của Zalo OA (V3-01, bổ sung).** OA gói Cơ bản không gửi được qua API (Zalo trả `-224`; docs/12 C-V3-01b), nên nhân viên nhắn từ trang chat của OA. Trong tab Zalo có nút **Mở chat Zalo OA** (cửa sổ mới 480 px, `window.open` với `noopener,noreferrer`) mở **đúng hội thoại của khách** bằng `https://oa.zalo.me/chat?uid=<mã người dùng Zalo>&oaid=<mã OA>` (**`oaid` viết thường**; viết `oaId` thì Zalo bỏ tham số; đã kiểm trên trình duyệt thật). `uid` = `Omni Identity.external_id` của định danh Zalo gắn Lead; `oaid` = `Omni Channel.zalo_oa_id` của kênh khách đã nhắn; cả hai chỉ nhận chuỗi số. Luồng chính chỉ có nút và dòng "Mở chat với <tên khách>" (không hướng dẫn tìm tay). **Chỉ khi thiếu `uid` hoặc `oaid`** (hoặc không phải số) tab mở trang chat chung `https://oa.zalo.me/chat` và hiện hướng dẫn tìm khách theo **tên** hoặc **mã Zalo** (rút gọn, có nút **Sao chép**). **Nhúng iframe `oa.zalo.me/chat` KHÔNG khả thi** (Chrome chặn, thử 2026-11-04) nên không làm. Tin nhắn từ trang OA quay lại Lead nhờ sự kiện `oa_echo` (bong bóng bên phải). Khách đã từ chối liên hệ hoặc Lead không có định danh Zalo: không hiện khối này. Khi OA nâng gói, khung gửi qua API trong tab hoạt động bình thường. Mã lỗi `-224` hiện thành "Gói OA hiện tại không hỗ trợ gửi tin qua API; hãy nhắn từ trang Zalo OA".
+
+**Tên khách Zalo.** Tab và dòng thời gian hiện tên theo thứ tự `Omni Identity.display_name`, rồi tên Lead (sale sửa `first_name` của Lead được), rồi mã rút gọn; không bao giờ hiện mã số dài. Tên Zalo lấy bằng `fetch_profile` (`channels/zalo/worker_hooks.py`) khi tin tới; **không lấy được khi**: sandbox bật (không gọi API), kênh chưa có access token, Zalo trả lỗi (đặt thời gian chờ `PROFILE_COOLDOWN` 600 giây; gói Cơ bản có thể chặn cả API hồ sơ, `-224`), hoặc Zalo không trả tên. Lý do gần nhất được lưu (bộ nhớ đệm Redis, 30 ngày; không thêm trường DocType) và tab hiện "Chưa lấy được tên Zalo: <lý do>". Cập nhật tay cho khách thiếu tên, sau khi OA đủ gói và đã tắt sandbox: `bench --site <site> execute omni_crm.channels.zalo.profile_refresh.run` (xem trước) rồi `--kwargs "{'dry_run': 0}"` (bỏ qua thời gian chờ; không đổi tên Lead).
+
+Tên người gửi tin vào ở dòng thời gian: `Omni Identity.display_name`, rồi tên Lead/Deal (ví dụ "Khách Zalo OA 8383"), rồi mã rút gọn `Zalo OA …8383`; không bao giờ hiện mã số thô. Tin cũ sửa bằng lệnh chạy tay `omni_crm.ops.backfill_sender.run` (mặc định chỉ xem trước). Cách áp patch và build: `omni_crm/crm_frontend_patch/README.md`.
 
 ## 9. Test bắt buộc
 

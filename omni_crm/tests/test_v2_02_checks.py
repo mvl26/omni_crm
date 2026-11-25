@@ -24,6 +24,46 @@ ROOT = pathlib.Path(omni_crm.__file__).parent
 # Danh sách hàm whitelisted đã duyệt (V2-02). Thêm hàm mới = test đỏ để người duyệt xem có phải đường gửi hàng loạt /
 # trả dữ liệu khách không kiểm quyền không.
 EXPECTED_WHITELISTED = {
+	"api/media.py": {"check_storage"},  # ADR 0033: nút Kiểm kho ảnh S3 (Omni Admin)
+	"api/script.py": {  # ADR 0032 (bot kịch bản v3): MỘT Lead mỗi lần gọi; bot_status kiểm quyền đọc, còn lại POST + quyền ghi Lead
+		"bot_status",
+		"return_to_bot",
+		"mark_docs_sent",
+		"mark_quote_sent",
+		"set_demo_result",
+		"set_no_bot_followup",
+		"demo_calendar",  # trang Lịch demo: chỉ đọc, Lead lọc theo quyền đọc; khung đã đặt chỉ có giờ, không lộ khách
+	},
+	"script/brain.py": {  # ADR 0034 (bộ não cải tiến): chỉ Omni Admin / System Manager; sửa câu kịch bản, không gửi tin
+		"approve",
+		"reject",
+		"approve_phrases",
+	},
+	"marketing/api.py": {  # V3-10: Marketing Hub, mỗi lời gọi MỘT bài / MỘT kênh
+		"hub_state",
+		"get_social_channels",
+		"check_channel",
+		"list_approvers",
+		"submit_item",
+		"approve_item",
+		"cancel_item",
+		"ai_budget",  # Prompt 4: AI chỉ soạn / chấm, không đăng; mỗi lời gọi MỘT phiên / MỘT bài / MỘT câu hỏi
+		"planner_send",
+		"planner_state",
+		"planner_create",
+		"score_item",
+		"kb_overview",
+		"kb_reindex",
+		"kb_ask",
+		"kb_feedback",
+		"marketing_report",  # Prompt 6: chỉ đọc
+		"export_report",
+		"list_campaigns",  # Prompt 3: chỉ đọc, trừ approve_campaign đi qua approval từng bài
+		"campaign_detail",
+		"item_detail",
+		"approve_campaign",
+		"get_calendar",
+	},
 	"api/admin.py": {
 		"reprocess",
 		"monitor_snapshot",
@@ -75,11 +115,29 @@ EXPECTED_WHITELISTED = {
 		"google_leads",
 		"web_form",
 	},
+	"api/zalo_tab.py": {
+		"tab_state",
+		"get_conversation",
+		"send",
+		"request_phone",  # V3-07: thẻ xin số cho 1 Lead/lần, chỉ trong 48 giờ, chưa có số
+		"send_attachment",  # V3-09: 1 ảnh/tệp của chính Lead tới 1 khách/lần, qua mọi guard của send_zalo
+	},  # V3-01: tab Zalo, 1 Lead/1 khách mỗi lần gửi
 	"identity/duplicates.py": {"dismiss", "merge"},
+	"api/lead_contact.py": {
+		"state",
+		"sync_from_lead",
+	},  # V3-06: tạo/cập nhật Liên hệ từ 1 Lead, không gửi tin
+	# V3-05: trợ lý nội bộ, chỉ thao tác CRM theo quyền người dùng, không gửi tin cho khách
+	"assistant/api.py": {"tab_state", "start_session", "chat", "approve", "reject", "close_session"},
 }
 BULK_NAME = re.compile(r"bulk|broadcast|mass|blast|newsletter|campaign_send|send_all|send_many", re.I)
 # Tệp được phép TẠO Omni Outbound Message (mỗi tin gắn với đúng một Lead/khách).
-OUTBOUND_CREATORS = {"api/inbox.py", "channels/zalo/worker_hooks.py", "pipeline/outbound.py"}
+OUTBOUND_CREATORS = {
+	"api/inbox.py",
+	"channels/zalo/worker_hooks.py",
+	"pipeline/outbound.py",
+	"channels/zalo/phone_request.py",  # V3-07: thẻ xin số, mỗi lần MỘT định danh (hẹn theo lô tin vừa Done)
+}
 
 
 def whitelisted_functions() -> dict[str, dict[str, list[str]]]:

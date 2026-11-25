@@ -2,7 +2,8 @@
 
 Nháp ở chế độ Draft không tự gửi: tin ra do Sale bấm, đi qua `queue_outbound` với `source=Sale` và `bot_draft` liên kết.
 (Nhóm đang Auto thì `bot/auto_send.py` gửi, D3-05; ở đây chỉ chấm điểm tin bot đã gửi.)
-Nháp `Handoff` không có nội dung để gửi và bị từ chối ở cả API này lẫn `queue_outbound`. Mọi thao tác kiểm quyền
+Nháp `Handoff` không có nội dung để gửi và bị từ chối ở cả API này lẫn `queue_outbound`, trừ nháp Handoff có mẫu tin
+(hỏi giá/đặt demo, ADR 0031): sale điền chỗ trống `[...]` rồi gửi; còn `[...]` thì bị chặn. Mọi thao tác kiểm quyền
 theo Lead (không chỉ theo DocType); trạng thái nháp đổi dưới khóa dòng nên bấm hai lần không gửi hai tin.
 """
 
@@ -15,7 +16,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import knowledge, reply
+from omni_crm.bot import handoff, kb_docs, knowledge, reply, templates
 
 DRAFT = "Omni Bot Draft"
 IDENTITY = "Omni Identity"
@@ -31,6 +32,26 @@ MIN_EDIT_RATIO = (
 
 def _kb_ids(raw: str | None) -> list[str]:
 	return [k for k in (x.strip() for x in (raw or "").split(",")) if k]
+
+
+def _sources(ids: list[str]) -> list[dict[str, str]]:
+	"""Nguồn của nháp: mục hỏi/đáp (KB-…) và đoạn tài liệu Kho tri thức (ADR 0030), theo thứ tự mã trong nháp."""
+	found = {k["id"]: k for k in knowledge.kb_items(ids, active_only=False)}
+	found.update({k["id"]: k for k in kb_docs.sources(ids)})
+	return [found[i] for i in ids if i in found]
+
+
+def _unique_sources(items: list[dict]) -> list[dict[str, str]]:
+	"""Nguồn để hiện: mỗi tài liệu/mục một lần (nhiều đoạn cùng tài liệu chỉ giữ đoạn đầu), giữ thứ tự."""
+	seen: set[str] = set()
+	out = []
+	for k in items:
+		key = k.get("question") or k["id"]
+		if key in seen:
+			continue
+		seen.add(key)
+		out.append({"id": k["id"], "question": k.get("question"), "group": k.get("group")})
+	return out
 
 
 def _get(draft: str, lock: bool = False) -> Any:
@@ -77,6 +98,7 @@ def thread_drafts(lead: str) -> list[dict]:
 			"draft_text",
 			"kb_items",
 			"handoff_reason",
+			"guard_flags",
 			"creation",
 		],
 		order_by="creation asc",
@@ -86,20 +108,21 @@ def thread_drafts(lead: str) -> list[dict]:
 	for r in rows:
 		channel_type = _channel_type(r.channel)
 		reply_ok = r.action == "Reply" and bool((r.draft_text or "").strip())
+		template = templates.is_template_draft(r)
 		out.append(
 			{
 				"name": r.name,
 				"action": r.action,
 				"channel_type": channel_type,
 				"question_group": r.question_group,
-				"text": r.draft_text if reply_ok else None,
-				"handoff_reason": r.handoff_reason if r.action == "Handoff" else None,
-				"kb": [
-					{"id": k["id"], "question": k["question"], "group": k["group"]}
-					for k in knowledge.kb_items(_kb_ids(r.kb_items), active_only=False)
-				],
+				"text": r.draft_text if reply_ok or template else None,
+				"template": template,
+				"handoff_reason": handoff.explain_reason(r.handoff_reason, r.guard_flags)
+				if r.action == "Handoff"
+				else None,
+				"kb": _unique_sources(_sources(_kb_ids(r.kb_items))),
 				"created": r.creation,
-				"can_send": can_write and reply_ok and channel_type == "Zalo OA",
+				"can_send": can_write and (reply_ok or template) and channel_type == "Zalo OA",
 				"can_decide": can_write,
 			}
 		)
@@ -168,7 +191,7 @@ def get_draft_kb_item(draft: str, item: str) -> dict:
 	inbox.check_lead_access(row.lead)
 	if item not in _kb_ids(row.kb_items):
 		frappe.throw(_("Mục này không thuộc nháp"), frappe.ValidationError)
-	found = knowledge.kb_items([item], active_only=False)
+	found = _sources([item])
 	if not found:
 		frappe.throw(_("Không tìm thấy mục kho tri thức"), frappe.DoesNotExistError)
 	k = found[0]
@@ -220,7 +243,8 @@ def send_draft(draft: str, text: str | None = None, confirm_paid: int | str = 0)
 	row = _get(draft, lock=True)
 	_reject_if_stale(row, lead)
 	_must_be_pending(row)
-	if row.action != "Reply" or not (row.draft_text or "").strip():
+	template = templates.is_template_draft(row)
+	if not template and (row.action != "Reply" or not (row.draft_text or "").strip()):
 		frappe.throw(_("Nháp chuyển người không có nội dung để gửi"), frappe.ValidationError)
 	if _channel_type(row.channel) != "Zalo OA":
 		frappe.throw(
@@ -229,6 +253,8 @@ def send_draft(draft: str, text: str | None = None, confirm_paid: int | str = 0)
 	final = (row.draft_text if text is None else text or "").strip()
 	if not final:
 		frappe.throw(_("Nội dung tin nhắn đang trống"), frappe.ValidationError)
+	if template and templates.unfilled(final):
+		frappe.throw(_("Mẫu tin còn chỗ trống [...] chưa điền"), frappe.ValidationError)
 	identity_doc = frappe.get_doc(IDENTITY, row.identity)
 	from omni_crm.crm_bridge import lead as lead_bridge
 

@@ -27,6 +27,8 @@ Quy ước: `Link` ghi đích trong cột Options; "Duy nhất" = `unique: 1` �
 | Omni Score Rule | Bảng con của Omni Settings | 2 | Bảng điểm Lead |
 | Omni Bot Run | Thường | 2 | Nhật ký mỗi lần gọi AI |
 | Omni Bot Draft | Thường | 2 | Câu trả lời bot soạn (ngầm, nháp, tự động) |
+| Omni Assistant Session | Thường | V3-05 | Phiên hội thoại với trợ lý AI nội bộ (ADR 0018) |
+| Omni Assistant Action | Thường | V3-05 | Mỗi lần trợ lý gọi tool: kiểm toán + hàng đợi duyệt (ADR 0018) |
 | Omni Eval Case | Thường | 2 | Một ca trong bộ đề |
 | Omni Eval Run | Thường | 2 | Một lần chạy bộ đề và kết quả |
 
@@ -170,6 +172,16 @@ D1-06 bổ sung: chỉ mục ghép (`lead`, `received_at`) cho Hộp thư; `raw_
 | `sent_at` | Datetime | | |
 | `last_error` | Small Text | | |
 | `is_sandbox` | Check | | Tạo khi `sandbox_mode` bật |
+| `message_kind` | Select | CS 48h / CS ngoai 48h / ZBS Template | V3-07: do `routing.pick_message_kind` chọn |
+| `purpose` | Select | reply / followup / transaction / request_info | V3-07 |
+| `zbs_template_id` | Data | | V3-07: chỉ khi là ZBS |
+| `quota_consumed` | Check | | V3-07: tin ăn vào quỹ ngoài 48 giờ (Zalo trả `quota_type` thì theo Zalo) |
+| `approved_by` | Link | User | V3-07: người đồng ý tiêu quỹ |
+| `attachment` | Attach | | V3-09: ảnh/tệp sale gửi kèm (File của Lead trong CRM) |
+| `attachment_kind` | Select | image / gif / file | V3-09: loại tin đính kèm Zalo |
+| `attachment_name` | Data | | V3-09: tên tệp hiển thị |
+
+V3-07 (ADR 0019): `source = Bot` không có `bot_draft` là tin OA gửi ngoài hệ thống không do admin gõ (kịch bản chatbot Zalo); không tính là sale phản hồi.
 
 D1-06 bổ sung: chỉ mục ghép (`lead`, `creation`) cho Hộp thư.
 

@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 10:00:00.000000",
+ "modified": "2026-11-13 11:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Marketing Settings",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "sec_mode",
+  "hub_disabled",
+  "dry_run",
+  "late_window_minutes",
+  "graph_api_version",
+  "insights_sync_hours",
+  "col_mode",
+  "landing_base_url",
+  "default_landing_page",
+  "sec_review",
+  "require_approval",
+  "quality_threshold",
+  "default_approver",
+  "col_review",
+  "ai_model",
+  "ai_fallback_model",
+  "monthly_ai_budget",
+  "sec_voice",
+  "brand_voice",
+  "sec_checks",
+  "channel_checks"
+ ],
+ "fields": [
+  {
+   "fieldname": "sec_mode",
+   "fieldtype": "Section Break",
+   "label": "Chế độ đăng"
+  },
+  {
+   "fieldname": "hub_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt Marketing Hub",
+   "default": "0",
+   "description": "Bật ô này thì ẩn các trang Marketing trong CRM (không cần build lại) và bộ đăng bài không chạy."
+  },
+  {
+   "fieldname": "dry_run",
+   "fieldtype": "Check",
+   "label": "Chế độ thử (không đăng thật)",
+   "default": "1",
+   "description": "Bật: không gọi API Facebook/Zalo/TikTok, chỉ ghi nhật ký. Chưa lưu cấu hình thì coi như BẬT."
+  },
+  {
+   "fieldname": "late_window_minutes",
+   "fieldtype": "Int",
+   "label": "Cửa sổ đăng muộn (phút)",
+   "default": "30",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "graph_api_version",
+   "fieldtype": "Data",
+   "label": "Phiên bản Graph API",
+   "description": "Trống: dùng bản mặc định của kênh Meta (site_config omni_meta_graph_version)."
+  },
+  {
+   "fieldname": "insights_sync_hours",
+   "fieldtype": "Int",
+   "label": "Đồng bộ số liệu mỗi (giờ)",
+   "default": "6",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "col_mode",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "landing_base_url",
+   "fieldtype": "Data",
+   "label": "Địa chỉ gốc trang đích",
+   "default": "https://yhct.miyano.com.vn"
+  },
+  {
+   "fieldname": "default_landing_page",
+   "fieldtype": "Data",
+   "label": "Trang đích mặc định",
+   "default": "/spd/"
+  },
+  {
+   "fieldname": "sec_review",
+   "fieldtype": "Section Break",
+   "label": "AI & kiểm duyệt"
+  },
+  {
+   "fieldname": "require_approval",
+   "fieldtype": "Check",
+   "label": "Bắt buộc duyệt trước khi đăng",
+   "default": "1"
+  },
+  {
+   "fieldname": "quality_threshold",
+   "fieldtype": "Int",
+   "label": "Ngưỡng điểm chất lượng",
+   "default": "80",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "default_approver",
+   "fieldtype": "Link",
+   "label": "Người duyệt mặc định",
+   "options": "User",
+   "description": "Phải có vai trò Marketing Manager."
+  },
+  {
+   "fieldname": "col_review",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ai_model",
+   "fieldtype": "Data",
+   "label": "Mô hình AI chính",
+   "description": "Để trống: claude-opus-5-5"
+  },
+  {
+   "fieldname": "ai_fallback_model",
+   "fieldtype": "Data",
+   "label": "Mô hình AI dự phòng",
+   "description": "Để trống: claude-sonnet-5-5"
+  },
+  {
+   "fieldname": "monthly_ai_budget",
+   "fieldtype": "Float",
+   "label": "Ngân sách AI mỗi tháng (USD)",
+   "non_negative": 1,
+   "precision": "2",
+   "description": "Tính theo bảng giá Claude API. 0 = tắt AI marketing."
+  },
+  {
+   "fieldname": "sec_voice",
+   "fieldtype": "Section Break",
+   "label": "Nội dung & giọng văn"
+  },
+  {
+   "fieldname": "brand_voice",
+   "fieldtype": "Small Text",
+   "label": "Giọng văn thương hiệu"
+  },
+  {
+   "fieldname": "sec_checks",
+   "fieldtype": "Section Break",
+   "label": "Kết quả kiểm quyền kênh",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "channel_checks",
+   "fieldtype": "JSON",
+   "label": "Kết quả kiểm quyền (theo kênh)",
+   "read_only": 1,
+   "description": "Do nút Kiểm tra quyền ghi; không chứa token."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "issingle": 1
+}

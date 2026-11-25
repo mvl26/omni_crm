@@ -1,0 +1,90 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 11:00:00.000000",
+ "modified": "2026-11-13 11:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni KB Chunk",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "document",
+  "category",
+  "seq",
+  "token_estimate",
+  "content",
+  "embedding"
+ ],
+ "fields": [
+  {
+   "fieldname": "document",
+   "fieldtype": "Link",
+   "options": "Omni KB Document",
+   "label": "Tài liệu",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "options": "Omni KB Category",
+   "label": "Danh mục",
+   "read_only": 1
+  },
+  {
+   "fieldname": "seq",
+   "fieldtype": "Int",
+   "label": "Thứ tự",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "token_estimate",
+   "fieldtype": "Int",
+   "label": "Token (ước lượng)"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Long Text",
+   "label": "Nội dung đoạn"
+  },
+  {
+   "fieldname": "embedding",
+   "fieldtype": "Long Text",
+   "label": "Embedding (để trống, ADR 0029)",
+   "hidden": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "delete": 1,
+   "report": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "in_create": 1,
+ "read_only": 0
+}

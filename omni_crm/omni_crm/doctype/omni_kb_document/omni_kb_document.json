@@ -1,0 +1,148 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 11:00:00.000000",
+ "modified": "2026-11-13 11:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni KB Document",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "title",
+  "category",
+  "status",
+  "is_active",
+  "source_file",
+  "content",
+  "sec_index",
+  "chunk_count",
+  "char_count",
+  "indexed_at",
+  "content_hash",
+  "index_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Tên tài liệu",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "options": "Omni KB Category",
+   "label": "Danh mục",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Đang xử lý\nĐã lập chỉ mục\nLỗi",
+   "default": "Đang xử lý",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Dùng cho AI",
+   "default": "1"
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Attach",
+   "label": "Tệp (PDF, DOCX, TXT, MD)"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Long Text",
+   "label": "Nội dung văn bản",
+   "description": "Dán văn bản trực tiếp nếu không có tệp"
+  },
+  {
+   "fieldname": "sec_index",
+   "fieldtype": "Section Break",
+   "label": "Lập chỉ mục"
+  },
+  {
+   "fieldname": "chunk_count",
+   "fieldtype": "Int",
+   "label": "Số đoạn",
+   "read_only": 1
+  },
+  {
+   "fieldname": "char_count",
+   "fieldtype": "Int",
+   "label": "Số ký tự",
+   "read_only": 1
+  },
+  {
+   "fieldname": "indexed_at",
+   "fieldtype": "Datetime",
+   "label": "Lập chỉ mục lúc",
+   "read_only": 1
+  },
+  {
+   "fieldname": "content_hash",
+   "fieldtype": "Data",
+   "label": "Mã băm nội dung",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "index_error",
+   "fieldtype": "Small Text",
+   "label": "Lỗi lập chỉ mục",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "report": 1,
+   "write": 1,
+   "create": 1
+  }
+ ],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "title_field": "title",
+ "track_changes": 1
+}

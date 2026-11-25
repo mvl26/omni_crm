@@ -212,7 +212,10 @@ def post_batch_hooks(batch_id: str, lead: str | None) -> None:
 	"""Điểm nối Đợt 2: việc gọi lại cho cuộc gọi nhỡ (D2-03), bot phân tích (D2-05), chấm điểm (D2-06), bot trả lời ngầm (D2-07)."""
 	from omni_crm.bot import analyze, reply, scoring
 	from omni_crm.channels.telephony import callbacks
+	from omni_crm.channels.zalo import phone_request
 
+	phone_request.on_batch_done(batch_id)  # V3-07: hẹn gửi thẻ xin số sau 60 giây (tự bắt lỗi)
+	reply.enqueue_reply(batch_id, lead, script_first=True)  # bot kịch bản trả lời ngay, không chờ phân tích
 	try:
 		callbacks.after_batch(batch_id)
 	finally:  # lỗi ở việc gọi lại không được làm mất lượt phân tích, và ngược lại enqueue_analyze tự bắt lỗi

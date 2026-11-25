@@ -31,7 +31,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, escape_html, get_datetime, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import handoff, intents, reply
+from omni_crm.bot import guards, handoff, reply
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.ingest.events import OutboundRequest
@@ -551,6 +551,15 @@ def _common_checks(row: Any, now: datetime, group_row: Any | None = None) -> str
 	return None
 
 
+def _batch_text(batch_id: str | None) -> str:
+	"""Lời khách của lượt (để biết lượt này có nhắc giá/phí không)."""
+	return "\n".join(
+		m.text
+		for m in (reply._batch_messages(batch_id) if batch_id else [])
+		if m.event_type == "message" and (m.text or "").strip()
+	)
+
+
 def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = None) -> tuple[bool, str]:
 	"""Nháp có được tự gửi không: (True, "") hoặc (False, mã lý do). Chỉ đọc; gọi dưới khóa dòng nhóm rồi nháp,
 	`group_row` là dòng nhóm đã đọc CÓ KHÓA."""
@@ -576,7 +585,8 @@ def check_reply(row: Any, now: datetime | None = None, group_row: Any | None = N
 	if (
 		not analysis
 		or analysis.get("intent") == COMPLAINT_INTENT
-		or intents.always_handoff(analysis.get("intent"))  # F6: Hỏi phí/Yêu cầu đề xuất không bao giờ tự gửi
+		# F6: Hỏi phí (khi lượt này nhắc giá/phí)/Yêu cầu đề xuất không bao giờ tự gửi
+		or guards.intent_forces_handoff(analysis.get("intent"), _batch_text(row.batch_id))
 		or analysis.get("wants_human")
 	):
 		return False, "phan_tich"
@@ -611,6 +621,8 @@ def _sending(draft: str) -> Iterator[None]:
 
 def assert_can_queue(req: OutboundRequest) -> None:
 	"""Gọi từ `queue_outbound` cho tin source=Bot: kiểm lần hai MỌI điều kiện; ném ValidationError nếu không đủ."""
+	if not req.bot_draft and _script_queue_ok(req):  # tin bot kịch bản v3 (ADR 0032): không có nháp
+		return
 	if not req.bot_draft or frappe.flags.get(SENDING_FLAG) != req.bot_draft:
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
 	group = frappe.db.get_value(DRAFT, req.bot_draft, "question_group")
@@ -626,8 +638,20 @@ def assert_can_queue(req: OutboundRequest) -> None:
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
 
 
+def _script_queue_ok(req: OutboundRequest) -> bool:
+	"""Tin Bot không nháp chỉ hợp lệ khi đang được `script.send` xếp cho đúng định danh và công tắc kịch bản bật."""
+	from omni_crm.script import send as script_send
+	from omni_crm.script import switch
+
+	return script_send.is_script_sending(req.identity) and switch.enabled_for(req.identity)
+
+
 def send_time_check(row: Any) -> tuple[bool, str]:
 	"""Ngay trước khi gửi tin Bot đang chờ (từ `send_outbound`): khóa hạ tầng, nhóm còn bật, bot chưa tạm dừng, trong giờ bot."""
+	if not row.get("bot_draft") and frappe.db.get_value(OUTBOUND, row.name, "script_node"):
+		from omni_crm.script import send as script_send  # ADR 0032: tin kịch bản kiểm công tắc riêng
+
+		return script_send.send_time_check(row)
 	if not flags.auto_send_infra_allowed():
 		return False, _("Khóa hạ tầng tự động gửi đang đóng")
 	draft = (
@@ -654,6 +678,11 @@ def revert_to_draft(row: Any) -> bool:
 
 	Chỉ nháp còn ở trạng thái Auto/Sent As Is mới quay lại; commit. Không ném lỗi. Trả True nếu đã đưa về nháp.
 	"""
+	if not row.get("bot_draft") and frappe.db.get_value(OUTBOUND, row.name, "script_node"):
+		from omni_crm.script import send as script_send  # tin kịch bản không có nháp: báo người phụ trách
+
+		script_send.on_blocked(row)
+		return False
 	try:
 		draft = row.get("bot_draft")
 		d = (

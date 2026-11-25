@@ -156,6 +156,12 @@ SENSITIVE_CUSTOMER_PATTERNS = {
 		r"\bnoi chuyen voi (?:nguoi|nhan vien)\b",
 		r"\bgoi lai cho toi\b",
 	),
+	# K1: "Yêu cầu đề xuất" nhận từ lời khách ở lượt hiện tại (câu lệnh reply v4 không dùng ý định của cả hội thoại).
+	"yeu_cau_de_xuat": (
+		r"\b(?:xin|gui|cho xin|can) (?:\w+ ){0,3}de xuat\b",
+		r"\bde xuat (?:dich vu|bang van ban|hop tac)\b",
+		r"\bhop dong mau\b",
+	),
 }
 # V21-07: từ khóa so dạng viết liền / đảo ngược / trong một từ (guard_text.compact_hit), chuẩn hóa cùng cách văn bản.
 COMPACT_KEYWORDS = {
@@ -346,6 +352,25 @@ def sensitive_topics(customer_text: str | None) -> list[str]:
 	return list(dict.fromkeys(topics))
 
 
+def intent_forces_handoff(intent: str | None, customer_text: str | None = None) -> bool:
+	"""Ý định (của CẢ cuộc hội thoại) có buộc chuyển người cho lượt này không.
+
+	Hỏi phí: chỉ khi lời khách ở lượt hiện tại cũng nhắc giá/phí (chủ đề `hoi_gia`); khách từng hỏi giá rồi hỏi câu kiến
+	thức thì bot vẫn trả lời (người dùng chốt 2026-11-16). Không biết lời khách (None/rỗng) thì vẫn chặn. Yêu cầu đề xuất,
+	Khiếu nại: luôn chặn như cũ.
+	"""
+	if not intents.always_handoff(intent):
+		return False
+	if (
+		intents.normalize(intent) == intents.FEE
+		and isinstance(customer_text, str)
+		and customer_text.strip()
+		and "hoi_gia" not in sensitive_topics(customer_text)
+	):
+		return False
+	return True
+
+
 def guard_handoff_topic(
 	group_always_handoff: bool,
 	intent: str | None = None,
@@ -355,7 +380,7 @@ def guard_handoff_topic(
 	"""Chốt chặn 1: nhóm luôn chuyển người, ý định Hỏi phí/Yêu cầu đề xuất/Khiếu nại (và tên cũ), khách muốn gặp người, lời khách nhạy cảm."""
 	if group_always_handoff:
 		return True, "handoff_topic:nhom_luon_chuyen_nguoi"
-	if intents.always_handoff(intent):  # độc lập nhóm câu hỏi và độc lập việc AI đã trả action reply
+	if intent_forces_handoff(intent, customer_text):  # độc lập nhóm câu hỏi và việc AI đã trả action reply
 		return True, f"handoff_topic:y_dinh_{_folded(intent).replace(' ', '_')}"
 	if wants_human:
 		return True, "handoff_topic:khach_muon_gap_nguoi"

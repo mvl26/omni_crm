@@ -106,8 +106,8 @@ def _check_bot_draft(req: OutboundRequest) -> None:
 
 	- `source="Bot"`: chỉ đi qua `bot.auto_send` (D3-05): cần nháp hợp lệ và `auto_send.assert_can_queue` kiểm lại MỌI điều
 	  kiện (khóa hạ tầng, nhóm bật, nháp Draft/Reply/Pending, khung miễn phí, giờ bot...). Mọi tin Bot khác bị từ chối.
-	- Tin có `bot_draft` mà không phải Bot: chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách (Handoff
-	  không gửi được).
+	- Tin có `bot_draft` mà không phải Bot: chỉ do Sale gửi, từ nháp Draft còn Pending, action Reply, đúng khách. Handoff
+	  chỉ gửi được khi nháp có mẫu tin (ADR 0031) và tin đã điền hết chỗ trống `[...]`.
 	"""
 	if req.source == "Bot":
 		from omni_crm.bot import auto_send  # import trễ: auto_send import module này
@@ -122,12 +122,19 @@ def _check_bot_draft(req: OutboundRequest) -> None:
 	if not req.bot_draft:
 		return
 	row = frappe.db.get_value(
-		"Omni Bot Draft", req.bot_draft, ["mode", "action", "decision", "identity"], as_dict=True
+		"Omni Bot Draft",
+		req.bot_draft,
+		["mode", "action", "decision", "identity", "draft_text"],
+		as_dict=True,
 	)
+	from omni_crm.bot import templates
+
+	template_ok = bool(row) and templates.is_template_draft(row) and not templates.unfilled(req.text)
 	if (
 		req.source != "Sale"
 		or not row
-		or (row.mode, row.action, row.decision) != ("Draft", "Reply", "Pending")
+		or (row.mode, row.decision) != ("Draft", "Pending")
+		or not (row.action == "Reply" or template_ok)
 		or row.identity != req.identity
 	):
 		frappe.throw(_("Không gửi được nháp này"), frappe.ValidationError)
@@ -140,11 +147,12 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 	miễn phí. send_outbound chỉ cho tin Sale đi khi khung có phí nếu cờ là "paid" (free chuyển sang paid giữa chừng bị chặn).
 	"""
 	text = (req.text or "").strip()
-	if not text:
+	if not text and not req.attachment:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(MAX_TEXT_CHARS))
 	_check_bot_draft(req)
+	route = _route_for(req, user, confirmed_paid)
 	lead = frappe.db.get_value(IDENTITY, req.identity, "lead")
 	doc = frappe.get_doc(
 		{
@@ -159,6 +167,8 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 			"status": "Queued",
 			"attempts": 0,
 			"is_sandbox": 1 if flags.sandbox() else 0,
+			**(route.fields() if route else {}),
+			**_attachment_fields(req.attachment),
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -167,6 +177,60 @@ def queue_outbound(req: OutboundRequest, user: str | None = None, confirmed_paid
 		frappe.cache().set_value(paid_ok_key(doc.name), confirmation, expires_in_sec=PAID_OK_TTL)
 	enqueue_outbound(doc.name)
 	return doc.name
+
+
+def _attachment_fields(attachment: dict | None) -> dict:
+	"""Trường đính kèm ghi vào Omni Outbound Message (V3-09)."""
+	if not attachment:
+		return {}
+	return {
+		"attachment": attachment["file_url"],
+		"attachment_kind": attachment["kind"],
+		"attachment_name": attachment.get("name") or "",
+	}
+
+
+def _attachment_of(row: Any) -> dict | None:
+	if not row.get("attachment"):
+		return None
+	return {"file_url": row.attachment, "kind": row.attachment_kind, "name": row.attachment_name}
+
+
+def _route_for(req: OutboundRequest, user: str | None, confirmed_paid: bool) -> Any:
+	"""V3-07: loại tin Zalo của lần gửi (routing.pick_message_kind); kênh khác trả None. Ném RoutingError nếu không gửi được.
+
+	Người gọi đã chọn sẵn (`req.route`, ví dụ Hộp thư cần hỏi sale trước) thì dùng lại; còn lại chọn ở đây, nên KHÔNG có
+	đường xếp hàng tin Zalo nào bỏ qua bước chọn loại tin. Tin Bot/System không có người xác nhận: ngoài 48 giờ là lỗi.
+	"""
+	channel_doc = frappe.get_doc(CHANNEL, req.channel)
+	if channel_doc.channel_type != "Zalo OA":
+		return None
+	if req.route is not None:
+		return req.route
+	from omni_crm.channels.zalo import routing
+
+	human = req.source == "Sale"
+	return routing.pick_message_kind(
+		frappe.get_doc(IDENTITY, req.identity),
+		req.purpose,
+		channel_doc=channel_doc,
+		confirmed=bool(confirmed_paid) and human,
+		user=user if human else None,
+	)
+
+
+def _route_check(row: Any, adapter: Any, identity_doc: Any, channel_doc: Any) -> str | None:
+	"""Kiểm lại loại tin ngay trước khi gửi (V3-07); trả lý do chặn hoặc None."""
+	from omni_crm.channels.zalo import quota, routing
+
+	if row.message_kind == routing.CS_48H and hasattr(adapter, "send_window"):
+		if adapter.send_window(identity_doc, channel_doc) != routing.FREE:
+			return _("Khách đã quá 48 giờ không nhắn trong lúc tin chờ gửi; tin miễn phí không còn gửi được.")
+	if row.message_kind == routing.CS_PAID:
+		return quota.gate(row.approved_by)
+	if row.message_kind == routing.ZBS:
+		return _("Gửi tin ZBS Template chưa được bật trên hệ thống")
+	return None
 
 
 # --- trạng thái ---------------------------------------------------------------------------------------
@@ -190,6 +254,13 @@ def _row(name: str, lock: bool = False) -> Any:
 			"last_error",
 			"is_sandbox",
 			"bot_draft",
+			"message_kind",
+			"purpose",
+			"quota_consumed",
+			"approved_by",
+			"attachment",
+			"attachment_kind",
+			"attachment_name",
 		],
 		as_dict=True,
 		for_update=lock,
@@ -248,7 +319,8 @@ def drop_echo_duplicate(row: Any, external_id: str) -> None:
 			"external_message_id": external_id,
 			"name": ["!=", row.name],
 			"sent_by": ["is", "not set"],
-			"source": "Sale",
+			"source": ["in", ["Sale", "Bot"]],  # V3-07: echo không có admin_id được ghi nguồn Bot
+			"bot_draft": ["is", "not set"],
 		},
 		pluck="name",
 	)
@@ -257,9 +329,21 @@ def drop_echo_duplicate(row: Any, external_id: str) -> None:
 		frappe.delete_doc(OUTBOUND, dup, force=True, ignore_permissions=True)
 
 
-def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
-	"""Ghi Sent + mã tin + dòng thời gian trong MỘT commit (mã tin phải có ngay để nhận ra echo)."""
+PAID_QUOTA_TYPES = ("sub_quota", "purchase_quota", "reward_quota")  # Zalo trả trong data.quota.quota_type
+
+
+def _sent(row: Any, external_id: str | None, sandbox: bool, quota_type: str | None = None) -> str:
+	"""Ghi Sent + mã tin + dòng thời gian trong MỘT commit (mã tin phải có ngay để nhận ra echo).
+
+	V3-07: Zalo báo nguồn quota của tin vừa gửi (`reply` = trong 48 giờ, `sub_quota`/... = ăn vào quỹ): ghi đúng theo Zalo
+	vào `quota_consumed` để bộ đếm khớp số Zalo tính. Tin Sale tự soạn (không phải nháp bot) đặt tạm dừng bot 24 giờ cho khách (brief mục C).
+	"""
 	sent_at = now_datetime()
+	extra: dict[str, Any] = {}
+	if quota_type in PAID_QUOTA_TYPES:
+		extra["quota_consumed"] = 1
+	elif quota_type == "reply":
+		extra["quota_consumed"] = 0
 	_set(
 		row,
 		status="Sent",
@@ -267,8 +351,18 @@ def _sent(row: Any, external_id: str | None, sandbox: bool) -> str:
 		sent_at=sent_at,
 		is_sandbox=1 if sandbox else 0,
 		last_error=None,
+		**extra,
 	)
+	if row.source == "Sale" and row.identity and not row.get("bot_draft"):
+		# sale tự nhắn mới dừng bot; sale bấm gửi nháp của bot thì chế độ Draft vẫn chạy tiếp
+		from omni_crm.bot import handoff
+
+		handoff.pause_identity_for_sale(row.identity)
 	frappe.db.commit()  # trạng thái Sent + mã tin phải bền trước các bước phụ bên dưới
+	if not sandbox and extra.get("quota_consumed", row.get("quota_consumed")):
+		from omni_crm.channels.zalo import quota_watch
+
+		quota_watch.check_level_safe()  # V3-07: cảnh báo 80/95/100% ngay khi chạm mức
 	first_response.on_outbound_sent({**row, "is_sandbox": 1 if sandbox else 0}, sent_at)  # V2-01; tự bắt lỗi
 	care_log.on_outbound_sent(
 		row, sent_at, sandbox
@@ -378,6 +472,9 @@ def send_outbound(outbound_name: str) -> str:
 			outbound_name,
 			_("Khung gửi đã chuyển sang có phí trong lúc chờ; hãy gửi lại và xác nhận phí."),
 		)
+	why_not = _route_check(row, adapter, identity_doc, channel_doc)
+	if why_not:
+		return _block_locked(outbound_name, why_not)
 	if flags.sandbox():
 		return _sandbox_sent(outbound_name)
 	claimed = _claim(outbound_name)
@@ -387,14 +484,17 @@ def send_outbound(outbound_name: str) -> str:
 		channel=claimed.channel,
 		identity=claimed.identity,
 		text=claimed.text,
+		meta={"outbound": claimed.name},  # ADR 0032: adapter đọc nút kịch bản theo tên tin
 		reply_to_external_id=_reply_target(claimed),
 		source=claimed.source,
+		purpose=claimed.purpose or "reply",
+		attachment=_attachment_of(claimed),
 	)
 	try:
 		external_id = adapter.send(req, channel_doc)  # ngoài khóa DB; sandbox đã chặn ở trên
 	except Exception as e:
 		return _after_error(claimed, e)
-	return _sent(claimed, external_id, sandbox=False)
+	return _sent(claimed, external_id, sandbox=False, quota_type=req.meta.get("quota_type"))
 
 
 def _reply_target(row: Any) -> str | None:

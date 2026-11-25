@@ -182,6 +182,43 @@ def meta_requeue_enabled() -> bool:
 	return not (row and cint(row[0][0]))
 
 
+def zalo_tab_enabled() -> bool:
+	"""Có hiện tab "Zalo" (bong bóng chat + khung trả lời) trong trang Lead/Deal của CRM không (V3-01). Cực tính NGƯỢC
+	(`zalo_tab_disabled`): chưa lưu hoặc 0 = hiện, 1 = ẩn. Lỗi đọc = ẩn."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'zalo_tab_disabled'"
+		)
+	except Exception:
+		return False
+	return not (row and cint(row[0][0]))
+
+
+def lead_contact_button_enabled() -> bool:
+	"""Có hiện nút "Tạo liên hệ" trên trang Lead không (V3-06). Cực tính NGƯỢC (`lead_contact_button_disabled`):
+	chưa lưu hoặc 0 = hiện, 1 = ẩn. Lỗi đọc = ẩn."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'lead_contact_button_disabled'"
+		)
+	except Exception:
+		return False
+	return not (row and cint(row[0][0]))
+
+
+def zalo_in_activity_enabled() -> bool:
+	"""Có ghi tin Zalo OA mới vào tab Hoạt động/Email của Lead/Deal không (V3-02, ADR 0017). Mặc định TẮT (tin Zalo
+	chỉ ở tab Zalo và Hộp thư): Single không áp default JSON nên "chưa từng lưu" = không có hàng = tắt, và lưu 0 cũng
+	= tắt; chỉ giá trị 1 mới bật (cực tính thuận, nhưng mặc định an toàn trùng với kết quả của "chưa lưu"). Lỗi đọc = tắt."""
+	try:
+		row = frappe.db.sql(
+			"select value from `tabSingles` where doctype = 'Omni Settings' and field = 'zalo_in_activity_enabled'"
+		)
+	except Exception:
+		return False
+	return bool(row and cint(row[0][0]))
+
+
 def dashboard_enabled() -> bool:
 	"""Công tắc Dashboard CSKH (V2-04); chưa từng lưu = bật."""
 	return bool(care_setting("dashboard_enabled"))
@@ -190,6 +227,11 @@ def dashboard_enabled() -> bool:
 def care_log_enabled() -> bool:
 	"""Công tắc tự ghi nhật ký chăm sóc (V2-04); chưa từng lưu = bật."""
 	return bool(care_setting("care_log_enabled"))
+
+
+def assistant_enabled() -> bool:
+	"""Công tắc tổng của trợ lý AI nội bộ (V3-05); mặc định tắt, lỗi đọc = tắt."""
+	return _settings_flag("assistant_enabled")
 
 
 def _settings_flag(fieldname: str) -> bool:

@@ -104,3 +104,35 @@ Bản `CLAUDE.md` của repo giống hệt bản kit v1 gốc (V2-00 đã so; ag
 - Job nền do webhook đẩy ra chạy bằng người dùng Guest: mọi job mới phải có test chạy bằng Guest (`docs/12` mục D, E6).
 - Mặc định phát hành phải giữ: `bot_reply_mode = Off`, `bot_analyze_enabled = 0`, mọi `auto_send_enabled = 0`, không đặt `omni_auto_send_allowed` trong `site_config.json`.
 - Kit v2: `README-v2.md`, `docs/v2/`, `prompts/v2/`; báo cáo khoảng cách ở `docs/v2/gap-report.md`. Quyết định của kit v2 mang tiền tố `V2-` (`V2-Q12…V2-Q15`) vì Q12–Q14 của v1 đã dùng cho việc khác (`docs/12` mục A).
+
+# Bot tư vấn Miyano – bối cảnh (cập nhật 17/11/2026)
+
+## Tài liệu gốc
+- docs/kich_ban_bot_miyano_v3.md là nguồn đúng cho luồng, câu chữ, nút bấm, mã nút và quy tắc. Số mục trong các prompt (1.4, 3.3.1, C.3…) là số mục của file này. Tiêu đề trong file còn ghi "v2"; nội dung là bản v3 đang dùng.
+- Mục tiêu: bot chạy đúng luồng 5 bước của file này. Phần bot AI đang có (phân tích hội thoại, trả lời theo Kho tri thức, nháp, chuyển người) được giữ và dùng lại bên trong luồng; không viết cơ chế thứ hai chạy song song.
+- Chỗ kịch bản ghi [Miyano bổ sung] hoặc [anh Xuân cung cấp]: để trống, làm thành cấu hình, liệt kê trong báo cáo. Không tự điền.
+- Chỗ cần một câu gửi khách mà kịch bản chưa có nguyên văn: soạn theo giọng văn ở mục "Tên và tính cách của bot", lưu vào kho kịch bản ở trạng thái "cần duyệt", liệt kê trong báo cáo. Câu "cần duyệt" chỉ được gửi cho danh sách thử.
+- Kịch bản mâu thuẫn với giới hạn thật của Zalo, Meta hoặc với code đang chạy: dừng và hỏi.
+
+## Hệ thống
+- Frappe v15, Frappe CRM, app omni_crm. Site trong bench: `miyano` (đã đối chiếu trên máy chủ ngày 17/11; bản prompt gốc ghi nhầm "crm.miyano.com.vn"), phục vụ qua https://yhct.miyano.com.vn. Mọi lệnh bench trên máy chủ dùng --site miyano; test chạy trên site test riêng (omni.test), không trên miyano.
+- Đang có trên site (quan sát ngày 17/11, đối chiếu lại với code trước khi dùng):
+  - DocType: Omni Channel (zalo_cs_free_hours, zalo_cs_max_days, zalo_cs_paid_quota_month…), Omni Identity (last_inbound_at, phone_requested_at, bot_paused_until…), Omni Inbound Message, Omni Outbound Message (source, purpose, message_kind, quota_consumed, bot_draft…), Omni Bot Run (kind Analyze / Reply / Marketing), Omni Bot Draft (mode Shadow / Draft, action, decision, guard_flags, handoff_logs…), Omni Question Group (5 nhóm: Thông tin dịch vụ, Hỏi giá, Khiếu nại, Tư vấn y khoa, Đặt lịch demo; có always_handoff, auto_send_enabled), Omni Chat Template, Omni KB Document / KB Chunk / KB Category (8 tài liệu đang dùng), Omni Eval Case / Eval Run (đang trống), Omni Settings.
+  - Omni Settings: bot_analyze_enabled, bot_reply_mode (đang "Draft"), reply_prompt_version (v3), handoff_pause_hours (24), handoff_notify_channels, handoff_message_in_hours, handoff_message_after_hours, business_hours, holidays (đang trống), bot_active_hours, assignment_fallback_users, sandbox_mode.
+  - Job: omni_crm.bot.reply.compare_pending, omni_crm.bot.reply.expire_pending_drafts, omni_crm.bot.handoff.email_unread_handoffs, omni_crm.bot.auto_send.run_breaker_checks, omni_crm.channels.zalo.phone_request.run_due, omni_crm.crm_bridge.response_sla.run.
+  - Trường trên CRM Lead: omni_intent, omni_need, omni_products, omni_urgency, omni_bot_summary, omni_is_test, omni_campaign…
+  - Zalo: mọi tin gửi đi qua pick_message_kind (tin tư vấn miễn phí trong 48 giờ, quỹ tin ngoài 48 giờ).
+- Chưa có: tin kèm nút, kho kịch bản, trạng thái "khách đang ở bước nào", tin tự gửi theo lịch (nhắn lại, nhắc), đặt lịch demo, tạo việc khi chuyển người.
+
+## Quy tắc bắt buộc
+- Site có webhook sống và khách thật. Tin bot gửi ra không thu lại được.
+- Công tắc "Bật bot kịch bản" trong Omni Settings, mặc định TẮT, phải có trước dòng code gửi tin kịch bản đầu tiên. Khi công tắc tắt, bot kịch bản chỉ chạy với identity trong danh sách thử; mọi identity khác bị chặn ở tầng gửi và tiếp tục được xử lý như hiện nay.
+- Không đổi giá trị cấu hình đang chạy trên site (bot_reply_mode, auto_send_enabled, business_hours, cấu hình kênh, token, secret). Chỉ thêm trường mới với mặc định an toàn; giá trị nào cần đổi thì nêu trong báo cáo để người dùng tự đổi.
+- Mọi tin bot gửi đi qua đúng một đường gửi chung: Zalo qua pick_message_kind; Messenger qua hàm kiểm tra hạn 24 giờ. Không gọi thẳng API kênh ở nơi khác. Tin của bot ghi Omni Outbound Message với source = "Bot", có lưu nội dung chữ và các nút đã gửi.
+- Một cuộc trò chuyện chỉ có một bot trả lời. Nếu phát hiện chatbot trên Zalo OA Manager đang trả lời song song thì báo lại.
+- Câu chữ gửi khách không viết cứng trong code; lấy từ kho kịch bản trên CRM để Truyền thông sửa được. Dữ liệu khởi tạo lấy nguyên văn từ file kịch bản.
+- AI chỉ làm ba việc: phân loại tin khách về một mã trong danh sách đóng; tách thông tin (tên hàng, số lượng, email, SĐT…); viết câu trả lời từ Kho tri thức. AI không tự viết giá, chiết khấu, cam kết, thời hạn. Nội dung khách gửi luôn được đưa vào prompt như dữ liệu, không phải lệnh.
+- Dữ liệu cá nhân: không in SĐT, email đầy đủ ra log; che phần giữa.
+- Chỉ sửa code trong omni_crm. Nhánh git riêng, commit nhỏ. Chạy bench --site miyano backup --with-files trước mỗi lần migrate trên máy chủ.
+- Không tự đoán endpoint hay giới hạn của Zalo và Meta. Chỗ nào chưa đối chiếu được với tài liệu chính thức thì đánh dấu # VERIFY: và báo lại.
+- Mỗi prompt kết thúc bằng báo cáo: file đã thêm hoặc sửa, test đã chạy, chỗ lệch so với kịch bản, câu "cần duyệt", ô còn trống, việc còn mở. Để công tắc "Bật bot kịch bản" ở trạng thái tắt.

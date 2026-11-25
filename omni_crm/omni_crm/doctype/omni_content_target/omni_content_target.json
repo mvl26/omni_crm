@@ -1,0 +1,292 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 10:00:00.000000",
+ "modified": "2026-11-23 13:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Content Target",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "content_item",
+  "campaign",
+  "platform",
+  "channel_account",
+  "post_format",
+  "scheduled_at",
+  "col1",
+  "status",
+  "attempts",
+  "next_retry_at",
+  "idempotency_key",
+  "sec_result",
+  "tracking_url",
+  "external_post_id",
+  "permalink",
+  "published_at",
+  "col2",
+  "error_type",
+  "last_error",
+  "sec_stats",
+  "reach",
+  "impressions",
+  "likes",
+  "col3",
+  "comments",
+  "shares",
+  "clicks",
+  "insights_synced_at",
+  "insights_fields"
+ ],
+ "fields": [
+  {
+   "fieldname": "content_item",
+   "fieldtype": "Link",
+   "label": "Bài đăng",
+   "options": "Omni Content Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "label": "Chiến dịch",
+   "options": "Omni Campaign",
+   "read_only": 1,
+   "fetch_from": "content_item.campaign",
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Select",
+   "label": "Nền tảng",
+   "options": "Facebook\nZalo OA\nTikTok",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "channel_account",
+   "fieldtype": "Link",
+   "label": "Kênh",
+   "options": "Omni Channel",
+   "description": "Kênh Facebook (Meta) hoặc Zalo OA có sẵn; token đọc từ kênh, không lưu ở đây."
+  },
+  {
+   "fieldname": "post_format",
+   "fieldtype": "Select",
+   "label": "Định dạng",
+   "options": "fb_link\nfb_photo\nfb_multi_photo\nfb_video\nfb_pdf_link\nzalo_article\ntiktok_video",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scheduled_at",
+   "fieldtype": "Datetime",
+   "label": "Giờ đăng",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Chờ duyệt\nĐã lên lịch\nĐang xử lý\nĐăng thành công\nThất bại\nĐã hủy",
+   "default": "Chờ duyệt",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Số lần thử",
+   "read_only": 1,
+   "default": "0",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "next_retry_at",
+   "fieldtype": "Datetime",
+   "label": "Thử lại lúc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Khóa chống đăng trùng",
+   "read_only": 1,
+   "unique": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "sec_result",
+   "fieldtype": "Section Break",
+   "label": "Kết quả"
+  },
+  {
+   "fieldname": "tracking_url",
+   "fieldtype": "Small Text",
+   "label": "Link có mã theo dõi",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "external_post_id",
+   "fieldtype": "Data",
+   "label": "ID bài trên nền tảng",
+   "read_only": 1,
+   "search_index": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "permalink",
+   "fieldtype": "Small Text",
+   "label": "Link bài gốc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "published_at",
+   "fieldtype": "Datetime",
+   "label": "Đăng lúc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "error_type",
+   "fieldtype": "Select",
+   "label": "Loại lỗi",
+   "options": "\nvalidation\nprovider\nterminal",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Lỗi gần nhất",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "sec_stats",
+   "fieldtype": "Section Break",
+   "label": "Số liệu",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "reach",
+   "fieldtype": "Int",
+   "label": "Tiếp cận",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "impressions",
+   "fieldtype": "Int",
+   "label": "Lượt hiển thị",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "likes",
+   "fieldtype": "Int",
+   "label": "Thích",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "col3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "comments",
+   "fieldtype": "Int",
+   "label": "Bình luận",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "shares",
+   "fieldtype": "Int",
+   "label": "Chia sẻ",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "clicks",
+   "fieldtype": "Int",
+   "label": "Lượt bấm",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "insights_synced_at",
+   "fieldtype": "Datetime",
+   "label": "Đồng bộ số liệu lúc",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "insights_fields",
+   "fieldtype": "Data",
+   "label": "Chỉ số đã có",
+   "read_only": 1,
+   "description": "Các chỉ số lấy được ở lần đồng bộ gần nhất (chỉ số Int mặc định 0, cột này phân biệt 0 thật với chưa có)"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "track_changes": 1
+}

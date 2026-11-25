@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -24,7 +25,7 @@ from frappe import _
 from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from omni_crm import flags
-from omni_crm.bot import ai_client, guards, handoff, knowledge
+from omni_crm.bot import ai_client, guards, handoff, kb_docs, knowledge, templates
 from omni_crm.bot.context import build_conversation, escape_tags, mask_pii, normalize_text
 from omni_crm.bot.prompts.loader import load_prompt, render
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
@@ -40,6 +41,7 @@ INBOUND = "Omni Inbound Message"
 GROUP = "Omni Question Group"
 QUEUE = queue_for()  # V21-01: việc chat/bot/tổng đài/nhập danh sách luôn ở hàng đợi mặc định
 JOB = "omni_crm.bot.reply.reply_batch"
+SCRIPT_FIRST_JOB = "omni_crm.bot.reply.script_first_batch"
 JOB_TIMEOUT = 600
 LOCK_WAIT_SECONDS = 100  # chờ khóa lượt tối đa (E12); nhỏ hơn timeout job RQ để job còn kịp trả "locked"
 LOCK_TTL_SECONDS = 150  # khóa tự hết nếu tiến trình chết; nhỏ hơn timeout job RQ
@@ -56,6 +58,9 @@ REPLAY_PREFIX = "replay::"
 KB_LOG_KEY = "omni:reply:kb_too_large_logged"
 KB_LOG_TTL = 3600
 TEXT_MAX = 1200
+# Trần token đầu ra của lượt Reply. Mô hình không ép được tool (tool_choice "auto", vd claude-sonnet-5-5) viết chữ
+# trước khi gọi tool; 800 làm cắt cụt tool_use (thiếu trường bắt buộc / reply_text rỗng) trên miyano 2026-11-16.
+REPLY_MAX_TOKENS = 2000
 REASON_MAX = 300
 
 TOOL: dict[str, Any] = {
@@ -75,6 +80,71 @@ TOOL: dict[str, Any] = {
 		"required": ["action", "question_group", "kb_item_ids", "confidence"],
 	},
 }
+
+
+# K1 (docs/bot_v3_plan.md): từ câu lệnh reply v4, quyết định chỉ theo tin hiện tại của khách. Bot nhận tin đó trong
+# <tin_moi>, không nhận tóm tắt Lead (omni_bot_summary chỉ để nhân viên đọc), và ý định của lượt Analyze (phân tích CẢ
+# hội thoại) không còn được dùng để chặn hay chọn mẫu tin. Ghim lại v3 là tắt toàn bộ thay đổi này.
+CURRENT_TURN_MIN_PROMPT = 4
+FLAG_AI_FAILED = "ai_khong_tra_ket_qua"
+FLAG_SYSTEM_ERROR = "loi_he_thong"
+FLAG_RATE_LIMITED = "qua_nhieu_tin"
+
+
+def current_turn_mode(prompt_version: str | None) -> bool:
+	"""Câu lệnh `prompt_version` (vd "v4") có quyết định theo tin hiện tại của khách không."""
+	m = re.fullmatch(r"v(\d+)", str(prompt_version or ""))
+	return bool(m) and int(m.group(1)) >= CURRENT_TURN_MIN_PROMPT
+
+
+def current_turn_block(customer_text: str, mask: bool = True) -> str:
+	"""Thẻ <tin_moi>: tin khách cần trả lời lúc này (đã thoát thẻ, che SĐT/email khi `mask`)."""
+	text = escape_tags(normalize_text(customer_text or ""))
+	return f"<tin_moi>{mask_pii(text) if mask else text}</tin_moi>"
+
+
+def check_reply_output(out: dict) -> str | None:
+	"""Kiểm thêm đầu ra propose_reply (ai_client thử lại khi sai): action reply thì phải có reply_text."""
+	if (
+		isinstance(out, dict)
+		and out.get("action") == "reply"
+		and not str(out.get("reply_text") or "").strip()
+	):
+		return "action = reply nhưng reply_text rỗng"
+	return None
+
+
+CLAIMS_REPAIR_NOTE = (
+	"reply_text có cụm {0!r} không có nguyên văn trong các đoạn đã trích (kb_item_ids). Chép nguyên văn cụm có con "
+	"số/thời gian từ đoạn tài liệu, giữ cả từ đứng ngay trước con số, không đánh số thứ tự bằng chữ số; hoặc bỏ con số đó"
+)
+
+
+def make_reply_check(items: list[dict], allowed_phrases: list[str] | tuple[str, ...] = ()) -> Any:
+	"""Hàm kiểm cho call_tool: như check_reply_output, thêm MỘT lần nhờ AI sửa khi câu trả lời vướng chốt chặn số/thời hạn.
+
+	Không nới chốt chặn: sau lần sửa, đầu ra được nhận nguyên và `evaluate` vẫn chặn như cũ nếu còn sai.
+	"""
+	by_id = {i["id"]: i for i in items}
+	left = {"claims": 1}
+
+	def check(out: dict) -> str | None:
+		problem = check_reply_output(out)
+		if problem or not isinstance(out, dict) or out.get("action") != "reply" or left["claims"] <= 0:
+			return problem
+		ids = [str(x).strip() for x in out.get("kb_item_ids") or []]
+		texts = [by_id[k]["answer"] for k in ids if k in by_id]
+		if not texts:
+			return None  # thiếu/sai mã nguồn: để evaluate chặn bằng cờ riêng
+		blocked, flag = guards.guard_unsupported_claims(
+			str(out.get("reply_text") or ""), texts, allowed_phrases
+		)
+		if not blocked:
+			return None
+		left["claims"] -= 1
+		return CLAIMS_REPAIR_NOTE.format(flag.split(":", 1)[-1][:40])
+
+	return check
 
 
 # --- Đầu vào cho bot (docs/08 mục 5.2) -----------------------------------------------------------------------
@@ -385,9 +455,12 @@ def notify_pending_draft(lead: str, action: str) -> int:
 	subject = (
 		_("Bot chuyển người, mời xem: {0}") if action == "Handoff" else _("Có nháp bot chờ duyệt: {0}")
 	).format(name)[:NOTIFY_SUBJECT_MAX]
-	link = f"/app/omni-inbox?lead={lead}"
+	from omni_crm.crm_bridge import notify
+
+	link = notify.crm_lead_link(lead)
+	users = scoring._recipients(lead)
 	done = 0
-	for user in scoring._recipients(lead):
+	for user in users:
 		try:
 			frappe.get_doc(
 				{
@@ -396,7 +469,7 @@ def notify_pending_draft(lead: str, action: str) -> int:
 					"for_user": user,
 					"subject": subject,
 					"email_content": f"{frappe.utils.escape_html(subject)}. "
-					f'<a href="{frappe.utils.escape_html(link)}">{frappe.utils.escape_html(_("Mở Hộp thư"))}</a>',
+					f'<a href="{frappe.utils.escape_html(link)}">{frappe.utils.escape_html(_("Mở trong CRM"))}</a>',
 					"document_type": "CRM Lead",
 					"document_name": lead,
 				}
@@ -404,6 +477,7 @@ def notify_pending_draft(lead: str, action: str) -> int:
 			done += 1
 		except Exception:
 			frappe.log_error(title="Omni: không báo được nháp bot", message=f"lead={lead}")
+	notify.crm_notify(lead, users, subject)  # chuông của app CRM (sale làm việc ở /crm)
 	timeline.notify(lead, [])
 	return done
 
@@ -452,9 +526,6 @@ def make_draft(
 	"""
 	settings = frappe.get_cached_doc("Omni Settings")
 	items = knowledge.kb_items()
-	if len(items) > KB_MAX_ITEMS:
-		_log_kb_too_large(len(items))
-		return None
 	base = {
 		"lead": lead,
 		"identity": identity,
@@ -463,11 +534,26 @@ def make_draft(
 		"mode": mode,
 		**(extra or {}),
 	}
+	if len(items) > KB_MAX_ITEMS:
+		_log_kb_too_large(len(items))
+		if mode == "Draft":  # K1: không để tin khách rơi vào im lặng
+			return _fallback_handoff(base, [], FLAG_SYSTEM_ERROR, wants_human)
+		return None
 	info = [n for n in (_send_note(identity, channel, mode) if check_channel else None,) if n]
 	if not business_hours.is_business_time(at or now_datetime()):
 		info.append("info:ngoai_gio")
 	info.extend(notes or [])
-	if not items:
+	prompt = load_prompt("reply")
+	turn_mode = current_turn_mode(prompt.version)
+	decision_intent = None if turn_mode else intent  # K1: v4 không dùng ý định của cả hội thoại
+	if (
+		turn_mode
+	):  # v4: "muốn gặp người" chỉ xét trên lời khách của lượt này, không theo phân tích cả hội thoại
+		wants_human = "gap_nguoi" in guards.sensitive_topics(customer_text)
+	include_summary = include_summary and not turn_mode
+	use_docs = kb_docs.enabled(prompt.version)  # ADR 0030: thêm đoạn tài liệu của Kho tri thức
+	passages = kb_docs.passages_for(customer_text) if use_docs else []
+	if not items and not (use_docs and kb_docs.indexed_count()):
 		name = _insert_draft(
 			{
 				**base,
@@ -479,33 +565,46 @@ def make_draft(
 		_after_insert(name, base, "Handoff")
 		frappe.db.commit()
 		return name
-	prompt = load_prompt("reply")
+	if not items and not passages:  # chỉ có tài liệu mà không đoạn nào liên quan: không gọi AI
+		name = _insert_draft(
+			{
+				**base,
+				"action": "Handoff",
+				"guard_flags": "\n".join(["kb_khong_co_doan_lien_quan", *info]),
+				"handoff_reason": _("Kho tri thức chưa có thông tin cho câu hỏi này"),
+			}
+		)
+		_after_insert(name, base, "Handoff")
+		frappe.db.commit()
+		return name
 	mask = not cint(frappe.conf.get(UNMASK_CONF))
 	hours = hours_context(at)
 	system = render(prompt, kenh=channel_type or "kênh nhắn tin", **hours)
+	content = build_user_message(lead, channel_type, until, include_summary=include_summary, mask=mask)
+	if turn_mode:
+		content = f"{content}\n{current_turn_block(customer_text, mask)}"
+	if use_docs:
+		content = f"{kb_docs.render(passages)}\n{content}"
 	raw = ai_client.call_tool(
 		"Reply",
 		settings.get("reply_model") or "claude-sonnet-5-5",
 		system,
-		[
-			{
-				"role": "user",
-				"content": build_user_message(
-					lead, channel_type, until, include_summary=include_summary, mask=mask
-				),
-			}
-		],
+		[{"role": "user", "content": content}],
 		TOOL,
 		lead=lead,
 		identity=identity,
 		batch_id=batch_id,
 		cache_blocks=[knowledge.render_kb()],
 		prompt_version=prompt.version,
-		max_tokens=800,
+		max_tokens=REPLY_MAX_TOKENS,
+		check=make_reply_check(items + kb_docs.as_items(passages), [hours["gio_lam_viec_ke_tiep"]])
+		if turn_mode
+		else check_reply_output,
+		repair=True,
 	)  # KHÔNG truyền synthetic: hội thoại khách luôn qua cổng Q11
 	if raw is None:
-		if mode == "Draft" and wants_human:  # khách đòi gặp người thì vẫn phải qua chuyển người dù AI lỗi
-			return _handoff_without_ai(base, info)
+		if mode == "Draft":  # K1: AI lỗi/sai định dạng sau khi đã thử lại -> chuyển người, không im lặng
+			return _fallback_handoff(base, info, FLAG_AI_FAILED, wants_human)
 		return None
 	try:
 		group_rows = {
@@ -517,16 +616,29 @@ def make_draft(
 		decision = evaluate(
 			raw,
 			{
-				"items": items,
+				"items": items + kb_docs.as_items(passages),
 				"group_row": group_rows,
 				"customer_text": customer_text,
-				"intent": intent,
+				"intent": decision_intent,
 				"wants_human": wants_human,
 				"channel_type": channel_type,
 				# chuỗi mốc giờ do hệ thống sinh (prompt quy tắc 7) được miễn chốt chặn 3, chỉ đúng chuỗi này
 				"allowed_phrases": [hours["gio_lam_viec_ke_tiep"]],
 			},
 		)
+		suspicious = any(f.startswith("nghi_chen_lenh") for f in decision["flags"])
+		if (
+			decision["action"] == "Handoff" and not suspicious
+		):  # ADR 0031: hỏi giá/đặt demo -> mẫu tin để sale điền rồi gửi
+			tpl = templates.pick(decision["group"], decision_intent, customer_text)
+			if tpl:
+				decision["text"] = tpl.text
+				# Nhóm AI chọn đã là nhóm luôn chuyển người thì giữ; nếu không (vd "Thông tin dịch vụ" bị chốt chặn giá) thì
+				# đổi sang nhóm của mẫu, thiếu nhóm đó thì bỏ nhóm, để nháp sale điền không tính vào tỉ lệ mở Auto của nhóm
+				current = group_rows.get(decision["group"])
+				if not (current and cint(current.always_handoff)):
+					decision["group"] = tpl.group if tpl.group in group_rows else None
+				info.append(f"info:mau_tin:{tpl.key}")
 		row = group_rows.get(decision["group"])
 		if base["mode"] == "Draft" and decision["action"] == "Reply" and row and cint(row.shadow_only):
 			base = {**base, "mode": "Shadow"}  # nhóm chỉ chạy ngầm (V2-06): nháp trả lời không hiện cho sale
@@ -564,14 +676,30 @@ def make_draft(
 		raise
 
 
-def _handoff_without_ai(base: dict, info: list[str]) -> str:
-	"""AI không trả được kết quả nhưng khách đòi gặp người: ghi nháp Handoff (không văn bản) và chuyển người."""
+FALLBACK_REASONS = {
+	FLAG_AI_FAILED: "Bot không soạn được câu trả lời (AI lỗi), cần nhân viên trả lời",
+	FLAG_SYSTEM_ERROR: "Bot gặp lỗi khi soạn câu trả lời, cần nhân viên trả lời",
+	FLAG_RATE_LIMITED: "Khách nhắn nhiều tin liên tiếp, cần nhân viên trả lời",
+}
+
+
+def _fallback_handoff(base: dict, info: list[str], flag: str, wants_human: bool = False) -> str:
+	"""Bot không có câu trả lời (AI lỗi, lỗi hệ thống, quá nhiều tin): ghi nháp Handoff không văn bản và chuyển người.
+
+	Khách đòi gặp người thì giữ nhãn "Khách muốn gặp nhân viên". Commit.
+	"""
+	flags_ = [handoff.FLAG_WANTS_HUMAN, flag] if wants_human else [flag]
+	reason = (
+		_("Khách muốn gặp nhân viên")
+		if wants_human
+		else _(FALLBACK_REASONS.get(flag, FALLBACK_REASONS[FLAG_SYSTEM_ERROR]))
+	)
 	name = _insert_draft(
 		{
 			**base,
 			"action": "Handoff",
-			"guard_flags": "\n".join([handoff.FLAG_WANTS_HUMAN, "ai_khong_tra_ket_qua", *info]),
-			"handoff_reason": _("Khách muốn gặp nhân viên"),
+			"guard_flags": "\n".join([*flags_, *info]),
+			"handoff_reason": reason,
 		}
 	)
 	_after_insert(name, base, "Handoff")
@@ -653,12 +781,78 @@ def reply_batch(batch_id: str) -> str:
 		return _reply_batch(batch_id)
 
 
+def _script_handled(batch_id: str) -> bool:
+	"""Gọi `script.router.handle_batch`; lỗi thì ghi log (không nội dung khách) và để luồng cũ chạy.
+
+	Lỗi SAU KHI bot kịch bản đã gửi tin cho lượt này: không chạy luồng cũ (tránh trả lời hai lần), chuyển người.
+	"""
+	try:
+		from omni_crm.script import router
+
+		return bool(router.handle_batch(batch_id))
+	except Exception as e:
+		frappe.db.rollback()
+		frames = "".join(traceback.format_list(traceback.extract_tb(e.__traceback__)[-6:]))
+		partial = _script_already_sent(batch_id)
+		frappe.log_error(  # chỉ loại lỗi + vị trí code: thông điệp lỗi có thể chứa lời khách
+			title="Omni: bot kịch bản lỗi sau khi đã gửi tin, chuyển người"
+			if partial
+			else "Omni: bot kịch bản lỗi, dùng luồng cũ",
+			message=f"batch_id={batch_id}\nloai={type(e).__name__}\n{frames}",
+		)
+		if partial:
+			_script_error_handoff(batch_id)
+		return partial
+
+
+def _script_already_sent(batch_id: str) -> bool:
+	"""Lượt đã được bot kịch bản đánh dấu nhận (Redis) hoặc đã có tin kịch bản được xếp. Lỗi khi kiểm thì coi là chưa."""
+	try:
+		from omni_crm.script import router
+		from omni_crm.script import send as script_send
+
+		return router.is_marked(batch_id) or script_send.batch_has_outbound(batch_id)
+	except Exception:
+		return False
+
+
+def _script_error_handoff(batch_id: str) -> None:
+	"""Bot kịch bản lỗi giữa chừng sau khi đã gửi tin: ghi nháp Handoff và chuyển người (một lần cho lượt). Không ném lỗi."""
+	try:
+		rows = _batch_messages(batch_id)
+		last = rows[-1] if rows else None
+		lead = lead_bridge.follow_merged(last.lead) if last and last.lead else None
+		if (
+			not lead
+			or not last.identity
+			or not last.channel
+			or frappe.db.exists(DRAFT, {"batch_id": batch_id})
+		):
+			return
+		base = {
+			"lead": lead,
+			"identity": last.identity,
+			"channel": last.channel,
+			"batch_id": batch_id,
+			"mode": "Draft",
+		}
+		_fallback_handoff(base, [], FLAG_SYSTEM_ERROR)
+	except Exception as e:
+		frappe.db.rollback()
+		_log_failure(batch_id, e)
+
+
 def _reply_batch(batch_id: str) -> str:
 	"""Soạn nháp (Shadow hoặc Draft theo công tắc) cho lượt `batch_id`; trả "drafted" hoặc lý do bỏ qua. Không ném lỗi, không gửi gì.
 
 	Điều kiện (docs/08 mục 5.1): chế độ khác Off; tin cuối của lượt là tin khách; bot chưa bị tạm dừng với khách;
 	sale chưa trả lời sau tin đó (ngắt mạch); chưa quá giới hạn tần suất.
 	"""
+	if _script_handled(batch_id):  # ADR 0032: bot kịch bản v3 nhận lượt thì luồng cũ không chạy
+		return "script"
+	fallback: dict | None = (
+		None  # K1: đủ thông tin để chuyển người khi lượt này lỗi giữa chừng (chế độ Draft)
+	)
 	try:
 		if flags.bot_reply_mode() == "Off":
 			return "off"
@@ -681,8 +875,19 @@ def _reply_batch(batch_id: str) -> str:
 			return "paused"
 		if sale_replies_after(lead, last.received_at):
 			return "sale_replied"
+		mode = flags.bot_reply_mode()
+		base = {
+			"lead": lead,
+			"identity": identity,
+			"channel": last.channel,
+			"batch_id": batch_id,
+			"mode": mode,
+		}
 		if _recent_drafts(identity) >= MAX_DRAFTS_PER_HOUR:
+			if mode == "Draft":  # K1: không im lặng; chuyển người làm bot tạm dừng nên không lặp
+				_fallback_handoff(base, [], FLAG_RATE_LIMITED)
 			return "rate_limited"
+		fallback = base if mode == "Draft" else None
 		analysis = analysis_of(batch_id)
 		notes = ["info:khong_co_phan_tich"] if flags.bot_analyze_enabled() and not analysis else []
 		customer_text = "\n".join(
@@ -699,26 +904,67 @@ def _reply_batch(batch_id: str) -> str:
 			wants_human=bool(analysis.get("wants_human")),
 			at=get_datetime(last.received_at),
 			notes=notes,
-			mode=flags.bot_reply_mode(),
+			mode=mode,
 		)
 		return "drafted" if name else "no_result"
 	except Exception as e:
 		_log_failure(batch_id, e)
+		if fallback:
+			_fallback_after_error(fallback)
 		return "error"
 
 
-def enqueue_reply(batch_id: str, lead: str | None) -> bool:
+def _fallback_after_error(base: dict) -> None:
+	"""Lượt lỗi giữa chừng ở chế độ Draft: chuyển người nếu lượt chưa có nháp. Không ném lỗi."""
+	try:
+		frappe.db.rollback()
+		if not frappe.db.exists(DRAFT, {"batch_id": base["batch_id"]}):
+			_fallback_handoff(base, [], FLAG_SYSTEM_ERROR)
+	except Exception as e:
+		_log_failure(base["batch_id"], e)
+
+
+def _script_enabled_batch(batch_id: str) -> bool:
+	"""Lượt có định danh đang chạy bot kịch bản v3 (ADR 0032): vẫn đẩy job dù chế độ Reply là Off. Lỗi thì coi là không."""
+	try:
+		from omni_crm.script import switch
+
+		rows = frappe.get_all(INBOUND, filters={"batch_id": batch_id}, pluck="identity", distinct=True)
+		return any(switch.enabled_for(i) for i in rows if i)
+	except Exception:
+		return False
+
+
+def script_first_batch(batch_id: str) -> str:
+	"""Job nền chạy NGAY sau khi lượt tin xử lý xong, không chờ bot phân tích: chỉ thử bot kịch bản.
+
+	Cùng khóa lượt với `reply_batch`: job trả lời (đến sau khi phân tích xong) chờ job này rồi thấy lượt đã được nhận;
+	bot kịch bản không nhận thì job đó chạy luồng cũ như trước.
+	"""
+	with _batch_lock(batch_id) as held:
+		if not held:
+			return "locked"
+		return "script" if _script_handled(batch_id) else "skipped"
+
+
+def enqueue_reply(batch_id: str, lead: str | None, *, script_first: bool = False) -> bool:
 	"""Đẩy `reply_batch` khi công tắc không Off và lượt có tin khách; lỗi enqueue không ném ra.
 
 	Gọi từ `analyze.after_analyze` (bot phân tích bật) hoặc `post_batch_hooks` (bot phân tích tắt).
+	`script_first`: đẩy `script_first_batch` (chỉ khi lượt có định danh chạy bot kịch bản), từ `post_batch_hooks`.
 	"""
-	if not lead or flags.bot_reply_mode() == "Off":
+	if not lead:
+		return False
+	if script_first:
+		if not _script_enabled_batch(batch_id):
+			return False
+	elif flags.bot_reply_mode() == "Off" and not _script_enabled_batch(batch_id):
 		return False
 	try:
 		frappe.enqueue(
-			JOB,
+			SCRIPT_FIRST_JOB if script_first else JOB,
 			queue=QUEUE,
-			job_id=f"omni-reply::{batch_id}",
+			job_id=f"omni-script::{batch_id}" if script_first else f"omni-reply::{batch_id}",
 			deduplicate=True,
 			timeout=JOB_TIMEOUT,
 			batch_id=batch_id,

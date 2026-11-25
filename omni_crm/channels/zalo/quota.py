@@ -1,58 +1,116 @@
-"""Đếm tin tư vấn Zalo mà Sale gửi NGOÀI khung `zalo_cs_free_hours` trong tháng (V21-05, docs/06 mục 7a).
+"""Quỹ tin tư vấn Zalo ngoài khung 48 giờ của gói OA (V3-07, thay cách đếm theo tháng của V21-05).
 
-Chỉ để BÁO (Hộp thư), không bao giờ chặn gửi. Một tin tính là "ngoài khung" khi, tại lúc gửi (`sent_at`), khách không có
-tin vào nào (trừ `oa_echo`, `unfollow`) trong `zalo_cs_free_hours` giờ trước đó. Đếm tin do hệ thống gửi qua API
-(`sent_by` có giá trị, `status = Sent`, không sandbox); tin nhân viên trả lời thẳng trên ứng dụng Zalo OA (`oa_echo`, không có
-`sent_by`) không đếm: chưa xác nhận Zalo có tính hạn mức cho chúng hay không (docs/12, C-V21-05).
+Gói Tăng trưởng cho 500 tin/năm; hết thì Zalo tính phí từng tin. Hệ thống TỰ ĐẾM, không đợi Zalo báo: mỗi tin ra được
+`routing.pick_message_kind` đánh dấu `quota_consumed = 1` khi ăn vào quỹ. Đếm = tin `quota_consumed = 1`, `status = Sent`,
+không sandbox, trong chu kỳ của gói. Chu kỳ là 1 năm kết thúc ở `Omni Settings.zalo_quota_cycle_end` (ngày hết hạn gói),
+không phải năm dương lịch.
+
+Ba mức: 80% cảnh báo, 95% chỉ Omni Admin gửi được, 100% từ chối.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime, time
 
 import frappe
 from frappe import _
-from frappe.utils import add_months, cint, get_first_day, now_datetime
+from frappe.utils import add_days, add_years, cint, getdate
 
-# khớp pipeline.worker.NON_INBOUND_EVENTS: không phải khách chủ động liên hệ
-_NON_INBOUND = ("oa_echo", "unfollow")
-
-
-def month_bounds(now: datetime | None = None) -> tuple[datetime, datetime]:
-	"""[đầu tháng, đầu tháng sau) theo giờ site của `now`."""
-	now = now or now_datetime()
-	start = datetime.combine(get_first_day(now), datetime.min.time())
-	return start, datetime.combine(get_first_day(add_months(start, 1)), datetime.min.time())
+SETTINGS = "Omni Settings"
+DEFAULT_TOTAL = 500
+DEFAULT_CYCLE_END = date(2027, 11, 9)
+WARN_PCT, SOFT_PCT = 80, 95
+OK, WARN, SOFT, HARD = "ok", "warn", "soft", "hard"
+ADMIN_ROLE = "Omni Admin"
 
 
-def count_out_of_window(channel: str, free_hours: int, now: datetime | None = None) -> int:
-	"""Số tin Sale đã gửi qua API của kênh ngoài khung `free_hours` giờ trong tháng chứa `now`."""
-	start, end = month_bounds(now)
+def _setting(fieldname: str):
+	try:
+		return frappe.get_cached_doc(SETTINGS).get(fieldname)
+	except Exception:
+		return None
+
+
+def total() -> int:
+	"""Tổng quỹ tin/năm (trống hoặc 0 = 500)."""
+	return cint(_setting("zalo_quota_total")) or DEFAULT_TOTAL
+
+
+def cycle_bounds() -> tuple[datetime, datetime]:
+	"""[đầu chu kỳ, đầu ngày sau ngày hết hạn): 10/11/2026 00:00 .. 10/11/2027 00:00 với hạn 09/11/2027."""
+	end = getdate(_setting("zalo_quota_cycle_end") or DEFAULT_CYCLE_END)
+	start = add_days(add_years(end, -1), 1)
+	return datetime.combine(start, time.min), datetime.combine(add_days(end, 1), time.min)
+
+
+def count_used() -> int:
+	"""Số tin đã ăn vào quỹ trong chu kỳ hiện tại (mọi kênh Zalo OA)."""
+	start, end = cycle_bounds()
 	row = frappe.db.sql(
 		"""
-		select count(*) from `tabOmni Outbound Message` o
-		where o.channel = %(channel)s and o.status = 'Sent' and o.source = 'Sale'
-			and ifnull(o.sent_by, '') != '' and ifnull(o.is_sandbox, 0) = 0
-			and o.sent_at >= %(start)s and o.sent_at < %(end)s
-			and not exists (
-				select 1 from `tabOmni Inbound Message` i
-				where i.identity = o.identity and i.event_type not in %(skip)s
-					and i.received_at <= o.sent_at
-					and i.received_at >= date_sub(o.sent_at, interval %(hours)s hour)
-			)
+		select count(*) from `tabOmni Outbound Message`
+		where quota_consumed = 1 and status = 'Sent' and ifnull(is_sandbox, 0) = 0
+			and sent_at >= %(start)s and sent_at < %(end)s
 		""",
-		{"channel": channel, "start": start, "end": end, "skip": _NON_INBOUND, "hours": int(free_hours)},
+		{"start": start, "end": end},
 	)
 	return cint(row[0][0])
 
 
-def usage(channel_doc, now: datetime | None = None) -> dict:
-	"""{"used", "quota" (None = chưa biết), "text"} cho Hộp thư; quota trống hoặc 0 = chưa biết."""
-	used = count_out_of_window(channel_doc.name, cint(channel_doc.zalo_cs_free_hours), now)
-	quota = cint(channel_doc.get("zalo_cs_paid_quota_month")) or None
-	hours = cint(channel_doc.zalo_cs_free_hours)
-	if quota:
-		text = _("Đã dùng {0} / {1} tin ngoài {2} giờ tháng này").format(used, quota, hours)
-	else:
-		text = _("Đã gửi {0} tin ngoài {1} giờ tháng này (chưa biết hạn mức)").format(used, hours)
-	return {"used": used, "quota": quota, "over": bool(quota and used >= quota), "text": text}
+def level_of(used: int, quota: int) -> str:
+	"""Mức chặn theo số đã dùng: ok / warn (>= 80%) / soft (>= 95%) / hard (>= 100%)."""
+	if used >= quota:
+		return HARD
+	if used * 100 >= quota * SOFT_PCT:
+		return SOFT
+	if used * 100 >= quota * WARN_PCT:
+		return WARN
+	return OK
+
+
+@dataclass
+class Usage:
+	used: int
+	total: int
+	level: str
+
+	@property
+	def remain(self) -> int:
+		return max(0, self.total - self.used)
+
+	def as_dict(self) -> dict:
+		return {
+			"used": self.used,
+			"total": self.total,
+			"remain": self.remain,
+			"level": self.level,
+			"text": _("Còn {0}/{1} tin ngoài khung 48h").format(self.remain, self.total),
+		}
+
+
+def usage() -> Usage:
+	"""Số đã dùng, tổng và mức chặn hiện tại."""
+	used, quota = count_used(), total()
+	return Usage(used=used, total=quota, level=level_of(used, quota))
+
+
+def is_admin(user: str | None) -> bool:
+	"""Người dùng có vai trò Omni Admin (được gửi khi quỹ đã dùng >= 95%)."""
+	return bool(user) and ADMIN_ROLE in frappe.get_roles(user)
+
+
+def gate(user: str | None) -> str | None:
+	"""Lý do KHÔNG được tiêu thêm một tin của quỹ (None = được); kiểm 95% / 100%."""
+	info = usage()
+	if info.level == HARD:
+		return _(
+			"Đã hết quỹ {0} tin tư vấn ngoài khung 48 giờ của gói OA. Gửi thêm sẽ bị Zalo tính phí từng tin, "
+			"nên hệ thống không gửi. Hãy đợi khách nhắn trước (tin trong 48 giờ miễn phí) hoặc liên hệ kênh khác."
+		).format(info.total)
+	if info.level == SOFT and not is_admin(user):
+		return _(
+			"Quỹ tin ngoài khung 48 giờ chỉ còn {0}/{1} tin: chỉ Omni Admin được gửi. "
+			"Hãy nhờ quản trị hoặc đợi khách nhắn trước."
+		).format(info.remain, info.total)
+	return None

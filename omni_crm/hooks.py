@@ -171,6 +171,7 @@ scheduler_events = {
 	"cron": {
 		"* * * * *": [
 			"omni_crm.ingest.spool.drain",  # V21-04: chèn lại tin trong hàng dự phòng webhook (kiểm chữ ký, chống trùng)
+			"omni_crm.channels.zalo.phone_request.run_due",  # V3-07: gửi thẻ xin số đã đến hẹn (60 giây sau tin khách)
 		],
 		"*/5 * * * *": [
 			"omni_crm.pipeline.sweeper.requeue_stuck",
@@ -188,9 +189,22 @@ scheduler_events = {
 		"30 1 * * *": ["omni_crm.channels.telephony.registry.reconcile_yesterday"],  # D2-03
 		"0 2 * * *": ["omni_crm.pipeline.sweeper.cleanup_raw_payloads"],  # D1-10
 		"45 17 * * *": ["omni_crm.crm_bridge.care_log.end_of_day_digest"],  # V2-04: phiên chưa ghi kết quả
+		"15 7 * * *": [
+			"omni_crm.channels.zalo.quota_watch.daily"
+		],  # V3-07: đối chiếu quỹ tin ngoài 48 giờ với số Zalo báo, cảnh báo 80%
 		"20 2 * * *": [
 			"omni_crm.prospect.fit.recompute_all_fit"
 		],  # V2-02: ngày tính đổi nên điểm phù hợp đổi
+		# V3-10 Marketing Hub (ADR 0028): CRM tự giữ lịch, mỗi phút đăng bài đến giờ. Khóa riêng "*/1" để không chung
+		# danh sách "* * * * *" (dễ đụng thay đổi của luồng khác khi gộp).
+		"*/1 * * * *": [
+			"omni_crm.marketing.publisher.dispatch.dispatch_due",
+			# K3 (20/11): 10 phút chưa ai trả lời khách đã chuyển -> bot hoạt động lại, báo quản lý. Mỗi phút để không trễ.
+			"omni_crm.script.flows.handoff.check_unanswered",
+		],
+		# V3-10 Prompt 6: mỗi giờ (phút 23) xem đã đủ insights_sync_hours chưa rồi đồng bộ số liệu bài đăng
+		"23 * * * *": ["omni_crm.marketing.insights.sync_due"],
+		"*/15 * * * *": ["omni_crm.script.scheduler.run_due"],  # bot kịch bản v3 (K5): tin hẹn giờ đến hạn
 	},
 	"hourly": [
 		"omni_crm.bot.auto_send.run_breaker_checks",  # D3-05: ngắt mạch Handoff gấp đôi
@@ -199,6 +213,13 @@ scheduler_events = {
 	],
 	# "hourly": ["omni_crm.bot.ai_client.report_budget"],
 }
+
+# Bộ não cải tiến của bot kịch bản (ADR 0034). Khai báo tách khỏi hai khối lớn phía trên và khỏi cuối tệp để
+# không đụng các thay đổi đang dở của luồng khác trong cùng tệp.
+scheduler_events["cron"]["40 1 * * *"] = [
+	"omni_crm.script.brain.review"  # mỗi đêm rà hội thoại hôm qua, ghi đề xuất CHỜ DUYỆT
+]
+
 
 # Fixtures
 # --------
@@ -233,6 +254,16 @@ doc_events = {
 		"on_update": "omni_crm.crm_bridge.lead.track_manual_edits",  # D1-06
 		"on_trash": "omni_crm.crm_bridge.care_log.delete_for_lead",  # V2-04: nhật ký chăm sóc đi theo Lead
 	},
+}
+# K3 (bot kịch bản v3): nhân viên sửa trường "Hành trình bot" trên Lead. Nối ngoài dict để không đụng dòng on_update ở trên.
+doc_events["CRM Lead"]["on_update"] = [
+	doc_events["CRM Lead"]["on_update"],
+	"omni_crm.script.lead_ui.on_lead_fields_changed",
+]
+# Bộ não cải tiến (ADR 0034): kịch bản đổi thì cập nhật tài liệu kịch bản trong Kho tri thức.
+doc_events["Omni Script Node"] = {
+	"on_update": "omni_crm.script.brain.on_node_change",  # kịch bản đổi -> cập nhật tài liệu trong Kho tri thức
+	"on_trash": "omni_crm.script.brain.on_node_change",
 }
 fixtures = [
 	{"dt": "Role", "filters": [["name", "in", ["Omni Admin", "Omni Knowledge Editor"]]]},
@@ -321,3 +352,27 @@ fixtures = [
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
+
+# >>> ADR 0033 kho anh S3 (MinIO) - them boi them_hooks_minio.py
+# Ảnh và tệp đính kèm công khai của bài marketing lưu trên kho S3: job mỗi giờ đẩy tệp còn trên đĩa, lưu bài hoặc tải
+# tệp đính kèm lên thì đẩy ngay, xóa File thì xóa object,
+# CRM phát ảnh đã chuyển ở /omni-media/. Nối ngoài các dict ở trên để không đụng dòng có sẵn.
+scheduler_events.setdefault("cron", {})["47 * * * *"] = ["omni_crm.marketing.s3_media.push_pending"]
+_s3_old = doc_events.setdefault("Omni Content Item", {}).get("on_change")
+doc_events["Omni Content Item"]["on_change"] = [
+	*([_s3_old] if isinstance(_s3_old, str) else (_s3_old or [])),
+	"omni_crm.marketing.s3_media.on_item_change",
+]
+_s3_old = doc_events.setdefault("File", {}).get("after_delete")
+doc_events["File"]["after_delete"] = [
+	*([_s3_old] if isinstance(_s3_old, str) else (_s3_old or [])),
+	"omni_crm.marketing.s3_media.on_file_delete",
+]
+# Mức 2 (tài liệu 33): tệp đính kèm công khai của bài lên kho S3 ngay khi tải lên
+_s3_old = doc_events["File"].get("after_insert")
+doc_events["File"]["after_insert"] = [
+	*([_s3_old] if isinstance(_s3_old, str) else (_s3_old or [])),
+	"omni_crm.marketing.s3_media.on_file_insert",
+]
+page_renderer = [*globals().get("page_renderer", []), "omni_crm.marketing.s3_media.MediaRenderer"]
+# <<< ADR 0033 kho anh S3 (MinIO)

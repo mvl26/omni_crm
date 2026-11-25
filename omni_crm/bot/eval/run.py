@@ -24,7 +24,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint, get_datetime, now_datetime, nowdate
 
-from omni_crm.bot import ai_client, analyze, knowledge, reply
+from omni_crm.bot import ai_client, analyze, kb_docs, knowledge, reply
 from omni_crm.bot.context import escape_tags, render_turns
 from omni_crm.bot.eval import grading
 from omni_crm.bot.eval.fake import OracleClient
@@ -53,7 +53,11 @@ CATEGORY_NAMES = {
 	"YK": "Y khoa ngoài tài liệu",
 	"GIO": "Ngoài giờ làm việc",
 	"SPAM": "Spam số điện thoại",
+	"DEMO": "Đặt lịch demo",
 }
+# K1: ý phải có / không được có trong câu trả lời, ghi trong expected_fields bằng khóa dành riêng (không phải trường phân tích)
+MUST_KEY = "_phai_co"
+MUST_NOT_KEY = "_khong_duoc_co"
 STOP_ALL = ("Skipped Budget",)
 
 GRADE_TOOL: dict[str, Any] = {
@@ -113,12 +117,17 @@ def load_cases(case_filter: dict | None = None) -> list[dict]:
 	out = []
 	for name in names:
 		doc = frappe.get_doc(CASE, name)
+		fields = _json(doc.expected_fields, {})
+		must = fields.pop(MUST_KEY, []) if isinstance(fields, dict) else []
+		must_not = fields.pop(MUST_NOT_KEY, []) if isinstance(fields, dict) else []
 		out.append(
 			{
 				"case_id": doc.case_id,
 				"source": doc.source,
 				"conversation": _json(doc.conversation, []),
-				"expected_fields": _json(doc.expected_fields, {}),
+				"expected_fields": fields if isinstance(fields, dict) else {},
+				"must_have": [str(x) for x in must or []],
+				"must_not": [str(x) for x in must_not or []],
 				"expected_action": doc.expected_action,
 				"expected_group": doc.expected_group or "",
 				"reference_answer": doc.reference_answer or "",
@@ -266,7 +275,25 @@ def reply_case(
 ) -> dict:
 	"""Bước soạn trả lời + chốt chặn: trả {"decision": {...}, "kb_texts": [...], "allowed": [...]} hoặc {"unmeasured"}."""
 	items, groups = kb["items"], kb["groups"]
-	if not items:  # như bot trả lời thật: kho trống thì chuyển người, không gọi AI
+	prompt = _load("reply")
+	customer_text = _customer_text(turns, after_last_sale=True)
+	use_docs = kb.get("docs", True) and kb_docs.enabled(prompt.version)  # ADR 0030, như bot trả lời thật
+	passages = kb_docs.passages_for(customer_text) if use_docs else []
+	if not items and passages:
+		pass  # chỉ có tài liệu: vẫn gọi AI với các đoạn liên quan
+	elif not items and use_docs and kb_docs.indexed_count():
+		return {
+			"decision": {
+				"action": "Handoff",
+				"flags": ["kb_khong_co_doan_lien_quan"],
+				"text": None,
+				"group": None,
+				"kb_ids": [],
+			},
+			"kb_texts": [],
+			"allowed": [],
+		}
+	elif not items:  # như bot trả lời thật: kho trống thì chuyển người, không gọi AI
 		return {
 			"decision": {
 				"action": "Handoff",
@@ -282,9 +309,16 @@ def reply_case(
 		return {"unmeasured": f"reply: kho {len(items)} mục vượt ngưỡng truy hồi {reply.KB_MAX_ITEMS}"}
 	at = get_datetime(case["conversation"][-1].get("at") or DEFAULT_AT)
 	hours = reply.hours_context(at)
-	prompt = _load("reply")
 	batch_id = f"eval::{tag}::{case['case_id']}"
 	conversation = render_turns(turns, reply.MAX_TURNS, 6000, mask)
+	turn_mode = reply.current_turn_mode(prompt.version)  # K1: như bot trả lời thật
+	content = reply.compose_user_message(
+		conversation, DEFAULT_CHANNEL, None, mask, groups=reply.groups_block(groups)
+	)
+	if turn_mode:
+		content = f"{content}\n{reply.current_turn_block(customer_text, mask)}"
+	if use_docs:
+		content = f"{kb_docs.render(passages)}\n{content}"
 	raw = ai_client.call_tool(
 		"Reply",
 		settings.get("reply_model") or DEFAULT_REPLY_MODEL,
@@ -292,16 +326,18 @@ def reply_case(
 		[
 			{
 				"role": "user",
-				"content": reply.compose_user_message(
-					conversation, DEFAULT_CHANNEL, None, mask, groups=reply.groups_block(groups)
-				),
+				"content": content,
 			}
 		],
 		reply.TOOL,
 		batch_id=batch_id,
 		cache_blocks=[knowledge.render_items(items)],
 		prompt_version=prompt.version,
-		max_tokens=800,
+		max_tokens=reply.REPLY_MAX_TOKENS,
+		check=reply.make_reply_check(items + kb_docs.as_items(passages), [hours["gio_lam_viec_ke_tiep"]])
+		if turn_mode
+		else reply.check_reply_output,
+		repair=True,
 		synthetic=case["source"] == "Synthetic",
 		eval_mode=True,
 	)
@@ -310,19 +346,20 @@ def reply_case(
 		return {"unmeasured": f"reply: {status or 'không có kết quả'} {error}".strip(), "status": status}
 	allowed = [hours["gio_lam_viec_ke_tiep"]]
 	accepted = (analysis or {}).get("accepted") or {}
+	all_items = items + kb_docs.as_items(passages)
 	decision = reply.evaluate(
 		raw,
 		{
-			"items": items,
+			"items": all_items,
 			"group_row": {g.name: g for g in groups},
-			"customer_text": _customer_text(turns, after_last_sale=True),
-			"intent": accepted.get("intent"),
+			"customer_text": customer_text,
+			"intent": None if turn_mode else accepted.get("intent"),
 			"wants_human": bool(accepted.get("wants_human")),
 			"channel_type": DEFAULT_CHANNEL,
 			"allowed_phrases": allowed,
 		},
 	)
-	by_id = {i["id"]: i for i in items}
+	by_id = {i["id"]: i for i in all_items}
 	return {
 		"decision": decision,
 		"kb_texts": [by_id[k]["answer"] for k in decision["kb_ids"] if k in by_id],
@@ -422,9 +459,13 @@ def run_case(
 			kb_ids=decision.get("kb_ids") or [],
 		)
 		verdict = None
+		res["group_correct"] = (
+			None if not case["expected_group"] else (decision.get("group") == case["expected_group"])
+		)
 		if decision["action"] == "Reply":
 			text = decision["text"] or ""
 			res["reply_text"] = text
+			res["content"] = grading.content_check(text, case.get("must_have"), case.get("must_not"))
 			leak = grading.guard_leak(text, out["kb_texts"], out["allowed"])
 			if judge:
 				judged = judge_case(case, turns, text, out["kb_texts"], tag, mask)
@@ -438,6 +479,11 @@ def run_case(
 			res["critical_reasons"] = grading.critical_reasons(case, "Reply", verdict, leak)
 		else:
 			res["critical_reasons"] = grading.critical_reasons(case, "Handoff", None, [])
+	if "reply" in steps:
+		content = res.get("content") or {}
+		res["case_pass"] = bool(
+			res["action_correct"] and res.get("group_correct") is not False and content.get("pass", True)
+		)
 	res["critical_reasons_auto"] = list(res["critical_reasons"])  # trước khi người chấm lại thay đổi
 	res["answer_pass_auto"] = res["answer_pass"]
 	return res

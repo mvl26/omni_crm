@@ -13,12 +13,14 @@ from frappe.utils import cint, get_datetime
 from omni_crm import flags
 from omni_crm.bot import scoring
 from omni_crm.channels.registry import AdapterNotFoundError, get_adapter
+from omni_crm.channels.zalo import media_out
 from omni_crm.crm_bridge import lead as lead_bridge
 from omni_crm.crm_bridge import timeline
 from omni_crm.crm_bridge.timeline import TIMELINE_EVENTS, parse_attachments
 from omni_crm.ingest.events import OutboundRequest
 from omni_crm.pipeline import outbound as outbound_pipeline
 from omni_crm.pipeline.retry import redact
+from omni_crm.utils import media
 
 LEAD = "CRM Lead"
 INBOUND = "Omni Inbound Message"
@@ -31,7 +33,6 @@ THREAD_LIMIT = 300
 SNIPPET_LEN = 120
 PAGE_LENGTH_MAX = 100
 OUT_STATUSES = ("Queued", "Sent")  # tin ra tính là đã trả lời; Failed/Blocked thì chưa
-PHONE_REQUEST_COOLDOWN_DAYS = 7  # docs/06 mục 6
 SAFE_FILE_PREFIXES = ("http://", "https://", "/files/", "/private/files/")
 
 
@@ -71,7 +72,8 @@ def _last_events(leads: list[str]) -> dict[str, dict]:
 	st_marks, st_params = _in_clause(list(OUT_STATUSES))
 	outbound = frappe.db.sql(
 		f"""
-		select m.lead, c.channel_type, m.text, coalesce(m.sent_at, m.creation) as at
+		select m.lead, c.channel_type, m.text, m.attachment_kind, m.attachment_name,
+			coalesce(m.sent_at, m.creation) as at
 		from `tab{OUTBOUND}` m
 		left join `tabOmni Channel` c on c.name = m.channel
 		join (
@@ -95,7 +97,13 @@ def _last_events(leads: list[str]) -> dict[str, dict]:
 		}
 		for r in inbound
 	] + [
-		{"lead": r.lead, "direction": "out", "channel_type": r.channel_type, "text": r.text, "at": r.at}
+		{
+			"lead": r.lead,
+			"direction": "out",
+			"channel_type": r.channel_type,
+			"text": media_out.display_text(r.text, r.attachment_kind, r.attachment_name),
+			"at": r.at,
+		}
 		for r in outbound
 	]
 	for c in candidates:
@@ -271,12 +279,40 @@ def list_conversations(filters: dict | str | None = None, page: int = 1, page_le
 
 
 def _safe_attachments(raw: Any) -> list[dict]:
+	"""Đính kèm đã lọc URL: {url, name} (+ type, thumb, inline nếu có). `inline` = được vẽ thành ảnh (ADR 0020)."""
 	out = []
 	for a in parse_attachments(raw):
 		url = str(a.get("url") or "")
-		if url.startswith(SAFE_FILE_PREFIXES):
-			out.append({"url": url, "name": str(a.get("name") or url.rsplit("/", 1)[-1])})
+		if not media.is_safe_link(url):
+			continue
+		kind = str(a.get("type") or "").strip().lower()[:30]
+		name = str(a.get("name") or "")
+		if not name or name == url:
+			name = (
+				""
+				if kind in media.INLINE_IMAGE_TYPES
+				else media.filename_from_url(url) or url.rsplit("/", 1)[-1]
+			)
+		item = {"url": url, "name": name}
+		if kind:
+			item["type"] = kind
+		thumb = str(a.get("thumb") or "")
+		if thumb and media.is_inline_image_url(thumb):
+			item["thumb"] = thumb
+		if kind in media.INLINE_IMAGE_TYPES and media.is_inline_image_url(url):
+			item["inline"] = True
+		out.append(item)
 	return out
+
+
+def _outbound_attachments(row: Any) -> list[dict]:
+	"""Ảnh/tệp sale gửi kèm (V3-09), qua cùng bộ lọc URL với đính kèm của khách."""
+	if not row.get("attachment"):
+		return []
+	kind = row.get("attachment_kind") or "file"
+	return _safe_attachments(
+		[{"url": row.attachment, "name": row.get("attachment_name") or "", "type": kind}]
+	)
 
 
 def check_lead_access(lead: str) -> None:
@@ -290,11 +326,16 @@ def check_lead_access(lead: str) -> None:
 @frappe.whitelist()
 def get_thread(lead: str) -> dict:
 	"""Toàn bộ hội thoại của Lead trên mọi kênh, theo thời gian tăng dần (không kèm payload gốc)."""
+	check_lead_access(lead)
+	return thread_data(lead)
+
+
+def thread_data(lead: str) -> dict:
+	"""Dữ liệu hội thoại của Lead; người gọi PHẢI đã gọi `check_lead_access` (dùng chung với tab Zalo, V3-01)."""
 	from omni_crm.api import bot_control  # import trễ: drafts.py dùng lại các hàm của module này
 	from omni_crm.api import customer as customer_api
 	from omni_crm.api import drafts as drafts_mod
 
-	check_lead_access(lead)
 	inbound = frappe.get_all(
 		INBOUND,
 		filters={"lead": lead, "event_type": ["in", sorted(TIMELINE_EVENTS)], "status": ["!=", "Ignored"]},
@@ -328,6 +369,9 @@ def get_thread(lead: str) -> dict:
 			"external_message_id",
 			"last_error",
 			"bot_draft",
+			"attachment",
+			"attachment_kind",
+			"attachment_name",
 		],
 		order_by="creation desc",
 		limit_page_length=THREAD_LIMIT,
@@ -339,6 +383,7 @@ def get_thread(lead: str) -> dict:
 		r.name: r.display_name
 		for r in frappe.get_all(IDENTITY, filters={"lead": lead}, fields=["name", "display_name"])
 	}
+	lead_label = frappe.db.get_value(LEAD, lead, "lead_name")
 	call_rows = frappe.get_all(
 		CALL,
 		filters={
@@ -364,8 +409,25 @@ def get_thread(lead: str) -> dict:
 		if r.name in {o.channel for o in outbound}
 	}
 	items: list[dict] = []
+	user_names: dict[
+		str, str
+	] = {}  # tên người dùng theo lượt gọi: bỏ truy vấn User lặp lại cho mỗi tin/cuộc gọi
+	# K1: echo của tin gửi TỪ CRM (Outbound đã có trước, sent_at là lúc hệ thống gửi) thì hiện bản Outbound kèm tên người gửi
+	# và bỏ echo. Outbound do chính echo tạo ra (nhân viên gõ trên công cụ OA, chatbot Zalo) có sent_at = thời điểm echo.
+	echo_at = {
+		m.external_message_id: m.received_at
+		for m in inbound
+		if m.event_type == "oa_echo" and m.external_message_id
+	}
+	crm_sent = {
+		o.external_message_id
+		for o in outbound
+		if o.external_message_id in echo_at and o.sent_at and o.sent_at != echo_at[o.external_message_id]
+	}
 	for m in inbound:
 		echo = m.event_type == "oa_echo"
+		if echo and m.external_message_id in crm_sent:
+			continue
 		items.append(
 			{
 				"name": m.name,
@@ -374,7 +436,10 @@ def get_thread(lead: str) -> dict:
 				"channel_type": m.channel_type,
 				"sender": _("Nhân viên (ngoài hệ thống)")
 				if echo
-				else names.get(m.identity) or m.external_sender_id,
+				else timeline.sender_label(
+					names.get(m.identity), lead_label, m.channel_type, m.external_sender_id
+				),
+				"kind": "echo" if echo else "customer",
 				"text": m.text or "",
 				"attachments": _safe_attachments(m.attachments),
 				"at": m.received_at,
@@ -382,14 +447,14 @@ def get_thread(lead: str) -> dict:
 			}
 		)
 	for c in call_rows:
-		items.append(_call_item(c))
+		items.append(_call_item(c, user_names))
 	# Tin Sale trả lời ngoài hệ thống (oa_echo) có cả Omni Outbound Message cùng mã tin: chỉ hiện bản echo.
-	echo_ids = {m.external_message_id for m in inbound if m.event_type == "oa_echo" and m.external_message_id}
+	echo_ids = set(echo_at) - crm_sent
 	for o in outbound:
 		if o.external_message_id and o.external_message_id in echo_ids:
 			continue
 		if o.sent_by:
-			sender = frappe.db.get_value("User", o.sent_by, "full_name") or o.sent_by
+			sender = _user_full_name(o.sent_by, user_names)
 		else:
 			sender = _("Bot") if o.source == "Bot" else _("Hệ thống")
 		items.append(
@@ -400,13 +465,15 @@ def get_thread(lead: str) -> dict:
 				"channel_type": channel_types.get(o.channel),
 				"sender": sender,
 				"text": o.text or "",
-				"attachments": [],
+				"attachments": _outbound_attachments(o),
 				"at": o.sent_at or o.creation,
 				"status": o.status,
 				"is_sandbox": cint(o.is_sandbox),
 				"error": o.last_error if o.status in ("Failed", "Blocked") else None,
 				"queued": o.status == "Queued",
 				"bot_sent": o.source == "Bot",
+				"source": o.source,
+				"kind": "bot" if o.source == "Bot" else "sale",
 				"bot": bot_meta.get(o.bot_draft) if o.source == "Bot" else None,
 			}
 		)
@@ -462,7 +529,19 @@ def _duration_text(seconds: int | None) -> str:
 	return _("{0} phút {1} giây").format(minutes, secs) if secs else _("{0} phút").format(minutes)
 
 
-def _call_item(c: Any) -> dict:
+def _user_full_name(user: str | None, cache: dict[str, str] | None = None) -> str | None:
+	"""Tên đầy đủ của User (hoặc chính mã nếu trống); `cache` theo lượt gọi để không truy vấn lại cho cùng người."""
+	if not user:
+		return None
+	if cache is not None and user in cache:
+		return cache[user]
+	name = frappe.db.get_value("User", user, "full_name") or user
+	if cache is not None:
+		cache[user] = name
+	return name
+
+
+def _call_item(c: Any, names: dict[str, str] | None = None) -> dict:
 	"""Dòng cuộc gọi trong hội thoại: chiều, trạng thái, thời lượng, người nghe máy (không kèm số, ghi âm, sự kiện gốc)."""
 	inbound = c.direction != "Outbound"
 	labels = {
@@ -475,7 +554,7 @@ def _call_item(c: Any) -> dict:
 	parts = [_("Cuộc gọi đến") if inbound else _("Cuộc gọi đi"), labels.get(c.status, c.status)]
 	if c.status == "Answered" and c.duration_seconds is not None:
 		parts.append(_duration_text(c.duration_seconds))
-	agent = frappe.db.get_value("User", c.agent, "full_name") or c.agent if c.agent else None
+	agent = _user_full_name(c.agent, names)
 	if agent:
 		parts.append((_("Nghe máy: {0}") if inbound else _("Gọi bởi: {0}")).format(agent))
 	return {
@@ -543,24 +622,32 @@ def compose_state(lead: str) -> dict:
 	except AdapterNotFoundError:
 		ok, reason = False, _("Chưa có adapter Zalo")
 	has_phone = _has_phone(lead)
+	from omni_crm.channels.zalo import phone_request
+
+	phone_why = phone_request.ineligible_reason(identity_doc, channel_doc, manual=True)
+	paid = bool(ok and reason)
 	state["zalo"] = {
 		"can_send": bool(ok),
-		"paid": bool(ok and reason),  # được gửi nhưng có thể tính phí: cần xác nhận
+		"paid": paid,  # được gửi nhưng ăn vào quỹ tin ngoài 48 giờ: cần xác nhận
 		"message": reason or "",
-		"can_request_phone": bool(ok and not has_phone and _phone_request_due(identity_doc)),
+		"can_request_phone": bool(ok and not phone_why),
+		"phone_request_reason": phone_why or "",
 		"has_phone": has_phone,
 		"sandbox": bool(flags.sandbox()),
-		"quota": _quota_safe(channel_doc),
+		# V3-09: nút đính kèm ảnh/tệp; công tắc tắt thì chỉ tài khoản Zalo thử nghiệm
+		"can_send_media": bool(ok and media_out.recipient_allowed(identity_doc.get("external_id"))),
+		# V3-07: số tin còn lại của quỹ ngoài 48 giờ CHỈ hiện khi khách đã ngoài 48 giờ (trong khung thì không liên quan)
+		"quota": _quota_safe() if paid else None,
 	}
 	return state
 
 
-def _quota_safe(channel_doc: Any) -> dict | None:
-	"""Số tin ngoài khung 48 giờ tháng này (V21-05); lỗi đếm không được làm hỏng khung soạn tin."""
+def _quota_safe() -> dict | None:
+	"""Quỹ tin ngoài khung 48 giờ của gói OA (V3-07); lỗi đếm không được làm hỏng khung soạn tin."""
 	from omni_crm.channels.zalo import quota
 
 	try:
-		return quota.usage(channel_doc)
+		return quota.usage().as_dict()
 	except Exception:
 		frappe.logger("omni").warning("omni: đếm hạn mức Zalo lỗi", exc_info=True)
 		return None
@@ -575,13 +662,6 @@ def _has_channel(lead: str, channel_type: str) -> bool:
 	return bool(frappe.db.exists(IDENTITY, {"lead": lead, "channel_type": channel_type}))
 
 
-def _phone_request_due(identity_doc: Any) -> bool:
-	last = identity_doc.get("phone_requested_at")
-	return not last or get_datetime(last) < frappe.utils.add_to_date(
-		frappe.utils.now_datetime(), days=-PHONE_REQUEST_COOLDOWN_DAYS
-	)
-
-
 @frappe.whitelist(methods=["POST"])
 def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) -> dict:
 	"""Sale trả lời khách trên kênh Zalo OA từ Hộp thư.
@@ -594,8 +674,16 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 		frappe.throw(_("Email được trả lời bằng trình soạn thư của CRM; hãy mở Lead trong CRM."))
 	if channel != "Zalo OA":
 		frappe.throw(_("Kênh {0} chưa hỗ trợ trả lời từ Hộp thư").format(channel))
+	return send_zalo(lead, text, confirm_paid)
+
+
+def send_zalo(lead: str, text: str, confirm_paid: int | str = 0, attachment: dict | None = None) -> dict:
+	"""Gửi tin Sale qua Zalo OA của Lead (kiểm nội dung, từ chối liên hệ, khung gửi); người gọi PHẢI đã kiểm quyền ghi.
+
+	`attachment` (V3-09): {"file_url", "kind", "name"} đã kiểm thuộc Lead (media_out.attachment_for_lead); có tệp thì chữ được trống.
+	"""
 	text = (text or "").strip()
-	if not text:
+	if not text and not attachment:
 		frappe.throw(_("Nội dung tin nhắn đang trống"))
 	if len(text) > outbound_pipeline.MAX_TEXT_CHARS:
 		frappe.throw(_("Tin nhắn dài quá {0} ký tự").format(outbound_pipeline.MAX_TEXT_CHARS))
@@ -609,7 +697,7 @@ def send_reply(lead: str, channel: str, text: str, confirm_paid: int | str = 0) 
 			_("Người này đã từ chối nhận liên hệ (hoặc đã bị xóa dữ liệu): không gửi tin nhắn từ hệ thống.")
 		)
 	identity_doc, channel_doc = target
-	return queue_zalo_reply(lead, identity_doc, channel_doc, text, confirm_paid)
+	return queue_zalo_reply(lead, identity_doc, channel_doc, text, confirm_paid, attachment=attachment)
 
 
 def queue_zalo_reply(
@@ -619,18 +707,32 @@ def queue_zalo_reply(
 	text: str,
 	confirm_paid: int | str = 0,
 	bot_draft: str | None = None,
+	attachment: dict | None = None,
 ) -> dict:
 	"""Kiểm khung gửi Zalo rồi xếp hàng tin của Sale (dùng chung cho trả lời tay và gửi nháp của bot).
 
 	Trả {"status": "Queued"|"Blocked"|"confirm_required", ...}; `bot_draft` gắn vào tin ra khi gửi từ nháp.
 	"""
+	from omni_crm.channels.zalo import routing
+
 	adapter = get_adapter("Zalo OA")
 	ok, reason = adapter.can_send_now(identity_doc, channel_doc, source="Sale")
 	if not ok:
-		name = _record_blocked(channel_doc, identity_doc, lead, text, reason)
+		name = _record_blocked(channel_doc, identity_doc, lead, text, reason, attachment)
 		return {"status": "Blocked", "outbound": name, "reason": reason}
-	if reason and not cint(confirm_paid):
-		return {"status": "confirm_required", "warning": reason}
+	try:  # V3-07: ngoài 48 giờ thì NGƯỜI quyết định tiêu quỹ, máy không tự hạ loại tin
+		route = routing.pick_message_kind(
+			identity_doc,
+			"reply",
+			channel_doc=channel_doc,
+			confirmed=bool(cint(confirm_paid)),
+			user=frappe.session.user,
+		)
+	except routing.NeedsApproval as e:
+		return {"status": "confirm_required", "warning": e.message_vi, "quota": _quota_safe()}
+	except routing.RoutingError as e:
+		name = _record_blocked(channel_doc, identity_doc, lead, text, e.message_vi, attachment)
+		return {"status": "Blocked", "outbound": name, "reason": e.message_vi}
 	name = outbound_pipeline.queue_outbound(
 		OutboundRequest(
 			channel=channel_doc.name,
@@ -639,6 +741,8 @@ def queue_zalo_reply(
 			reply_to_external_id=None,
 			source="Sale",
 			bot_draft=bot_draft,
+			route=route,
+			attachment=attachment,
 		),
 		user=frappe.session.user,
 		confirmed_paid=bool(cint(confirm_paid)),
@@ -647,9 +751,12 @@ def queue_zalo_reply(
 	return {"status": "Queued", "outbound": name, "warning": reason or ""}
 
 
-def _record_blocked(channel_doc: Any, identity_doc: Any, lead: str, text: str, reason: str) -> str:
+def _record_blocked(
+	channel_doc: Any, identity_doc: Any, lead: str, text: str, reason: str, attachment: dict | None = None
+) -> str:
 	doc = frappe.get_doc(
 		{
+			**outbound_pipeline._attachment_fields(attachment),
 			"doctype": OUTBOUND,
 			"channel": channel_doc.name,
 			"identity": identity_doc.name,
@@ -669,70 +776,21 @@ def _record_blocked(channel_doc: Any, identity_doc: Any, lead: str, text: str, r
 
 @frappe.whitelist(methods=["POST"])
 def request_phone(lead: str, confirm_paid: int | str = 0) -> dict:
-	"""Gửi tin yêu cầu thông tin (xin SĐT) qua Zalo; chỉ khi Lead chưa có SĐT và 7 ngày chưa xin (khung có phí cần confirm_paid)."""
+	"""Sale bấm gửi thẻ xin số điện thoại qua Zalo (V3-07: chỉ trong 48 giờ, khách chưa có số, chưa xin trong phiên chat).
+
+	`confirm_paid` giữ cho tương thích, không còn tác dụng: thẻ xin số không bao giờ đi bằng quỹ tin ngoài 48 giờ.
+	"""
+	from omni_crm.channels.zalo import phone_request
+
 	lead = check_lead_write(lead)
-	if _has_phone(lead):
-		frappe.throw(_("Lead đã có số điện thoại"))
 	target = _zalo_target(lead)
 	if not target:
 		frappe.throw(_("Khách này chưa có tài khoản Zalo liên kết với Lead"))
 	identity_doc, channel_doc = target
-	ok, reason = get_adapter("Zalo OA").can_send_now(identity_doc, channel_doc, source="Sale")
-	if not ok:
-		frappe.throw(reason)
-	if reason and not cint(confirm_paid):  # khung có phí: giống send_reply, cần sale xác nhận
-		return {"status": "confirm_required", "warning": reason}
-	previous = _reserve_phone_request(
-		identity_doc.name
-	)  # giữ chỗ trước khi gọi API: bấm hai lần không gửi hai tin
-	if previous is False:
-		frappe.throw(_("Đã xin số điện thoại trong {0} ngày qua").format(PHONE_REQUEST_COOLDOWN_DAYS))
-	frappe.db.commit()  # nhả khóa dòng trước khi gọi API ngoài
-	try:
-		message_id, shown = get_adapter("Zalo OA").request_user_info(identity_doc, channel_doc)
-	except Exception as e:
-		frappe.db.set_value(
-			IDENTITY, identity_doc.name, "phone_requested_at", previous, update_modified=False
-		)
-		frappe.db.commit()
-		message = getattr(e, "message_vi", None) or _("Không gửi được yêu cầu, thử lại sau")
-		frappe.logger("omni").warning("omni: xin SĐT lỗi: %s", redact(str(e))[:200])
-		frappe.throw(message)
-	doc = frappe.get_doc(
-		{
-			"doctype": OUTBOUND,
-			"channel": channel_doc.name,
-			"identity": identity_doc.name,
-			"lead": lead,
-			"text": shown,
-			"source": "Sale",
-			"sent_by": frappe.session.user,
-			"status": "Sent",
-			"sent_at": frappe.utils.now_datetime(),
-			"external_message_id": None if flags.sandbox() else message_id,
-			"is_sandbox": 1 if flags.sandbox() else 0,
-		}
-	)
-	doc.insert(ignore_permissions=True)
-	if not flags.sandbox() and message_id:  # echo có thể tới trước khi ta ghi mã tin (Z9)
-		outbound_pipeline.drop_echo_duplicate(doc, message_id)
-	timeline.append_outbound(lead_bridge.get_deal_for_lead(lead) or lead, doc.name)
-	timeline.notify(lead, ["Zalo OA"])
-	return {"status": "Sent", "outbound": doc.name, "sandbox": bool(flags.sandbox())}
-
-
-def _reserve_phone_request(identity: str) -> Any:
-	"""Ghi phone_requested_at = bây giờ dưới khóa dòng; trả giá trị cũ (có thể None) hoặc False nếu chưa đến hạn."""
-	last = frappe.db.get_value(IDENTITY, identity, "phone_requested_at", for_update=True)
-	if last and get_datetime(last) >= frappe.utils.add_to_date(
-		frappe.utils.now_datetime(), days=-PHONE_REQUEST_COOLDOWN_DAYS
-	):
-		frappe.db.rollback()
-		return False
-	frappe.db.set_value(
-		IDENTITY, identity, "phone_requested_at", frappe.utils.now_datetime(), update_modified=False
-	)
-	return last
+	why = phone_request.ineligible_reason(identity_doc, channel_doc, manual=True)
+	if why:
+		frappe.throw(why)
+	return phone_request.send(identity_doc, channel_doc, source="Sale", user=frappe.session.user)
 
 
 STATUS_CACHE_KEY = "omni:system_status"

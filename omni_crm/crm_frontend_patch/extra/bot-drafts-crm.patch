@@ -1,0 +1,274 @@
+diff --git a/frontend/src/components/Activities/BotDrafts.vue b/frontend/src/components/Activities/BotDrafts.vue
+new file mode 100644
+index 0000000..31adb29
+--- /dev/null
++++ b/frontend/src/components/Activities/BotDrafts.vue
+@@ -0,0 +1,243 @@
++<template>
++  <!-- V3-13: nháp của bot chờ sale duyệt, ngay trong tab Zalo của Lead (thay Hộp thư Desk). Luôn ghi rõ "chưa gửi". -->
++  <div v-if="drafts.length || rating" class="border-t px-3 py-2 sm:px-10">
++    <div
++      v-for="d in drafts"
++      :key="d.name"
++      class="mb-2 rounded-lg border px-3 py-2"
++      :class="
++        d.action === 'Handoff' && !d.template
++          ? 'border-amber-300 bg-amber-50'
++          : 'border-blue-200 bg-blue-50'
++      "
++    >
++      <div class="mb-1 flex flex-wrap items-center gap-x-2 text-xs text-ink-gray-6">
++        <span class="font-semibold text-ink-gray-9">{{
++          __('Nháp của bot — chưa gửi')
++        }}</span>
++        <span v-if="d.question_group">{{
++          __('Nhóm: {0}', [d.question_group])
++        }}</span>
++      </div>
++      <div
++        v-if="d.action === 'Handoff'"
++        class="mb-1 text-sm text-ink-gray-8"
++      >
++        <b>{{
++          d.template
++            ? __('Bot chuyển người, có mẫu tin để điền')
++            : __('Bot đề nghị chuyển người')
++        }}</b
++        >: {{ d.handoff_reason || '' }}
++      </div>
++      <template v-if="d.text">
++        <Textarea
++          v-if="editing === d.name"
++          v-model="editText"
++          :rows="5"
++          class="w-full"
++        />
++        <div
++          v-else
++          class="whitespace-pre-wrap break-words text-base text-ink-gray-9"
++        >
++          {{ d.text }}
++        </div>
++      </template>
++      <div v-if="d.kb && d.kb.length" class="mt-1 text-xs text-ink-gray-6">
++        {{ __('Nguồn') }}:
++        <a
++          v-for="k in d.kb"
++          :key="k.id"
++          href="#"
++          class="mr-2 text-ink-blue-3 underline"
++          :title="k.question"
++          @click.prevent="showSource(d.name, k.id)"
++          >{{ k.question || k.id }}</a
++        >
++      </div>
++      <div
++        v-if="source && source.draft === d.name"
++        class="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-white px-2 py-1 text-xs text-ink-gray-8"
++      >
++        <b>{{ source.title }}</b>
++        <div>{{ source.answer }}</div>
++      </div>
++      <div class="mt-2 flex flex-wrap items-center gap-2">
++        <template v-if="d.can_send && editing === d.name">
++          <Button
++            variant="solid"
++            size="sm"
++            :label="__('Gửi bản đã sửa')"
++            :loading="busy"
++            @click="send(d, editText)"
++          />
++          <Button size="sm" :label="__('Hủy sửa')" @click="editing = null" />
++        </template>
++        <template v-else-if="d.can_send">
++          <Button
++            v-if="!d.template"
++            variant="solid"
++            size="sm"
++            :label="__('Gửi')"
++            :loading="busy"
++            @click="send(d, null)"
++          />
++          <Button
++            :variant="d.template ? 'solid' : 'subtle'"
++            size="sm"
++            :label="d.template ? __('Điền rồi gửi') : __('Sửa rồi gửi')"
++            @click="startEdit(d)"
++          />
++        </template>
++        <Button
++          v-if="d.can_decide && editing !== d.name"
++          size="sm"
++          :label="__('Bỏ')"
++          :disabled="busy"
++          @click="discard(d)"
++        />
++        <span
++          v-if="d.can_decide && !d.can_send && d.text"
++          class="text-xs text-ink-gray-5"
++          >{{ __('Kênh này không gửi được từ đây; hãy chép nội dung') }}</span
++        >
++      </div>
++    </div>
++    <div
++      v-if="rating"
++      class="mb-1 flex flex-wrap items-center gap-2 text-sm text-ink-gray-7"
++    >
++      <span>{{ __('Nháp vừa rồi:') }}</span>
++      <Button
++        v-for="r in ['Đúng', 'Sai', 'Thiếu']"
++        :key="r"
++        size="sm"
++        :label="__(r)"
++        @click="rate(r)"
++      />
++      <a href="#" class="text-xs text-ink-gray-5" @click.prevent="rating = null">{{
++        __('Bỏ qua')
++      }}</a>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import { ref } from 'vue'
++import { Button, Textarea, call, toast } from 'frappe-ui'
++
++// Mọi kiểm tra (quyền theo Lead, chỉ Zalo OA, mẫu còn [...] thì chặn, khung 48 giờ) nằm ở máy chủ: omni_crm.api.drafts.
++defineProps({
++  drafts: { type: Array, default: () => [] },
++})
++const emit = defineEmits(['changed'])
++
++const editing = ref(null)
++const editText = ref('')
++const busy = ref(false)
++const rating = ref(null) // tên nháp vừa gửi/bỏ, chờ sale chấm
++const source = ref(null)
++
++const PLACEHOLDER = /\[[^\]]*\]/
++
++function errorText(error, fallback) {
++  return error?.messages?.[0] || error?.message || fallback
++}
++
++function startEdit(d) {
++  editing.value = d.name
++  editText.value = d.text || ''
++}
++
++async function send(d, text) {
++  if (busy.value) return
++  if (text !== null && !String(text).trim()) {
++    toast.error(__('Nội dung tin nhắn đang trống'))
++    return
++  }
++  if (d.template && PLACEHOLDER.test(text ?? d.text ?? '')) {
++    toast.error(__('Mẫu tin còn chỗ trống [...] chưa điền'))
++    return
++  }
++  busy.value = true
++  try {
++    const args = (confirmPaid) =>
++      Object.assign(
++        { draft: d.name, confirm_paid: confirmPaid },
++        text === null ? {} : { text },
++      )
++    let res = await call('omni_crm.api.drafts.send_draft', args(0))
++    if (res?.status === 'confirm_required') {
++      if (!window.confirm(`${res.warning}\n\n${__('Bạn vẫn muốn gửi?')}`)) return
++      res = await call('omni_crm.api.drafts.send_draft', args(1))
++    }
++    if (res?.status === 'Blocked') {
++      toast.error(res.reason || __('Tin bị chặn, chưa gửi'))
++    } else if (res?.status === 'Queued') {
++      editing.value = null
++      rating.value = d.name
++      toast.success(__('Đã gửi'))
++    }
++  } catch (error) {
++    toast.error(errorText(error, __('Không gửi được nháp')))
++  } finally {
++    busy.value = false
++    emit('changed')
++  }
++}
++
++async function discard(d) {
++  if (busy.value) return
++  busy.value = true
++  try {
++    await call('omni_crm.api.drafts.discard_draft', { draft: d.name })
++    editing.value = null
++    rating.value = d.name
++  } catch (error) {
++    toast.error(errorText(error, __('Không bỏ được nháp')))
++  } finally {
++    busy.value = false
++    emit('changed')
++  }
++}
++
++async function rate(value) {
++  const draft = rating.value
++  rating.value = null
++  try {
++    const res = await call('omni_crm.api.drafts.rate_draft', {
++      draft,
++      rating: value,
++    })
++    toast.success(
++      res?.auto_disabled
++        ? __('Đã ghi nhận. Nhóm này đã tự tắt tự động gửi.')
++        : __('Đã ghi nhận, cảm ơn'),
++    )
++  } catch (error) {
++    toast.error(errorText(error, __('Không ghi được đánh giá')))
++  }
++}
++
++async function showSource(draft, item) {
++  if (source.value?.draft === draft && source.value?.id === item) {
++    source.value = null
++    return
++  }
++  try {
++    const k = await call('omni_crm.api.drafts.get_draft_kb_item', {
++      draft,
++      item,
++    })
++    source.value = {
++      draft,
++      id: item,
++      title: k.question || k.id,
++      answer: k.answer || '',
++    }
++  } catch (error) {
++    toast.error(errorText(error, __('Không xem được nguồn')))
++  }
++}
++</script>
+diff --git a/frontend/src/components/Activities/ZaloTab.vue b/frontend/src/components/Activities/ZaloTab.vue
+index f6ebfd9..3c533ef 100644
+--- a/frontend/src/components/Activities/ZaloTab.vue
++++ b/frontend/src/components/Activities/ZaloTab.vue
+@@ -137,6 +137,12 @@
+       </template>
+     </div>
+ 
++    <!-- V3-13: nháp của bot chờ duyệt (Gửi / Sửa rồi gửi / Điền rồi gửi / Bỏ), xem omni_crm.api.drafts -->
++    <BotDrafts
++      :drafts="conversation.data?.drafts || []"
++      @changed="conversation.reload()"
++    />
++
+     <div
+       v-if="contact"
+       class="border-t px-3 py-2 text-sm text-ink-gray-7 sm:px-10"
+@@ -305,6 +311,7 @@ import {
+   toast,
+ } from 'frappe-ui'
+ import { globalStore } from '@/stores/global'
++import BotDrafts from '@/components/Activities/BotDrafts.vue'
+ import {
+   POLL_MS,
+   ZALO_EVENT,

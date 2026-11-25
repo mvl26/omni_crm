@@ -1,0 +1,519 @@
+"""Bot trả lời mượt hơn (thử thật 19/11): gõ gần đúng lựa chọn, không đẩy về menu giữa chừng, chào lại khách cũ,
+nêu dịch vụ kèm "đặt lịch demo" thì vào thẳng đặt demo."""
+
+from unittest import mock
+
+from frappe.tests.utils import FrappeTestCase
+
+from omni_crm.script import classify as cl
+from omni_crm.script import router
+from omni_crm.script.flows import demo, menu
+from omni_crm.tests.test_k2_flow import FlowCase
+
+MODE = [["Online qua Teams", "DEMO_HT_ONLINE"], ["Gặp trực tiếp", "DEMO_HT_TRUCTIEP"]]
+MAIN = [
+	["Cung ứng vật tư", "MENU_VATTU"],
+	["Phần mềm quản lý", "MENU_PHANMEM"],
+	["Hệ thống SPD", "MENU_SPD"],
+	["Khác", "MENU_KHAC"],
+	["Gặp nhân viên", "GAP_NHANVIEN"],
+]
+
+
+class TestLooseChoice(FrappeTestCase):
+	def test_partial_label_and_sentence(self):
+		for text in ("online", "Online", "anh muốn demo online", "cho anh online nhé", "truc tiep"):
+			with self.subTest(text=text):
+				want = "DEMO_HT_TRUCTIEP" if "truc" in text else "DEMO_HT_ONLINE"
+				self.assertEqual(router._loose_choice(text.lower(), MODE), want)
+
+	def test_not_guessed(self):
+		cases = [
+			("không online được", MODE),  # phủ định
+			("online hay trực tiếp", MODE),  # trúng hai lựa chọn
+			("online thế nào", MODE),  # câu hỏi
+			("online?", MODE),
+			("báo giá phần mềm bên em", [["Xin báo giá", "BAOGIA_SPD"], ["Đặt lịch demo", "DEMO_SPD"]]),  # 2 từ lạ
+			("anh đang cần tìm hiểu thêm về hệ thống spd của bên em", MAIN),  # câu dài
+			("xin chào", MAIN),
+		]
+		for text, items in cases:
+			with self.subTest(text=text):
+				self.assertIsNone(router._loose_choice(text, items))
+
+	def test_typed_choice_skips_when_free_text_expected_or_unnumbered(self):
+		st = {"script_state": {"choices": {"numbered": True, "items": MODE}, "field": "items"}}
+		self.assertIsNone(router.typed_choice("online", st))
+		st = {"script_state": {"choices": {"numbered": False, "items": MODE}}}
+		self.assertIsNone(router.typed_choice("online", st))
+
+	def test_greeting_only(self):
+		for text in ("Alo em ơi", "hi", "Chào shop ạ", "alo alo"):
+			self.assertTrue(cl.is_greeting_only(text), text)
+		for text in ("alo cho anh báo giá", "anh muốn demo", "", "👍", "a", "dạ"):
+			self.assertFalse(cl.is_greeting_only(text), text)
+
+
+class TestSmoothFlow(FlowCase):
+	def setUp(self):
+		super().setUp()
+		self.set_switch(enabled=0, tests=self.ident1)  # ô demo "Cần duyệt" chỉ gửi cho danh sách thử
+		p = mock.patch.object(demo, "demo_user", return_value=None)
+		p.start()
+		self.addCleanup(p.stop)
+
+	def test_returning_customer_greeting_gets_hello_and_menu(self):
+		self.greeted()
+		self.turn("Alo em ơi")
+		self.assertEqual(self.sent(), ["MENU_CHINH"])
+		text = self.texts()[-1]
+		self.assertIn("Miyano chào anh/chị", text)
+		self.assertNotIn("chưa rõ ý", text)
+
+	def test_unclear_inside_a_question_repeats_that_question(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.turn("ờ thì cái kia kìa")
+		self.assertEqual(self.sent()[-1], "MENU_SPD")
+		again = [t for t in self.texts() if "chưa rõ lựa chọn" in t]
+		self.assertEqual(len(again), 1)
+		self.assertIn("Đặt lịch demo", again[0])
+
+	def test_unclear_at_main_menu_keeps_old_reask(self):
+		self.greeted()
+		self.tap("MENU_CHINH")
+		self.turn("ờ thì cái kia kìa")
+		self.assertEqual(self.sent()[-1], "REASK_CHUARO")
+
+	def test_service_plus_demo_in_one_message_goes_to_demo(self):
+		self.greeted()
+		text = "Anh thấy bảo bên mình có phần mềm spd anh muốn đặt lich demo"
+		self.codes[text] = ("MENU_SPD", 0.9)
+		self.turn(text)
+		self.assertEqual(self.sent(), ["DEMO_HINHTHUC"])
+
+	def test_typed_online_picks_the_format(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")
+		self.assertEqual(self.sent()[-1], "DEMO_HINHTHUC")
+		self.turn("Online")
+		self.classify.assert_not_called()
+		self.assertEqual(self.sstate().get("demo_mode"), "Online qua Teams")
+		self.assertNotIn(self.sent()[-1], ("REASK_CHUARO", "DEMO_HINHTHUC", "MENU_CHINH"))
+
+	def test_typed_time_at_slot_list_is_read_as_a_time(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")
+		self.tap("DEMO_HT_ONLINE")
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+		self.turn("3 giờ chiều ngày thứ 5 tuần sau")
+		self.classify.assert_not_called()
+		self.assertIn(self.sent()[-1], ("DEMO_SONGUOI", "DEMO_GIOBAN"))
+
+	def test_other_text_at_slot_list_still_understood(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")
+		self.tap("DEMO_HT_ONLINE")
+		self.codes["bên em là bot à"] = ("BOT_HOI", 1.0)
+		self.turn("bên em là bot à")
+		self.assertEqual(self.sent()[-2:], ["C3_BOT", "DEMO_KHUNGGIO"])  # đáp xong gửi lại danh sách khung giờ
+
+
+class TestTypedTimeAndAck(FrappeTestCase):
+	def test_parse_customer_phrase(self):
+		from datetime import datetime
+
+		now = datetime(2026, 11, 19, 14, 35)  # thứ Năm
+		self.assertEqual(demo.parse_time("3 giờ chiều ngày thứ 5 tuần sau", now), datetime(2026, 11, 26, 15, 0))
+
+	def test_question_is_not_confirmed_as_information(self):
+		from omni_crm.script.flows import collect
+
+		self.assertEqual(collect.ack_value("Bên mình có thể giao sớm nhất vào khi nào"), "")
+		self.assertEqual(collect.ack_value("trong tuần sau"), "trong tuần sau")
+
+	def test_ack_only(self):
+		for text in ("ok", "Oki em", "vâng ạ", "cảm ơn em nhé", "được rồi", "Thanks", "dạ", "ừ", "Đúng rồi em"):
+			self.assertTrue(cl.is_ack_only(text), text)
+		for text in ("ok gửi anh báo giá", "không cảm ơn", "a", "em", "đừng", ""):
+			self.assertFalse(cl.is_ack_only(text), text)
+
+
+class TestAckFlow(FlowCase):
+	def test_ok_after_a_closed_step_gets_a_short_reply(self):
+		self.greeted()
+		self.tap("KHONG_CAMON")
+		self.turn("Oki")
+		self.classify.assert_not_called()
+		self.assertEqual(self.sent()[-1], "DA_VANG")
+
+	def test_ok_at_a_menu_gets_a_short_reply_not_the_whole_menu_again(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.turn("ok em")
+		self.assertEqual(self.sent(), ["MENU_SPD", "DA_VANG"])
+
+	def test_ok_means_yes_when_the_question_has_a_yes_button(self):
+		self.greeted()
+		self.tap("MENU_PHANMEM")
+		self.tap("BAOGIA_PHANMEM")
+		before = len(self.sent())
+		self.turn("ok em")
+		after = self.sent()[before:]
+		self.assertTrue(after and after[-1] not in ("DA_VANG", "REASK_CHUARO", "BAOGIA_PHANMEM"), after)
+
+
+class TestBatchB(FlowCase):
+	def setUp(self):
+		super().setUp()
+		self.set_switch(enabled=0, tests=self.ident1)
+		p = mock.patch.object(demo, "demo_user", return_value=None)
+		p.start()
+		self.addCleanup(p.stop)
+
+	def _to_slots(self):
+		self.greeted()
+		for code in ("MENU_SPD", "DEMO_SPD", "DEMO_HT_ONLINE"):
+			self.tap(code)
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+
+	def test_polite_decline_is_not_do_not_contact(self):
+		import frappe
+
+		self.greeted()
+		self.turn("thôi không cần đâu em")
+		self.assertEqual(self.sent(), ["KHONG_CAMON"])
+		self.assertFalse(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"))
+
+	def test_slot_list_is_numbered_and_number_picks_a_slot(self):
+		self._to_slots()
+		listed = [t for t in self.texts() if "đề xuất các khung giờ" in t][0]
+		self.assertIn("\n1. ", listed)
+		self.turn("2")
+		self.assertEqual(self.sent()[-1], "DEMO_SONGUOI")
+		self.assertEqual(self.sstate()["demo_at"], self.sstate()["demo_slots"][1])
+
+	def test_ordinal_words_pick_a_slot(self):
+		self._to_slots()
+		self.turn("khung đầu tiên")
+		self.assertEqual(self.sstate().get("demo_at"), self.sstate()["demo_slots"][0])
+
+	def test_day_without_time_asks_for_the_time(self):
+		self._to_slots()
+		self.turn("sáng thứ hai tuần sau")
+		self.assertEqual(self.sent()[-1], "DEMO_GIOKHAC_LAI")
+		self.assertEqual(self.sstate().get("demo_wait"), "time")
+
+	def test_greeting_at_slot_list_resends_slots(self):
+		self._to_slots()
+		self.turn("alo em")
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+
+	def test_weekend_is_not_called_fully_booked(self):
+		self._to_slots()
+		self.tap("DEMO_GIOKHAC")
+		self.turn("thứ bảy tuần sau 9h")
+		self.assertEqual(self.sent()[-1], "DEMO_NGOAIGIO")
+
+	def test_delete_data_request_is_acknowledged(self):
+		self.greeted()
+		self.codes["xóa dữ liệu của tôi đi"] = ("XOA_DULIEU", 1.0)
+		self.turn("xóa dữ liệu của tôi đi")
+		self.assertIn("C4_XOADULIEU_GHINHAN", self.sent())
+
+
+class TestBatchC(FrappeTestCase):
+	def test_attendee_count(self):
+		cases = {"20": 20, "khoảng 20 người": 20, "hai mươi người": 20, "mười lăm": 15, "ba người": 3,
+			"anh và 2 đồng nghiệp": 3, "chưa biết": None, "asdf": None, "0": None}
+		for text, want in cases.items():
+			self.assertEqual(demo.attendee_count(text), want, text)
+
+	def test_only_extras(self):
+		from omni_crm.script.flows import collect
+
+		self.assertTrue(collect._only_extras("anh cần 100 hộp", {"quantity": "100 hộp"}))
+		self.assertFalse(collect._only_extras("Bơm 5ml g23 10 hộp", {"quantity": "10 hộp"}))
+
+	def test_ack_drops_question_tail(self):
+		from omni_crm.script.flows import collect
+
+		self.assertEqual(collect.ack_value("Thứ 3 tuần sau được k em"), "Thứ 3 tuần sau")
+		self.assertEqual(collect.ack_value("găng tay nitrile nhé em"), "găng tay nitrile")
+		self.assertEqual(collect.ack_value("30 cái"), "30 cái")
+		self.assertEqual(collect.ack_value("được không em"), "")
+
+	def test_sticker_placeholder_is_not_text(self):
+		for raw in ("[Sticker]", "[sticker]", "[Hình ảnh]", "[GIF]"):
+			self.assertTrue(router.NON_TEXT.match(raw), raw)
+		for raw in ("[1] găng tay", "Alo em", "[ghi chú] cần gấp"):
+			self.assertFalse(router.NON_TEXT.match(raw), raw)
+
+
+class TestStickerWithGreeting(FlowCase):
+	def test_alo_plus_sticker_is_a_greeting(self):
+		self.greeted()
+		self.turn("Alo em", "[Sticker]")
+		self.assertEqual(self.sent(), ["MENU_CHINH"])
+
+
+class TestDeliveryNote(FlowCase):
+	def test_need_by_with_question_gets_staff_will_confirm(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self.codes["găng tay nitrile"] = ("MENU_VATTU", 0.9)
+		self.turn("găng tay nitrile")
+		self.turn("100 hộp")
+		self.assertEqual(self.sent()[-1], "BG_VT_THOIGIAN")
+		self.turn("Thứ 3 tuần sau được không")
+		self.classify.assert_called_once()  # chỉ lượt "găng tay nitrile" hỏi AI; câu thời gian kèm lời hỏi thì không
+		self.assertEqual(self.sent()[-1], "BG_VT_THAYTHE")
+		self.reset()
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self.turn("găng tay nitrile")
+		self.turn("100 hộp")
+		self.turn("Thứ 3 tuần sau được k em")
+		last = [t for t in self.texts() if "hãng" in t.lower() and "xác nhận thông tin" in t]
+		self.assertEqual(len(last), 1, self.texts())
+		self.assertIn("thời gian cần hàng Thứ 3 tuần sau.", last[0])
+		self.assertIn("Nhân viên Miyano sẽ xác nhận thời gian giao hàng khi gửi báo giá ạ.", last[0])
+		self.assertNotIn("được k em", last[0])
+
+	def test_plain_need_by_has_no_note(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self.codes["găng tay nitrile"] = ("MENU_VATTU", 0.9)
+		self.turn("găng tay nitrile")
+		self.turn("100 hộp")
+		self.turn("trong tuần sau")
+		self.assertFalse([t for t in self.texts() if "xác nhận thời gian giao hàng" in t])
+
+
+class TestLive2011(FlowCase):
+	"""Hội thoại thật 20/11 11:28–11:30."""
+
+	def test_typed_demo_while_in_supplies_asks_which_product(self):
+		self.greeted()
+		self.tap("MENU_VATTU")
+		self.codes["Anh muốn đặt lịch demo"] = ("DEMO", 0.93)
+		self.turn("Anh muốn đặt lịch demo")
+		self.assertEqual(self.sent()[-1], "DEMO_CHONSANPHAM")
+
+	def test_other_intent_is_not_saved_as_the_item(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		text = "Anh muốn demo spd"
+		self.codes[text] = ("DEMO", 0.9)
+		import frappe
+
+		def fake(t, info=None, **kw):
+			frappe.flags[cl.DETAIL_FLAG] = {"code": "DEMO", "confidence": 0.9, "service": "SPD", "slots": {}, "batch_id": kw.get("batch_id")}
+			return "DEMO", 0.9
+
+		self.classify.side_effect = fake
+		self.turn(text)
+		self.assertNotIn("items", self.sstate().get("answers") or {})
+		self.assertEqual(self.sent()[-1], "DEMO_HINHTHUC")
+
+	def test_greeting_while_asked_for_phone_is_not_a_wrong_number(self):
+		from omni_crm.script.flows import handoff
+
+		self.greeted()
+		handoff.ask_phone(self.ident1, {})
+		import frappe
+
+		frappe.db.commit()
+		self.turn("Alo em ơi")
+		self.assertEqual(self.sent()[-1], "GAP_NV_GOIDIEN")
+		self.assertTrue(any("Miyano chào" in t for t in self.texts()))
+		self.assertNotIn("SAI_SDT", self.sent())
+
+	def test_no_staff_pattern(self):
+		from omni_crm.script.flows import handoff
+
+		for text in ("Anh không muốn gặp nhân viên", "thôi không cần nhân viên đâu", "ko cần gặp nv nữa"):
+			self.assertTrue(handoff.NO_STAFF.search(text), text)
+		for text in ("cho anh gặp nhân viên", "nhân viên đâu rồi", "alo"):
+			self.assertFalse(handoff.NO_STAFF.search(text), text)
+
+
+class TestThinking(FlowCase):
+	def setUp(self):
+		super().setUp()
+		import frappe
+
+		old = frappe.conf.get("omni_script_thinking")
+		frappe.conf["omni_script_thinking"] = 1
+		self.addCleanup(lambda: frappe.conf.__setitem__("omni_script_thinking", old))
+
+	def test_typed_message_that_needs_ai_gets_the_wait_line_first(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		text = "bên em triển khai mất bao lâu vậy"
+		self.codes[text] = ("MENU_SPD", 0.9)
+		self.turn(text)
+		self.assertEqual(self.sent()[-2:], ["DANG_SUYNGHI", "MENU_SPD"])
+		self.assertTrue((self.sstate().get("choices") or {}).get("items"))  # câu báo chờ không xoá lựa chọn
+
+	def test_taps_and_rule_hits_do_not_get_the_wait_line(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.turn("menu")
+		self.turn("2")
+		self.turn("Alo em ơi")
+		self.assertNotIn("DANG_SUYNGHI", self.sent())
+
+	def test_switch_off_by_default(self):
+		import frappe
+
+		frappe.conf["omni_script_thinking"] = 0
+		self.greeted()
+		text = "bên em triển khai mất bao lâu vậy"
+		self.codes[text] = ("MENU_SPD", 0.9)
+		self.turn(text)
+		self.assertNotIn("DANG_SUYNGHI", self.sent())
+
+	def test_wait_line_does_not_mark_the_batch_as_answered(self):
+		from omni_crm.script import send
+
+		self.greeted()
+		name = send.send_thinking(self.ident1)
+		self.assertTrue(name)
+		import frappe
+
+		self.assertFalse(frappe.db.get_value("Omni Outbound Message", name, "script_batch"))
+
+
+class TestContextAware(FlowCase):
+	"""AI đọc theo ngữ cảnh (script_classify v3): kết quả AI được giả; kiểm cách bot dùng `relation` / `choice`."""
+
+	def _ai(self, code, relation, choice=0, service="", extra=None, demo_mode="", conf=0.9):
+		import frappe
+
+		def fake(text, info=None, **kw):
+			self.seen = info or {}
+			frappe.flags[cl.DETAIL_FLAG] = {
+				"code": code, "confidence": conf, "service": service, "slots": {}, "relation": relation,
+				"choice": choice, "demo_mode": demo_mode, "extra": extra or {}, "batch_id": kw.get("batch_id"),
+			}
+			return code, conf
+
+		self.classify.side_effect = fake
+
+	def test_ai_gets_history_and_the_pending_question(self):
+		self.greeted()
+		self.tap("MENU_SPD")
+		self._ai("MENU_SPD", "", 0)
+		self.turn("thế bên em triển khai ra sao")
+		asked = self.seen.get(cl.ASKED_KEY) or ""
+		self.assertIn("Đặt lịch demo", asked)
+		self.assertTrue(any(who == "BOT" for who, _t in self.seen.get(cl.HISTORY_KEY) or []))
+		block = cl.conversation_block(self.seen)
+		self.assertIn("<bot_vua_hoi>", block)
+		self.assertIn("<lich_su>", block)
+
+	def test_natural_answer_picks_the_choice(self):
+		self.greeted()
+		for code in ("MENU_SPD", "DEMO_SPD"):
+			self.tap(code)
+		self._ai("DEMO", "TRA_LOI", 2)
+		self.turn("em qua chỗ anh đi")
+		self.assertEqual(self.sstate().get("demo_mode"), "Gặp trực tiếp")
+		self.assertEqual(self.sent()[-1], "DEMO_KHUNGGIO")
+
+	def test_low_confidence_or_out_of_range_choice_is_ignored(self):
+		self.greeted()
+		for code in ("MENU_SPD", "DEMO_SPD"):
+			self.tap(code)
+		self._ai("CHUA_RO", "TRA_LOI", 7)
+		self.turn("ờ thì cái kia")
+		self.assertIsNone(self.sstate().get("demo_mode"))
+
+	def test_other_intent_while_asked_leaves_the_question(self):
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		self._ai("MENU_PHANMEM", "Y_KHAC", 0, service="PHANMEM")
+		self.turn("thôi cho anh xem bên phần mềm đi")
+		self.assertNotIn("items", self.sstate().get("answers") or {})
+		self.assertEqual(self.sent()[-1], "MENU_PHANMEM")
+
+	def test_answer_with_choice_inside_collect_taps_the_button(self):
+		self.greeted()
+		for code in ("MENU_PHANMEM", "BAOGIA_PHANMEM"):
+			self.tap(code)
+		self.assertEqual(self.sent()[-1], "BAOGIA_PHANMEM")
+		self._ai("BAOGIA", "TRA_LOI", 1)
+		self.turn("chuẩn rồi đó em")
+		self.assertEqual(self.sent()[-1], "BG_SC_MATHANG")
+
+	def test_context_fields_are_verbatim_only(self):
+		raw = {"quan_he": "TRA_LOI", "lua_chon": 2, "ngay_gio": "thứ sáu 14h", "so_co_so": "5 cơ sở", "hinh_thuc_demo": "ONLINE"}
+		got = cl.context_fields(raw, "demo online thứ sáu 14h nhé", True)
+		self.assertEqual((got["relation"], got["choice"], got["demo_mode"]), ("TRA_LOI", 2, "ONLINE"))
+		self.assertEqual(got["extra"], {"when": "thứ sáu 14h"})  # "5 cơ sở" không có trong tin khách: bỏ
+		self.assertEqual(cl.context_fields(raw, "x", False)["relation"], "")  # bot không hỏi gì: không có quan hệ
+
+
+class TestLive2011Afternoon(FlowCase):
+	"""Hội thoại thật 20/11 14:28–14:32."""
+
+	def test_ai_guess_of_unsubscribe_never_sets_do_not_contact(self):
+		import frappe
+
+		self.greeted()
+		text = "Anh quên mất là thứ 6 bận"
+		self.codes[text] = ("HUY_DANGKY", 0.6)
+		self.turn(text)
+		self.assertFalse(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"))
+		self.assertNotIn("C4_HUYDANGKY", self.sent())
+		self.assertEqual(self.sent()[-1], "KHONG_CAMON")
+
+	def test_explicit_stop_still_works(self):
+		import frappe
+
+		self.greeted()
+		self.turn("đừng nhắn tin cho tôi nữa")
+		self.assertEqual(frappe.db.get_value("CRM Lead", self.lead1, "omni_do_not_contact"), 1)
+
+	def test_busy_and_move_patterns(self):
+		for text in ("Anh quên mất là thứ 6 bận", "hôm đó anh kẹt rồi", "anh không tham gia được"):
+			self.assertTrue(menu.BUSY.search(text), text)
+		for text in ("Đổi sang thứ 7 nhé", "dời lại tuần sau giúp anh", "hoãn lịch nhé"):
+			self.assertTrue(menu.MOVE_PLAIN.search(text), text)
+		for text in ("bạn ơi cho hỏi", "anh muốn mua bàn mổ", "đổi găng tay thành khẩu trang"):
+			self.assertFalse(menu.BUSY.search(text) or menu.MOVE_PLAIN.search(text), text)
+
+	def test_greeting_after_a_long_gap_does_not_resume_an_old_question(self):
+		import frappe
+		from frappe.utils import add_to_date, now_datetime
+
+		self.greeted()
+		for code in ("MENU_VATTU", "BAOGIA_VATTU"):
+			self.tap(code)
+		frappe.db.set_value("Omni Identity", self.ident1, "script_last_bot_at", add_to_date(now_datetime(), hours=-3), update_modified=False)
+		frappe.db.commit()
+		self.turn("Alo miyano")
+		self.assertEqual(self.sent()[-1], "MENU_CHINH")
+		self.assertFalse(self.sstate().get("field"))
+
+	def test_greeting_days_later_at_a_buttons_question_gets_the_menu(self):
+		# 23/11: "Helo" sau 3 ngày -> bot chào rồi hỏi tiếp "cần hàng vào khoảng thời gian nào" của hôm 20/11
+		import frappe
+		from frappe.utils import add_to_date, now_datetime
+
+		self.greeted()
+		self.tap("MENU_SPD")
+		self.tap("DEMO_SPD")  # đang đứng ở câu hỏi có nút, không có luồng thu thông tin
+		frappe.db.set_value("Omni Identity", self.ident1, "script_last_bot_at", add_to_date(now_datetime(), days=-3), update_modified=False)
+		frappe.db.commit()
+		self.turn("Helo")
+		self.assertEqual(self.sent()[-1], "MENU_CHINH")

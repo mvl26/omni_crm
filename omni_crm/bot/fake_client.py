@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from omni_crm.bot.ai_client import AIError, AIResponse, TransientAIError
+from omni_crm.bot.ai_client import AIError, AIResponse, ChatResponse, TransientAIError
 
 FAULTS = ("429", "500", "529", "timeout", "bad_schema", "fatal")
 CHARS_PER_TOKEN = 4
@@ -74,6 +74,7 @@ class FakeAIClient:
 				"messages": messages,
 				"tool": tool,
 				"cache_blocks": cache_blocks,
+				"max_tokens": max_tokens,
 				"timeout": timeout,
 			}
 		)
@@ -107,4 +108,57 @@ class FakeAIClient:
 			input_tokens=_tokens(in_chars),
 			output_tokens=_tokens(len(json.dumps(result, ensure_ascii=False))),
 			cache_read_tokens=cache_read,
+		)
+
+
+@dataclass
+class ScriptedChatClient:
+	"""Client giả cho trợ lý nội bộ: mỗi lần `converse` trả lượt kế tiếp trong `script` (danh sách khối nội dung).
+
+	Một lượt có thể là chuỗi (một khối text), danh sách khối, hoặc tên lỗi trong FAULTS. Hết kịch bản thì trả một câu
+	text cố định. Ghi lại mọi lời gọi để test kiểm system prompt, tool gửi đi và lịch sử.
+	"""
+
+	script: list = field(default_factory=list)
+	calls: list[dict] = field(default_factory=list)
+	is_real: bool = False
+
+	def converse(
+		self,
+		*,
+		model: str,
+		system: str,
+		messages: list[dict],
+		tools: list[dict],
+		max_tokens: int = 1024,
+		timeout: float = 60,
+		tool_choice: dict | None = None,
+	) -> ChatResponse:
+		"""Mô phỏng một lượt Messages API nhiều tool."""
+		self.calls.append(
+			{
+				"model": model,
+				"system": system,
+				"messages": json.loads(json.dumps(messages, default=str)),
+				"tools": tools,
+				"timeout": timeout,
+				"tool_choice": tool_choice,
+			}
+		)
+		turn = self.script.pop(0) if self.script else "(hết kịch bản)"
+		if turn in FAULTS:
+			if turn == "fatal":
+				raise AIError("HTTP 400 (giả)")
+			raise TransientAIError(f"HTTP {turn} (giả)", status=408 if turn == "timeout" else int(turn))
+		blocks = [{"type": "text", "text": turn}] if isinstance(turn, str) else list(turn)
+		for i, b in enumerate(blocks):
+			if b.get("type") == "tool_use" and not b.get("id"):
+				b["id"] = f"toolu_gia_{len(self.calls)}_{i}"
+		stop = "tool_use" if any(b.get("type") == "tool_use" for b in blocks) else "end_turn"
+		chars = sum(len(json.dumps(m, default=str)) for m in messages) + len(system)
+		return ChatResponse(
+			content=blocks,
+			stop_reason=stop,
+			input_tokens=_tokens(chars),
+			output_tokens=_tokens(len(json.dumps(blocks, ensure_ascii=False))),
 		)

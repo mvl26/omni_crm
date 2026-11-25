@@ -1,0 +1,134 @@
+{
+ "actions": [],
+ "autoname": "AST-.YYYY.-.######",
+ "naming_rule": "Expression (old style)",
+ "creation": "2026-11-06 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "lead",
+  "status",
+  "col_a",
+  "write_count",
+  "turn_count",
+  "last_turn_at",
+  "sec_data",
+  "allowed_leads",
+  "messages",
+  "transcript"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "Người dùng",
+   "read_only": 1,
+   "options": "User",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead đang mở",
+   "read_only": 1,
+   "options": "CRM Lead",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "read_only": 1,
+   "options": "Open\nClosed",
+   "default": "Open",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "write_count",
+   "fieldtype": "Int",
+   "label": "Số thao tác ghi (lượt gần nhất)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "turn_count",
+   "fieldtype": "Int",
+   "label": "Số lượt chat",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_turn_at",
+   "fieldtype": "Datetime",
+   "label": "Lượt gần nhất",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_data",
+   "fieldtype": "Section Break",
+   "label": "Dữ liệu"
+  },
+  {
+   "fieldname": "allowed_leads",
+   "fieldtype": "JSON",
+   "label": "Lead được phép ghi trong phiên",
+   "read_only": 1
+  },
+  {
+   "fieldname": "messages",
+   "fieldtype": "JSON",
+   "label": "Lịch sử hội thoại gửi cho mô hình",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transcript",
+   "fieldtype": "JSON",
+   "label": "Lịch sử hiển thị (câu lệnh, trả lời, thao tác)",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "modified": "2026-11-06 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Assistant Session",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "delete": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "if_owner": 1,
+   "report": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "if_owner": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "description": "Một phiên hội thoại với trợ lý AI nội bộ",
+ "track_changes": 0
+}

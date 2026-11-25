@@ -48,6 +48,8 @@ def counts_as_response(row: Any) -> bool:
 		and row.get("status") == "Sent"
 		and not row.get("is_sandbox")
 		and row.get("source") in COUNTED_SOURCES
+		# V3-07: tin "Bot" không có nháp là kịch bản chatbot Zalo dội về (oa_echo), không phải phản hồi của mình
+		and not (row.get("source") == "Bot" and not row.get("bot_draft"))
 	)
 
 

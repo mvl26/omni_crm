@@ -1,8 +1,10 @@
 """Ghi dòng thời gian của Lead/Deal (ADR 0004: mỗi tin Zalo là một Communication, medium "Chat").
 
-CRM lấy hoạt động của Lead/Deal từ `frappe.desk.form.load.get_docinfo`, trong đó Communication thuộc
-mọi `communication_medium` đều được trả về nếu `reference_doctype`/`reference_name` trỏ tới Lead/Deal. Khóa
-chống ghi trùng là Custom Field `omni_inbound_message` / `omni_outbound_message` trên Communication.
+CRM lấy hoạt động của Lead/Deal từ `frappe.desk.form.load.get_docinfo`, trong đó Communication có `communication_type`
+IN ('Communication', 'Feedback', 'Automated Message') và trỏ tới Lead/Deal đều được trả về (không lọc theo medium).
+Từ V3-02 (ADR 0017) tin Zalo OA ghi với `communication_type = "Chat"` nên KHÔNG hiện ở tab Hoạt động/Email (đã có tab
+Zalo); vẫn là Communication thật (hook CRM cập nhật `communication_status` như cũ). Khóa chống ghi trùng là Custom Field
+`omni_inbound_message` / `omni_outbound_message` trên Communication.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, get_datetime, now_datetime, strip_html_tags
 
+from omni_crm import flags
 from omni_crm.crm_bridge import lead as lead_bridge
 
 LEAD = "CRM Lead"
@@ -22,6 +25,7 @@ INBOUND = "Omni Inbound Message"
 OUTBOUND = "Omni Outbound Message"
 COMMUNICATION = "Communication"
 EMAIL = "Email"
+ZALO = "Zalo OA"
 # Sự kiện có nội dung hội thoại để hiện trên dòng thời gian (follow/unfollow/user_info... không hiện).
 TIMELINE_EVENTS = {"message", "oa_echo", "form_lead"}
 SUBJECT_LEN = 80
@@ -36,6 +40,43 @@ def resolve_target(target: str | None) -> tuple[str, str] | None:
 		return DEAL, target
 	if frappe.db.exists(LEAD, target):
 		return LEAD, target
+	return None
+
+
+def short_external_id(channel_type: str | None, external_id: str | None) -> str:
+	"""Mã rút gọn để làm nhãn dự phòng, ví dụ "Zalo OA …8383"; không bao giờ trả mã dài nguyên vẹn."""
+	tail = "".join(ch for ch in str(external_id or "") if ch.isalnum())[-4:]
+	label = channel_type or _("Khách")
+	return f"{label} …{tail}" if tail else str(label)
+
+
+def sender_label(
+	display_name: str | None,
+	fallback_name: str | None,
+	channel_type: str | None,
+	external_id: str | None,
+) -> str:
+	"""Tên người gửi tin vào: `Omni Identity.display_name`, rồi tên hiển thị của Lead/Deal, cuối cùng mã rút gọn."""
+	for candidate in (display_name, fallback_name):
+		if candidate and str(candidate).strip():
+			return str(candidate).strip()
+	return short_external_id(channel_type, external_id)
+
+
+def target_display_name(target: tuple[str, str] | None) -> str | None:
+	"""Tên hiển thị của Lead/Deal (trường `lead_name`); None nếu không có."""
+	if not target:
+		return None
+	return frappe.db.get_value(target[0], target[1], "lead_name") or None
+
+
+def _identity_display_name(row: Any) -> str | None:
+	"""`display_name` của định danh gửi tin. Worker chỉ ghi `identity` lên tin SAU khi ghi dòng thời gian, nên lần đầu
+	phải tra theo `identity_key`."""
+	if row.identity:
+		return frappe.db.get_value("Omni Identity", row.identity, "display_name")
+	if row.identity_key:
+		return frappe.db.get_value("Omni Identity", {"identity_key": row.identity_key}, "display_name")
 	return None
 
 
@@ -69,11 +110,19 @@ def _subject(channel_type: str, text: str | None) -> str:
 	return f"[{channel_type}] {snippet}".strip()
 
 
-def _insert_communication(values: dict) -> str:
+def communication_type_for(channel_type: str | None) -> str:
+	"""`Communication.communication_type` cho tin của kênh: "Chat" (ẩn khỏi Hoạt động/Email) với Zalo OA, trừ khi bật
+	`Omni Settings.zalo_in_activity_enabled`; kênh khác (form quảng cáo, web form) giữ "Communication"."""
+	if channel_type == ZALO and not flags.zalo_in_activity_enabled():
+		return "Chat"
+	return "Communication"
+
+
+def _insert_communication(values: dict, channel_type: str | None = None) -> str:
 	doc = frappe.get_doc(
 		{
 			"doctype": COMMUNICATION,
-			"communication_type": "Communication",
+			"communication_type": communication_type_for(channel_type),
 			"communication_medium": "Chat",
 			**values,
 		}
@@ -162,11 +211,13 @@ def append(target: str | None, msgs: list[Any]) -> int:
 			"communication",
 			"received_at",
 			"identity",
+			"identity_key",
 			"external_sender_id",
 		],
 		order_by="received_at asc, name asc",
 	)
 	done = 0
+	target_name = target_display_name(tgt)
 	for row in rows:
 		if row.channel_type == EMAIL:
 			done += int(_link_email(tgt, row))
@@ -176,9 +227,12 @@ def append(target: str | None, msgs: list[Any]) -> int:
 		if frappe.db.exists(COMMUNICATION, {"omni_inbound_message": row.name}):
 			continue  # đã ghi ở lượt trước
 		echo = row.event_type == "oa_echo"
-		who = (
-			frappe.db.get_value("Omni Identity", row.identity, "display_name") if row.identity else None
-		) or row.external_sender_id
+		who = sender_label(
+			_identity_display_name(row),
+			target_name,
+			row.channel_type,
+			row.external_sender_id,
+		)
 		_insert_communication(
 			{
 				"sent_or_received": "Sent" if echo else "Received",
@@ -189,7 +243,8 @@ def append(target: str | None, msgs: list[Any]) -> int:
 				"reference_doctype": tgt[0],
 				"reference_name": tgt[1],
 				"omni_inbound_message": row.name,
-			}
+			},
+			row.channel_type,
 		)
 		done += 1
 	return done
@@ -208,11 +263,26 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 	row = frappe.db.get_value(
 		OUTBOUND,
 		name,
-		["name", "channel", "text", "source", "sent_by", "sent_at", "creation", "is_sandbox"],
+		[
+			"name",
+			"channel",
+			"text",
+			"source",
+			"sent_by",
+			"sent_at",
+			"creation",
+			"is_sandbox",
+			"attachment_kind",
+			"attachment_name",
+		],
 		as_dict=True,
 	)
 	if not row:
 		return None
+	if row.attachment_kind:  # V3-09: tin ảnh/tệp hiện nhãn "[Ảnh] tên tệp" thay vì trống
+		from omni_crm.channels.zalo.media_out import display_text
+
+		row.text = display_text(row.text, row.attachment_kind, row.attachment_name)
 	channel_type = frappe.db.get_value("Omni Channel", row.channel, "channel_type") or ""
 	if channel_type == EMAIL:
 		return None
@@ -238,7 +308,8 @@ def append_outbound(target: str | None, outbound: str | Any) -> str | None:
 			"reference_doctype": tgt[0],
 			"reference_name": tgt[1],
 			"omni_outbound_message": row.name,
-		}
+		},
+		channel_type,
 	)
 
 

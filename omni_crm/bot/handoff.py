@@ -144,13 +144,78 @@ def reason_label(guard_flags: str | None, question_group: str | None = None) -> 
 	return _("Bot đề nghị chuyển người")
 
 
+# K1: lý do chuyển người bằng tiếng Việt cho khung nháp (thay mã cờ "Chốt chặn: handoff_topic:..."). Theo tiền tố mã.
+TOPIC_LABELS = {
+	"hoi_gia": "Khách hỏi giá hoặc phí",
+	"hoi_phi": "Khách hỏi giá hoặc phí",
+	"khieu_nai": "Khách phàn nàn, khiếu nại",
+	"phap_ly": "Câu hỏi về pháp lý",
+	"y_khoa": "Câu hỏi chuyên môn y khoa",
+	"dieu_khoan_hop_dong": "Hỏi điều khoản, thương lượng hợp đồng",
+	"gap_nguoi": "Khách muốn gặp nhân viên",
+	"khach_muon_gap_nguoi": "Khách muốn gặp nhân viên",
+	"nhom_luon_chuyen_nguoi": "Nhóm câu hỏi cần nhân viên xử lý",
+	"yeu_cau_de_xuat": "Khách xin đề xuất hoặc hợp đồng mẫu",
+	"dat_hang": "Khách muốn đặt hàng",
+}
+FLAG_LABELS = (
+	("kb_rong", "Kho tri thức chưa có thông tin cho câu hỏi này"),
+	("kb_trong", "Kho tri thức đang trống"),
+	("kb_khong_co_doan_lien_quan", "Kho tri thức chưa có thông tin cho câu hỏi này"),
+	("kb_khong_hop_le", "Bot dẫn nguồn không có trong Kho tri thức"),
+	("tra_loi_rong", "Bot không soạn được câu trả lời"),
+	("ai_khong_tra_ket_qua", "Bot không soạn được câu trả lời (AI lỗi)"),
+	("loi_he_thong", "Bot gặp lỗi khi soạn câu trả lời"),
+	("qua_nhieu_tin", "Khách nhắn nhiều tin liên tiếp"),
+	("qua_dai", "Câu trả lời quá dài"),
+	("so_ngoai_kho", "Câu trả lời có con số không có trong Kho tri thức"),
+	("so_dien_thoai_ngoai_kho", "Câu trả lời có số điện thoại không có trong Kho tri thức"),
+	("email_ngoai_kho", "Câu trả lời có email không có trong Kho tri thức"),
+	("duong_dan_ngoai_kho", "Câu trả lời có đường link không có trong Kho tri thức"),
+	("do_tu_tin", "Bot chưa đủ chắc chắn"),
+	("nghi_chen_lenh", "Tin khách có dấu hiệu điều khiển bot"),
+	("dau_ra_khong_an_toan", "Câu trả lời không an toàn"),
+	("nhom_cau_hoi_khong_ton_tai", "Bot chưa xếp được nhóm câu hỏi"),
+)
+
+
+def flag_label(flag: str) -> str | None:
+	"""Nhãn tiếng Việt của một cờ chốt chặn; None nếu là cờ thông tin (info:...) hoặc không biết."""
+	flag = (flag or "").strip()
+	if not flag or flag.startswith("info:"):
+		return None
+	if flag.startswith("handoff_topic:"):
+		rest = flag.split(":", 1)[1]
+		if rest.startswith("y_dinh_"):
+			rest = rest[len("y_dinh_") :]
+		labels = [TOPIC_LABELS.get(t.strip()) for t in rest.split(",")]
+		return "; ".join(dict.fromkeys(x for x in labels if x)) or "Chủ đề cần nhân viên xử lý"
+	for prefix, label in FLAG_LABELS:
+		if flag.startswith(prefix):
+			return label
+	return None
+
+
+def explain_reason(handoff_reason: str | None, guard_flags: str | None) -> str | None:
+	"""Lý do hiện cho sale: lý do do bot ghi bị thay bằng nhãn tiếng Việt khi nó chỉ là danh sách mã chốt chặn."""
+	reason = (handoff_reason or "").strip()
+	if reason and not reason.startswith("Chốt chặn:") and not reason.startswith(_("Chốt chặn: ")):
+		return reason
+	labels = [flag_label(f) for f in (guard_flags or "").splitlines()]
+	text = "; ".join(_(x) for x in dict.fromkeys(x for x in labels if x))
+	return text or (_("Bot đề nghị chuyển người") if reason or guard_flags else None)
+
+
 def _short_name(lead: str) -> str:
 	name = frappe.db.get_value(LEAD, lead, "lead_name") or lead
 	return " ".join(str(name).split())[:NAME_MAX]
 
 
 def _inbox_link(lead: str) -> str:
-	return f"/app/omni-inbox?lead={lead}"
+	"""Trang Lead trong app CRM (tab Zalo), nơi sale xem và duyệt nháp."""
+	from omni_crm.crm_bridge import notify
+
+	return notify.crm_lead_link(lead)
 
 
 # --- Tạm dừng / tiếp tục --------------------------------------------------------------------------------------
@@ -168,6 +233,22 @@ def pause_lead(lead: str, hours: int | None = None) -> datetime:
 		if current and get_datetime(current) > until:
 			continue
 		frappe.db.set_value(IDENTITY, name, "bot_paused_until", until, update_modified=False)
+	return until
+
+
+SALE_PAUSE_HOURS = 24  # V3-07 brief mục C: sale nhắn khách -> bot phía mình im 24 giờ
+
+
+def pause_identity_for_sale(identity: str) -> datetime:
+	"""Sale vừa gửi tin cho khách (CRM hoặc màn hình Zalo OA): tạm dừng bot của định danh 24 giờ, không rút ngắn hạn đang có.
+
+	Trong thời gian này hệ thống không tự gửi gì cho khách (thẻ xin số, nháp bot). Khách nhắn lại không xóa tạm dừng.
+	"""
+	until = add_to_date(now_datetime(), hours=SALE_PAUSE_HOURS)
+	current = frappe.db.get_value(IDENTITY, identity, "bot_paused_until")
+	if current and get_datetime(current) >= until:
+		return get_datetime(current)
+	frappe.db.set_value(IDENTITY, identity, "bot_paused_until", until, update_modified=False)
 	return until
 
 
@@ -246,7 +327,7 @@ def _notify_system(lead: str, users: list[str], label: str, channel_type: str | 
 	link = _inbox_link(lead)
 	body = (
 		f"{escape_html(label)} · {escape_html(channel_type or '')} · {escape_html(_short_name(lead))}. "
-		f'<a href="{escape_html(link)}">{escape_html(_("Mở Hộp thư"))}</a>'
+		f'<a href="{escape_html(link)}">{escape_html(_("Mở trong CRM"))}</a>'
 	)
 	names = []
 	for user in users:
@@ -266,6 +347,9 @@ def _notify_system(lead: str, users: list[str], label: str, channel_type: str | 
 			frappe.publish_realtime(REALTIME_EVENT, {"lead": lead}, user=user, after_commit=True)
 		except Exception:
 			frappe.log_error(title="Omni: không báo được chuyển người", message=f"lead={lead}")
+	from omni_crm.crm_bridge import notify
+
+	notify.crm_notify(lead, users, f"{subject} · {label}")  # chuông của app CRM
 	return names
 
 
@@ -287,7 +371,7 @@ def _queue_email(lead: str, users: list[str], label: str, channel_type: str | No
 		f"<p>{escape_html(_('Khách'))}: {escape_html(_short_name(lead))}<br>"
 		f"{escape_html(_('Kênh'))}: {escape_html(channel_type or '')}<br>"
 		f"{escape_html(_('Lý do'))}: {escape_html(label)}</p>"
-		f'<p><a href="{escape_html(get_url(_inbox_link(lead)))}">{escape_html(_("Mở Hộp thư"))}</a></p>'
+		f'<p><a href="{escape_html(get_url(_inbox_link(lead)))}">{escape_html(_("Mở trong CRM"))}</a></p>'
 	)
 	sent = 0
 	for user in users:

@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "creation": "2026-11-18 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sec_store",
+  "enabled",
+  "endpoint_url",
+  "bucket",
+  "prefix",
+  "region",
+  "col_store",
+  "access_key",
+  "secret_key",
+  "verify_tls",
+  "ca_bundle"
+ ],
+ "fields": [
+  {
+   "fieldname": "sec_store",
+   "fieldtype": "Section Break",
+   "label": "Kho ảnh S3 (MinIO)",
+   "description": "Ảnh bài marketing (Omni Content Item: ảnh bìa và ảnh thêm) chuyển từ đĩa máy chủ CRM sang MinIO. Hướng dẫn dựng MinIO: tài liệu spd/docs/26. Chỉ Omni Admin và System Manager sửa."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Lưu ảnh bài marketing trên kho S3",
+   "default": "0",
+   "description": "Bật: ảnh mới chuyển sang MinIO ngay khi lưu bài và bị xoá khỏi đĩa; ảnh cũ chuyển dần mỗi giờ (phút 47). Bấm Kiểm kho ảnh S3 trước khi bật. Tắt: ảnh mới ở lại đĩa như cũ, ảnh đã chuyển vẫn đọc từ MinIO."
+  },
+  {
+   "fieldname": "endpoint_url",
+   "fieldtype": "Data",
+   "label": "Endpoint S3",
+   "description": "Ví dụ https://minio.miyano.local:9000 (luôn dùng https trên production)."
+  },
+  {
+   "fieldname": "bucket",
+   "fieldtype": "Data",
+   "label": "Bucket",
+   "default": "crm-media"
+  },
+  {
+   "fieldname": "prefix",
+   "fieldtype": "Data",
+   "label": "Thư mục trong bucket",
+   "default": "omni-content-item/"
+  },
+  {
+   "fieldname": "region",
+   "fieldtype": "Data",
+   "label": "Region",
+   "default": "us-east-1"
+  },
+  {
+   "fieldname": "col_store",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "access_key",
+   "fieldtype": "Data",
+   "label": "Access key",
+   "description": "Tài khoản riêng của CRM trên MinIO (crm-yhct), chỉ có quyền trên bucket này."
+  },
+  {
+   "fieldname": "secret_key",
+   "fieldtype": "Password",
+   "label": "Secret key"
+  },
+  {
+   "fieldname": "verify_tls",
+   "fieldtype": "Check",
+   "label": "Kiểm chứng chỉ TLS",
+   "default": "1",
+   "description": "Luôn bật trên production. MinIO dùng chứng chỉ của CA nội bộ thì điền ô Tệp CA, không tắt ô này."
+  },
+  {
+   "fieldname": "ca_bundle",
+   "fieldtype": "Data",
+   "label": "Tệp CA trên máy chủ CRM (chứng chỉ nội bộ)",
+   "description": "Đường dẫn tệp .crt của CA đã ký chứng chỉ MinIO, ví dụ /etc/ssl/miyano/minio-ca.crt. Để trống khi MinIO dùng chứng chỉ công khai."
+  }
+ ],
+ "issingle": 1,
+ "modified": "2026-11-18 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Omni CRM",
+ "name": "Omni Media Storage",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

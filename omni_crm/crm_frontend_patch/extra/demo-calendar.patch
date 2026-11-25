@@ -1,0 +1,214 @@
+diff --git a/frontend/src/components/Layouts/AppSidebar.vue b/frontend/src/components/Layouts/AppSidebar.vue
+index 40df44b..ce4b03d 100644
+--- a/frontend/src/components/Layouts/AppSidebar.vue
++++ b/frontend/src/components/Layouts/AppSidebar.vue
+@@ -157,6 +157,7 @@ import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
+ import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+ import LucideMegaphone from '~icons/lucide/megaphone'
+ import LucideCalendarDays from '~icons/lucide/calendar-days'
++import LucideCalendarCheck from '~icons/lucide/calendar-check'
+ import LucideChartColumn from '~icons/lucide/chart-column'
+ import LucideBookOpen from '~icons/lucide/book-open'
+ import { canViewMarketing } from '@/composables/marketingHub'
+@@ -264,6 +265,11 @@ const links = [
+     icon: PhoneIcon,
+     to: 'Call Logs',
+   },
++  {
++    label: 'Lịch demo',
++    icon: LucideCalendarCheck,
++    to: 'Demo Calendar',
++  },
+ ]
+ 
+ const allViews = computed(() => {
+diff --git a/frontend/src/pages/DemoCalendar.vue b/frontend/src/pages/DemoCalendar.vue
+new file mode 100644
+index 0000000..6992113
+--- /dev/null
++++ b/frontend/src/pages/DemoCalendar.vue
+@@ -0,0 +1,167 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <div class="text-lg font-medium text-ink-gray-8">Lịch demo</div>
++      </template>
++      <template #right-header>
++        <Button icon="chevron-left" @click="shift(-1)" />
++        <div class="min-w-[110px] text-center text-base font-medium">Tháng {{ month }}/{{ year }}</div>
++        <Button icon="chevron-right" @click="shift(1)" />
++        <Button label="Hôm nay" @click="today" />
++      </template>
++    </LayoutHeader>
++
++    <div class="flex flex-wrap items-center gap-3 px-3 pt-3 text-p-sm text-ink-gray-6 sm:px-5">
++      <span>Tháng này có <b class="text-ink-gray-8">{{ monthCount }}</b> lịch demo.</span>
++      <div class="ml-auto flex flex-wrap items-center gap-3 text-xs">
++        <span class="flex items-center gap-1"><i class="inline-block h-2.5 w-2.5 rounded-sm" :style="{ background: BLUE }"></i>Lịch demo</span>
++        <span class="flex items-center gap-1"><i class="inline-block h-2.5 w-2.5 rounded-sm bg-surface-gray-4"></i>Đã kín (khách của người khác)</span>
++      </div>
++    </div>
++
++    <div class="flex-1 overflow-auto px-3 py-3 sm:px-5">
++      <div class="min-w-[720px]">
++        <div class="grid grid-cols-7 border-b border-outline-gray-2 text-center text-p-sm text-ink-gray-5">
++          <div v-for="w in WEEKDAYS" :key="w" class="py-1">{{ w }}</div>
++        </div>
++        <div class="grid grid-cols-7">
++          <div
++            v-for="cell in cells"
++            :key="cell.key"
++            class="min-h-[110px] border-b border-r border-outline-gray-1 p-1"
++            :class="cell.inMonth ? '' : 'bg-surface-gray-1'"
++          >
++            <div class="mb-1 text-right text-xs" :class="cell.isToday ? 'font-bold text-ink-blue-3' : 'text-ink-gray-5'">
++              {{ cell.day }}
++            </div>
++            <template v-for="e in cell.entries" :key="e.start + (e.lead || '')">
++              <router-link
++                v-if="e.lead"
++                :to="{ name: 'Lead', params: { leadId: e.lead } }"
++                class="mb-1 block truncate rounded px-1 py-0.5 text-xs text-white"
++                :style="{ background: BLUE }"
++                :title="titleOf(e)"
++              >
++                {{ hhmm(e.start) }} · {{ e.title }}
++              </router-link>
++              <div
++                v-else
++                class="mb-1 truncate rounded bg-surface-gray-3 px-1 py-0.5 text-xs text-ink-gray-6"
++                title="Khung này đã có lịch demo của khách khác"
++              >
++                {{ hhmm(e.start) }} · Đã kín
++              </div>
++            </template>
++          </div>
++        </div>
++      </div>
++      <div v-if="cal.loading" class="py-2 text-center text-p-sm text-ink-gray-5">Đang tải…</div>
++      <div v-else-if="cal.error" class="py-2 text-center text-p-sm text-ink-red-4">Không tải được lịch demo.</div>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import { createResource } from 'frappe-ui'
++import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
++
++const METHOD = 'omni_crm.api.script.demo_calendar'
++const BLUE = '#0b5cad'
++const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
++const REFRESH_MS = 60000
++
++const now = new Date()
++const month = ref(now.getMonth() + 1)
++const year = ref(now.getFullYear())
++
++const pad = (n) => String(n).padStart(2, '0')
++const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
++const hhmm = (v) => String(v || '').slice(11, 16)
++
++// Ô đầu tiên của lưới: thứ Hai của tuần chứa ngày 1
++const gridStart = computed(() => {
++  const first = new Date(year.value, month.value - 1, 1)
++  const offset = (first.getDay() + 6) % 7
++  return new Date(year.value, month.value - 1, 1 - offset)
++})
++const gridDays = computed(() => {
++  const first = new Date(year.value, month.value - 1, 1)
++  const offset = (first.getDay() + 6) % 7
++  return Math.ceil((offset + new Date(year.value, month.value, 0).getDate()) / 7) * 7
++})
++
++const cal = createResource({
++  url: METHOD,
++  makeParams: () => ({ start: keyOf(gridStart.value), days: gridDays.value }),
++  auto: true,
++})
++watch([month, year], () => cal.reload())
++
++function shift(n) {
++  let m = month.value + n
++  let y = year.value
++  if (m < 1) (m = 12), y--
++  if (m > 12) (m = 1), y++
++  month.value = m
++  year.value = y
++}
++function today() {
++  month.value = now.getMonth() + 1
++  year.value = now.getFullYear()
++}
++function titleOf(e) {
++  const parts = [`${hhmm(e.start)}–${hhmm(e.end)}`, e.title]
++  if (e.mode) parts.push(e.mode)
++  if (e.attendees) parts.push(`${e.attendees} người`)
++  return parts.join(' · ')
++}
++
++// Mỗi ngày: lịch của Lead mình đọc được (có tên) + khung đã kín của khách khác (chỉ có giờ)
++const byDay = computed(() => {
++  const map = {}
++  const mine = new Set()
++  for (const e of cal.data?.items || []) {
++    mine.add(e.start)
++    ;(map[e.start.slice(0, 10)] ||= []).push(e)
++  }
++  for (const start of cal.data?.busy || []) {
++    if (!mine.has(start)) (map[start.slice(0, 10)] ||= []).push({ start })
++  }
++  for (const k in map) map[k].sort((a, b) => a.start.localeCompare(b.start))
++  return map
++})
++const monthPrefix = computed(() => `${year.value}-${pad(month.value)}`)
++const monthCount = computed(() =>
++  Object.entries(byDay.value).reduce((n, [k, list]) => (k.startsWith(monthPrefix.value) ? n + list.length : n), 0),
++)
++
++const cells = computed(() => {
++  const start = gridStart.value
++  const todayKey = keyOf(now)
++  const out = []
++  for (let i = 0; i < gridDays.value; i++) {
++    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
++    const key = keyOf(d)
++    out.push({
++      key,
++      day: d.getDate(),
++      inMonth: d.getMonth() === month.value - 1,
++      isToday: key === todayKey,
++      entries: byDay.value[key] || [],
++    })
++  }
++  return out
++})
++
++let timer = null
++onMounted(() => {
++  timer = setInterval(() => {
++    if (!document.hidden) cal.reload()
++  }, REFRESH_MS)
++})
++onBeforeUnmount(() => {
++  if (timer) clearInterval(timer)
++})
++</script>
+diff --git a/frontend/src/router.js b/frontend/src/router.js
+index 6547151..e87f56c 100644
+--- a/frontend/src/router.js
++++ b/frontend/src/router.js
+@@ -101,6 +101,12 @@ const routes = [
+     component: () => import('@/pages/DataImport.vue'),
+     props: true,
+   },
++  // Lịch demo (omni_crm, bot kịch bản v3)
++  {
++    path: '/demo-calendar',
++    name: 'Demo Calendar',
++    component: () => import('@/pages/DemoCalendar.vue'),
++  },
+   // Marketing Hub (omni_crm, V3-10 Prompt 3)
+   {
+     path: '/marketing/campaigns',

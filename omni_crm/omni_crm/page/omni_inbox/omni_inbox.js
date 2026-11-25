@@ -291,7 +291,7 @@ class OmniInbox {
 				.join(" ");
 			const head = `<div class="oi-meta"><b>${e(__("Nháp của bot — chưa gửi"))}</b>${d.question_group ? " · " + e(__("Nhóm") + ": " + d.question_group) : ""}</div>`;
 			const src = kb ? `<div class="oi-meta">${e(__("Nguồn kho tri thức"))}: ${kb}</div>` : "";
-			if (d.action === "Handoff") {
+			if (d.action === "Handoff" && !d.template) {
 				return `<div class="oi-draft oi-draft-handoff" data-draft="${e(d.name)}">${head}
 					<div><b>${e(__("Bot đề nghị chuyển người"))}</b>: ${e(d.handoff_reason || "")}</div>${src}
 					<div class="oi-actions">${d.can_decide ? `<button class="btn btn-default btn-sm oi-draft-discard">${e(__("Bỏ"))}</button>` : ""}
@@ -302,9 +302,16 @@ class OmniInbox {
 				? `<textarea class="form-control oi-draft-text" rows="4" maxlength="6000">${e(this.draft_edit.text)}</textarea>`
 				: `<div class="oi-draft-body">${e(d.text || "").replace(/\n/g, "<br>")}</div>`;
 			let actions = "";
+			// Mẫu tin (ADR 0031): bot chuyển người vì hỏi giá/đặt demo; sale phải điền hết chỗ [...] rồi mới gửi
+			const tpl = d.action === "Handoff" && d.template
+				? `<div><b>${e(__("Bot chuyển người, có mẫu tin để điền"))}</b>: ${e(d.handoff_reason || "")}</div>`
+				: "";
 			if (d.can_send && editing) {
 				actions = `<button class="btn btn-primary btn-sm oi-draft-send-edited">${e(__("Gửi bản đã sửa"))}</button>
 					<button class="btn btn-default btn-sm oi-draft-cancel-edit">${e(__("Hủy sửa"))}</button>`;
+			} else if (d.can_send && d.template) {
+				actions = `<button class="btn btn-primary btn-sm oi-draft-edit">${e(__("Điền rồi gửi"))}</button>
+					<button class="btn btn-default btn-sm oi-draft-discard">${e(__("Bỏ"))}</button>`;
 			} else if (d.can_send) {
 				actions = `<button class="btn btn-primary btn-sm oi-draft-send">${e(__("Gửi"))}</button>
 					<button class="btn btn-default btn-sm oi-draft-edit">${e(__("Sửa rồi gửi"))}</button>
@@ -313,7 +320,7 @@ class OmniInbox {
 				actions = `<button class="btn btn-default btn-sm oi-draft-discard">${e(__("Bỏ"))}</button>
 					<span class="oi-meta">${e(__("Kênh này trả lời trong CRM, không gửi từ Hộp thư"))}</span>`;
 			}
-			return `<div class="oi-draft" data-draft="${e(d.name)}">${head}${body}${src}<div class="oi-actions">${actions}</div></div>`;
+			return `<div class="oi-draft" data-draft="${e(d.name)}">${head}${tpl}${body}${src}<div class="oi-actions">${actions}</div></div>`;
 		});
 		let rate = "";
 		const rp = this.rate_pending;
@@ -416,6 +423,10 @@ class OmniInbox {
 			const text = $r.find(".oi-draft-text").val();
 			if (!(text || "").trim()) {
 				frappe.show_alert({ message: __("Nội dung tin nhắn đang trống"), indicator: "orange" });
+				return;
+			}
+			if (draft_of(n).template && /\[[^\]]*\]/.test(text)) {
+				frappe.show_alert({ message: __("Mẫu tin còn chỗ trống [...] chưa điền"), indicator: "orange" });
 				return;
 			}
 			this.send_draft(n, text, 0);

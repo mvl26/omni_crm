@@ -1,0 +1,2661 @@
+diff --git a/frontend/src/components/Layouts/AppSidebar.vue b/frontend/src/components/Layouts/AppSidebar.vue
+index 19b770a..40df44b 100644
+--- a/frontend/src/components/Layouts/AppSidebar.vue
++++ b/frontend/src/components/Layouts/AppSidebar.vue
+@@ -155,6 +155,11 @@
+ <script setup>
+ import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
+ import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
++import LucideMegaphone from '~icons/lucide/megaphone'
++import LucideCalendarDays from '~icons/lucide/calendar-days'
++import LucideChartColumn from '~icons/lucide/chart-column'
++import LucideBookOpen from '~icons/lucide/book-open'
++import { canViewMarketing } from '@/composables/marketingHub'
+ import CRMLogo from '@/components/Icons/CRMLogo.vue'
+ import InviteIcon from '@/components/Icons/InviteIcon.vue'
+ import ConvertIcon from '@/components/Icons/ConvertIcon.vue'
+@@ -275,6 +280,18 @@ const allViews = computed(() => {
+       }),
+     },
+   ]
++  if (canViewMarketing.value) {
++    _views.push({
++      name: 'Marketing',
++      opened: true,
++      views: [
++        { label: 'Chiến dịch', icon: markRaw(LucideMegaphone), to: 'Marketing Campaigns' },
++        { label: 'Lịch đăng content', icon: markRaw(LucideCalendarDays), to: 'Marketing Calendar' },
++        { label: 'Báo cáo marketing', icon: markRaw(LucideChartColumn), to: 'Marketing Report' },
++        { label: 'Kho tri thức', icon: markRaw(LucideBookOpen), to: 'Marketing KB' },
++      ],
++    })
++  }
+   if (getPublicViews().length) {
+     _views.push({
+       name: 'Public Views',
+diff --git a/frontend/src/components/Marketing/PlannerChat.vue b/frontend/src/components/Marketing/PlannerChat.vue
+new file mode 100644
+index 0000000..11c237d
+--- /dev/null
++++ b/frontend/src/components/Marketing/PlannerChat.vue
+@@ -0,0 +1,287 @@
++<template>
++  <Dialog v-model="show" :options="{ size: '4xl' }">
++    <template #body>
++      <div class="flex flex-col gap-4 px-4 pb-6 pt-5 sm:px-6 text-ink-gray-8">
++        <div class="flex items-start justify-between gap-2">
++          <div>
++            <h3 class="text-2xl font-semibold leading-6">Tạo chiến dịch bằng AI</h3>
++            <p class="mt-1 text-p-sm text-ink-gray-5">
++              Mô tả mục tiêu, thời gian, kênh. AI hỏi lại tối đa 3 câu nếu thiếu, rồi lập kế hoạch và chấm điểm
++              từng bài. Không có gì được đăng cho tới khi bài được duyệt.
++            </p>
++          </div>
++          <Button variant="ghost" icon="x" @click="show = false" />
++        </div>
++
++        <div
++          ref="scroller"
++          class="flex max-h-[55vh] min-h-[160px] flex-col gap-3 overflow-y-auto rounded border border-outline-gray-2 p-3"
++        >
++          <div v-if="!state" class="text-p-base text-ink-gray-5">
++            Ví dụ: "Tạo chiến dịch giới thiệu dịch vụ SPD cho phòng khám đa khoa tại Hà Nội, mục tiêu lấy đăng ký
++            tư vấn".
++          </div>
++          <template v-for="(t, i) in state?.turns || []" :key="i">
++            <div
++              v-if="t.role === 'user'"
++              class="ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-surface-gray-2 px-3 py-2 text-p-base"
++            >
++              {{ t.text }}
++              <div v-if="t.files?.length" class="mt-1 text-xs text-ink-gray-5">
++                Đính kèm: {{ t.files.join(', ') }}
++              </div>
++            </div>
++            <div
++              v-else-if="!t.text.startsWith('Kế hoạch đã lập')"
++              class="max-w-[85%] whitespace-pre-wrap rounded-lg border border-outline-gray-2 px-3 py-2 text-p-base"
++            >
++              {{ t.text }}
++            </div>
++          </template>
++
++          <div v-if="state?.status === 'hoi_lai'" class="flex flex-col gap-2">
++            <div v-for="(q, qi) in state.questions" :key="qi" class="flex flex-col gap-1">
++              <div class="text-p-base font-medium">{{ q.question }}</div>
++              <div class="flex flex-wrap gap-1.5">
++                <Button
++                  v-for="s in q.suggestions"
++                  :key="s"
++                  size="sm"
++                  :label="s"
++                  :variant="answers[qi] === s ? 'solid' : 'subtle'"
++                  @click="pick(qi, s)"
++                />
++              </div>
++            </div>
++          </div>
++
++          <div v-if="busy" class="flex items-center gap-2 text-p-base text-ink-gray-5">
++            <LoadingIndicator class="h-4 w-4" />
++            {{ state?.status === 'cham_diem' ? `Đang chấm điểm bài ${(state.scores || []).length + 1}/${state.plan?.posts?.length || 0}…` : 'AI đang soạn…' }}
++          </div>
++          <div v-if="state?.status === 'loi'" class="rounded bg-surface-red-1 px-3 py-2 text-p-base text-ink-red-4">
++            {{ state.error }}
++          </div>
++
++          <div v-if="state?.plan" class="flex flex-col gap-3 rounded border border-outline-gray-2 p-3">
++            <div class="grid grid-cols-1 gap-2 text-p-base sm:grid-cols-2">
++              <div><span class="text-ink-gray-5">Chiến dịch:</span> {{ state.plan.title }}</div>
++              <div>
++                <span class="text-ink-gray-5">Thời gian:</span> {{ state.plan.start_date }} → {{ state.plan.end_date }}
++              </div>
++              <div><span class="text-ink-gray-5">Mục tiêu:</span> {{ state.plan.objective }}</div>
++              <div><span class="text-ink-gray-5">Khách hàng:</span> {{ state.plan.audience }}</div>
++              <div><span class="text-ink-gray-5">Thông điệp:</span> {{ state.plan.key_message }}</div>
++              <div><span class="text-ink-gray-5">Trang đích:</span> {{ state.plan.landing_page }}</div>
++            </div>
++            <div v-if="state.assumptions?.length" class="text-p-sm text-ink-gray-6">
++              Giả định của AI: {{ state.assumptions.join('; ') }}
++            </div>
++            <div class="flex flex-col divide-y divide-outline-gray-1">
++              <div v-for="(p, pi) in state.plan.posts" :key="pi" class="flex flex-col gap-1 py-2">
++                <div class="flex flex-wrap items-center gap-2">
++                  <span class="font-medium">{{ p.title }}</span>
++                  <Badge :label="p.platform" variant="subtle" />
++                  <Badge :label="p.funnel_stage" variant="outline" />
++                  <span class="text-xs text-ink-gray-5">{{ fmtDateTime(p.scheduled_at) }}</span>
++                  <span class="ml-auto text-base font-semibold" :class="scoreClass(score(pi), state.threshold)">
++                    {{ score(pi) == null ? (state.scores?.[pi] ? '—' : '…') : score(pi) + '/100' }}
++                  </span>
++                </div>
++                <div class="whitespace-pre-wrap text-p-sm text-ink-gray-7">{{ p.caption }}</div>
++                <div v-if="p.image_hint" class="text-xs text-ink-gray-5">Gợi ý ảnh: {{ p.image_hint }}</div>
++                <div
++                  v-if="state.scores?.[pi]?.note"
++                  class="whitespace-pre-wrap text-xs"
++                  :class="score(pi) != null && score(pi) >= state.threshold ? 'text-ink-gray-5' : 'text-ink-red-3'"
++                >
++                  {{ state.scores[pi].note }}
++                </div>
++              </div>
++            </div>
++            <div class="text-xs text-ink-gray-5">
++              Chi phí AI phiên này: {{ state.cost_usd }} USD. Bài dưới {{ state.threshold }} điểm không được lên lịch.
++            </div>
++          </div>
++
++          <div v-if="state?.campaign" class="flex flex-col gap-2 rounded bg-surface-green-1 px-3 py-2 text-p-base">
++            <div>Đã tạo chiến dịch {{ state.campaign }}.</div>
++            <div v-for="r in state.results" :key="r.item" class="text-p-sm">
++              {{ r.title }}: <b>{{ r.status }}</b><span v-if="r.message" class="text-ink-red-3"> — {{ r.message }}</span>
++            </div>
++            <div>
++              <Button label="Mở chiến dịch" variant="solid" @click="openCampaign" />
++            </div>
++          </div>
++        </div>
++
++        <div v-if="!state?.campaign" class="flex flex-col gap-2">
++          <Textarea
++            v-model="text"
++            :rows="3"
++            :placeholder="state?.status === 'hoi_lai' ? 'Trả lời câu hỏi (hoặc bấm gợi ý ở trên)…' : 'Mô tả chiến dịch cần tạo…'"
++            :disabled="busy"
++          />
++          <div class="flex flex-wrap items-center gap-2">
++            <FileUploader
++              :uploadArgs="{ private: true }"
++              fileTypes=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp"
++              @success="(f) => files.push(f)"
++            >
++              <template #default="{ openFileSelector, uploading }">
++                <Button
++                  :label="uploading ? 'Đang tải…' : 'Đính kèm tệp / ảnh'"
++                  icon-left="paperclip"
++                  :disabled="busy"
++                  @click="openFileSelector"
++                />
++              </template>
++            </FileUploader>
++            <Badge
++              v-for="(f, i) in files"
++              :key="f.file_url"
++              :label="f.file_name"
++              variant="subtle"
++              class="cursor-pointer"
++              @click="files.splice(i, 1)"
++            />
++            <div class="ml-auto flex gap-2">
++              <Button v-if="state" label="Phiên mới" :disabled="busy" @click="reset" />
++              <Button
++                v-if="state?.status === 'san_sang'"
++                label="Duyệt và lên lịch"
++                variant="solid"
++                :loading="creating"
++                @click="create"
++              />
++              <Button
++                v-else
++                label="Gửi"
++                variant="solid"
++                :loading="sending"
++                :disabled="busy || (!text.trim() && !files.length)"
++                @click="send"
++              />
++            </div>
++          </div>
++          <div v-if="state?.status === 'san_sang'" class="text-xs text-ink-gray-5">
++            Muốn sửa kế hoạch: gõ yêu cầu và bấm Gửi bên dưới thay vì duyệt.
++            <Button size="sm" variant="ghost" label="Gửi yêu cầu sửa" :disabled="!text.trim()" @click="send" />
++          </div>
++        </div>
++      </div>
++    </template>
++  </Dialog>
++</template>
++
++<script setup>
++import { Dialog, Badge, Textarea, FileUploader, LoadingIndicator, toast } from 'frappe-ui'
++import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
++import { useRouter } from 'vue-router'
++import { globalStore } from '@/stores/global'
++import { api, fmtDateTime, scoreClass, errorText } from '@/composables/marketing'
++
++const show = defineModel({ type: Boolean, default: false })
++const emit = defineEmits(['created'])
++const router = useRouter()
++const { $socket } = globalStore()
++
++const state = ref(null)
++const text = ref('')
++const files = ref([])
++const answers = ref({})
++const sending = ref(false)
++const creating = ref(false)
++const scroller = ref(null)
++let timer = null
++
++const busy = computed(() => ['dang_xu_ly', 'cham_diem'].includes(state.value?.status))
++const score = (i) => state.value?.scores?.[i]?.score ?? null
++
++function pick(qi, s) {
++  answers.value = { ...answers.value, [qi]: s }
++  const qs = state.value?.questions || []
++  text.value = qs
++    .map((q, i) => (answers.value[i] ? `${q.question} ${answers.value[i]}` : ''))
++    .filter(Boolean)
++    .join('\n')
++}
++
++async function refresh() {
++  if (!state.value?.session_id) return
++  try {
++    state.value = await api('planner_state', { session_id: state.value.session_id })
++  } catch (e) {
++    toast.error(errorText(e))
++    stopPolling()
++  }
++}
++
++function startPolling() {
++  stopPolling()
++  timer = setInterval(() => (busy.value ? refresh() : stopPolling()), 5000)
++}
++function stopPolling() {
++  if (timer) clearInterval(timer)
++  timer = null
++}
++
++async function send() {
++  sending.value = true
++  try {
++    state.value = await api('planner_send', {
++      text: text.value,
++      files: JSON.stringify(files.value.map((f) => f.file_url)),
++      session_id: state.value?.session_id || null,
++    })
++    text.value = ''
++    files.value = []
++    answers.value = {}
++    startPolling()
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    sending.value = false
++  }
++}
++
++async function create() {
++  creating.value = true
++  try {
++    state.value = await api('planner_create', { session_id: state.value.session_id })
++    toast.success('Đã tạo chiến dịch từ kế hoạch')
++    emit('created', state.value.campaign)
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    creating.value = false
++  }
++}
++
++function reset() {
++  stopPolling()
++  state.value = null
++  text.value = ''
++  files.value = []
++  answers.value = {}
++}
++
++function openCampaign() {
++  show.value = false
++  router.push({ name: 'Marketing Campaign', params: { name: state.value.campaign } })
++}
++
++function onUpdate(data) {
++  if (data?.session_id && data.session_id === state.value?.session_id) refresh()
++}
++$socket?.on('oc_plan_update', onUpdate)
++onBeforeUnmount(() => {
++  stopPolling()
++  $socket?.off('oc_plan_update', onUpdate)
++})
++
++watch(
++  () => [state.value?.turns?.length, state.value?.scores?.length, state.value?.status],
++  () => nextTick(() => scroller.value && (scroller.value.scrollTop = scroller.value.scrollHeight)),
++)
++</script>
+diff --git a/frontend/src/components/Settings/Marketing/ContentVoiceSettings.vue b/frontend/src/components/Settings/Marketing/ContentVoiceSettings.vue
+new file mode 100644
+index 0000000..2cdf87e
+--- /dev/null
++++ b/frontend/src/components/Settings/Marketing/ContentVoiceSettings.vue
+@@ -0,0 +1,244 @@
++<template>
++  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
++    <div class="flex justify-between px-2">
++      <div class="flex flex-col gap-1 w-9/12">
++        <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
++          Nội dung &amp; giọng văn
++        </h2>
++        <p class="text-p-base text-ink-gray-6">
++          Trụ cột nội dung để phân loại bài, và giọng văn AI dùng khi viết bài.
++        </p>
++      </div>
++      <div class="flex items-center w-3/12 justify-end">
++        <Button
++          v-if="canEditMarketingSettings"
++          label="Mới"
++          icon-left="plus"
++          variant="solid"
++          @click="openNew"
++        />
++      </div>
++    </div>
++
++    <div class="flex-1 flex flex-col gap-6 overflow-y-auto">
++      <div class="flex flex-col">
++        <div class="flex items-center py-2 px-2 text-sm text-ink-gray-5">
++          <div class="w-4/12">Trụ cột</div>
++          <div class="w-6/12">Mô tả</div>
++          <div class="w-2/12 text-right">Đang dùng</div>
++        </div>
++        <div class="h-px border-t mx-2 border-outline-gray-modals" />
++        <div
++          v-if="!pillars.loading && !pillars.data?.length"
++          class="px-2 py-6 text-p-base text-ink-gray-5"
++        >
++          Chưa có trụ cột nội dung. Bấm "+ Mới" để thêm.
++        </div>
++        <template v-for="(p, i) in pillars.data || []" :key="p.name">
++          <div v-if="i" class="h-px border-t mx-2 border-outline-gray-modals" />
++          <div
++            class="flex items-center py-3 px-2 rounded hover:bg-surface-menu-bar cursor-pointer"
++            @click="openEdit(p)"
++          >
++            <div
++              class="w-4/12 text-p-base font-medium text-ink-gray-7 truncate pr-3"
++            >
++              {{ p.pillar_name }}
++            </div>
++            <div class="w-6/12 text-p-sm text-ink-gray-6 truncate pr-3">
++              {{ p.description || '—' }}
++            </div>
++            <div class="w-2/12 flex justify-end" @click.stop>
++              <Switch
++                :model-value="Boolean(p.is_active)"
++                size="sm"
++                :disabled="!canEditMarketingSettings"
++                @update:model-value="(v) => toggle(p, v)"
++              />
++            </div>
++          </div>
++        </template>
++      </div>
++
++      <div class="flex flex-col gap-2 px-2">
++        <div class="flex items-center justify-between">
++          <div class="flex flex-col">
++            <div class="text-p-base font-medium text-ink-gray-7">
++              Giọng văn thương hiệu
++            </div>
++            <div class="text-p-sm text-ink-gray-5">
++              Ví dụ: xưng "Miyano", gọi "anh/chị", lịch sự, ngắn gọn; không bịa
++              giá, số liệu, cam kết.
++            </div>
++          </div>
++          <Button
++            v-if="voiceDirty && canEditMarketingSettings"
++            label="Lưu"
++            variant="solid"
++            :loading="settings.setValue.loading"
++            @click="saveVoice"
++          />
++        </div>
++        <Textarea
++          v-model="voice"
++          :rows="6"
++          :disabled="!canEditMarketingSettings"
++        />
++      </div>
++    </div>
++
++    <Dialog
++      v-model="dialog.show"
++      :options="{ title: dialog.name ? 'Sửa trụ cột' : 'Trụ cột mới' }"
++    >
++      <template #body-content>
++        <div class="flex flex-col gap-3">
++          <FormControl
++            v-model="dialog.pillar_name"
++            label="Tên trụ cột"
++            :disabled="Boolean(dialog.name)"
++          />
++          <FormControl
++            v-model="dialog.description"
++            type="textarea"
++            label="Mô tả"
++          />
++        </div>
++      </template>
++      <template #actions>
++        <Button
++          variant="solid"
++          class="w-full"
++          label="Lưu"
++          :loading="busy"
++          @click="savePillar"
++        />
++      </template>
++    </Dialog>
++  </div>
++</template>
++
++<script setup>
++import { canEditMarketingSettings } from '@/composables/marketingHub'
++import {
++  Button,
++  Dialog,
++  FormControl,
++  Switch,
++  Textarea,
++  call,
++  createDocumentResource,
++  createListResource,
++  toast,
++} from 'frappe-ui'
++import { computed, reactive, ref, watch } from 'vue'
++
++const pillars = createListResource({
++  doctype: 'Omni Content Pillar',
++  fields: ['name', 'pillar_name', 'description', 'is_active'],
++  orderBy: 'pillar_name asc',
++  pageLength: 200,
++  auto: true,
++})
++
++const settings = createDocumentResource({
++  doctype: 'Omni Marketing Settings',
++  name: 'Omni Marketing Settings',
++  auto: true,
++})
++const voice = ref('')
++const savedVoice = ref('')
++watch(
++  () => settings.doc,
++  (d) => {
++    if (!d) return
++    voice.value = d.brand_voice || ''
++    savedVoice.value = voice.value
++  },
++  { immediate: true },
++)
++const voiceDirty = computed(() => voice.value !== savedVoice.value)
++
++function err(e) {
++  return e?.messages?.[0] || e?.message || 'Có lỗi'
++}
++
++function saveVoice() {
++  settings.setValue.submit(
++    { brand_voice: voice.value },
++    {
++      onSuccess: () => toast.success('Đã lưu giọng văn'),
++      onError: (e) => toast.error(err(e)),
++    },
++  )
++}
++
++const dialog = reactive({
++  show: false,
++  name: '',
++  pillar_name: '',
++  description: '',
++})
++const busy = ref(false)
++
++function openNew() {
++  Object.assign(dialog, {
++    show: true,
++    name: '',
++    pillar_name: '',
++    description: '',
++  })
++}
++function openEdit(p) {
++  if (!canEditMarketingSettings.value) return
++  Object.assign(dialog, {
++    show: true,
++    name: p.name,
++    pillar_name: p.pillar_name,
++    description: p.description || '',
++  })
++}
++
++async function savePillar() {
++  busy.value = true
++  try {
++    if (dialog.name) {
++      await call('frappe.client.set_value', {
++        doctype: 'Omni Content Pillar',
++        name: dialog.name,
++        fieldname: { description: dialog.description },
++      })
++    } else {
++      await call('frappe.client.insert', {
++        doc: {
++          doctype: 'Omni Content Pillar',
++          pillar_name: dialog.pillar_name,
++          description: dialog.description,
++          is_active: 1,
++        },
++      })
++    }
++    dialog.show = false
++    pillars.reload()
++    toast.success('Đã lưu trụ cột')
++  } catch (e) {
++    toast.error(err(e))
++  } finally {
++    busy.value = false
++  }
++}
++
++async function toggle(p, value) {
++  try {
++    await call('frappe.client.set_value', {
++      doctype: 'Omni Content Pillar',
++      name: p.name,
++      fieldname: 'is_active',
++      value: value ? 1 : 0,
++    })
++    pillars.reload()
++  } catch (e) {
++    toast.error(err(e))
++  }
++}
++</script>
+diff --git a/frontend/src/components/Settings/Marketing/MarketingAISettings.vue b/frontend/src/components/Settings/Marketing/MarketingAISettings.vue
+new file mode 100644
+index 0000000..0863c7f
+--- /dev/null
++++ b/frontend/src/components/Settings/Marketing/MarketingAISettings.vue
+@@ -0,0 +1,221 @@
++<template>
++  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
++    <div class="flex justify-between px-2">
++      <div class="flex flex-col gap-1 w-9/12">
++        <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
++          AI &amp; kiểm duyệt
++          <Badge
++            v-if="dirty"
++            label="Chưa lưu"
++            variant="subtle"
++            theme="orange"
++          />
++        </h2>
++        <p class="text-p-base text-ink-gray-6">
++          Ngưỡng chất lượng, quy tắc duyệt bài và chế độ thử của Marketing Hub.
++        </p>
++      </div>
++      <div class="flex items-center w-3/12 justify-end">
++        <Button
++          v-if="dirty && canEditMarketingSettings"
++          label="Lưu"
++          variant="solid"
++          :loading="doc.setValue.loading"
++          @click="save"
++        />
++      </div>
++    </div>
++
++    <div v-if="form" class="flex-1 flex flex-col overflow-y-auto">
++      <Row
++        title="Chế độ thử"
++        desc="Bật: không gọi API Facebook, Zalo, TikTok; bài đến giờ chỉ ghi nhật ký. Chỉ tắt khi đã kiểm quyền và đăng thử."
++      >
++        <Switch v-model="form.dry_run" :disabled="!canEditMarketingSettings" />
++      </Row>
++      <Sep />
++      <Row
++        title="Bắt buộc duyệt"
++        desc="Bật: chỉ Marketing Manager được duyệt và lên lịch. Tắt: người soạn tự lên lịch (vẫn cần đạt ngưỡng điểm)."
++      >
++        <Switch
++          v-model="form.require_approval"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Ngưỡng điểm chất lượng"
++        :desc="`Bài dưới ${form.quality_threshold} điểm hiện đỏ và không lên lịch được.`"
++      >
++        <div class="flex items-center gap-3 w-56">
++          <input
++            v-model.number="form.quality_threshold"
++            type="range"
++            min="0"
++            max="100"
++            step="5"
++            class="flex-1 accent-gray-900"
++            :disabled="!canEditMarketingSettings"
++          />
++          <span class="w-8 text-right text-p-base font-medium">{{
++            form.quality_threshold
++          }}</span>
++        </div>
++      </Row>
++      <Sep />
++      <Row
++        title="Người duyệt mặc định"
++        desc="Người có vai trò Marketing Manager."
++      >
++        <FormControl
++          v-model="form.default_approver"
++          type="select"
++          class="w-56"
++          :options="[{ label: '—', value: '' }, ...(approvers.data || [])]"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Cửa sổ đăng muộn (phút)"
++        desc="Hệ thống trễ quá số phút này so với giờ hẹn thì không đăng nữa, báo Thất bại."
++      >
++        <FormControl
++          v-model.number="form.late_window_minutes"
++          type="number"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Hạn mức chi phí AI mỗi tháng"
++        desc="Vượt hạn mức thì dừng gọi AI cho Marketing Hub."
++      >
++        <FormControl
++          v-model.number="form.monthly_ai_budget"
++          type="number"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Mô hình AI chính"
++        desc="Trống: dùng mô hình của bot (Omni Settings)."
++      >
++        <FormControl
++          v-model="form.ai_model"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row title="Mô hình AI dự phòng" desc="Dùng khi mô hình chính lỗi.">
++        <FormControl
++          v-model="form.ai_fallback_model"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++      <Sep />
++      <Row
++        title="Trang đích mặc định"
++        desc="Đường dẫn trên địa chỉ gốc, ví dụ /spd/."
++      >
++        <FormControl
++          v-model="form.default_landing_page"
++          class="w-56"
++          :disabled="!canEditMarketingSettings"
++        />
++      </Row>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import { canEditMarketingSettings } from '@/composables/marketingHub'
++import {
++  Badge,
++  Button,
++  FormControl,
++  Switch,
++  createDocumentResource,
++  createResource,
++  toast,
++} from 'frappe-ui'
++import { computed, h, ref, watch } from 'vue'
++
++const FIELDS = [
++  'dry_run',
++  'require_approval',
++  'quality_threshold',
++  'default_approver',
++  'late_window_minutes',
++  'monthly_ai_budget',
++  'ai_model',
++  'ai_fallback_model',
++  'default_landing_page',
++]
++const CHECKS = ['dry_run', 'require_approval']
++
++const Row = (props, { slots }) =>
++  h('div', { class: 'flex items-center justify-between gap-8 py-3 px-2' }, [
++    h('div', { class: 'flex flex-col' }, [
++      h(
++        'div',
++        { class: 'text-p-base font-medium text-ink-gray-7' },
++        props.title,
++      ),
++      h('div', { class: 'text-p-sm text-ink-gray-5' }, props.desc),
++    ]),
++    h('div', { class: 'shrink-0' }, slots.default?.()),
++  ])
++Row.props = ['title', 'desc']
++const Sep = () =>
++  h('div', { class: 'h-px border-t mx-2 border-outline-gray-modals' })
++
++const form = ref(null)
++const original = ref('')
++
++const doc = createDocumentResource({
++  doctype: 'Omni Marketing Settings',
++  name: 'Omni Marketing Settings',
++  auto: true,
++})
++const approvers = createResource({
++  url: 'omni_crm.marketing.api.list_approvers',
++  auto: true,
++})
++
++function fromDoc(d) {
++  const out = {}
++  for (const f of FIELDS)
++    out[f] = CHECKS.includes(f) ? Boolean(d?.[f]) : (d?.[f] ?? '')
++  return out
++}
++
++watch(
++  () => doc.doc,
++  (d) => {
++    if (!d) return
++    form.value = fromDoc(d)
++    original.value = JSON.stringify(form.value)
++  },
++  { immediate: true },
++)
++
++const dirty = computed(
++  () => form.value && JSON.stringify(form.value) !== original.value,
++)
++
++function save() {
++  const values = { ...form.value }
++  for (const f of CHECKS) values[f] = values[f] ? 1 : 0
++  doc.setValue.submit(values, {
++    onSuccess: () => toast.success('Đã lưu thiết lập'),
++    onError: (e) => toast.error(e?.messages?.[0] || 'Không lưu được'),
++  })
++}
++</script>
+diff --git a/frontend/src/components/Settings/Marketing/SocialChannelsSettings.vue b/frontend/src/components/Settings/Marketing/SocialChannelsSettings.vue
+new file mode 100644
+index 0000000..cddc5ff
+--- /dev/null
++++ b/frontend/src/components/Settings/Marketing/SocialChannelsSettings.vue
+@@ -0,0 +1,158 @@
++<template>
++  <div class="flex h-full flex-col gap-6 px-6 py-8 text-ink-gray-8">
++    <div class="flex justify-between px-2">
++      <div class="flex flex-col gap-1 w-9/12">
++        <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
++          Mạng xã hội
++        </h2>
++        <p class="text-p-base text-ink-gray-6">
++          Tài khoản dùng để đăng bài theo lịch. Dùng chung kênh Facebook và Zalo
++          OA đã kết nối của CRM, không có mã truy cập riêng.
++        </p>
++      </div>
++      <div class="flex items-center w-3/12 justify-end">
++        <Button
++          :label="'Tải lại'"
++          icon-left="refresh-cw"
++          :loading="accounts.loading"
++          @click="accounts.reload()"
++        />
++      </div>
++    </div>
++
++    <div
++      v-if="accounts.loading && !accounts.data"
++      class="flex mt-28 justify-between w-full h-full"
++    >
++      <Button :loading="true" variant="ghost" class="w-full" size="2xl" />
++    </div>
++    <div v-else-if="accounts.error" class="px-2 text-p-base text-ink-red-4">
++      {{ errorText(accounts.error) }}
++    </div>
++
++    <div v-else class="flex-1 flex flex-col overflow-y-auto">
++      <template
++        v-for="(acc, i) in accounts.data || []"
++        :key="acc.platform + acc.name"
++      >
++        <div v-if="i" class="h-px border-t mx-2 border-outline-gray-modals" />
++        <div class="flex flex-col gap-2 py-3 px-2">
++          <div class="flex items-center justify-between gap-6">
++            <div class="flex flex-col min-w-0">
++              <div class="flex items-center gap-2">
++                <span class="text-p-base font-medium text-ink-gray-7 truncate">
++                  {{ acc.platform }} · {{ acc.account_name }}
++                </span>
++                <Badge
++                  :label="acc.status"
++                  :theme="STATUS_THEME[acc.status] || 'gray'"
++                  variant="subtle"
++                  size="sm"
++                />
++              </div>
++              <div class="text-p-sm text-ink-gray-5">{{ acc.description }}</div>
++            </div>
++            <div class="flex items-center gap-2 shrink-0">
++              <Button
++                v-if="acc.name && canEditMarketingSettings"
++                label="Kiểm tra quyền"
++                :loading="checking === acc.name"
++                @click="runCheck(acc)"
++              />
++              <Button
++                v-if="acc.name && canEditMarketingSettings"
++                label="Định Cấu Hình"
++                @click="openChannel(acc)"
++              />
++              <Button v-if="!acc.name" label="Chưa kết nối" :disabled="true" />
++            </div>
++          </div>
++          <div
++            v-if="acc.name"
++            class="grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1 text-p-sm text-ink-gray-6 pl-0.5"
++          >
++            <span class="text-ink-gray-5">
++              {{
++                acc.platform === 'Zalo OA'
++                  ? 'OA ID đang dùng'
++                  : 'Page ID đang dùng'
++              }}
++            </span>
++            <span class="font-mono">{{ acc.external_id || '—' }}</span>
++            <span class="text-ink-gray-5">Mã truy cập</span>
++            <span class="font-mono">{{ acc.token_tail || 'chưa có' }}</span>
++            <template v-if="acc.token_expires_at">
++              <span class="text-ink-gray-5">Hết hạn</span>
++              <span>{{
++                formatCheckedAt(acc.token_expires_at) || acc.token_expires_at
++              }}</span>
++            </template>
++            <template v-if="acc.last_check?.granted?.length">
++              <span class="text-ink-gray-5">Quyền đã có</span>
++              <span>{{ acc.last_check.granted.join(', ') }}</span>
++            </template>
++            <template v-if="acc.last_check?.missing?.length">
++              <span class="text-ink-gray-5">Thiếu quyền</span>
++              <span class="text-ink-red-4">{{
++                acc.last_check.missing.join(', ')
++              }}</span>
++            </template>
++            <template v-if="acc.last_check?.message">
++              <span class="text-ink-gray-5">Kết quả kiểm</span>
++              <span>{{ acc.last_check.message }}</span>
++            </template>
++            <template v-if="acc.last_checked_at">
++              <span class="text-ink-gray-5">Kiểm lúc</span>
++              <span>{{ formatCheckedAt(acc.last_checked_at) }}</span>
++            </template>
++          </div>
++        </div>
++      </template>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import {
++  STATUS_THEME,
++  canEditMarketingSettings,
++  formatCheckedAt,
++} from '@/composables/marketingHub'
++import { Badge, Button, call, createResource, toast } from 'frappe-ui'
++import { ref } from 'vue'
++
++const checking = ref('')
++
++const accounts = createResource({
++  url: 'omni_crm.marketing.api.get_social_channels',
++  auto: true,
++})
++
++function errorText(err) {
++  return err?.messages?.[0] || err?.message || 'Không tải được danh sách kênh'
++}
++
++async function runCheck(acc) {
++  checking.value = acc.name
++  try {
++    const res = await call('omni_crm.marketing.api.check_channel', {
++      name: acc.name,
++    })
++    const fn = res.status === 'Đã kết nối' ? toast.success : toast.warning
++    fn(res.message || res.status)
++    await accounts.reload()
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    checking.value = ''
++  }
++}
++
++function openChannel(acc) {
++  window.open(
++    `/app/omni-channel/${encodeURIComponent(acc.name)}`,
++    '_blank',
++    'noopener',
++  )
++}
++</script>
+diff --git a/frontend/src/components/Settings/Settings.vue b/frontend/src/components/Settings/Settings.vue
+index 3efc194..ac1fc77 100644
+--- a/frontend/src/components/Settings/Settings.vue
++++ b/frontend/src/components/Settings/Settings.vue
+@@ -84,6 +84,13 @@ import { ref, markRaw, computed, watch, h } from 'vue'
+ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
+ import ShieldCheck from '~icons/lucide/shield-check'
+ import SlaConfig from './Sla/SlaConfig.vue'
++import Share2Icon from '~icons/lucide/share-2'
++import BotIcon from '~icons/lucide/bot'
++import PenLineIcon from '~icons/lucide/pen-line'
++import SocialChannelsSettings from './Marketing/SocialChannelsSettings.vue'
++import MarketingAISettings from './Marketing/MarketingAISettings.vue'
++import ContentVoiceSettings from './Marketing/ContentVoiceSettings.vue'
++import { canViewMarketing } from '@/composables/marketingHub'
+ 
+ const { isManager, getUser } = usersStore()
+ 
+@@ -230,7 +237,29 @@ const tabs = computed(() => {
+           component: markRaw(LeadSyncSourcePage),
+           condition: () => isManager(),
+         },
++        {
++          label: 'Mạng xã hội',
++          icon: Share2Icon,
++          component: markRaw(SocialChannelsSettings),
++          condition: () => canViewMarketing.value,
++        },
++      ],
++    },
++    {
++      label: 'Marketing',
++      items: [
++        {
++          label: 'AI & kiểm duyệt',
++          icon: BotIcon,
++          component: markRaw(MarketingAISettings),
++        },
++        {
++          label: 'Nội dung & giọng văn',
++          icon: PenLineIcon,
++          component: markRaw(ContentVoiceSettings),
++        },
+       ],
++      condition: () => canViewMarketing.value,
+     },
+   ]
+ 
+diff --git a/frontend/src/composables/marketing.js b/frontend/src/composables/marketing.js
+new file mode 100644
+index 0000000..39a07de
+--- /dev/null
++++ b/frontend/src/composables/marketing.js
+@@ -0,0 +1,105 @@
++// Marketing Hub (omni_crm, V3-10 Prompt 3): tiện ích dùng chung cho các trang Marketing.
++import { call, frappeRequest, toast } from 'frappe-ui'
++import { serverMessageList } from '@/utils/serverMessages'
++
++export const API = 'omni_crm.marketing.api.'
++
++export function api(method, params = {}) {
++  return call(API + method, params)
++}
++
++// Cảnh báo máy chủ gửi kèm khi gọi THÀNH CÔNG (frappe.msgprint), ví dụ kho ảnh S3 chưa ghi được ảnh (ADR 0033).
++// call() của frappe-ui chỉ đọc _server_messages khi lỗi, nên trang Marketing không thấy các cảnh báo này như Desk.
++export function showServerMessages(raw = []) {
++  for (const m of serverMessageList(raw)) {
++    if (m.indicator === 'red') toast.error(m.message)
++    else if (m.indicator === 'green') toast.success(m.message)
++    else toast.warning(m.message)
++  }
++}
++
++// Như call() (cùng kết quả, cùng lỗi e.messages), thêm: hiện cảnh báo máy chủ gửi kèm khi thành công.
++export function callShowMessages(method, params = {}) {
++  return frappeRequest({ url: method, params, onServerMessages: showServerMessages })
++}
++
++// Màu trạng thái bài (Omni Content Item) và nền tảng (Omni Content Target)
++export const ITEM_THEME = {
++  'Nháp': 'gray',
++  'Chờ duyệt': 'orange',
++  'Đã lên lịch': 'blue',
++  'Đang xử lý': 'blue',
++  'Đã đăng': 'green',
++  'Đăng một phần': 'orange',
++  'Thất bại': 'red',
++  'Đã hủy': 'gray',
++}
++export const TARGET_THEME = {
++  'Chờ duyệt': 'orange',
++  'Đã lên lịch': 'blue',
++  'Đang xử lý': 'blue',
++  'Đăng thành công': 'green',
++  'Thất bại': 'red',
++  'Đã hủy': 'gray',
++}
++export const CAMPAIGN_THEME = {
++  'Nháp': 'gray',
++  'Đang chạy': 'green',
++  'Tạm dừng': 'orange',
++  'Kết thúc': 'gray',
++  'Đã hủy': 'gray',
++  'Có lỗi': 'red',
++}
++export const PLATFORMS = ['Facebook', 'Zalo OA', 'TikTok']
++export const FORMATS = {
++  Facebook: [
++    { label: 'Bài có link', value: 'fb_link' },
++    { label: 'Một ảnh', value: 'fb_photo' },
++    { label: 'Nhiều ảnh', value: 'fb_multi_photo' },
++  ],
++  'Zalo OA': [{ label: 'Bài viết OA', value: 'zalo_article' }],
++  TikTok: [{ label: 'Video (chưa hỗ trợ)', value: 'tiktok_video' }],
++}
++export const FUNNEL = ['Nhận biết', 'Cân nhắc', 'Chuyển đổi']
++
++// Số chưa có hiện "—", không hiện 0 gây hiểu nhầm (Prompt 6)
++export function dash(v, suffix = '') {
++  if (v === null || v === undefined || v === '') return '—'
++  if (typeof v === 'number') return v.toLocaleString('vi-VN') + suffix
++  return String(v) + suffix
++}
++
++export function fmtDateTime(value) {
++  if (!value) return '—'
++  const d = new Date(String(value).replace(' ', 'T'))
++  if (isNaN(d)) return String(value)
++  return d.toLocaleString('vi-VN', {
++    hour12: false,
++    day: '2-digit',
++    month: '2-digit',
++    year: 'numeric',
++    hour: '2-digit',
++    minute: '2-digit',
++  })
++}
++
++// Giá trị cho <input type="datetime-local"> và ngược lại (giờ máy chủ = giờ Việt Nam)
++export function toInputDateTime(value) {
++  if (!value) return ''
++  return String(value).replace(' ', 'T').slice(0, 16)
++}
++export function fromInputDateTime(value) {
++  if (!value) return null
++  return value.replace('T', ' ') + ':00'
++}
++
++export function scoreClass(score, threshold) {
++  if (!score) return 'text-ink-gray-5'
++  return score >= threshold ? 'text-ink-green-3' : 'text-ink-red-3'
++}
++
++export function errorText(e) {
++  const msgs = e?.messages || []
++  if (msgs.length) return msgs.join('\n')
++  return e?.message || 'Có lỗi xảy ra'
++}
+diff --git a/frontend/src/composables/marketingHub.js b/frontend/src/composables/marketingHub.js
+new file mode 100644
+index 0000000..b458f99
+--- /dev/null
++++ b/frontend/src/composables/marketingHub.js
+@@ -0,0 +1,30 @@
++// Marketing Hub (omni_crm, ADR 0028): trạng thái hub và quyền người dùng; không có omni_crm thì mọi thứ ẩn.
++import { createResource } from 'frappe-ui'
++import { computed } from 'vue'
++
++export const marketingHub = createResource({
++  url: 'omni_crm.marketing.api.hub_state',
++  cache: 'omni_marketing_hub_state',
++  auto: true,
++  onError: () => {},
++})
++
++export const canViewMarketing = computed(() =>
++  Boolean(marketingHub.data?.can_view),
++)
++export const canEditMarketingSettings = computed(() =>
++  Boolean(marketingHub.data?.can_edit_settings),
++)
++
++export const STATUS_THEME = {
++  'Đã kết nối': 'green',
++  'Cần kết nối lại': 'orange',
++  'Chưa kết nối': 'gray',
++}
++
++export function formatCheckedAt(value) {
++  if (!value) return ''
++  const d = new Date(String(value).replace(' ', 'T'))
++  if (isNaN(d)) return String(value)
++  return d.toLocaleString('vi-VN', { hour12: false })
++}
+diff --git a/frontend/src/pages/marketing/MarketingCalendar.vue b/frontend/src/pages/marketing/MarketingCalendar.vue
+new file mode 100644
+index 0000000..a39d2c5
+--- /dev/null
++++ b/frontend/src/pages/marketing/MarketingCalendar.vue
+@@ -0,0 +1,154 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <div class="text-lg font-medium text-ink-gray-8">Lịch đăng content</div>
++      </template>
++      <template #right-header>
++        <Button icon="chevron-left" @click="shift(-1)" />
++        <div class="min-w-[110px] text-center text-base font-medium">Tháng {{ month }}/{{ year }}</div>
++        <Button icon="chevron-right" @click="shift(1)" />
++        <Button label="Hôm nay" @click="today" />
++      </template>
++    </LayoutHeader>
++
++    <div class="flex flex-wrap items-center gap-2 px-3 pt-3 sm:px-5">
++      <FormControl v-model="platform" type="select" class="w-40" :options="[{ label: 'Mọi nền tảng', value: '' }, ...PLATFORMS]" />
++      <FormControl v-model="campaign" type="select" class="w-64" :options="campaignOptions" />
++      <div class="ml-auto flex flex-wrap gap-2 text-xs">
++        <span v-for="(theme, st) in TARGET_THEME" :key="st"><Badge :label="st" :theme="theme" /></span>
++      </div>
++    </div>
++
++    <div class="flex-1 overflow-auto px-3 py-3 sm:px-5">
++      <div class="min-w-[720px]">
++        <div class="grid grid-cols-7 border-b border-outline-gray-2 text-center text-p-sm text-ink-gray-5">
++          <div v-for="w in WEEKDAYS" :key="w" class="py-1">{{ w }}</div>
++        </div>
++        <div class="grid grid-cols-7">
++          <div
++            v-for="cell in cells"
++            :key="cell.key"
++            class="min-h-[110px] border-b border-r border-outline-gray-1 p-1"
++            :class="cell.inMonth ? '' : 'bg-surface-gray-1'"
++          >
++            <div class="mb-1 text-right text-xs" :class="cell.isToday ? 'font-bold text-ink-blue-3' : 'text-ink-gray-5'">
++              {{ cell.day }}
++            </div>
++            <router-link
++              v-for="e in cell.entries"
++              :key="e.target"
++              :to="{ name: 'Marketing Post', params: { name: e.item } }"
++              class="mb-1 block truncate rounded px-1 py-0.5 text-xs"
++              :class="ENTRY_CLASS[TARGET_THEME[e.status] || 'gray']"
++              :title="`${e.title} · ${e.campaign_name || ''} · ${e.status}`"
++            >
++              {{ hhmm(e.scheduled_at) }} {{ short(e.platform) }} · {{ e.title }}
++            </router-link>
++          </div>
++        </div>
++      </div>
++      <div v-if="cal.loading" class="py-2 text-center text-p-sm text-ink-gray-5">Đang tải…</div>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import { Badge, FormControl, createResource } from 'frappe-ui'
++import { ref, computed, watch, onBeforeUnmount } from 'vue'
++import { globalStore } from '@/stores/global'
++import { API, PLATFORMS, TARGET_THEME } from '@/composables/marketing'
++
++const { $socket } = globalStore()
++const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
++const ENTRY_CLASS = {
++  gray: 'bg-surface-gray-2 text-ink-gray-7',
++  orange: 'bg-surface-amber-2 text-ink-amber-4',
++  blue: 'bg-surface-blue-2 text-ink-blue-4',
++  green: 'bg-surface-green-2 text-ink-green-4',
++  red: 'bg-surface-red-2 text-ink-red-4',
++}
++
++const now = new Date()
++const month = ref(now.getMonth() + 1)
++const year = ref(now.getFullYear())
++const platform = ref('')
++const campaign = ref('')
++
++const campaigns = createResource({ url: API + 'list_campaigns', auto: true })
++const campaignOptions = computed(() => [
++  { label: 'Mọi chiến dịch', value: '' },
++  ...(campaigns.data || []).map((c) => ({ label: c.campaign_name, value: c.name })),
++])
++
++const cal = createResource({
++  url: API + 'get_calendar',
++  makeParams: () => ({
++    month: month.value,
++    year: year.value,
++    campaign: campaign.value || null,
++    platform: platform.value || null,
++  }),
++  auto: true,
++})
++watch([month, year, platform, campaign], () => cal.reload())
++
++function shift(n) {
++  let m = month.value + n
++  let y = year.value
++  if (m < 1) (m = 12), y--
++  if (m > 12) (m = 1), y++
++  month.value = m
++  year.value = y
++}
++function today() {
++  month.value = now.getMonth() + 1
++  year.value = now.getFullYear()
++}
++
++const pad = (n) => String(n).padStart(2, '0')
++const hhmm = (v) => String(v || '').slice(11, 16)
++const short = (p) => ({ Facebook: 'FB', 'Zalo OA': 'Zalo', TikTok: 'TT' })[p] || p
++
++const cells = computed(() => {
++  const first = new Date(year.value, month.value - 1, 1)
++  const offset = (first.getDay() + 6) % 7 // thứ Hai đầu tuần
++  const start = new Date(year.value, month.value - 1, 1 - offset)
++  const byDay = {}
++  for (const e of cal.data || []) {
++    const k = String(e.scheduled_at).slice(0, 10)
++    ;(byDay[k] = byDay[k] || []).push(e)
++  }
++  const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
++  const out = []
++  const total = Math.ceil((offset + new Date(year.value, month.value, 0).getDate()) / 7) * 7
++  for (let i = 0; i < total; i++) {
++    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
++    const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
++    out.push({
++      key,
++      day: d.getDate(),
++      inMonth: d.getMonth() === month.value - 1,
++      isToday: key === todayKey,
++      entries: byDay[key] || [],
++    })
++  }
++  return out
++})
++
++// Realtime: worker đăng xong / lỗi -> làm mới lịch (gộp nhiều sự kiện trong 1 giây)
++let pending = null
++function onUpdate() {
++  if (pending) return
++  pending = setTimeout(() => {
++    pending = null
++    cal.reload()
++  }, 1000)
++}
++$socket?.on('oc_publish_update', onUpdate)
++onBeforeUnmount(() => {
++  $socket?.off('oc_publish_update', onUpdate)
++  if (pending) clearTimeout(pending)
++})
++</script>
+diff --git a/frontend/src/pages/marketing/MarketingCampaign.vue b/frontend/src/pages/marketing/MarketingCampaign.vue
+new file mode 100644
+index 0000000..7bc7122
+--- /dev/null
++++ b/frontend/src/pages/marketing/MarketingCampaign.vue
+@@ -0,0 +1,206 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <router-link :to="{ name: 'Marketing Campaigns' }" class="text-lg font-medium text-ink-gray-5 hover:text-ink-gray-7">
++          Chiến dịch
++        </router-link>
++        <span class="text-ink-gray-4">/</span>
++        <span class="truncate text-lg font-medium text-ink-gray-8">{{ c?.campaign_name || name }}</span>
++      </template>
++      <template #right-header>
++        <Button label="Thêm bài" icon-left="plus" @click="openNew" />
++        <Button
++          :label="approveLabel"
++          variant="solid"
++          :loading="approving"
++          :disabled="!pendingCount"
++          @click="approveAll"
++        />
++      </template>
++    </LayoutHeader>
++
++    <div v-if="detail.data" class="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
++      <div class="grid grid-cols-1 gap-2 rounded-lg border border-outline-gray-2 p-4 text-p-base sm:grid-cols-2">
++        <div><span class="text-ink-gray-5">Trạng thái:</span> <Badge :label="c.status" :theme="CAMPAIGN_THEME[c.status] || 'gray'" variant="subtle" /></div>
++        <div><span class="text-ink-gray-5">Thời gian:</span> {{ c.start_date || '—' }} → {{ c.end_date || '—' }}</div>
++        <div><span class="text-ink-gray-5">Mã UTM:</span> {{ c.utm_campaign || '—' }}</div>
++        <div><span class="text-ink-gray-5">Trang đích:</span> {{ c.landing_page || '—' }}</div>
++        <div class="sm:col-span-2"><span class="text-ink-gray-5">Mục tiêu:</span> {{ c.objective || '—' }}</div>
++        <div class="sm:col-span-2"><span class="text-ink-gray-5">Khách hàng:</span> {{ c.audience || '—' }}</div>
++        <div class="sm:col-span-2"><span class="text-ink-gray-5">Thông điệp chính:</span> {{ c.key_message || '—' }}</div>
++      </div>
++
++      <div v-if="results.length" class="mt-3 rounded-lg bg-surface-gray-1 p-3 text-p-sm">
++        <div v-for="r in results" :key="r.item">
++          {{ r.title }}: <b>{{ r.status }}</b><span v-if="r.message" class="text-ink-red-3"> — {{ r.message }}</span>
++        </div>
++      </div>
++
++      <div class="mt-4 text-base font-medium text-ink-gray-8">Bài đăng ({{ items.length }})</div>
++      <div class="mt-2 flex flex-col divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2">
++        <div v-if="!items.length" class="p-4 text-p-base text-ink-gray-5">Chưa có bài.</div>
++        <router-link
++          v-for="it in items"
++          :key="it.name"
++          :to="{ name: 'Marketing Post', params: { name: it.name } }"
++          class="flex flex-col gap-1 p-3 hover:bg-surface-gray-1 sm:flex-row sm:items-center sm:gap-3"
++        >
++          <div class="min-w-0 flex-1">
++            <div class="truncate font-medium text-ink-gray-9">{{ it.title }}</div>
++            <div class="flex flex-wrap gap-1.5 pt-1">
++              <Badge
++                v-for="t in it.targets"
++                :key="t.name"
++                :label="`${t.platform} · ${fmtDateTime(t.scheduled_at)}`"
++                :theme="TARGET_THEME[t.status] || 'gray'"
++                variant="subtle"
++              />
++            </div>
++          </div>
++          <div class="flex items-center gap-3 text-p-sm">
++            <span class="text-ink-gray-5">{{ it.pillar || '—' }} · {{ it.funnel_stage || '—' }}</span>
++            <span class="font-semibold" :class="scoreClass(it.quality_score, threshold)">
++              {{ it.quality_score ? it.quality_score + '/100' : 'Chưa chấm' }}
++            </span>
++            <Badge :label="it.status" :theme="ITEM_THEME[it.status] || 'gray'" />
++          </div>
++        </router-link>
++      </div>
++    </div>
++
++    <Dialog v-model="showNew" :options="{ title: 'Thêm bài', size: 'xl' }">
++      <template #body-content>
++        <div class="flex flex-col gap-3">
++          <FormControl v-model="draft.title" label="Tiêu đề" />
++          <FormControl v-model="draft.caption" type="textarea" :rows="6" label="Caption" />
++          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
++            <FormControl v-model="draft.pillar" type="select" label="Trụ cột" :options="pillarOptions" />
++            <FormControl v-model="draft.funnel_stage" type="select" label="Giai đoạn phễu" :options="['', ...FUNNEL]" />
++            <FormControl v-model="draft.platform" type="select" label="Nền tảng" :options="['Facebook', 'Zalo OA']" />
++            <FormControl v-model="draft.post_format" type="select" label="Định dạng" :options="FORMATS[draft.platform]" />
++            <FormControl v-model="draft.channel_account" type="select" label="Kênh" :options="channelOptions" />
++            <FormControl v-model="draft.when" type="datetime-local" label="Giờ đăng" />
++          </div>
++          <p class="text-p-sm text-ink-gray-5">Bài mới ở trạng thái Nháp. Mở bài để chấm điểm AI, thêm ảnh và gửi duyệt.</p>
++        </div>
++      </template>
++      <template #actions>
++        <Button class="w-full" variant="solid" label="Tạo bài" :loading="saving" @click="createPost" />
++      </template>
++    </Dialog>
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import { Badge, Dialog, FormControl, createResource, call, toast } from 'frappe-ui'
++import { ref, computed, reactive } from 'vue'
++import { useRouter } from 'vue-router'
++import {
++  API,
++  api,
++  CAMPAIGN_THEME,
++  ITEM_THEME,
++  TARGET_THEME,
++  FORMATS,
++  FUNNEL,
++  fmtDateTime,
++  fromInputDateTime,
++  scoreClass,
++  errorText,
++} from '@/composables/marketing'
++
++const props = defineProps({ name: { type: String, required: true } })
++const router = useRouter()
++
++const detail = createResource({
++  url: API + 'campaign_detail',
++  makeParams: () => ({ name: props.name }),
++  auto: true,
++})
++const c = computed(() => detail.data?.campaign)
++const items = computed(() => detail.data?.items || [])
++const threshold = computed(() => detail.data?.threshold || 0)
++const pendingCount = computed(() => items.value.filter((i) => ['Nháp', 'Chờ duyệt'].includes(i.status)).length)
++const approveLabel = computed(() =>
++  detail.data?.require_approval && !detail.data?.is_manager ? 'Gửi duyệt cả chiến dịch' : 'Duyệt và lên lịch',
++)
++
++const results = ref([])
++const approving = ref(false)
++async function approveAll() {
++  approving.value = true
++  try {
++    results.value = await api('approve_campaign', { name: props.name })
++    detail.reload()
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    approving.value = false
++  }
++}
++
++const pillars = createResource({
++  url: 'frappe.client.get_list',
++  params: { doctype: 'Omni Content Pillar', filters: { is_active: 1 }, fields: ['name'], limit_page_length: 0 },
++  auto: true,
++})
++const pillarOptions = computed(() => ['', ...(pillars.data || []).map((p) => p.name)])
++const channels = createResource({ url: API + 'get_social_channels', auto: true })
++const channelOptions = computed(() =>
++  (channels.data || [])
++    .filter((a) => a.platform === draft.platform && a.name && a.platform !== 'TikTok')
++    .map((a) => ({ label: `${a.account_name} (${a.status})`, value: a.name })),
++)
++
++const showNew = ref(false)
++const saving = ref(false)
++const draft = reactive({})
++function openNew() {
++  Object.assign(draft, {
++    title: '',
++    caption: '',
++    pillar: '',
++    funnel_stage: '',
++    platform: 'Facebook',
++    post_format: 'fb_link',
++    channel_account: '',
++    when: '',
++  })
++  showNew.value = true
++}
++
++async function createPost() {
++  if (!draft.title || !draft.when) return toast.error('Nhập tiêu đề và giờ đăng')
++  saving.value = true
++  try {
++    const item = await call('frappe.client.insert', {
++      doc: {
++        doctype: 'Omni Content Item',
++        campaign: props.name,
++        title: draft.title,
++        caption: draft.caption,
++        pillar: draft.pillar || null,
++        funnel_stage: draft.funnel_stage || null,
++      },
++    })
++    await call('frappe.client.insert', {
++      doc: {
++        doctype: 'Omni Content Target',
++        content_item: item.name,
++        platform: draft.platform,
++        post_format: draft.post_format,
++        channel_account: draft.channel_account || channelOptions.value[0]?.value,
++        scheduled_at: fromInputDateTime(draft.when),
++      },
++    })
++    showNew.value = false
++    router.push({ name: 'Marketing Post', params: { name: item.name } })
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    saving.value = false
++  }
++}
++</script>
+diff --git a/frontend/src/pages/marketing/MarketingCampaigns.vue b/frontend/src/pages/marketing/MarketingCampaigns.vue
+new file mode 100644
+index 0000000..2a24fa7
+--- /dev/null
++++ b/frontend/src/pages/marketing/MarketingCampaigns.vue
+@@ -0,0 +1,86 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <div class="text-lg font-medium text-ink-gray-8">Chiến dịch</div>
++      </template>
++      <template #right-header>
++        <Button label="Làm mới" icon-left="refresh-cw" @click="campaigns.reload()" />
++        <Button label="Tạo chiến dịch bằng AI" variant="solid" icon-left="zap" @click="showChat = true" />
++      </template>
++    </LayoutHeader>
++
++    <div class="flex flex-wrap gap-1.5 px-3 pt-3 sm:px-5">
++      <Button
++        v-for="s in statuses"
++        :key="s.value"
++        size="sm"
++        :label="s.label"
++        :variant="status === s.value ? 'solid' : 'subtle'"
++        @click="status = s.value"
++      />
++    </div>
++
++    <div class="flex-1 overflow-y-auto px-3 py-3 sm:px-5">
++      <div v-if="campaigns.loading && !campaigns.data" class="py-10 text-center text-ink-gray-5">Đang tải…</div>
++      <div
++        v-else-if="!campaigns.data?.length"
++        class="rounded border border-dashed border-outline-gray-2 py-10 text-center text-p-base text-ink-gray-5"
++      >
++        Chưa có chiến dịch nào có bài đăng. Bấm "Tạo chiến dịch bằng AI" để bắt đầu.
++      </div>
++      <div v-else class="grid grid-cols-1 gap-3 lg:grid-cols-2">
++        <router-link
++          v-for="c in campaigns.data"
++          :key="c.name"
++          :to="{ name: 'Marketing Campaign', params: { name: c.name } }"
++          class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 p-4 hover:bg-surface-gray-1"
++        >
++          <div class="flex items-start justify-between gap-2">
++            <div class="font-medium text-ink-gray-9">{{ c.campaign_name }}</div>
++            <Badge :label="c.status || 'Nháp'" :theme="CAMPAIGN_THEME[c.status] || 'gray'" variant="subtle" />
++          </div>
++          <div class="text-p-sm text-ink-gray-5">
++            {{ c.start_date || '—' }} → {{ c.end_date || '—' }} · {{ c.utm_campaign || 'chưa có mã UTM' }}
++          </div>
++          <div class="flex flex-wrap gap-x-4 gap-y-1 text-p-sm text-ink-gray-7">
++            <span>{{ c.posts }} bài</span>
++            <span v-if="c.draft">{{ c.draft }} nháp</span>
++            <span v-if="c.review" class="text-ink-amber-3">{{ c.review }} chờ duyệt</span>
++            <span v-if="c.scheduled" class="text-ink-blue-3">{{ c.scheduled }} đã lên lịch</span>
++            <span v-if="c.published" class="text-ink-green-3">{{ c.published }} đã đăng</span>
++            <span v-if="c.failed" class="text-ink-red-3">{{ c.failed }} lỗi</span>
++            <span class="ml-auto">Điểm TB: {{ dash(c.avg_score) }}</span>
++          </div>
++        </router-link>
++      </div>
++    </div>
++    <PlannerChat v-model="showChat" @created="campaigns.reload()" />
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import PlannerChat from '@/components/Marketing/PlannerChat.vue'
++import { Badge, createResource } from 'frappe-ui'
++import { ref, watch } from 'vue'
++import { API, CAMPAIGN_THEME, dash } from '@/composables/marketing'
++
++const statuses = [
++  { label: 'Tất cả', value: '' },
++  { label: 'Nháp', value: 'Nháp' },
++  { label: 'Đang chạy', value: 'Đang chạy' },
++  { label: 'Tạm dừng', value: 'Tạm dừng' },
++  { label: 'Kết thúc', value: 'Kết thúc' },
++  { label: 'Có lỗi', value: 'Có lỗi' },
++]
++const status = ref('')
++const showChat = ref(false)
++
++const campaigns = createResource({
++  url: API + 'list_campaigns',
++  makeParams: () => ({ status: status.value || null }),
++  auto: true,
++})
++watch(status, () => campaigns.reload())
++</script>
+diff --git a/frontend/src/pages/marketing/MarketingKB.vue b/frontend/src/pages/marketing/MarketingKB.vue
+new file mode 100644
+index 0000000..2116327
+--- /dev/null
++++ b/frontend/src/pages/marketing/MarketingKB.vue
+@@ -0,0 +1,279 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <div class="text-lg font-medium text-ink-gray-8">Kho tri thức</div>
++      </template>
++      <template #right-header>
++        <Button label="Làm mới" icon-left="refresh-cw" :loading="kb.loading" @click="kb.reload()" />
++        <Button label="Thêm tài liệu" icon-left="upload" variant="solid" @click="openUpload" />
++      </template>
++    </LayoutHeader>
++
++    <div class="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
++      <div class="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
++        <!-- Danh mục -->
++        <section class="rounded-lg border border-outline-gray-2 p-3">
++          <div class="mb-2 flex items-center justify-between">
++            <h3 class="text-base font-medium">Danh mục</h3>
++            <Button v-if="isManager" size="sm" icon="plus" @click="showCat = true" />
++          </div>
++          <button
++            class="flex w-full justify-between rounded px-2 py-1.5 text-left text-p-base"
++            :class="category === '' ? 'bg-surface-gray-2' : 'hover:bg-surface-gray-1'"
++            @click="category = ''"
++          >
++            <span>Tất cả</span><span class="text-ink-gray-5">{{ docs.length }}</span>
++          </button>
++          <button
++            v-for="c in kb.data?.categories || []"
++            :key="c.name"
++            class="flex w-full justify-between rounded px-2 py-1.5 text-left text-p-base"
++            :class="[category === c.name ? 'bg-surface-gray-2' : 'hover:bg-surface-gray-1', c.is_active ? '' : 'text-ink-gray-4']"
++            :title="c.description"
++            @click="category = c.name"
++          >
++            <span class="truncate">{{ c.category_name }}</span><span class="text-ink-gray-5">{{ c.document_count }}</span>
++          </button>
++          <button
++            v-if="kb.data?.uncategorized"
++            class="flex w-full justify-between rounded px-2 py-1.5 text-left text-p-base"
++            :class="category === '-' ? 'bg-surface-gray-2' : 'hover:bg-surface-gray-1'"
++            @click="category = '-'"
++          >
++            <span>(chưa phân loại)</span><span class="text-ink-gray-5">{{ kb.data.uncategorized }}</span>
++          </button>
++        </section>
++
++        <div class="flex flex-col gap-4">
++          <!-- Tài liệu -->
++          <section class="rounded-lg border border-outline-gray-2 p-3">
++            <h3 class="mb-2 text-base font-medium">Tài liệu</h3>
++            <div class="overflow-x-auto">
++              <table class="w-full min-w-[680px] text-p-sm">
++                <thead class="text-ink-gray-5">
++                  <tr>
++                    <th class="py-1 text-left font-normal">Tên</th>
++                    <th class="text-left font-normal">Danh mục</th>
++                    <th class="text-left font-normal">Trạng thái</th>
++                    <th class="text-right font-normal">Đoạn</th>
++                    <th class="text-left font-normal">Cập nhật</th>
++                    <th class="text-right font-normal">Dùng</th>
++                    <th />
++                  </tr>
++                </thead>
++                <tbody>
++                  <tr v-if="!shown.length"><td colspan="7" class="py-2 text-ink-gray-5">Chưa có tài liệu.</td></tr>
++                  <tr v-for="doc in shown" :key="doc.name" class="border-t border-outline-gray-1">
++                    <td class="max-w-[240px] truncate py-1.5" :title="doc.title">{{ doc.title }}</td>
++                    <td>{{ doc.category || '—' }}</td>
++                    <td>
++                      <Badge :label="doc.status" :theme="DOC_THEME[doc.status] || 'gray'" />
++                      <div v-if="doc.index_error" class="text-xs text-ink-red-3">{{ doc.index_error }}</div>
++                    </td>
++                    <td class="text-right">{{ doc.chunk_count || '—' }}</td>
++                    <td>{{ fmtDateTime(doc.indexed_at || doc.modified) }}</td>
++                    <td class="text-right">
++                      <Switch :modelValue="!!doc.is_active" @update:modelValue="(v) => toggle(doc, v)" />
++                    </td>
++                    <td class="text-right">
++                      <Button size="sm" variant="ghost" icon="refresh-cw" title="Lập chỉ mục lại" @click="reindex(doc)" />
++                    </td>
++                  </tr>
++                </tbody>
++              </table>
++            </div>
++          </section>
++
++          <!-- Hỏi thử -->
++          <section class="rounded-lg border border-outline-gray-2 p-3">
++            <h3 class="mb-1 text-base font-medium">Hỏi thử Kho tri thức</h3>
++            <p class="mb-2 text-p-sm text-ink-gray-5">
++              AI chỉ trả lời từ tài liệu trong kho và ghi nguồn. Đánh giá câu trả lời để đội tinh chỉnh tài liệu.
++            </p>
++            <div class="flex flex-col gap-2 sm:flex-row">
++              <FormControl v-model="question" class="flex-1" placeholder="Ví dụ: Dịch vụ SPD gồm những bước nào?" @keydown.enter="ask" />
++              <Button label="Hỏi" variant="solid" :loading="asking" :disabled="!question.trim()" @click="ask" />
++            </div>
++            <div v-if="answer" class="mt-3 flex flex-col gap-2">
++              <div v-if="!answer.ok" class="rounded bg-surface-red-1 px-3 py-2 text-p-base text-ink-red-4">{{ answer.message }}</div>
++              <template v-else>
++                <div v-if="answer.insufficient" class="text-p-sm text-ink-amber-4">Kho chưa đủ thông tin cho câu này.</div>
++                <div class="whitespace-pre-wrap rounded bg-surface-gray-1 px-3 py-2 text-p-base">{{ answer.answer }}</div>
++                <div v-if="answer.sources.length" class="flex flex-col gap-1">
++                  <div class="text-p-sm text-ink-gray-5">Nguồn:</div>
++                  <details v-for="s in answer.sources" :key="s.id" class="rounded border border-outline-gray-1 px-2 py-1 text-p-sm">
++                    <summary class="cursor-pointer">[{{ s.id }}] {{ s.source }}</summary>
++                    <div class="whitespace-pre-wrap pt-1 text-ink-gray-6">{{ s.excerpt }}</div>
++                  </details>
++                </div>
++                <div class="text-xs text-ink-gray-5">Chi phí: {{ answer.cost_usd }} USD</div>
++              </template>
++              <div v-if="answer.run" class="flex flex-wrap items-center gap-2">
++                <span class="text-p-sm">Đánh giá:</span>
++                <Button
++                  v-for="v in ['Đúng', 'Cần sửa', 'Sai']"
++                  :key="v"
++                  size="sm"
++                  :label="v"
++                  :variant="verdict === v ? 'solid' : 'subtle'"
++                  :theme="v === 'Sai' ? 'red' : v === 'Đúng' ? 'green' : 'gray'"
++                  @click="verdict = v"
++                />
++                <FormControl v-if="verdict && verdict !== 'Đúng'" v-model="note" class="min-w-[200px] flex-1" placeholder="Sai / cần sửa ở đâu?" />
++                <Button v-if="verdict" size="sm" label="Gửi đánh giá" :loading="sendingFb" :disabled="fbSent" @click="feedback" />
++                <span v-if="fbSent" class="text-p-sm text-ink-green-3">Đã ghi nhận</span>
++              </div>
++            </div>
++          </section>
++        </div>
++      </div>
++    </div>
++
++    <Dialog v-model="showUpload" :options="{ title: 'Thêm tài liệu' }">
++      <template #body-content>
++        <div class="flex flex-col gap-3">
++          <FormControl v-model="up.title" label="Tên tài liệu" />
++          <FormControl v-model="up.category" type="select" label="Danh mục" :options="categoryOptions" />
++          <FileUploader :uploadArgs="{ private: true }" fileTypes=".pdf,.docx,.txt,.md" @success="(f) => (up.file = f)">
++            <template #default="{ openFileSelector, uploading }">
++              <Button :label="uploading ? 'Đang tải…' : up.file ? up.file.file_name : 'Chọn tệp (PDF, DOCX, TXT, MD)'" icon-left="paperclip" @click="openFileSelector" />
++            </template>
++          </FileUploader>
++          <p class="text-p-sm text-ink-gray-5">Tệp được lưu riêng tư. Lập chỉ mục chạy nền, xong sẽ chuyển trạng thái "Đã lập chỉ mục".</p>
++        </div>
++      </template>
++      <template #actions>
++        <Button class="w-full" variant="solid" label="Lưu" :loading="saving" :disabled="!up.file" @click="saveDoc" />
++      </template>
++    </Dialog>
++
++    <Dialog v-model="showCat" :options="{ title: 'Thêm danh mục' }">
++      <template #body-content>
++        <div class="flex flex-col gap-3">
++          <FormControl v-model="cat.category_name" label="Tên danh mục" />
++          <FormControl v-model="cat.description" type="textarea" label="Mô tả" />
++        </div>
++      </template>
++      <template #actions>
++        <Button class="w-full" variant="solid" label="Lưu" :disabled="!cat.category_name" @click="saveCat" />
++      </template>
++    </Dialog>
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import { Badge, Dialog, FormControl, FileUploader, Switch, createResource, call, toast } from 'frappe-ui'
++import { ref, reactive, computed } from 'vue'
++import { marketingHub } from '@/composables/marketingHub'
++import { API, api, fmtDateTime, errorText } from '@/composables/marketing'
++
++const DOC_THEME = { 'Đang xử lý': 'blue', 'Đã lập chỉ mục': 'green', 'Lỗi': 'red' }
++const isManager = computed(() => Boolean(marketingHub.data?.is_manager))
++
++const kb = createResource({ url: API + 'kb_overview', auto: true })
++const docs = computed(() => kb.data?.documents || [])
++const category = ref('')
++const shown = computed(() =>
++  docs.value.filter((d) => !category.value || (category.value === '-' ? !d.category : d.category === category.value)),
++)
++const categoryOptions = computed(() => [
++  { label: '(chưa phân loại)', value: '' },
++  ...(kb.data?.categories || []).filter((c) => c.is_active).map((c) => ({ label: c.category_name, value: c.name })),
++])
++
++async function toggle(doc, value) {
++  try {
++    await call('frappe.client.set_value', { doctype: 'Omni KB Document', name: doc.name, fieldname: 'is_active', value: value ? 1 : 0 })
++    kb.reload()
++  } catch (e) {
++    toast.error(errorText(e))
++  }
++}
++async function reindex(doc) {
++  try {
++    await api('kb_reindex', { name: doc.name })
++    toast.info('Đang lập chỉ mục lại')
++    setTimeout(() => kb.reload(), 3000)
++  } catch (e) {
++    toast.error(errorText(e))
++  }
++}
++
++const showUpload = ref(false)
++const saving = ref(false)
++const up = reactive({})
++function openUpload() {
++  Object.assign(up, { title: '', category: category.value && category.value !== '-' ? category.value : '', file: null })
++  showUpload.value = true
++}
++async function saveDoc() {
++  saving.value = true
++  try {
++    await call('frappe.client.insert', {
++      doc: {
++        doctype: 'Omni KB Document',
++        title: up.title || up.file.file_name,
++        category: up.category || null,
++        source_file: up.file.file_url,
++      },
++    })
++    showUpload.value = false
++    toast.success('Đã thêm, đang lập chỉ mục')
++    kb.reload()
++    setTimeout(() => kb.reload(), 4000)
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    saving.value = false
++  }
++}
++
++const showCat = ref(false)
++const cat = reactive({ category_name: '', description: '' })
++async function saveCat() {
++  try {
++    await call('frappe.client.insert', { doc: { doctype: 'Omni KB Category', ...cat, is_active: 1 } })
++    showCat.value = false
++    cat.category_name = ''
++    cat.description = ''
++    kb.reload()
++  } catch (e) {
++    toast.error(errorText(e))
++  }
++}
++
++const question = ref('')
++const asking = ref(false)
++const answer = ref(null)
++const verdict = ref('')
++const note = ref('')
++const sendingFb = ref(false)
++const fbSent = ref(false)
++async function ask() {
++  if (!question.value.trim() || asking.value) return
++  asking.value = true
++  verdict.value = ''
++  note.value = ''
++  fbSent.value = false
++  try {
++    answer.value = await api('kb_ask', { question: question.value })
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    asking.value = false
++  }
++}
++async function feedback() {
++  sendingFb.value = true
++  try {
++    await api('kb_feedback', { run: answer.value.run, verdict: verdict.value, note: note.value })
++    fbSent.value = true
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    sendingFb.value = false
++  }
++}
++</script>
+diff --git a/frontend/src/pages/marketing/MarketingPost.vue b/frontend/src/pages/marketing/MarketingPost.vue
+new file mode 100644
+index 0000000..432cc7f
+--- /dev/null
++++ b/frontend/src/pages/marketing/MarketingPost.vue
+@@ -0,0 +1,432 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <router-link :to="{ name: 'Marketing Campaigns' }" class="text-lg font-medium text-ink-gray-5 hover:text-ink-gray-7">
++          Chiến dịch
++        </router-link>
++        <template v-if="d?.campaign">
++          <span class="text-ink-gray-4">/</span>
++          <router-link
++            :to="{ name: 'Marketing Campaign', params: { name: d.campaign.name } }"
++            class="truncate text-lg font-medium text-ink-gray-5 hover:text-ink-gray-7"
++          >
++            {{ d.campaign.campaign_name }}
++          </router-link>
++        </template>
++        <span class="text-ink-gray-4">/</span>
++        <span class="truncate text-lg font-medium text-ink-gray-8">{{ item?.title || name }}</span>
++      </template>
++      <template #right-header>
++        <Badge v-if="item" :label="item.status" :theme="ITEM_THEME[item.status] || 'gray'" size="lg" />
++        <Button v-if="canScore" label="Chấm điểm lại" icon-left="star" :loading="busy === 'score'" @click="rescore" />
++        <Button v-if="item?.status === 'Nháp' && d.can_edit" label="Gửi duyệt" :loading="busy === 'submit'" @click="act('submit_item')" />
++        <Button
++          v-if="canApprove"
++          label="Duyệt và lên lịch"
++          variant="solid"
++          :loading="busy === 'approve'"
++          @click="act('approve_item')"
++        />
++        <Button
++          v-if="canCancel"
++          label="Hủy lịch"
++          theme="red"
++          variant="subtle"
++          :loading="busy === 'cancel'"
++          @click="act('cancel_item')"
++        />
++      </template>
++    </LayoutHeader>
++
++    <div v-if="d" class="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
++      <div v-if="d.dry_run" class="mb-3 rounded bg-surface-amber-1 px-3 py-2 text-p-sm text-ink-amber-4">
++        Chế độ chạy thử đang bật: bài được "đăng" chỉ ghi nhật ký, không gửi lên Facebook / Zalo.
++      </div>
++
++      <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
++        <div class="flex flex-col gap-4">
++          <!-- Nội dung -->
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <div class="mb-3 flex items-center justify-between">
++              <h3 class="text-base font-medium text-ink-gray-8">Nội dung</h3>
++              <div class="flex items-center gap-2 text-p-sm">
++                Điểm chất lượng:
++                <span class="text-base font-semibold" :class="scoreClass(item.quality_score, d.threshold)">
++                  {{ item.quality_score ? item.quality_score + '/100' : 'Chưa chấm' }}
++                </span>
++                <span class="text-ink-gray-5">(ngưỡng {{ d.threshold }})</span>
++              </div>
++            </div>
++            <div
++              v-if="item.quality_note"
++              class="mb-3 whitespace-pre-wrap rounded bg-surface-gray-1 px-3 py-2 text-p-sm"
++              :class="item.quality_score >= d.threshold ? 'text-ink-gray-6' : 'text-ink-red-3'"
++            >
++              {{ item.quality_note }}
++            </div>
++            <div class="flex flex-col gap-3">
++              <FormControl v-model="form.title" label="Tiêu đề" :disabled="!d.can_edit" />
++              <FormControl v-model="form.caption" type="textarea" :rows="9" label="Caption" :disabled="!d.can_edit" />
++              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
++                <FormControl v-model="form.pillar" type="select" label="Trụ cột" :options="pillarOptions" :disabled="!d.can_edit" />
++                <FormControl
++                  v-model="form.funnel_stage"
++                  type="select"
++                  label="Giai đoạn phễu"
++                  :options="['', ...FUNNEL]"
++                  :disabled="!d.can_edit"
++                />
++              </div>
++              <div v-if="d.can_edit" class="flex items-center gap-2">
++                <Button label="Lưu nội dung" variant="solid" :disabled="!dirty" :loading="busy === 'save'" @click="save" />
++                <span class="text-p-sm text-ink-gray-5">Sửa tiêu đề / caption / ảnh sau khi chấm sẽ phải chấm lại.</span>
++              </div>
++            </div>
++          </section>
++
++          <!-- Ảnh -->
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-3 text-base font-medium text-ink-gray-8">Ảnh</h3>
++            <div class="flex flex-wrap gap-3">
++              <div v-for="(img, i) in images" :key="img.url + i" class="relative">
++                <img :src="img.url" class="h-28 w-28 rounded border border-outline-gray-2 object-cover" />
++                <span class="absolute left-1 top-1 rounded bg-surface-white px-1 text-xs">{{ img.label }}</span>
++                <Button
++                  v-if="d.can_edit"
++                  class="absolute right-1 top-1"
++                  size="sm"
++                  icon="x"
++                  @click="removeImage(img)"
++                />
++              </div>
++              <div v-if="!images.length" class="text-p-base text-ink-gray-5">Chưa có ảnh.</div>
++            </div>
++            <div v-if="d.can_edit" class="mt-3 flex flex-wrap items-center gap-2">
++              <FileUploader fileTypes="image/*" @success="addImage">
++                <template #default="{ openFileSelector, uploading }">
++                  <Button :label="uploading ? 'Đang tải…' : 'Tải ảnh lên'" icon-left="upload" @click="openFileSelector" />
++                </template>
++              </FileUploader>
++              <Tooltip text="Chưa hỗ trợ: AI chỉ gợi ý mô tả ảnh, thiết kế ảnh do người làm.">
++                <Button label="Tạo ảnh bằng AI" icon-left="image" disabled />
++              </Tooltip>
++              <span class="text-p-sm text-ink-gray-5">Ảnh đầu tiên là ảnh bìa (bắt buộc với Zalo OA và Facebook một ảnh).</span>
++            </div>
++          </section>
++
++          <!-- Nền tảng -->
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <div class="mb-3 flex items-center justify-between">
++              <h3 class="text-base font-medium text-ink-gray-8">Nền tảng đăng</h3>
++              <Button v-if="d.can_edit" size="sm" label="Thêm nền tảng" icon-left="plus" @click="openTarget()" />
++            </div>
++            <div class="flex flex-col divide-y divide-outline-gray-1">
++              <div v-if="!d.targets.length" class="py-2 text-p-base text-ink-gray-5">Chưa chọn nền tảng.</div>
++              <div v-for="t in d.targets" :key="t.name" class="flex flex-col gap-1 py-2">
++                <div class="flex flex-wrap items-center gap-2">
++                  <span class="font-medium">{{ t.platform }}</span>
++                  <span class="text-p-sm text-ink-gray-5">{{ formatLabel(t) }} · {{ channelName(t.channel_account) }}</span>
++                  <span class="text-p-sm">{{ fmtDateTime(t.scheduled_at) }}</span>
++                  <Badge class="ml-auto" :label="t.status" :theme="TARGET_THEME[t.status] || 'gray'" />
++                  <Button
++                    v-if="d.can_edit && t.status === 'Chờ duyệt'"
++                    size="sm"
++                    variant="ghost"
++                    icon="edit-2"
++                    @click="openTarget(t)"
++                  />
++                </div>
++                <div v-if="t.permalink" class="text-p-sm">
++                  <a :href="t.permalink" target="_blank" rel="noopener" class="text-ink-blue-3 underline">Xem bài đã đăng</a>
++                  <span class="text-ink-gray-5"> · {{ fmtDateTime(t.published_at) }}</span>
++                </div>
++                <div v-if="t.last_error" class="text-p-sm text-ink-red-3">
++                  {{ t.last_error }}
++                  <span v-if="t.next_retry_at" class="text-ink-gray-5"> · thử lại lúc {{ fmtDateTime(t.next_retry_at) }}</span>
++                </div>
++              </div>
++            </div>
++          </section>
++
++          <!-- Link & UTM -->
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-3 text-base font-medium text-ink-gray-8">Link và UTM</h3>
++            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
++              <FormControl
++                v-model="form.landing_page"
++                label="Trang đích của bài"
++                :placeholder="d.campaign?.landing_page || 'Theo chiến dịch'"
++                :disabled="!d.can_edit"
++              />
++              <FormControl v-model="form.utm_content" label="utm_content (mã bài)" :disabled="!d.can_edit" />
++            </div>
++            <div class="mt-2 text-p-sm text-ink-gray-5">
++              utm_campaign: <b>{{ d.campaign?.utm_campaign || '—' }}</b>. Link theo từng nền tảng được tạo khi duyệt.
++            </div>
++            <div v-for="t in d.targets.filter((x) => x.tracking_url)" :key="t.name" class="mt-1 break-all text-p-sm">
++              {{ t.platform }}: <span class="text-ink-gray-7">{{ t.tracking_url }}</span>
++            </div>
++          </section>
++        </div>
++
++        <div class="flex flex-col gap-4">
++          <!-- Xem trước -->
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-3 text-base font-medium text-ink-gray-8">Xem trước</h3>
++            <div class="rounded-lg border border-outline-gray-2 bg-surface-white">
++              <div class="flex items-center gap-2 p-3">
++                <div class="h-8 w-8 rounded-full bg-surface-gray-3" />
++                <div>
++                  <div class="text-p-sm font-medium">{{ previewChannel }}</div>
++                  <div class="text-xs text-ink-gray-5">{{ fmtDateTime(d.targets[0]?.scheduled_at) }}</div>
++                </div>
++              </div>
++              <div class="whitespace-pre-wrap px-3 pb-3 text-p-sm text-ink-gray-8">{{ form.caption || '(chưa có caption)' }}</div>
++              <div v-if="previewLink" class="break-all px-3 pb-3 text-p-sm text-ink-blue-3">{{ previewLink }}</div>
++              <img v-if="images[0]" :src="images[0].url" class="max-h-72 w-full object-cover" />
++            </div>
++          </section>
++
++          <!-- Nhật ký -->
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-3 text-base font-medium text-ink-gray-8">Nhật ký đăng</h3>
++            <div v-if="!d.logs.length" class="text-p-base text-ink-gray-5">Chưa có lần đăng nào.</div>
++            <div v-for="l in d.logs" :key="l.name" class="border-b border-outline-gray-1 py-1.5 text-p-sm last:border-0">
++              <div class="flex items-center gap-2">
++                <span>{{ platformOf(l.target) }} · lần {{ l.attempt_no }}</span>
++                <span class="ml-auto font-medium" :class="l.outcome === 'Thành công' ? 'text-ink-green-3' : 'text-ink-red-3'">
++                  {{ l.outcome }}
++                </span>
++              </div>
++              <div class="text-xs text-ink-gray-5">
++                {{ fmtDateTime(l.started_at) }}<span v-if="l.http_status"> · HTTP {{ l.http_status }}</span>
++              </div>
++              <div v-if="l.message" class="text-xs text-ink-gray-7">{{ l.message }}</div>
++            </div>
++          </section>
++        </div>
++      </div>
++    </div>
++
++    <Dialog v-model="showTarget" :options="{ title: tdraft.name ? 'Sửa nền tảng' : 'Thêm nền tảng' }">
++      <template #body-content>
++        <div class="flex flex-col gap-3">
++          <FormControl
++            v-model="tdraft.platform"
++            type="select"
++            label="Nền tảng"
++            :options="['Facebook', 'Zalo OA']"
++            :disabled="!!tdraft.name"
++          />
++          <FormControl v-model="tdraft.post_format" type="select" label="Định dạng" :options="FORMATS[tdraft.platform]" />
++          <FormControl v-model="tdraft.channel_account" type="select" label="Kênh" :options="channelOptions" />
++          <FormControl v-model="tdraft.when" type="datetime-local" label="Giờ đăng" />
++        </div>
++      </template>
++      <template #actions>
++        <Button class="w-full" variant="solid" label="Lưu" :loading="busy === 'target'" @click="saveTarget" />
++      </template>
++    </Dialog>
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import { Badge, Dialog, FormControl, FileUploader, Tooltip, createResource, call, toast } from 'frappe-ui'
++import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
++import { globalStore } from '@/stores/global'
++import {
++  API,
++  api,
++  ITEM_THEME,
++  TARGET_THEME,
++  FORMATS,
++  FUNNEL,
++  fmtDateTime,
++  toInputDateTime,
++  fromInputDateTime,
++  scoreClass,
++  errorText,
++  callShowMessages,
++} from '@/composables/marketing'
++
++const props = defineProps({ name: { type: String, required: true } })
++const { $socket } = globalStore()
++
++const detail = createResource({
++  url: API + 'item_detail',
++  makeParams: () => ({ name: props.name }),
++  auto: true,
++})
++const d = computed(() => detail.data)
++const item = computed(() => d.value?.item)
++
++const FIELDS = ['title', 'caption', 'pillar', 'funnel_stage', 'landing_page', 'utm_content']
++const form = reactive({})
++watch(item, (v) => v && FIELDS.forEach((f) => (form[f] = v[f] || '')), { immediate: true })
++const dirty = computed(() => item.value && FIELDS.some((f) => (form[f] || '') !== (item.value[f] || '')))
++
++const canScore = computed(() => d.value?.can_edit && (form.caption || '').trim())
++const canApprove = computed(
++  () =>
++    item.value &&
++    ((item.value.status === 'Chờ duyệt' && (d.value.is_manager || !d.value.require_approval)) ||
++      (item.value.status === 'Nháp' && !d.value.require_approval && d.value.can_edit)),
++)
++const canCancel = computed(
++  () => item.value && ['Chờ duyệt', 'Đã lên lịch', 'Thất bại', 'Đăng một phần'].includes(item.value.status),
++)
++
++const busy = ref('')
++async function run(key, fn) {
++  busy.value = key
++  try {
++    await fn()
++  } catch (e) {
++    toast.error(errorText(e))
++  } finally {
++    busy.value = ''
++  }
++}
++
++function act(method) {
++  const key = { submit_item: 'submit', approve_item: 'approve', cancel_item: 'cancel' }[method]
++  return run(key, async () => {
++    const status = await api(method, { name: props.name })
++    toast.success(`Trạng thái bài: ${status}`)
++    detail.reload()
++  })
++}
++
++function save() {
++  return run('save', async () => {
++    const values = {}
++    FIELDS.forEach((f) => {
++      if ((form[f] || '') !== (item.value[f] || '')) values[f] = form[f] || null
++    })
++    await callShowMessages('frappe.client.set_value', { doctype: 'Omni Content Item', name: props.name, fieldname: values })
++    toast.success('Đã lưu')
++    detail.reload()
++  })
++}
++
++function rescore() {
++  return run('score', async () => {
++    if (dirty.value) await save()
++    await api('score_item', { name: props.name })
++    toast.info('Đang chấm điểm, kết quả sẽ hiện sau ít giây')
++  })
++}
++
++// Ảnh: media là ảnh bìa, media_items là ảnh thêm
++const images = computed(() => {
++  if (!item.value) return []
++  const out = []
++  if (item.value.media) out.push({ url: item.value.media, label: 'Bìa', field: 'media' })
++  ;(item.value.media_items || []).forEach((m, i) => out.push({ url: m.image, label: `#${i + 2}`, row: m.name }))
++  return out
++})
++
++async function saveMedia(media, rows) {
++  const doc = await call('frappe.client.get', { doctype: 'Omni Content Item', name: props.name })
++  doc.media = media
++  doc.media_items = rows
++  await callShowMessages('frappe.client.save', { doc })
++  detail.reload()
++}
++
++function addImage(file) {
++  return run('media', async () => {
++    const rows = (item.value.media_items || []).map((m) => ({ image: m.image, alt_text: m.alt_text }))
++    if (!item.value.media) await saveMedia(file.file_url, rows)
++    else await saveMedia(item.value.media, [...rows, { image: file.file_url }])
++  })
++}
++
++function removeImage(img) {
++  return run('media', async () => {
++    let rows = (item.value.media_items || []).map((m) => ({ name: m.name, image: m.image, alt_text: m.alt_text }))
++    let media = item.value.media
++    if (img.field === 'media') {
++      media = rows.length ? rows.shift().image : null
++    } else {
++      rows = rows.filter((r) => r.name !== img.row)
++    }
++    await saveMedia(media, rows.map(({ image, alt_text }) => ({ image, alt_text })))
++  })
++}
++
++// Nền tảng
++const channels = createResource({ url: API + 'get_social_channels', auto: true })
++function channelName(name) {
++  return (channels.data || []).find((c) => c.name === name)?.account_name || name || '—'
++}
++const channelOptions = computed(() =>
++  (channels.data || [])
++    .filter((a) => a.name && a.platform === tdraft.platform)
++    .map((a) => ({ label: `${a.account_name} (${a.status})`, value: a.name })),
++)
++function formatLabel(t) {
++  return (FORMATS[t.platform] || []).find((f) => f.value === t.post_format)?.label || t.post_format
++}
++function platformOf(target) {
++  return d.value?.targets.find((t) => t.name === target)?.platform || target
++}
++const previewChannel = computed(() => channelName(d.value?.targets[0]?.channel_account) || 'Trang của bạn')
++const previewLink = computed(() => d.value?.targets.find((t) => t.tracking_url)?.tracking_url || form.landing_page || d.value?.campaign?.landing_page)
++
++const showTarget = ref(false)
++const tdraft = reactive({})
++function openTarget(t) {
++  Object.assign(tdraft, {
++    name: t?.name || '',
++    platform: t?.platform || 'Facebook',
++    post_format: t?.post_format || 'fb_link',
++    channel_account: t?.channel_account || '',
++    when: toInputDateTime(t?.scheduled_at),
++  })
++  showTarget.value = true
++}
++watch(
++  () => tdraft.platform,
++  (p) => {
++    if (!tdraft.name && p && !(FORMATS[p] || []).some((f) => f.value === tdraft.post_format)) {
++      tdraft.post_format = FORMATS[p][0].value
++      tdraft.channel_account = ''
++    }
++  },
++)
++function saveTarget() {
++  if (!tdraft.when) return toast.error('Chọn giờ đăng')
++  return run('target', async () => {
++    const values = {
++      post_format: tdraft.post_format,
++      channel_account: tdraft.channel_account || channelOptions.value[0]?.value,
++      scheduled_at: fromInputDateTime(tdraft.when),
++    }
++    if (tdraft.name) {
++      await call('frappe.client.set_value', { doctype: 'Omni Content Target', name: tdraft.name, fieldname: values })
++    } else {
++      await call('frappe.client.insert', {
++        doc: { doctype: 'Omni Content Target', content_item: props.name, platform: tdraft.platform, ...values },
++      })
++    }
++    showTarget.value = false
++    detail.reload()
++  })
++}
++
++const pillars = createResource({
++  url: 'frappe.client.get_list',
++  params: { doctype: 'Omni Content Pillar', filters: { is_active: 1 }, fields: ['name'], limit_page_length: 0 },
++  auto: true,
++})
++const pillarOptions = computed(() => ['', ...(pillars.data || []).map((p) => p.name)])
++
++function onUpdate(data) {
++  if ((data?.item || data?.content_item) === props.name) detail.reload()
++}
++$socket?.on('oc_publish_update', onUpdate)
++onBeforeUnmount(() => $socket?.off('oc_publish_update', onUpdate))
++</script>
+diff --git a/frontend/src/pages/marketing/MarketingReport.vue b/frontend/src/pages/marketing/MarketingReport.vue
+new file mode 100644
+index 0000000..ca7eaab
+--- /dev/null
++++ b/frontend/src/pages/marketing/MarketingReport.vue
+@@ -0,0 +1,189 @@
++<template>
++  <div class="flex h-full flex-col overflow-hidden">
++    <LayoutHeader>
++      <template #left-header>
++        <div class="text-lg font-medium text-ink-gray-8">Báo cáo marketing</div>
++      </template>
++      <template #right-header>
++        <Button label="Làm mới" icon-left="refresh-cw" :loading="report.loading" @click="report.reload()" />
++        <Button label="Xuất Excel" icon-left="download" variant="solid" @click="exportXlsx" />
++      </template>
++    </LayoutHeader>
++
++    <div class="flex flex-wrap items-end gap-2 px-3 pt-3 sm:px-5">
++      <FormControl v-model="f.campaign" type="select" label="Chiến dịch" class="w-64" :options="campaignOptions" />
++      <FormControl
++        v-model="f.platform"
++        type="select"
++        label="Nền tảng"
++        class="w-40"
++        :options="[{ label: 'Tất cả', value: '' }, ...PLATFORMS]"
++      />
++      <FormControl v-model="f.from_date" type="date" label="Từ ngày" class="w-40" />
++      <FormControl v-model="f.to_date" type="date" label="Đến ngày" class="w-40" />
++    </div>
++
++    <div class="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
++      <div v-if="report.error" class="rounded bg-surface-red-1 px-3 py-2 text-p-base text-ink-red-4">
++        {{ errorText(report.error) }}
++      </div>
++      <template v-if="r">
++        <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
++          <div v-for="card in cards" :key="card.label" class="rounded-lg border border-outline-gray-2 p-3">
++            <div class="text-p-sm text-ink-gray-5">{{ card.label }}</div>
++            <div class="mt-1 text-2xl font-semibold text-ink-gray-9">{{ card.value }}</div>
++          </div>
++        </div>
++        <p class="mt-2 text-xs text-ink-gray-5">
++          "—" là chưa có số liệu (chưa đồng bộ hoặc nền tảng chưa cấp quyền đọc chỉ số), không phải bằng 0.
++        </p>
++
++        <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-2 text-base font-medium">Theo trụ cột</h3>
++            <table class="w-full text-p-sm">
++              <thead class="text-ink-gray-5">
++                <tr><th class="py-1 text-left font-normal">Trụ cột</th><th class="text-right font-normal">Bài</th><th class="text-right font-normal">Tương tác</th><th class="text-right font-normal">Lead</th></tr>
++              </thead>
++              <tbody>
++                <tr v-if="!r.pillars.length"><td colspan="4" class="py-2 text-ink-gray-5">—</td></tr>
++                <tr v-for="p in r.pillars" :key="p.pillar" class="border-t border-outline-gray-1">
++                  <td class="py-1">{{ p.pillar }}</td>
++                  <td class="text-right">{{ p.posts }}</td>
++                  <td class="text-right">{{ dash(p.engagement) }}</td>
++                  <td class="text-right">{{ p.leads }}</td>
++                </tr>
++              </tbody>
++            </table>
++          </section>
++          <section class="rounded-lg border border-outline-gray-2 p-4">
++            <h3 class="mb-2 text-base font-medium">Theo giai đoạn phễu</h3>
++            <div v-for="s in r.funnel" :key="s.stage" class="mb-2">
++              <div class="flex justify-between text-p-sm">
++                <span>{{ s.stage }}</span>
++                <span>{{ s.posts }} bài · {{ dash(s.percent, '%') }}</span>
++              </div>
++              <div class="mt-1 h-2 rounded bg-surface-gray-2">
++                <div class="h-2 rounded bg-surface-gray-7" :style="{ width: (s.percent || 0) + '%' }" />
++              </div>
++            </div>
++          </section>
++        </div>
++
++        <section class="mt-4 rounded-lg border border-outline-gray-2 p-4">
++          <h3 class="mb-2 text-base font-medium">Từng bài đăng</h3>
++          <div class="overflow-x-auto">
++            <table class="w-full min-w-[900px] text-p-sm">
++              <thead class="text-ink-gray-5">
++                <tr>
++                  <th class="py-1 text-left font-normal">Bài viết</th>
++                  <th class="text-left font-normal">Kênh</th>
++                  <th class="text-left font-normal">Trụ cột</th>
++                  <th class="text-left font-normal">Giai đoạn</th>
++                  <th class="text-left font-normal">Giờ đăng</th>
++                  <th class="text-right font-normal">Tiếp cận</th>
++                  <th class="text-right font-normal">Tương tác</th>
++                  <th class="text-right font-normal">Lượt bấm</th>
++                  <th class="text-right font-normal">Lead</th>
++                  <th class="text-right font-normal">Trạng thái</th>
++                </tr>
++              </thead>
++              <tbody>
++                <tr v-if="!r.posts.length"><td colspan="10" class="py-2 text-ink-gray-5">Không có bài trong bộ lọc.</td></tr>
++                <tr v-for="p in r.posts" :key="p.name" class="border-t border-outline-gray-1">
++                  <td class="max-w-[260px] truncate py-1">
++                    <router-link :to="{ name: 'Marketing Post', params: { name: p.name } }" class="hover:underline">
++                      {{ p.title }}
++                    </router-link>
++                  </td>
++                  <td>{{ p.platforms }}</td>
++                  <td>{{ dash(p.pillar) }}</td>
++                  <td>{{ dash(p.funnel_stage) }}</td>
++                  <td>{{ fmtDateTime(p.scheduled_at) }}</td>
++                  <td class="text-right">{{ dash(p.reach) }}</td>
++                  <td class="text-right">{{ dash(p.engagement) }}</td>
++                  <td class="text-right">{{ dash(p.clicks) }}</td>
++                  <td class="text-right">{{ p.leads }}</td>
++                  <td class="text-right"><Badge :label="p.status" :theme="ITEM_THEME[p.status] || 'gray'" /></td>
++                </tr>
++              </tbody>
++            </table>
++          </div>
++        </section>
++
++        <section class="mt-4 rounded-lg border border-outline-gray-2 p-4">
++          <h3 class="mb-2 text-base font-medium">Lỗi đăng tải</h3>
++          <div v-if="!r.errors.length" class="text-p-sm text-ink-gray-5">Không có lỗi.</div>
++          <div v-for="(e, i) in r.errors" :key="i" class="flex flex-col gap-1 border-t border-outline-gray-1 py-2 text-p-sm first:border-0">
++            <div class="flex flex-wrap items-center gap-2">
++              <Badge :label="errorLabel(e.error_type)" theme="red" variant="subtle" />
++              <span class="text-ink-gray-5">{{ e.platforms }} · {{ e.count }} lần · gần nhất {{ fmtDateTime(e.last_at) }}</span>
++              <Button
++                v-if="e.permission"
++                class="ml-auto"
++                size="sm"
++                label="Mở Thiết lập › Mạng xã hội"
++                @click="openSocialSettings"
++              />
++            </div>
++            <div class="text-ink-gray-8">{{ e.last_error || '—' }}</div>
++          </div>
++        </section>
++      </template>
++    </div>
++  </div>
++</template>
++
++<script setup>
++import LayoutHeader from '@/components/LayoutHeader.vue'
++import { Badge, FormControl, createResource } from 'frappe-ui'
++import { reactive, computed, watch } from 'vue'
++import { showSettings, activeSettingsPage } from '@/composables/settings'
++import { API, PLATFORMS, ITEM_THEME, dash, fmtDateTime, errorText } from '@/composables/marketing'
++
++const f = reactive({ campaign: '', platform: '', from_date: '', to_date: '' })
++const cleanFilters = () => Object.fromEntries(Object.entries(f).filter(([, v]) => v))
++
++const campaigns = createResource({ url: API + 'list_campaigns', auto: true })
++const campaignOptions = computed(() => [
++  { label: 'Tất cả', value: '' },
++  ...(campaigns.data || []).map((c) => ({ label: c.campaign_name, value: c.name })),
++])
++
++const report = createResource({
++  url: API + 'marketing_report',
++  makeParams: () => ({ filters: JSON.stringify(cleanFilters()) }),
++  auto: true,
++})
++watch(f, () => report.reload(), { deep: true })
++const r = computed(() => report.data)
++
++const cards = computed(() => {
++  const c = r.value?.cards || {}
++  return [
++    { label: 'Tổng bài', value: dash(c.total_posts) },
++    { label: 'Đã đăng', value: dash(c.published_posts) },
++    { label: 'Chờ duyệt', value: dash(c.waiting_review) },
++    { label: 'Đang lên lịch / xử lý', value: dash(c.processing) },
++    { label: 'Tỷ lệ đăng thành công', value: dash(c.success_rate, '%') },
++    { label: 'Lượt tiếp cận', value: dash(c.reach) },
++    { label: 'Lượt tương tác', value: dash(c.engagement) },
++    { label: 'Lead từ chiến dịch', value: dash(c.leads) },
++    { label: 'Lead đã thành Deal', value: dash(c.deals) },
++  ]
++})
++
++function errorLabel(t) {
++  return { validation: 'Nội dung không hợp lệ', provider: 'Lỗi nền tảng', terminal: 'Lỗi quyền / token' }[t] || 'Lỗi'
++}
++
++function openSocialSettings() {
++  activeSettingsPage.value = 'Mạng xã hội'
++  showSettings.value = true
++}
++
++function exportXlsx() {
++  const q = encodeURIComponent(JSON.stringify(cleanFilters()))
++  window.open(`/api/method/${API}export_report?filters=${q}`, '_blank')
++}
++</script>
+diff --git a/frontend/src/router.js b/frontend/src/router.js
+index 3ae5d43..6547151 100644
+--- a/frontend/src/router.js
++++ b/frontend/src/router.js
+@@ -101,6 +101,39 @@ const routes = [
+     component: () => import('@/pages/DataImport.vue'),
+     props: true,
+   },
++  // Marketing Hub (omni_crm, V3-10 Prompt 3)
++  {
++    path: '/marketing/campaigns',
++    name: 'Marketing Campaigns',
++    component: () => import('@/pages/marketing/MarketingCampaigns.vue'),
++  },
++  {
++    path: '/marketing/campaigns/:name',
++    name: 'Marketing Campaign',
++    component: () => import('@/pages/marketing/MarketingCampaign.vue'),
++    props: true,
++  },
++  {
++    path: '/marketing/posts/:name',
++    name: 'Marketing Post',
++    component: () => import('@/pages/marketing/MarketingPost.vue'),
++    props: true,
++  },
++  {
++    path: '/marketing/calendar',
++    name: 'Marketing Calendar',
++    component: () => import('@/pages/marketing/MarketingCalendar.vue'),
++  },
++  {
++    path: '/marketing/report',
++    name: 'Marketing Report',
++    component: () => import('@/pages/marketing/MarketingReport.vue'),
++  },
++  {
++    path: '/marketing/knowledge',
++    name: 'Marketing KB',
++    component: () => import('@/pages/marketing/MarketingKB.vue'),
++  },
+   {
+     path: '/welcome',
+     name: 'Welcome',
+diff --git a/frontend/src/utils/serverMessages.js b/frontend/src/utils/serverMessages.js
+new file mode 100644
+index 0000000..cbed91c
+--- /dev/null
++++ b/frontend/src/utils/serverMessages.js
+@@ -0,0 +1,20 @@
++// Đọc cảnh báo máy chủ gửi kèm (_server_messages của Frappe) thành danh sách gọn (ADR 0033, việc V2).
++// `raw`: mảng chuỗi JSON như frappeRequest đưa cho onServerMessages. Trả [{ message, indicator }], bỏ thẻ HTML.
++export function serverMessageList(raw = []) {
++  const out = []
++  for (const item of raw || []) {
++    let m = item
++    if (typeof m === 'string') {
++      try {
++        m = JSON.parse(m)
++      } catch {
++        m = { message: m }
++      }
++    }
++    const text = String(m?.message ?? '')
++      .replace(/<[^>]*>/g, '')
++      .trim()
++    if (text) out.push({ message: text, indicator: m?.indicator || '' })
++  }
++  return out
++}
+diff --git a/frontend/tests/unit/marketingServerMessages.test.js b/frontend/tests/unit/marketingServerMessages.test.js
+new file mode 100644
+index 0000000..796f6de
+--- /dev/null
++++ b/frontend/tests/unit/marketingServerMessages.test.js
+@@ -0,0 +1,39 @@
++import { describe, expect, it } from 'vitest'
++import { serverMessageList } from '@/utils/serverMessages'
++
++// ADR 0033 việc V2: cảnh báo máy chủ gửi kèm khi lưu thành công (frappe.msgprint) phải hiện trên trang Marketing.
++describe('serverMessageList', () => {
++  it('đọc cảnh báo kho ảnh S3 như Frappe gửi (_server_messages)', () => {
++    const raw = [
++      JSON.stringify({
++        message:
++          'Kho ảnh S3: ghi ảnh không được (EndpointConnectionError). Ảnh vẫn lưu trên máy chủ CRM, sẽ tự đẩy lại trong vòng 1 giờ.',
++        indicator: 'orange',
++        alert: 1,
++      }),
++    ]
++    expect(serverMessageList(raw)).toEqual([
++      {
++        message:
++          'Kho ảnh S3: ghi ảnh không được (EndpointConnectionError). Ảnh vẫn lưu trên máy chủ CRM, sẽ tự đẩy lại trong vòng 1 giờ.',
++        indicator: 'orange',
++      },
++    ])
++  })
++  it('bỏ thẻ HTML, bỏ tin rỗng, nhận chuỗi không phải JSON', () => {
++    expect(
++      serverMessageList([
++        JSON.stringify({ message: '<b>Đã</b> lưu', indicator: 'green' }),
++        JSON.stringify({ message: '   ' }),
++        'tin thường',
++      ]),
++    ).toEqual([
++      { message: 'Đã lưu', indicator: 'green' },
++      { message: 'tin thường', indicator: '' },
++    ])
++  })
++  it('không có gì thì trả mảng rỗng', () => {
++    expect(serverMessageList()).toEqual([])
++    expect(serverMessageList(null)).toEqual([])
++  })
++})

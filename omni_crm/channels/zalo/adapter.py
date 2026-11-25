@@ -13,9 +13,11 @@ import frappe
 from frappe import _
 from frappe.utils import cint, convert_utc_to_system_timezone, now_datetime
 
+from omni_crm import flags
 from omni_crm.channels.registry import register_adapter
 from omni_crm.channels.zalo import signature, sigprobe, worker_hooks
 from omni_crm.channels.zalo.client import ZaloClient
+from omni_crm.channels.zalo.errors import ZaloError
 from omni_crm.ingest.events import InboundEvent, OutboundRequest, stable_message_id
 
 CHANNEL_TYPE = "Zalo OA"
@@ -24,7 +26,17 @@ REJECT_TTL = 86400
 USER_EVENT_PREFIX = "user_send_"
 OA_EVENT_PREFIX = "oa_send_"
 # loại đính kèm -> nhãn mô tả ngắn đặt vào `text`
-LABELS = {"image": "Ảnh", "file": "Tệp", "sticker": "Sticker", "location": "Vị trí", "audio": "Tin thoại"}
+LABELS = {
+	"image": "Ảnh",
+	"gif": "GIF",
+	"file": "Tệp",
+	"sticker": "Sticker",
+	"location": "Vị trí",
+	"audio": "Tin thoại",
+	"video": "Video",
+	"link": "Liên kết",
+	"business_card": "Danh thiếp",
+}
 
 
 def _env_allows_skip() -> bool:
@@ -43,6 +55,53 @@ def _record_rejection(channel: str, reason: str) -> None:
 		pass
 
 
+_MEDIA_KINDS = (
+	"text",
+	"image",
+	"gif",
+	"file",
+	"sticker",
+	"location",
+	"audio",
+	"video",
+	"link",
+	"business_card",
+	"list",
+)
+# Tên sự kiện được đếm riêng (tập hữu hạn nên số khóa Redis có trần); tên khác gộp vào "khac".
+KNOWN_EVENT_NAMES = frozenset(
+	[
+		f"{p}{k}"
+		for p in ("user_send_", "user_send_group_", "oa_send_", "anonymous_send_")
+		for k in _MEDIA_KINDS
+	]
+	+ [
+		"user_submit_info",
+		"user_received_message",
+		"user_seen_message",
+		"user_click_chatnow",
+		"user_reacted_message",
+		"user_feedback",
+		"add_user_to_tag",
+		"oa_reacted_message",
+		"follow",
+		"unfollow",
+	]
+)
+OTHER_EVENT = "khac"
+
+
+def ignored_bucket(event_name: str) -> str:
+	"""Khóa đếm của sự kiện bị bỏ qua: chính tên nếu thuộc `KNOWN_EVENT_NAMES`, còn lại "khac"."""
+	name = str(event_name or "").strip().lower()
+	return name if name in KNOWN_EVENT_NAMES else OTHER_EVENT
+
+
+def _record_ignored(channel: str, event_name: str) -> None:
+	"""Đếm sự kiện bị bỏ qua theo nhóm tên đã biết (Redis, 24 giờ, số khóa có trần); không ném lỗi."""
+	_record_rejection(channel, f"ignored:{ignored_bucket(event_name)}")
+
+
 def _ts(data: dict) -> datetime:
 	try:
 		seconds = float(data.get("timestamp")) / 1000
@@ -52,10 +111,22 @@ def _ts(data: dict) -> datetime:
 
 
 def _attachments(message: dict) -> list[dict]:
+	"""Đính kèm của tin; hình dạng lạ không bao giờ làm cả sự kiện thành `unparsed` (tin vẫn lưu, kèm nhãn theo sự kiện)."""
+	try:
+		return _attachments_unsafe(message)
+	except Exception:
+		_record_rejection(CHANNEL_TYPE, "attachments_parse_loi")
+		return []
+
+
+def _attachments_unsafe(message: dict) -> list[dict]:
 	out: list[dict] = []
-	for att in message.get("attachments") or []:
+	raw = message.get("attachments")
+	for att in raw if isinstance(raw, list) else []:
+		if not isinstance(att, dict):
+			continue
 		kind = att.get("type")
-		payload = att.get("payload") or {}
+		payload = att.get("payload") if isinstance(att.get("payload"), dict) else {}
 		if kind == "location":
 			coords = payload.get("coordinates") or {}
 			lat, lon = coords.get("latitude"), coords.get("longitude")
@@ -65,16 +136,27 @@ def _attachments(message: dict) -> list[dict]:
 				item["url"] = f"https://www.google.com/maps?q={lat},{lon}"
 			out.append(item)
 			continue
-		url = payload.get("url") or payload.get("thumbnail")
-		out.append(
-			{
-				"type": kind,
-				"url": url,
-				"name": payload.get("name") or url,
-				"mime": payload.get("mime") or None,
-			}
-		)
+		out.append(_normalize(kind, payload))
 	return out
+
+
+def _normalize(kind: Any, payload: dict) -> dict:
+	"""Một đính kèm Zalo thành {type, url, name, mime, thumb?}.
+
+	`url` là địa chỉ gốc (thiếu thì dùng thumbnail để vẫn có liên kết), `thumb` là thumbnail nếu khác `url`. GIF có thể
+	đến với type "image" nhưng URL đuôi .gif: gán lại thành "gif".
+	"""
+	kind = str(kind or "").strip().lower()[:30] or "file"
+	url = payload.get("url") or None
+	thumb = payload.get("thumbnail") or None
+	url = url or thumb
+	if kind == "image" and url and str(url).lower().split("?", 1)[0].endswith(".gif"):
+		kind = "gif"
+	name = str(payload.get("name") or payload.get("title") or payload.get("description") or "")[:200] or None
+	item = {"type": kind, "url": url, "name": name or url, "mime": payload.get("mime") or None}
+	if thumb and thumb != url:
+		item["thumb"] = thumb
+	return item
 
 
 def _describe(message: dict, attachments: list[dict]) -> str:
@@ -88,6 +170,34 @@ def _describe(message: dict, attachments: list[dict]) -> str:
 		name = att.get("name")
 		labels.append(f"[{label}: {name}]" if att.get("type") == "file" and name else f"[{label}]")
 	return " ".join(labels) + (f" {text}" if text else "")
+
+
+def shared_phone(raw, channel: str) -> str | None:
+	"""SĐT khách chia sẻ qua thẻ xin số ("84988806848") -> E.164 "+84988806848"; số không chuẩn hóa được thì bỏ và ghi Error Log (đã che)."""
+	from omni_crm.identity.normalize import normalize_phone
+	from omni_crm.utils.pii import mask_phone
+
+	if raw in (None, ""):
+		return None
+	phone = normalize_phone(str(raw))
+	if not phone:
+		frappe.log_error(
+			title="Omni: SĐT Zalo khách chia sẻ không hợp lệ",
+			message=f"kenh={channel} so={mask_phone(str(raw))}: bỏ qua, không lưu",
+		)
+	return phone
+
+
+def _text_for(name: str, message: dict, attachments: list[dict]) -> str:
+	"""`text` của tin; tin không chữ không đính kèm (payload lạ) vẫn có nhãn theo tên sự kiện để không hiện bong bóng trống."""
+	text = _describe(message, attachments)
+	if text:
+		return text
+	suffix = name.rsplit("_", 1)[-1] if name.startswith(USER_EVENT_PREFIX) else ""
+	if name.endswith("business_card"):
+		suffix = "business_card"
+	label = LABELS.get(suffix)
+	return f"[{_(label)}]" if label else ""
 
 
 def _event(channel_doc, data: dict, *, event_type: str, user_id: str, text: str | None, **kw) -> InboundEvent:
@@ -120,12 +230,15 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 			data,
 			event_type="message",
 			user_id=sender,
-			text=_describe(message, atts),
+			text=_text_for(name, message, atts),
 			attachments=atts,
 		)
 	if name.startswith(OA_EVENT_PREFIX) and recipient:  # nhân viên trả lời ngoài hệ thống: khách là recipient
 		message = data.get("message") or {}
 		atts = _attachments(message)
+		# V3-07: `sender.admin_id` chỉ có khi một admin OA gõ tin trên công cụ chat OA (tài liệu webhook "OA gửi tin");
+		# tin gửi qua API hoặc kịch bản tự động không có trường này.
+		admin_id = (data.get("sender") or {}).get("admin_id")
 		return _event(
 			channel_doc,
 			data,
@@ -133,16 +246,24 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 			user_id=recipient,
 			text=_describe(message, atts),
 			attachments=atts,
+			sender_profile={"admin_id": str(admin_id)} if admin_id else {},
 		)
 	if name == "user_submit_info" and sender:
 		info = data.get("info") or {}
+		full = info.get("full_address") if isinstance(info.get("full_address"), dict) else {}
 		profile = {
 			"display_name": info.get("name"),
-			"phone": info.get("phone"),
+			"phone": shared_phone(info.get("phone"), channel_doc.name),
 			"email": info.get("email"),
+			# Tài liệu có hai dạng: ví dụ dùng full_address{user_address, user_ward, user_city}, bảng mô tả dùng trường phẳng.
 			"address": ", ".join(
-				filter(None, (info.get(k) for k in ("address", "ward", "district", "city")))
+				filter(
+					None,
+					[full.get(k) for k in ("user_address", "user_ward", "user_district", "user_city")]
+					+ [info.get(k) for k in ("address", "ward", "district", "city")],
+				)
 			),
+			"zalo_shared": 1,
 		}
 		return _event(
 			channel_doc,
@@ -156,9 +277,17 @@ def parse_event(channel_doc, data: dict) -> InboundEvent:
 		user = (data.get("follower") or {}).get("id") or sender
 		if user:
 			return _event(channel_doc, data, event_type=name, user_id=user, text=None)
-	# Sự kiện khác: lưu để tra cứu, không xử lý
+	# Sự kiện khác: lưu để tra cứu, không xử lý (đếm theo tên để người vận hành thấy sự kiện lạ, V3-05)
+	_record_ignored(channel_doc.name, name)
 	user = sender or recipient or "unknown"
 	return _event(channel_doc, data, event_type="ignored", user_id=user, text=None)
+
+
+def _script_buttons(req: OutboundRequest) -> list[dict]:
+	"""Nút kịch bản của tin ra (`req.meta["outbound"]` do send_outbound đặt); trống nếu không có."""
+	from omni_crm.script import send as script_send
+
+	return script_send.buttons_of(req.meta.get("outbound"))
 
 
 class ZaloAdapter:
@@ -234,17 +363,68 @@ class ZaloAdapter:
 		user_id = frappe.db.get_value("Omni Identity", req.identity, "external_id")
 		if not user_id:
 			raise ValueError(_("Định danh chưa có mã người dùng Zalo"))
-		ids = ZaloClient(channel_doc.name).send_text(user_id, req.text)
+		client = ZaloClient(channel_doc.name)
+		if req.attachment:
+			message_id = self._send_attachment(client, user_id, req)
+			req.meta["quota_type"] = client.last_quota_type
+			return message_id
+		buttons = _script_buttons(req)
+		if buttons:  # ADR 0032: tin kịch bản kèm nút gửi dạng template trong một tin
+			message_id = client.send_buttons(user_id, req.text, buttons)
+			req.meta["quota_type"] = client.last_quota_type
+			return message_id
+		ids = client.send_text(user_id, req.text)
+		req.meta["quota_type"] = client.last_quota_type
 		return ids[0]
 
-	def request_user_info(self, identity_doc, channel_doc) -> tuple[str, str]:
-		"""Gửi tin yêu cầu thông tin người dùng (xin SĐT); trả (mã tin, nội dung hiển thị). Sandbox: không gọi HTTP."""
-		title = _("Miyano Việt Nam")
-		subtitle = _("Vui lòng chia sẻ số điện thoại để nhân viên tư vấn hỗ trợ bạn nhanh hơn.")
+	@staticmethod
+	def _send_attachment(client: ZaloClient, user_id: str, req: OutboundRequest) -> str:
+		"""Ảnh/GIF/tệp của Lead (V3-09): đọc tệp, nén ảnh quá 1 MB, lấy kích thước GIF, rồi tải lên và gửi."""
+		from omni_crm.channels.zalo import media_out
+
+		att = req.attachment or {}
+		kind = att.get("kind")
+		name = att.get("name") or "tep"
+		if not media_out.recipient_allowed(user_id):  # chặn trước cả khi đọc tệp (client cũng chặn lần nữa)
+			raise ZaloError(
+				None,
+				"permanent",
+				_("Gửi ảnh/tệp qua Zalo đang tắt: chỉ tài khoản Zalo thử nghiệm nhận được."),
+			)
+		if flags.sandbox():
+			return client.send_media(user_id, kind, b"", name, caption=req.text or "")
+		try:
+			content = media_out.read_content(att["file_url"])
+			size = None
+			if kind == media_out.IMAGE:
+				content, ext = media_out.shrink_image(content)
+				base = name.rsplit(".", 1)[0] if "." in name else name
+				name = f"{base}{ext}"
+			elif kind == media_out.GIF:
+				size = media_out.gif_size(content)
+		except media_out.MediaError as e:
+			raise ZaloError(None, "permanent", str(e)) from e
+		except Exception as e:  # tệp đã bị xóa khỏi CRM, ảnh hỏng...: không thử lại vô ích
+			raise ZaloError(None, "permanent", _("Không đọc được tệp đính kèm trong CRM")) from e
+		if len(content) > media_out.LIMITS[kind]:
+			raise ZaloError(None, "permanent", media_out.too_big_text(kind, len(content)))
+		return client.send_media(user_id, kind, content, name, caption=req.text or "", size=size)
+
+	def request_user_info(self, identity_doc, channel_doc, meta: dict | None = None) -> tuple[str, str]:
+		"""Gửi thẻ xin SĐT (request_user_info); trả (mã tin, nội dung hiển thị). Sandbox: không gọi HTTP.
+
+		Chữ và ảnh lấy từ Omni Settings (phone_request_*); danh sách trắng kiểm trong ZaloClient.
+		"""
+		from omni_crm.channels.zalo import phone_request
+
+		title, subtitle, image_url = phone_request.card_texts()
 		user_id = identity_doc.get("external_id")
 		if not user_id:
 			raise ValueError(_("Định danh chưa có mã người dùng Zalo"))
-		message_id = ZaloClient(channel_doc.name).send_request_user_info(user_id, title, subtitle)
+		client = ZaloClient(channel_doc.name)
+		message_id = client.send_request_user_info(user_id, title, subtitle, image_url)
+		if meta is not None:
+			meta["quota_type"] = client.last_quota_type
 		return message_id, f"{title}: {subtitle}"
 
 	# Điểm nối với worker (không thuộc Protocol bắt buộc)

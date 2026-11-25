@@ -42,6 +42,12 @@
   "reply_prompt_version",
   "summarize_prompt_version",
   "kb_version",
+  "sec_assistant",
+  "assistant_enabled",
+  "assistant_model",
+  "col_assistant",
+  "assistant_daily_token_limit",
+  "assistant_max_writes_per_turn",
   "sec_prospect",
   "fit_scoring_enabled",
   "prospect_import_enabled",
@@ -88,6 +94,18 @@
   "meta_requeue_batch",
   "meta_requeue_disabled",
   "webhook_spool_disabled",
+  "zalo_tab_disabled",
+  "zalo_in_activity_enabled",
+  "lead_contact_button_disabled",
+  "sec_zalo_growth",
+  "phone_request_enabled",
+  "phone_request_title",
+  "phone_request_subtitle",
+  "phone_request_image_url",
+  "col_zalo_growth",
+  "zalo_quota_total",
+  "zalo_quota_cycle_end",
+  "zalo_media_send_enabled",
   "sec_release_gate",
   "q1_allowed",
   "q11_allowed",
@@ -370,6 +388,41 @@
    "description": "{gio_lam_viec_ke_tiep} được thay bằng thời điểm mở cửa kế tiếp"
   },
   {
+   "fieldname": "sec_assistant",
+   "fieldtype": "Section Break",
+   "label": "Trợ lý AI nội bộ (V3-05)"
+  },
+  {
+   "fieldname": "assistant_enabled",
+   "fieldtype": "Check",
+   "label": "Bật trợ lý AI nội bộ",
+   "default": "0",
+   "description": "Công tắc tổng của tab Trợ lý trên trang Lead. Tắt thì tab ẩn và API từ chối ngay."
+  },
+  {
+   "fieldname": "assistant_model",
+   "fieldtype": "Data",
+   "label": "Mô hình của trợ lý",
+   "default": "claude-sonnet-5-5"
+  },
+  {
+   "fieldname": "col_assistant",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "assistant_daily_token_limit",
+   "fieldtype": "Int",
+   "label": "Hạn mức token/ngày của trợ lý",
+   "default": "300000",
+   "description": "Tổng token vào + ra mỗi ngày của trợ lý, toàn hệ thống."
+  },
+  {
+   "fieldname": "assistant_max_writes_per_turn",
+   "fieldtype": "Int",
+   "label": "Số thao tác ghi tối đa mỗi lượt",
+   "default": "5"
+  },
+  {
    "fieldname": "sec_prospect",
    "fieldtype": "Section Break",
    "label": "Nhà thầu B2B (V2-02)"
@@ -592,6 +645,84 @@
    "description": "Bật: khi DB không ghi được tin, webhook trả 503 như trước V21-04 (không ghi hàng dự phòng); tác vụ quét vẫn chèn lại các tin đã có trong hàng. Chưa từng lưu hoặc 0 = dùng hàng dự phòng (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt)."
   },
   {
+   "fieldname": "zalo_tab_disabled",
+   "fieldtype": "Check",
+   "label": "Tắt tab Zalo trong trang Lead/Deal",
+   "default": "0",
+   "description": "Bật: ẩn tab Zalo (bong bóng chat + khung trả lời) trong giao diện CRM. Chưa từng lưu hoặc 0 = hiện (cực tính ngược để lần lưu Omni Settings đầu tiên không vô tình tắt). Hộp thư và dòng thời gian không bị ảnh hưởng."
+  },
+  {
+   "fieldname": "zalo_in_activity_enabled",
+   "fieldtype": "Check",
+   "label": "Hiện tin Zalo mới trong tab Hoạt động/Email",
+   "default": "0",
+   "description": "Bật: tin Zalo OA GHI MỚI vẫn hiện thành thẻ trong tab Hoạt động/Email của Lead/Deal như trước V3-02. Chưa từng lưu hoặc 0 (mặc định) = ẩn: tin Zalo chỉ ở tab Zalo và Hộp thư. Công tắc này chỉ áp cho tin ghi sau đó; tin cũ đổi bằng lệnh omni_crm.ops.hide_zalo_activity.run (tham số reverse). Email không bị ảnh hưởng."
+  },
+  {
+   "fieldname": "lead_contact_button_disabled",
+   "fieldtype": "Check",
+   "label": "Ẩn nút Tạo liên hệ trên Lead",
+   "default": "0",
+   "description": "V3-06: nút tạo/cập nhật Liên hệ từ dữ liệu Lead (không cần chuyển Deal). Tích để ẩn nút và chặn API."
+  },
+  {
+   "fieldname": "sec_zalo_growth",
+   "fieldtype": "Section Break",
+   "label": "Zalo gói Tăng trưởng (V3-07)",
+   "description": "Xin số điện thoại qua Zalo, hạn mức tin tư vấn ngoài khung 48 giờ. Sửa tay các trường hạn mức khi gia hạn gói OA."
+  },
+  {
+   "fieldname": "phone_request_enabled",
+   "fieldtype": "Check",
+   "label": "Bật luồng xin số điện thoại qua Zalo",
+   "default": "0",
+   "description": "Tắt (mặc định): thẻ xin số (gửi tự động lẫn nút bấm) chỉ tới được tài khoản Zalo thử nghiệm ghi cứng trong code, mọi khách khác bị chặn ở tầng gửi. Bật: tự gửi thẻ xin số sau tin của khách (đủ điều kiện) và sale bấm nút được với mọi khách."
+  },
+  {
+   "fieldname": "phone_request_title",
+   "fieldtype": "Data",
+   "label": "Tiêu đề thẻ xin số",
+   "length": 100,
+   "description": "Tối đa 100 ký tự. Trống = \"Miyano xin phép nhận thông tin liên hệ\"."
+  },
+  {
+   "fieldname": "phone_request_subtitle",
+   "fieldtype": "Small Text",
+   "label": "Nội dung thẻ xin số",
+   "description": "Tối đa 500 ký tự. Trống = câu mặc định của brief V3-07."
+  },
+  {
+   "fieldname": "phone_request_image_url",
+   "fieldtype": "Data",
+   "label": "Ảnh thẻ xin số (URL HTTPS công khai)",
+   "description": "Zalo bắt buộc có ảnh. Trống = logo trên miyano.com.vn."
+  },
+  {
+   "fieldname": "col_zalo_growth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "zalo_quota_total",
+   "fieldtype": "Int",
+   "label": "Quỹ tin tư vấn ngoài khung 48 giờ (tin/năm)",
+   "default": "500",
+   "description": "Trống hoặc 0 = 500. Cảnh báo ở 80%, chỉ Omni Admin gửi được từ 95%, từ chối ở 100%."
+  },
+  {
+   "fieldname": "zalo_quota_cycle_end",
+   "fieldtype": "Date",
+   "label": "Ngày hết hạn gói OA (cuối chu kỳ quỹ)",
+   "default": "2027-11-09",
+   "description": "Chu kỳ quỹ là 1 năm kết thúc ở ngày này (không phải năm dương lịch). Trống = 09/11/2027."
+  },
+  {
+   "fieldname": "zalo_media_send_enabled",
+   "fieldtype": "Check",
+   "label": "Bật gửi ảnh / tệp qua Zalo cho mọi khách",
+   "default": "0",
+   "description": "Tắt (mặc định): nút đính kèm trên tab Zalo chỉ gửi được tới tài khoản Zalo thử nghiệm ghi cứng trong code, mọi khách khác bị chặn ở tầng gửi. Bật: sale gửi ảnh (JPG/PNG/GIF) và tệp (PDF/DOC/DOCX/CSV) cho mọi khách."
+  },
+  {
    "fieldname": "sec_release_gate",
    "fieldtype": "Section Break",
    "label": "Quyết định phát hành (V21-08)",
@@ -644,5 +775,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "modified": "2026-11-10 16:00:00.000000"
 }

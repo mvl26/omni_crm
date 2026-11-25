@@ -1,0 +1,116 @@
+{
+ "actions": [],
+ "creation": "2026-11-17 12:00:00.000000",
+ "modified": "2026-11-17 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Scheduled Message",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "links": [],
+ "field_order": [
+  "kind",
+  "identity",
+  "lead",
+  "due_at",
+  "status",
+  "dedupe_key",
+  "node",
+  "payload",
+  "sent_at",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Loại",
+   "options": "followup_docs\nfollowup_quote\ndemo_remind_1d\ndemo_remind_1h\ndemo_noshow\nsilence_3d\npostdemo_1\nlost_3m",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Định danh",
+   "options": "Omni Identity"
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "due_at",
+   "fieldtype": "Datetime",
+   "label": "Đến hạn",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Trạng thái",
+   "options": "Pending\nSent\nCancelled\nSkipped\nFailed",
+   "default": "Pending",
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "dedupe_key",
+   "fieldtype": "Data",
+   "label": "Khóa chống trùng",
+   "unique": 1
+  },
+  {
+   "fieldname": "node",
+   "fieldtype": "Data",
+   "label": "Mã ô sẽ gửi"
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "JSON",
+   "label": "Dữ liệu"
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "label": "Đã gửi lúc"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Lý do"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "autoname": "hash",
+ "track_changes": 1
+}

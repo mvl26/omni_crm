@@ -1,0 +1,218 @@
+{
+ "_meta": {
+  "prompt": "v3",
+  "model": "claude-haiku-5-5",
+  "calls": 24
+ },
+ "KB-01": {
+  "Bên mình có thể giao sớm nhất vào khi nào": {
+   "code": "KB_HOI",
+   "confidence": 0.8,
+   "service": "VATTU",
+   "quan_he": "Y_KHAC"
+  }
+ },
+ "KB-04": {
+  "găng tay phẫu thuật 30 chiếc": {
+   "code": "BAOGIA",
+   "confidence": 0.93,
+   "quan_he": "TRA_LOI",
+   "service": "VATTU",
+   "mat_hang": "găng tay phẫu thuật",
+   "so_luong": "30 chiếc",
+   "lua_chon": 0
+  }
+ },
+ "KB-05": {
+  "Anh muốn đặt lịch demo": {
+   "code": "DEMO",
+   "confidence": 0.85,
+   "quan_he": "Y_KHAC",
+   "service": "KHONG_RO"
+  }
+ },
+ "KB-06": {
+  "Demo cơ mà không phải mua hàng": {
+   "code": "DEMO",
+   "confidence": 0.85,
+   "quan_he": "Y_KHAC",
+   "service": "VATTU"
+  }
+ },
+ "KB-07": {
+  "Anh muốn demo spd": {
+   "code": "DEMO",
+   "confidence": 0.93,
+   "quan_he": "Y_KHAC",
+   "service": "SPD",
+   "mat_hang": ""
+  }
+ },
+ "KB-08": {
+  "Anh muốn đặt 30 chiếc giường bệnh": {
+   "code": "BAOGIA",
+   "confidence": 0.85,
+   "quan_he": "Y_KHAC",
+   "service": "VATTU",
+   "mat_hang": "giường bệnh",
+   "so_luong": "30 chiếc"
+  }
+ },
+ "KB-09": {
+  "Anh vừa nói bên trên thây": {
+   "code": "CHUA_RO",
+   "confidence": 0.3,
+   "quan_he": "Y_KHAC",
+   "service": "VATTU"
+  }
+ },
+ "KB-14": {
+  "Anh muốn xin lịch demo sản phẩm spd": {
+   "code": "DEMO",
+   "confidence": 0.85,
+   "quan_he": "KHONG_HOI",
+   "service": "SPD"
+  }
+ },
+ "KB-15": {
+  "Anh muốn hỏi là công ty mình cung cấp mặt hàng gì": {
+   "code": "KB_HOI",
+   "confidence": 0.8,
+   "quan_he": "KHONG_HOI",
+   "service": "KHONG_RO"
+  }
+ },
+ "KB-16": {
+  "Anh muốn biết mã số thuế của công ty": {
+   "code": "CAN_NGUOI",
+   "confidence": 0.6,
+   "quan_he": "KHONG_HOI"
+  }
+ },
+ "KB-17": {
+  "Em đang ở đâu thế": {
+   "code": "KB_HOI",
+   "confidence": 0.3,
+   "quan_he": "KHONG_HOI"
+  }
+ },
+ "KB-18": {
+  "Bên mình có bơm kim tiêm không": {
+   "code": "MENU_VATTU",
+   "confidence": 0.4,
+   "quan_he": "Y_KHAC",
+   "service": "VATTU",
+   "mat_hang": "bơm kim tiêm"
+  }
+ },
+ "KB-25": {
+  "039968824": {
+   "code": "GAP_NHANVIEN",
+   "confidence": 0.95,
+   "quan_he": "TRA_LOI",
+   "service": "VATTU"
+  }
+ },
+ "KB-28": {
+  "Demo\nOnline": {
+   "code": "DEMO",
+   "confidence": 0.9,
+   "quan_he": "TRA_LOI",
+   "lua_chon": 1,
+   "service": "SPD",
+   "hinh_thuc_demo": "ONLINE"
+  }
+ },
+ "KB-30": {
+  "Em vẫn k hiểu": {
+   "code": "CHUA_RO",
+   "confidence": 0.6,
+   "quan_he": "Y_KHAC",
+   "service": "VATTU"
+  }
+ },
+ "KB-33": {
+  "Hãng toóhiba": {
+   "code": "BAOGIA",
+   "confidence": 0.85,
+   "quan_he": "TRA_LOI",
+   "lua_chon": 0,
+   "service": "VATTU",
+   "dinh_chinh": "Hãng toóhiba"
+  }
+ },
+ "KB-34": {
+  "Phải đúng hãng toshiba": {
+   "code": "BAOGIA",
+   "confidence": 0.9,
+   "quan_he": "TRA_LOI",
+   "lua_chon": 2,
+   "service": "VATTU",
+   "mat_hang": "Phải đúng hãng toshiba"
+  }
+ },
+ "KB-36": {
+  "bg giup a 500 hop khau trang, can trong tuan nay dc k, ma ben e o dau": {
+   "code": "BAOGIA",
+   "confidence": 0.95,
+   "service": "VATTU",
+   "mat_hang": "khau trang",
+   "so_luong": "500 hop",
+   "thoi_gian": "trong tuan nay",
+   "quan_he": "KHONG_HOI"
+  }
+ },
+ "KB-37": {
+  "Gửi anh tài liệu spd với báo giá găng tay 300 đôi": {
+   "code": "TAILIEU",
+   "confidence": 0.7,
+   "service": "SPD",
+   "quan_he": "KHONG_HOI"
+  }
+ },
+ "KB-38": {
+  "Phần mềm có kết nối HIS của bệnh viện không": {
+   "code": "KB_HOI",
+   "confidence": 0.8,
+   "quan_he": "Y_KHAC",
+   "service": "PHANMEM"
+  }
+ },
+ "KB-39": {
+  "cái nào cũng được": {
+   "code": "DEMO",
+   "confidence": 0.45,
+   "quan_he": "TRA_LOI",
+   "lua_chon": 0,
+   "service": "SPD",
+   "hinh_thuc_demo": "ONLINE"
+  }
+ },
+ "KB-40": {
+  "cái ấy đó em": {
+   "code": "CHUA_RO",
+   "confidence": 0.3,
+   "quan_he": "TRA_LOI",
+   "lua_chon": 0,
+   "service": "VATTU"
+  }
+ },
+ "KB-41": {
+  "Sửa giờ thành 3 giờ chiều": {
+   "code": "DEMO",
+   "confidence": 0.85,
+   "quan_he": "KHONG_HOI",
+   "service": "SPD",
+   "ngay_gio": "3 giờ chiều",
+   "hinh_thuc_demo": "ONLINE"
+  }
+ },
+ "KB-44": {
+  "Thế còn phần mềm spd thì sao": {
+   "code": "MENU_SPD",
+   "confidence": 0.9,
+   "service": "SPD",
+   "quan_he": "KHONG_HOI"
+  }
+ }
+}

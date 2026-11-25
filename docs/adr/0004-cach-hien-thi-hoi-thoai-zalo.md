@@ -1,3 +1,5 @@
+> **Cập nhật V3-02 (ADR 0017):** tin Zalo OA nay ghi với `communication_type = "Chat"` nên không hiện ở tab Hoạt động/Email nữa (xem tab Zalo và Hộp thư); phần còn lại của ADR này giữ nguyên.
+
 # 0004 · Cách hiển thị hội thoại Zalo (và đa kênh) cho sale
 
 - Ngày: 2026-10-29

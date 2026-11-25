@@ -1,0 +1,114 @@
+{
+ "actions": [],
+ "creation": "2026-11-13 10:00:00.000000",
+ "modified": "2026-11-13 10:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "module": "Omni CRM",
+ "name": "Omni Publish Log",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "target",
+  "attempt_no",
+  "outcome",
+  "http_status",
+  "col1",
+  "started_at",
+  "finished_at",
+  "error_type",
+  "message"
+ ],
+ "fields": [
+  {
+   "fieldname": "target",
+   "fieldtype": "Link",
+   "label": "Nền tảng đăng",
+   "options": "Omni Content Target",
+   "reqd": 1,
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "attempt_no",
+   "fieldtype": "Int",
+   "label": "Lần thử",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "label": "Kết quả",
+   "options": "success\nerror\ndry_run",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "http_status",
+   "fieldtype": "Int",
+   "label": "Mã HTTP"
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Bắt đầu"
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Kết thúc"
+  },
+  {
+   "fieldname": "error_type",
+   "fieldtype": "Select",
+   "label": "Loại lỗi",
+   "options": "\nvalidation\nprovider\nterminal"
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú",
+   "description": "Không bao giờ chứa token."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "Omni Admin",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Marketing Manager",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Marketing User",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "track_changes": 1
+}

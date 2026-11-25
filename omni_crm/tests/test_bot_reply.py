@@ -422,8 +422,9 @@ class TestReplyShadow(ReplyTestCase):
 		self.assertIn("tien_ngoai_kho", d.guard_flags)
 
 	def test_analysis_intent_forces_handoff(self):
+		# Khiếu nại: ý định của cả hội thoại luôn buộc chuyển người. ("Hỏi giá" chỉ buộc khi lượt này nhắc giá, ADR 0031.)
 		batch = self.say("Cho hỏi giờ làm việc")
-		self.fake.add_rule(signals(intent="Hỏi giá"), kind="Analyze")
+		self.fake.add_rule(signals(intent="Khiếu nại"), kind="Analyze")
 		with mock.patch("frappe.enqueue"):
 			analyze.analyze_batch(batch)
 		self.fake.add_rule(reply_ok(), kind="Reply")

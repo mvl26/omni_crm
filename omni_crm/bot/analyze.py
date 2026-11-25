@@ -359,8 +359,9 @@ def postprocess(signals: dict, text_of_customer: str) -> dict:
 def apply_to_lead(lead: str, accepted: dict) -> dict:
 	"""Ghi trường đã duyệt vào Lead (cờ in_omni_bot); trả {"applied": [...], "skipped_manual": [...]}.
 
-	Không ghi trường nằm trong `omni_manual_fields`. Tên chỉ điền khi Lead đang để tên tạm. Không đụng
-	`mobile_no`/`email`. `organization` chỉ điền khi đang trống.
+	Không ghi trường nằm trong `omni_manual_fields`. Tên chỉ điền khi Lead đang để tên tạm. SĐT/email khách tự nhắn
+	(V3-04, người phụ trách chốt 2026-11-04) chỉ điền vào ô ĐANG TRỐNG và chỉ khi không thuộc Lead khác (thuộc Lead
+	khác thì `flag_duplicates` tạo nghi trùng). `organization` chỉ điền khi đang trống.
 	"""
 	row = frappe.db.get_value(
 		LEAD,
@@ -370,6 +371,9 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 			"last_name",
 			"lead_name",
 			"organization",
+			"mobile_no",
+			"phone",
+			"email",
 			"omni_phone_e164",
 			"omni_email_norm",
 			"omni_manual_fields",
@@ -414,6 +418,7 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 			_note_weak_org(lead, claim)
 		else:
 			put("organization", claim)
+	values.update(_contact_values(lead, accepted, row, manual, skipped))
 	if accepted.get("summary"):
 		values["omni_bot_summary"] = accepted["summary"]  # cập nhật mỗi lượt; trường chỉ đọc, sale không sửa
 	applied = sorted(values)  # trước set_value (nó thêm modified/modified_by vào dict)
@@ -421,12 +426,37 @@ def apply_to_lead(lead: str, accepted: dict) -> dict:
 		# db.set_value: không chạy validate của CRM (has_gravatar qua mạng), như crm_bridge.lead.fill_blank_contact.
 		with flags.omni_bot():
 			frappe.db.set_value(LEAD, lead, values)
-			_note_update(lead, sorted(set(values) - {"omni_bot_summary", "lead_name"}))
+			_note_update(lead, sorted(set(values) - {"omni_bot_summary", "lead_name", *CONTACT_NORM_FIELDS}))
 	return {
 		"applied": applied,
 		"skipped_manual": sorted(set(skipped)),
 		"org_link": {k: v for k, v in link.items() if v},
 	}
+
+
+CONTACT_NORM_FIELDS = ("omni_phone_e164", "omni_email_norm")  # trường kỹ thuật, không ghi vào ghi chú
+
+
+def _unclaimed(lead: str, values: list[str] | None, kind: str) -> str | None:
+	"""Giá trị đầu tiên (SĐT hoặc email đã chuẩn hóa) không thuộc Lead nào khác; None nếu không có."""
+	for value in values or []:
+		phones, emails = ([value], []) if kind == "phone" else ([], [value])
+		if not [x for x in resolver.find_leads(phones, emails) if x != lead]:
+			return value
+	return None
+
+
+def _contact_values(lead: str, accepted: dict, row: Any, manual: set[str], skipped: list[str]) -> dict:
+	"""Điền SĐT/email khách tự nhắn vào ô trống của Lead (không ghi đè, tôn trọng `omni_manual_fields`)."""
+	phone = _unclaimed(lead, accepted.get("phones"), "phone")
+	email = _unclaimed(lead, accepted.get("emails"), "email")
+	if phone and {"mobile_no", "phone"} & manual:
+		skipped.append("mobile_no")
+		phone = None
+	if email and "email" in manual:
+		skipped.append("email")
+		email = None
+	return lead_bridge.blank_contact_values(row, phone, email)
 
 
 def organization_exists(name: str | None) -> bool:

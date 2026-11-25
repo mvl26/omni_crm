@@ -109,7 +109,7 @@ class TestPauseAndNotify(HandoffTestCase):
 		(log,) = self.logs()
 		self.assertEqual(log.for_user, SALE1)
 		blob = f"{log.subject} {log.email_content}"
-		self.assertIn("omni-inbox", blob)
+		self.assertIn(f"/crm/leads/{self.lead1}", blob)  # liên kết mở app CRM, không mở Desk
 		self.assertIn(self.lead1, log.subject)
 		self.assertNotIn(SECRET, blob)
 		self.assertNotIn("SECRETREASON", blob)
@@ -248,7 +248,7 @@ class TestEmailFallback(HandoffTestCase):
 		self.assertEqual(mail["recipients"], [frappe.db.get_value("User", SALE1, "email")])
 		self.assertNotIn("SECRET", mail["message"])  # không lời khách, không lý do do AI viết
 		self.assertIn(self.lead1, mail["message"])
-		self.assertIn("omni-inbox", mail["message"])
+		self.assertIn(f"/crm/leads/{self.lead1}", mail["message"])
 		handoff.email_unread_handoffs()
 		self.assertEqual(len(self.emails()), 1)  # mỗi nháp một lần
 
