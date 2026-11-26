@@ -87,7 +87,7 @@ MIRROR_KEYS = (
 
 def reset_answers(identity: str, **values) -> None:
 	"""Xoá câu trả lời của nhánh thu thông tin trước (kèm bản sao cấp trên) và ghi thêm `values`."""
-	state.update_state(identity, **{**dict.fromkeys(MIRROR_KEYS), "answers": {}, "lines": None, **values})
+	state.update_state(identity, **{**dict.fromkeys(MIRROR_KEYS), "answers": {}, "lines": None, "qty_round": None, **values})
 
 
 # --- Tra cứu ---------------------------------------------------------------------------------------------------
@@ -103,6 +103,8 @@ def known(ctx: RouteContext, field: str, lead_only: bool = False) -> bool:
 		return False
 	st = engine.script_state(ctx)
 	answers = {} if lead_only else store.as_dict(st.get("answers"))
+	if field == "quantity" and not lead_only and _lines_missing(st):
+		return False  # báo giá nhiều mặt hàng: còn dòng chưa có số lượng thì vẫn phải hỏi (không coi là đã trả lời)
 	if field in answers or f"{field}_raw" in answers or f"{field}_declined" in answers:
 		return True
 	lead = _lead(ctx.lead)
@@ -242,6 +244,15 @@ def apply_prefill(ctx: RouteContext) -> None:
 	for field, value in (ctx.state.get(PREFILL_KEY) or {}).items():
 		if field in PREFILL_FIELDS and str(value or "").strip():
 			save_answer(ctx, field, str(value), typed=True)
+	goods, _removed = _goods_of_turn(ctx)
+	prefill = ctx.state.get(PREFILL_KEY) or {}
+	if goods and prefill.get(EXTRACT_FROM) and engine.script_state(ctx).get("branch") == "3b":
+		from omni_crm.script import quote_lines
+
+		lines, _changed = quote_lines.merge([], goods, [])
+		if lines:  # khách nêu nhiều mặt hàng ngay trong tin mở báo giá: ghi theo từng dòng (số lượng gắn đúng tên)
+			_write_lines(ctx, lines)
+			_take_more(ctx, store.as_dict(engine.script_state(ctx).get("answers")))
 
 
 def _more_from_answer(ctx: RouteContext, text: str) -> dict:
@@ -413,6 +424,109 @@ EDIT_WORDS = re.compile(
 )
 
 
+def _lines_missing(st: dict) -> list:
+	from omni_crm.script import quote_lines
+
+	lines = st.get(LINES_KEY)
+	return quote_lines.missing(lines) if isinstance(lines, list) and len(lines) > 1 else []
+
+
+def _lines_of(st: dict, answers: dict) -> list:
+	from omni_crm.script import quote_lines
+
+	lines = st.get(LINES_KEY)
+	return [dict(x) for x in lines] if isinstance(lines, list) else quote_lines.seed(answers.get(EXTRACT_FROM), answers.get("quantity"))
+
+
+def _write_lines(ctx: RouteContext, lines: list, ack: bool = True) -> None:
+	"""Ghi các dòng hàng và dựng lại hai câu trả lời "mặt hàng" / "số lượng" từ chúng (luôn khớp nhau)."""
+	from omni_crm.script import quote_lines
+
+	answers = store.as_dict(engine.script_state(ctx).get("answers"))
+	items, amounts = quote_lines.items_text(lines)[:MAX_ANSWER], quote_lines.quantity_text(lines)[:MAX_ANSWER]
+	answers[EXTRACT_FROM] = items
+	if amounts:
+		answers["quantity"] = amounts
+	else:
+		answers.pop("quantity", None)
+	state.update_state(ctx.identity, answers=answers, items=items, quantity=amounts or None, **{LINES_KEY: lines})
+	if ack:
+		pairs = [p for p in ctx.state.get(ACK_KEY) or [] if p[0] not in (EXTRACT_FROM, "quantity")]
+		ctx.state[ACK_KEY] = [*pairs, (EXTRACT_FROM, items)] + ([("quantity", amounts)] if amounts else [])
+
+
+def _goods_of_turn(ctx: RouteContext) -> tuple[list, list]:
+	detail = ctx.state.get("_classify_detail") or {}
+	if detail.get("batch_id") != ctx.batch_id:
+		return [], []
+	return detail.get("goods") or [], detail.get("removed") or []
+
+
+def _structured_answer(ctx: RouteContext, st: dict, field: str, text: str) -> bool | None:
+	"""Khách trả lời câu "mặt hàng" / "số lượng" của báo giá vật tư: ghi theo TỪNG DÒNG HÀNG mà bước đọc hiểu trích được
+	(tên, số lượng, hãng, quy cách của mỗi mặt hàng), thay vì chép cả câu vào một ô. Không có gì để ghi theo dòng → False
+	(đường ghi thường xử lý)."""
+	from omni_crm.script import quote_lines
+	from omni_crm.script.flows import menu
+
+	if st.get("branch") != "3b" or field not in (EXTRACT_FROM, "quantity") or not text or not menu._understand_on():
+		return False
+	answers = store.as_dict(st.get("answers"))
+	several = len(re.findall(r"[,;\n]|\svà\s", text)) >= 1 or len(quote_lines.UNIT_RE.findall(text)) >= 2
+	if field == "quantity" and len(_lines_of(st, answers)) <= 1 and not several:
+		return False  # một mặt hàng, một số lượng: đường ghi thường đủ dùng, khỏi gọi AI
+	menu.classify_text(ctx)
+	goods, removed = _goods_of_turn(ctx)
+	if not goods:
+		return False
+	base = _lines_of(st, answers) if (field == "quantity" or isinstance(st.get(LINES_KEY), list)) else []
+	lines, _changed = quote_lines.merge(base, goods, removed)
+	if not lines:
+		return False
+	ask_rest = False
+	if field == "quantity":
+		left = quote_lines.missing(lines)
+		if left and (st.get("qty_round") or SKIP_VALUE.search(text)):
+			# khách nói chưa rõ, hoặc đã hỏi lại một lần mà vẫn thiếu: ghi rõ là chưa rõ, không hỏi mãi
+			lines = quote_lines.fill(lines, NOT_GIVEN)
+		elif left:
+			ask_rest = True  # mới có số lượng của một số mặt hàng: ghi phần đã có, hỏi nốt phần còn thiếu (một lần)
+		state.update_state(ctx.identity, qty_round=1 if left else None)
+	_write_lines(ctx, lines)
+	_take_more(ctx, answers)
+	if ask_rest:
+		node = store.get_node(st.get("node")) or {}
+		lead_in = store.render(store.get_node(NODE_QTY_LEFT), {**engine.variables(ctx), "identity": ctx.identity, "con_thieu": ", ".join(quote_lines.missing(lines))})
+		prefix = " ".join(x for x in (take_ack(ctx, engine.variables(ctx)), lead_in[0] if lead_in else "") if x)
+		if node and send.send_node(ctx.identity, node.get("code") or "", engine.variables(ctx), prefix=prefix):
+			router._mark(ctx.batch_id)
+			_restore_flow(ctx, st, wrong=cint(st.get("wrong")))
+			state.update_state(ctx.identity, not_recorded=None)
+			return None  # đã hỏi nốt: vẫn đứng ở câu số lượng
+	state.update_state(ctx.identity, flow=None, field=None, node=None, pending=None, wrong=None, force=None, not_recorded=None)
+	return True
+
+
+NODE_QTY_LEFT = "BG_VT_CON_THIEU"
+SUBSTITUTE_LABEL = {"DUOC": "Được", "CHI_DUNG_HANG": "Chỉ đúng hãng", "TUY_MAT_HANG": "Tuỳ mặt hàng"}
+
+
+def _take_more(ctx: RouteContext, answers: dict) -> None:
+	"""Điều khách nói kèm trong cùng tin: thời gian cần hàng, có nhận hãng thay thế không — ghi luôn để không hỏi lại."""
+	detail = ctx.state.get("_classify_detail") or {}
+	if detail.get("batch_id") != ctx.batch_id:
+		return
+	slots = detail.get("slots") or {}
+	if slots.get(DELIVERY_FIELD) and DELIVERY_FIELD not in answers:
+		save_answer(ctx, DELIVERY_FIELD, str(slots[DELIVERY_FIELD]), typed=True)
+	label = SUBSTITUTE_LABEL.get(detail.get("substitute") or "")
+	if label and "substitute" not in answers:
+		save_answer(ctx, "substitute", label, typed=False)
+
+
+NOT_GIVEN = "chưa rõ"
+
+
 def edit_lines(ctx: RouteContext) -> bool:
 	"""Yêu cầu báo giá vật tư đang dở mà khách THÊM / BỎ / SỬA mặt hàng ("thêm 50 hộp khẩu trang", "bỏ cồn, bơm tiêm
 	1 triệu cái") trong lúc bot đang hỏi câu khác hoặc đang đọc lại: cập nhật đúng dòng hàng theo bản đọc hiểu, báo lại
@@ -491,8 +605,23 @@ def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) 
 	if typed and field == DELIVERY_FIELD and DELIVERY_ASK.search(answers[field].lower()):
 		ctx.state[NOTE_KEY] = NODE_DELIVERY_NOTE
 	values: dict = {"answers": answers}
-	if field in (EXTRACT_FROM, "quantity"):
-		values[LINES_KEY] = None  # hai chuỗi vừa đổi theo đường thường: các dòng hàng sẽ được dựng lại từ chúng khi cần
+	if field == EXTRACT_FROM:
+		values[LINES_KEY] = None  # danh sách mặt hàng vừa ghi theo đường thường: các dòng hàng sẽ được dựng lại khi cần
+	if field == "quantity" and typed and st.get("branch") == "3b":
+		from omni_crm.script import quote_lines
+
+		old = st.get(LINES_KEY)
+		base = [dict(x) for x in old] if isinstance(old, list) else quote_lines.seed(answers.get(EXTRACT_FROM), "")
+		if len(base) > 1:  # nhiều mặt hàng: gắn số lượng với đúng tên ("50 chai, 1000 cái" -> "cồn: 50 chai; bơm tiêm: 1000 cái")
+			if not quote_lines.missing(base):
+				base = [{k: v for k, v in x.items() if k != "sl"} for x in base]  # khách trả lời lại cả câu số lượng
+			lines = quote_lines.fill(base, answers[field])
+			answers[field] = quote_lines.quantity_text(lines)[:MAX_ANSWER] or answers[field]
+			values[LINES_KEY] = lines
+			if not skip_ack:
+				ctx.state[ACK_KEY][-1] = (field, answers[field])
+		else:
+			values[LINES_KEY] = None
 	if field in MIRROR_KEYS:  # flows/quote.py (K7) đọc câu trả lời báo giá ở khóa cấp trên của script_state
 		values[field] = answers[field]
 	if field == "tai_lieu":
@@ -582,6 +711,14 @@ def on_text(ctx: RouteContext) -> bool:
 			return True
 		if field == DELIVERY_FIELD and text and ((ctx.state.get("_classify_detail") or {}).get("questions") or DELIVERY_ASK.search(text.lower())):
 			ctx.state[NOTE_KEY] = NODE_DELIVERY_NOTE
+		done = _structured_answer(ctx, st, field, text) if text and not ctx.attachments else False
+		if done is None:  # đã ghi phần có và hỏi nốt phần thiếu
+			state.reset_reask(ctx.identity)
+			return True
+		if done:
+			_continue(ctx, node, engine.split_actions(st.get("pending")))  # đã ghi theo từng dòng hàng
+			state.reset_reask(ctx.identity)
+			return True
 		if text and not ctx.attachments:
 			value = slot_value(ctx, field, text)
 			if value is None:  # không phải giá trị của ô này (câu nói, câu hỏi, AI chưa chắc): KHÔNG ghi, hỏi lại

@@ -1106,5 +1106,321 @@
   },
   "lua_chon": 0,
   "cam_xuc": "BINH_THUONG"
+ },
+ "KB-51": {
+  "dien_giai": "Khách muốn báo giá vật tư y tế gồm găng tay nitrile size M 300 hộp, bơm tiêm 5ml 2000 cái và khẩu trang 3 lớp 50 thùng.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Xin báo giá găng tay nitrile, bơm tiêm 5ml, khẩu trang 3 lớp"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "quy_cach": "size M",
+     "so_luong": 300,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bơm tiêm",
+     "quy_cach": "5ml",
+     "so_luong": 2000,
+     "don_vi": "cái"
+    },
+    {
+     "ten": "khẩu trang",
+     "quy_cach": "3 lớp",
+     "so_luong": 50,
+     "don_vi": "thùng"
+    }
+   ]
+  },
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-52": {
+  "dien_giai": "Khách muốn báo giá vật tư y tế gồm găng tay 100 hộp, bơm tiêm 10ml 500 cái và bông gòn (chưa rõ số lượng).",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Xin báo giá găng tay, bơm tiêm 10ml, bông gòn"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bơm tiêm",
+     "quy_cach": "10ml",
+     "so_luong": 500,
+     "don_vi": "cái"
+    },
+    {
+     "ten": "bông gòn"
+    }
+   ]
+  },
+  "chua_ro": [
+   {
+    "diem": "bông gòn có số lượng và quy cách bao nhiêu",
+    "cach_hieu": [
+     "khách sẽ bổ sung sau",
+     "khách không cần số lượng"
+    ],
+    "anh_huong": "CHI_TIET"
+   }
+  ]
+ },
+ "KB-53": {
+  "dien_giai": "Khách cung cấp số lượng cho các mặt hàng đang báo giá: găng tay nitrile 100 hộp, bơm tiêm 5ml 500 cái, bông gòn 20 gói.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "doi_tuong": "BAO_GIA",
+    "dich_vu": "VATTU",
+    "noi_dung": "Cung cấp số lượng cho từng mặt hàng trong yêu cầu báo giá"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bơm tiêm 5ml",
+     "so_luong": 500,
+     "don_vi": "cái"
+    },
+    {
+     "ten": "bông gòn",
+     "so_luong": 20,
+     "don_vi": "gói"
+    }
+   ]
+  },
+  "lua_chon": 0
+ },
+ "KB-54": {
+  "dien_giai": "Khách cung cấp số lượng cho từng mặt hàng đang báo giá: găng tay nitrile 100 hộp, bơm tiêm 5ml 500 cái, bông gòn 20 gói.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Cung cấp số lượng cho từng mặt hàng trong yêu cầu báo giá"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bơm tiêm 5ml",
+     "so_luong": 500,
+     "don_vi": "cái"
+    },
+    {
+     "ten": "bông gòn",
+     "so_luong": 20,
+     "don_vi": "gói"
+    }
+   ]
+  },
+  "lua_chon": 0
+ },
+ "KB-55": {
+  "dien_giai": "Khách muốn xin báo giá 200 cái kim luồn 22G hãng B.Braun và 300 bộ dây truyền dịch Terumo.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.97,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Kim luồn 22G B.Braun 200 cái; dây truyền dịch Terumo 300 bộ"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "kim luồn",
+     "quy_cach": "22G",
+     "hang": "B.Braun",
+     "so_luong": 200,
+     "don_vi": "cái"
+    },
+    {
+     "ten": "dây truyền dịch",
+     "hang": "Terumo",
+     "so_luong": 300,
+     "don_vi": "bộ"
+    }
+   ]
+  },
+  "cam_xuc": "BINH_THUONG"
+ },
+ "KB-56": {
+  "dien_giai": "Khách cung cấp số lượng cho găng tay nitrile (100 hộp) và bông gòn (20 gói), chưa có số lượng bơm tiêm 5ml.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Cung cấp số lượng cho các mặt hàng trong yêu cầu báo giá"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bông gòn",
+     "so_luong": 20,
+     "don_vi": "gói"
+    }
+   ]
+  },
+  "chua_ro": [
+   {
+    "diem": "số lượng bơm tiêm 5ml",
+    "cach_hieu": [
+     "khách chưa quyết định số lượng bơm tiêm",
+     "khách muốn bỏ bơm tiêm"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "lua_chon": 0
+ },
+ "KB-57": {
+  "dien_giai": "Khách muốn báo giá 300 hộp găng tay và 50 hộp khẩu trang, cần trong tuần này, chấp nhận hàng Việt Nam.",
+  "quan_he": "Y_KHAC",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Xin báo giá găng tay và khẩu trang"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay",
+     "so_luong": 300,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "khẩu trang",
+     "so_luong": 50,
+     "don_vi": "hộp"
+    }
+   ],
+   "thoi_gian_can_hang": {
+    "lua_chon": "TRONG_1_TUAN",
+    "nguyen_van": "trong tuần này"
+   },
+   "hang_thay_the": "DUOC"
+  },
+  "chua_ro": []
+ },
+ "KB-58": {
+  "dien_giai": "Khách muốn báo giá vật tư: găng tay nitrile, bơm tiêm 5ml, bông gòn, mỗi loại 100 hộp.",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Trả lời số lượng 100 hộp cho mỗi mặt hàng trong yêu cầu báo giá"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bơm tiêm 5ml",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bông gòn",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    }
+   ]
+  },
+  "ly_do": "Khách trả lời đúng câu hỏi số lượng cho từng mặt hàng đang dở báo giá."
+ },
+ "KB-59": {
+  "dien_giai": "(bản ghi dựng từ KB-56: cùng mặt hàng, khách không nói \"chưa biết\")",
+  "quan_he": "TRA_LOI",
+  "cac_y": [
+   {
+    "y_dinh": "BAOGIA",
+    "do_tin_cay": 0.95,
+    "dich_vu": "VATTU",
+    "doi_tuong": "BAO_GIA",
+    "noi_dung": "Cung cấp số lượng cho các mặt hàng trong yêu cầu báo giá"
+   }
+  ],
+  "slots": {
+   "mat_hang": [
+    {
+     "ten": "găng tay nitrile",
+     "so_luong": 100,
+     "don_vi": "hộp"
+    },
+    {
+     "ten": "bông gòn",
+     "so_luong": 20,
+     "don_vi": "gói"
+    }
+   ]
+  },
+  "chua_ro": [
+   {
+    "diem": "số lượng bơm tiêm 5ml",
+    "cach_hieu": [
+     "khách chưa quyết định số lượng bơm tiêm",
+     "khách muốn bỏ bơm tiêm"
+    ],
+    "anh_huong": "DOI_HANH_DONG"
+   }
+  ],
+  "lua_chon": 0
  }
 }

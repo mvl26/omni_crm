@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 
 import frappe
+
+from omni_crm.script import state
 from frappe.tests.utils import FrappeTestCase
 
 from omni_crm.tests.k11_helpers import A, ConversationCase
@@ -196,6 +198,47 @@ case("KB-49", R, [*LINES, "à thêm 50 hộp khẩu trang nữa nhé"],
 case("KB-50", R, [*LINES, "Bỏ cồn, bơm tiêm 1 triệu cái"],
 	[answer_is_not("items", "cồn"), answer_is_not("quantity", "cồn"), answer_has("quantity", "1 triệu cái"), unsaved("need_by"), ends("BG_VT_THOIGIAN"), no_handoff()], {"y_dinh": {"SUA_THONG_TIN", "BAOGIA"}}, critical=True)
 
+# báo giá NHIỀU MẶT HÀNG (phản hồi 26/11: "ghi thiếu hoặc ghi nhầm ô"): mỗi mặt hàng một dòng, số lượng gắn đúng tên
+M3 = "găng tay nitrile, bơm tiêm 5ml, bông gòn"
+
+
+def line_qty(name, amount):
+	"""Trong câu trả lời số lượng, mặt hàng `name` đi với đúng `amount`."""
+	def check(c):
+		got = _plain(_answers(c).get("quantity"))
+		c.assertRegex(got, rf"{_plain(name)}[^;]*: *{_plain(amount)}(?![0-9])", _answers(c))
+
+	return check
+
+
+def lines_are(*names):
+	def check(c):
+		lines = state.get(c.ident1)["script_state"].get("lines") or []
+		c.assertEqual(len(lines), len(names), lines)
+		for name in names:
+			c.assertTrue(any(_plain(name) in _plain(x.get("ten")) for x in lines), (name, lines))
+
+	return check
+
+
+case("KB-51", S, ["báo giá giúp anh: găng tay nitrile size M 300 hộp, bơm tiêm 5ml 2000 cái, khẩu trang 3 lớp 50 thùng"],
+	[lines_are("găng tay", "bơm tiêm", "khẩu trang"), line_qty("găng tay", "300 hộp"), line_qty("bơm tiêm", "2000 cái"), line_qty("khẩu trang", "50 thùng"), ends("BG_VT_THOIGIAN"), clear()], {"y_dinh": {"BAOGIA"}}, critical=True)
+case("KB-52", S, [*VT_Q, ("multi", ["găng tay 100 hộp", "bơm tiêm 10ml 500 cái", "bông gòn"])],
+	[lines_are("găng tay", "bơm tiêm", "bông gòn"), line_qty("găng tay", "100 hộp"), line_qty("bơm tiêm", "500 cái"), ends("BG_VT_SOLUONG"), clear()], {}, critical=True)
+case("KB-53", S, [*VT_Q, M3, "găng 100 hộp, bơm 500 cái, bông 20 gói"],
+	[line_qty("găng tay", "100 hộp"), line_qty("bơm tiêm", "500 cái"), line_qty("bông gòn", "20 gói"), ends("BG_VT_THOIGIAN"), clear()], {}, critical=True)
+case("KB-54", S, [*VT_Q, M3, "100 hộp, 500 cái, 20 gói"],
+	[line_qty("găng tay", "100 hộp"), line_qty("bơm tiêm", "500 cái"), line_qty("bông gòn", "20 gói"), ends("BG_VT_THOIGIAN"), clear()], {})
+case("KB-55", S, [*VT_Q, "kim luồn 22G hãng B.Braun 200 cái; dây truyền dịch Terumo 300 bộ"],
+	[lines_are("kim luồn", "dây truyền dịch"), line_qty("kim luồn", "200 cái"), line_qty("dây truyền dịch", "300 bộ"), answer_has("items", "B.Braun"), answer_has("items", "Terumo"), ends("BG_VT_THOIGIAN"), clear()], {})
+case("KB-56", S, [*VT_Q, M3, "găng tay 100 hộp, bông gòn 20 gói còn bơm tiêm a chưa biết"],
+	[line_qty("găng tay", "100 hộp"), line_qty("bông gòn", "20 gói"), line_qty("bơm tiêm", "chưa rõ"), ends("BG_VT_THOIGIAN"), clear(), no_handoff()], {})
+case("KB-59", S, [*VT_Q, M3, "găng tay 100 hộp, bông gòn 20 gói"],
+	[line_qty("găng tay", "100 hộp"), line_qty("bông gòn", "20 gói"), ends("BG_VT_SOLUONG"), says("bơm tiêm"), clear(), no_handoff()], {})
+case("KB-57", S, ["a cần găng tay 300 hộp và khẩu trang 50 hộp, cần trong tuần này, hàng việt nam cũng được"],
+	[lines_are("găng tay", "khẩu trang"), line_qty("găng tay", "300 hộp"), line_qty("khẩu trang", "50 hộp"), answer_has("need_by", "tuần này"), saved("substitute", "Được"), lacks("BG_VT_THAYTHE"), clear()], {"y_dinh": {"BAOGIA"}})
+case("KB-58", S, [*VT_Q, M3, "mỗi loại 100 hộp nhé"], [answer_has("quantity", "100 hộp"), ends("BG_VT_THOIGIAN"), clear()], {})
+
 RESULTS: dict[str, dict] = {}
 CAPTURED: dict[str, dict] = {}
 CAPTURED_U: dict[str, str] = {}  # đầu vào đầy đủ của bước hiểu mới (script.understand) ở lượt được chấm
@@ -226,6 +269,7 @@ def U(intent, relation="TRA_LOI", conf=0.9, service="VATTU", goods=None, **slots
 
 
 SETUP_U = {
+	M3: U("BAOGIA", goods=[_good("găng tay nitrile"), _good("bơm tiêm 5ml"), _good("bông gòn")]),
 	LINES_ITEMS: U("BAOGIA", goods=[_good("cồn 70 độ"), _good("bơm tiêm")]),
 	LINES_QTY: U("BAOGIA", goods=[_good("cồn", 50, "chai"), _good("bơm tiêm", 1000, "cái")]),
 	"kim bơm": U("BAOGIA", goods=[_good("kim bơm")]),
@@ -376,5 +420,5 @@ class TestK15ZReport(FrappeTestCase):
 		out = {"summary": summary(RESULTS), "cases": RESULTS}
 		if os.environ.get(REPORT_ENV):
 			Path(os.environ[REPORT_ENV]).write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
-		self.assertEqual(len(C), 50)
-		self.assertEqual(len({c["id"] for c in C}), 50)
+		self.assertEqual(len(C), 59)
+		self.assertEqual(len({c["id"] for c in C}), 59)

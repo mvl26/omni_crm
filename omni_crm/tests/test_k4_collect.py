@@ -300,7 +300,7 @@ class TestBranch3b(CollectCase):
 			"BG_VT_THAYTHE",
 			[
 				"găng tay nitrile size M, bơm tiêm 5ml",
-				"200 hộp và 5000 cái",
+				"găng tay nitrile size M: 200 hộp; bơm tiêm 5ml: 5000 cái",  # 26/11: số lượng gắn đúng tên từng mặt hàng
 				"Trong 1 tháng",
 				"Chỉ đúng hãng",
 			],

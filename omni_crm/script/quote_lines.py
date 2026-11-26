@@ -13,7 +13,6 @@ import unicodedata
 _SPLIT = re.compile(r"\s*[;\n]\s*|\s*,\s*(?!\d)")
 _PAIR = re.compile(r"^(?P<ten>[^:]{1,120}):\s*(?P<sl>.+)$")
 MAX_LINES = 20
-_QTY = re.compile(r"\d[\d.,]*\s*(?:(?:nghìn|ngàn|triệu|tỷ|chục|trăm)\s*)?[a-zà-ỹ]+", re.I)
 
 
 def _fold(text: object) -> str:
@@ -38,39 +37,65 @@ def qty_of(good: dict) -> str:
 	return " ".join(str(good.get("so_luong_chu") or "").split())
 
 
-def seed(items: object, quantity: object) -> list[dict]:
-	"""Các dòng dựng từ hai chuỗi đã ghi ("găng tay, bơm tiêm" + "găng tay: 100 hộp; bơm tiêm: 50 cái")."""
-	names = [n.strip() for n in _SPLIT.split(str(items or "")) if n.strip()]
-	lines = [{"ten": n} for n in names[:MAX_LINES]]
-	amounts = [a.strip() for a in re.split(r"\s*[;\n]\s*", str(quantity or "")) if a.strip()]
+UNITS = "hộp|cái|chiếc|thùng|bộ|gói|lọ|chai|túi|cuộn|đôi|kg|lít|tấm|vỉ|ống|bịch|cây|tuýp|kiện|can|bao|viên|tờ|tập|cuốn|hop|cai|chiec|thung|goi|doi|tui|cuon"
+_UNIT_QTY = re.compile(rf"\d[\d.,]*\s*(?:(?:nghìn|ngàn|triệu|tỷ|chục|trăm)\s*)?(?:{UNITS})(?![\wà-ỹ])", re.I)
+UNIT_RE = _UNIT_QTY
+_BARE_QTY = re.compile(r"(?<![\w.,])\d[\d.,]*(?:\s*(?:nghìn|ngàn|triệu|tỷ|chục|trăm))?(?![\wà-ỹ])", re.I)
+
+
+def amount_in(piece: str) -> str:
+	"""Phần SỐ LƯỢNG trong một mảnh câu ("bơm tiêm 5ml 500 cái" -> "500 cái", "bơm 500" -> "500"); "5ml", "22G" là quy
+	cách (số dính liền chữ không phải đơn vị hàng), không phải số lượng. Không có → ""."""
+	found = _UNIT_QTY.findall(piece)
+	if found:
+		return found[-1].strip()
+	bare = _BARE_QTY.findall(piece)
+	return bare[-1].strip() if bare else ""
+
+
+def fill(lines: list[dict], quantity: object) -> list[dict]:
+	"""Điền câu trả lời số lượng của khách vào các dòng CHƯA có số lượng: theo tên nếu khách nhắc tên ("cồn 50 chai"),
+	theo thứ tự nếu số mảnh bằng số dòng còn thiếu ("50 chai, 1000 cái"), còn lại là số lượng chung của các dòng thiếu."""
+	out = [dict(line) for line in lines or []]
 	loose = []
-	for amount in amounts:
+	for amount in [a.strip() for a in re.split(r"\s*[;\n]\s*", str(quantity or "")) if a.strip()]:
 		m = _PAIR.match(amount)
-		target = next((line for line in lines if m and same(line["ten"], m["ten"])), None)
+		target = next((line for line in out if m and same(line["ten"], m["ten"])), None)
 		if target is not None:
 			target["sl"] = m["sl"].strip()
 		else:
 			loose.append(amount)
 	if not loose:
-		return lines
-	pieces = [p.strip() for chunk in loose for p in re.split(r"\s*,\s*(?!\d{3}(?!\d))", chunk) if p.strip()]
+		return out
+	pieces = [p.strip() for chunk in loose for p in re.split(r"\s*,\s*(?!\d{3}(?!\d))|\s+và\s+", chunk) if p.strip()]
 	rest = []
 	for piece in pieces:  # "cồn 50 chai": mảnh có nhắc tên một dòng thì là số lượng của dòng đó
 		words = f" {_fold(piece)} "
-		target = next((x for x in lines if "sl" not in x and (f" {_fold(x['ten'])} " in words or f" {_fold(x['ten']).split()[0]} " in words)), None)
-		amount = _QTY.search(piece)
+		target = next((x for x in out if not x.get("sl") and (f" {_fold(x['ten'])} " in words or f" {_fold(x['ten']).split()[0]} " in words)), None)
+		amount = amount_in(piece)
 		if target is not None and amount:
-			target["sl"] = amount.group(0).strip()
+			target["sl"] = amount
 		else:
 			rest.append(piece)
-	empty = [x for x in lines if "sl" not in x]
-	if rest and len(rest) == len(empty) and len(pieces) > 1 and all(_QTY.search(r) for r in rest):
+	empty = [x for x in out if not x.get("sl")]
+	if rest and len(rest) == len(empty) and len(pieces) > 1 and all(amount_in(r) for r in rest):
 		for line, piece in zip(empty, rest):  # "50 chai, 1000 cái" cho hai mặt hàng: khách trả lời theo đúng thứ tự đã nêu
 			line["sl"] = piece
-	elif rest:  # số lượng không gắn tên ("100 hộp", "mỗi loại 100 hộp"): là của mọi dòng chưa có số lượng
+	elif rest:  # số lượng không gắn tên ("100 hộp", "mỗi loại 100 hộp", "chưa biết"): là của mọi dòng còn thiếu
 		for line in empty:
 			line["sl"] = ", ".join(rest)
-	return lines
+	return out
+
+
+def seed(items: object, quantity: object) -> list[dict]:
+	"""Các dòng dựng từ hai chuỗi đã ghi ("găng tay, bơm tiêm" + "găng tay: 100 hộp; bơm tiêm: 50 cái")."""
+	names = [n.strip() for n in _SPLIT.split(str(items or "")) if n.strip()]
+	return fill([{"ten": n} for n in names[:MAX_LINES]], quantity)
+
+
+def missing(lines: list[dict]) -> list[str]:
+	"""Tên các dòng chưa có số lượng."""
+	return [line["ten"] for line in lines or [] if not line.get("sl")]
 
 
 def merge(lines: list[dict], goods: list[dict], removed: list) -> tuple[list[dict], bool]:

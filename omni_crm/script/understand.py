@@ -416,8 +416,8 @@ def to_detail(reading: dict) -> dict:
 	if goods:
 		slots["items"] = ", ".join(" ".join(x for x in (g["ten"], g.get("quy_cach") or "", g.get("hang") or "") if x) for g in goods)
 		amounts = [quantity_text(g) for g in goods]
-		if all(amounts):
-			slots["quantity"] = amounts[0] if len(goods) == 1 else "; ".join(f"{g['ten']}: {a}" for g, a in zip(goods, amounts))
+		if any(amounts):  # kể cả khi mới có số lượng của MỘT SỐ mặt hàng: ghi phần đã có (trước đây bỏ hết → ghi thiếu)
+			slots["quantity"] = amounts[0] if len(goods) == 1 else "; ".join(f"{g['ten']}: {a}" for g, a in zip(goods, amounts) if a)
 	when = slots_in.get("thoi_gian_can_hang") or {}
 	if when.get("nguyen_van"):
 		slots["need_by"] = when["nguyen_van"]

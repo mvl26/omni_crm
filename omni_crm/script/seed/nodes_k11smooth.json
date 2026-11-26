@@ -567,5 +567,18 @@
   "source_ref": "Thử nghiệm 25/11/2026 (lỗ hổng 3: khách không thoát được luồng)",
   "text": "Dạ vâng ạ, Miyano tạm dừng ở đây và chưa gửi yêu cầu nào đi. Khi nào cần, anh/chị cứ nhắn cho Miyano nhé.",
   "notes": "Gửi khi khách nói 'để lúc khác', 'để anh hỏi sếp đã', 'tính sau'... trong lúc bot đang hỏi dở. Việc đang dở bị bỏ, không tạo việc cho nhân viên."
+ },
+ {
+  "code": "BG_VT_CON_THIEU",
+  "title": "Báo giá vật tư – còn mặt hàng chưa có số lượng (câu dẫn)",
+  "step": "3",
+  "service": "VATTU",
+  "channel": "Tất cả",
+  "status": "Đang dùng",
+  "buttons": [],
+  "action": "",
+  "source_ref": "Phản hồi 26/11/2026 (báo giá nhiều mặt hàng ghi thiếu)",
+  "text": "Miyano chưa có số lượng của: {con_thieu}. Chưa rõ thì anh/chị nhắn \"chưa rõ\" giúp Miyano ạ.",
+  "notes": "Không gửi riêng: ghép lên đầu câu hỏi số lượng khi khách mới cho số lượng của một số mặt hàng. {con_thieu} là tên mặt hàng khách đã nêu."
  }
 ]
