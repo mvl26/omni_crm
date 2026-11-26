@@ -94,8 +94,16 @@ def asked_back(c):
 	c.assertFalse(c.T[-1].main_menu, c.T[-1].nodes)
 
 
+def _plain(text) -> str:
+	"""Bỏ dấu, chữ thường: AI có thể chép lại lời khách gõ không dấu thành có dấu ("khau trang" / "khẩu trang")."""
+	import unicodedata
+
+	raw = unicodedata.normalize("NFD", str(text or "").lower().replace("đ", "d"))
+	return "".join(ch for ch in raw if unicodedata.category(ch) != "Mn")
+
+
 def answer_has(field, part):
-	return lambda c: c.assertIn(part.lower(), str(_answers(c).get(field) or "").lower(), _answers(c))
+	return lambda c: c.assertIn(_plain(part), _plain(_answers(c).get(field)), _answers(c))
 
 
 def answer_is_not(field, part):
@@ -180,6 +188,13 @@ case("KB-45", R, [*ATT, "Tầm 5 người"], [ends("DEMO_DOCLAI"), says("5 ngư�
 case("KB-46", S, [*ATT, "5", "đúng rồi em"], [booked, attendees(5)], {})
 case("KB-47", S, [*VT_QE, *CONTACT3], [ends("BG_DOCLAI"), says("găng tay nitrile"), says("100 hộp"), lambda c: c.assertEqual(len(c.tasks), 0, "đã tạo việc khi khách chưa xác nhận")], {})
 case("KB-48", S, [*VT_QE, *CONTACT3, "đúng rồi"], [lambda c: c.assertEqual(len(c.tasks), 1), clear()], {})
+# sửa danh sách mặt hàng của báo giá đang dở (bản thử 25/11, lỗ hổng 4): thêm / bỏ / đổi đúng dòng, hỏi tiếp câu đang dở
+LINES_ITEMS, LINES_QTY = "cồn 70 độ, bơm tiêm", "cồn 50 chai, bơm tiêm 1000 cái"
+LINES = [*VT_Q, LINES_ITEMS, LINES_QTY]
+case("KB-49", R, [*LINES, "à thêm 50 hộp khẩu trang nữa nhé"],
+	[answer_has("items", "khẩu trang"), answer_has("quantity", "khẩu trang: 50 hộp"), answer_has("items", "cồn"), unsaved("need_by"), not_says("chưa ghi được"), ends("BG_VT_THOIGIAN"), no_handoff()], {"y_dinh": {"SUA_THONG_TIN", "BAOGIA"}})
+case("KB-50", R, [*LINES, "Bỏ cồn, bơm tiêm 1 triệu cái"],
+	[answer_is_not("items", "cồn"), answer_is_not("quantity", "cồn"), answer_has("quantity", "1 triệu cái"), unsaved("need_by"), ends("BG_VT_THOIGIAN"), no_handoff()], {"y_dinh": {"SUA_THONG_TIN", "BAOGIA"}}, critical=True)
 
 RESULTS: dict[str, dict] = {}
 CAPTURED: dict[str, dict] = {}
@@ -211,6 +226,8 @@ def U(intent, relation="TRA_LOI", conf=0.9, service="VATTU", goods=None, **slots
 
 
 SETUP_U = {
+	LINES_ITEMS: U("BAOGIA", goods=[_good("cồn 70 độ"), _good("bơm tiêm")]),
+	LINES_QTY: U("BAOGIA", goods=[_good("cồn", 50, "chai"), _good("bơm tiêm", 1000, "cái")]),
 	"kim bơm": U("BAOGIA", goods=[_good("kim bơm")]),
 	"ống thở": U("BAOGIA", goods=[_good("ống thở")]),
 	"găng tay": U("BAOGIA", goods=[_good("găng tay")]),
@@ -359,5 +376,5 @@ class TestK15ZReport(FrappeTestCase):
 		out = {"summary": summary(RESULTS), "cases": RESULTS}
 		if os.environ.get(REPORT_ENV):
 			Path(os.environ[REPORT_ENV]).write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
-		self.assertEqual(len(C), 48)
-		self.assertEqual(len({c["id"] for c in C}), 48)
+		self.assertEqual(len(C), 50)
+		self.assertEqual(len({c["id"] for c in C}), 50)

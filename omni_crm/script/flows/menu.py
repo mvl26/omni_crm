@@ -138,6 +138,8 @@ def on_text(ctx: RouteContext) -> None:
 		flow, st = "", engine.script_state(ctx)
 	if text and _postpones(ctx, text, flow):  # "để lúc khác anh nhắn lại": rời việc đang dở, không hỏi tiếp
 		return
+	if text and _edit_quote_lines(ctx):  # "thêm 50 hộp khẩu trang", "bỏ cồn": sửa đúng dòng hàng rồi hỏi tiếp câu đang dở
+		return
 	handler = engine._state_handlers.get(flow)
 	if handler is not None and _side_talk(ctx, text, st):
 		return
@@ -721,6 +723,18 @@ def _reply_with_menu(ctx: RouteContext, lead_in: str) -> bool:
 	return False
 
 
+def _edit_quote_lines(ctx: RouteContext) -> bool:
+	try:
+		from omni_crm.script.flows import collect
+
+		return bool(collect.edit_lines(ctx))
+	except router.Superseded:
+		raise
+	except Exception as e:
+		frappe.logger("omni").info("omni script: không sửa được dòng hàng báo giá (%s)", type(e).__name__)
+		return False
+
+
 NODE_LATER = "TAM_DUNG"
 
 
@@ -759,7 +773,10 @@ NODE_SORRY_WAIT = "XINLOI_CHO"  # "Dạ, Miyano xin lỗi đã để anh/chị c
 NODE_KB_NOTED = "KB_GHINHAN"  # chưa có thông tin: ghi lại cho chuyên viên, KHÔNG tạm dừng bot
 
 
-CLARIFY_OK = re.compile(r"^(?:đổi|dời|chuyển|hủy|huỷ|đặt|sửa|giữ|gửi|nhận|xem|mua|lấy|thêm|bớt|báo giá|đăng ký|hỏi)(?![\wÀ-ỹ])", re.I)
+CLARIFY_OK = re.compile(
+	r"^(?:đổi|dời|chuyển|hủy|huỷ|đặt|sửa|giữ|gửi|nhận|xem|mua|lấy|thêm|bớt|báo giá|đăng ký|hỏi|gặp|gọi|tìm hiểu|biết|bỏ)(?![\wÀ-ỹ])", re.I
+)
+CLARIFY_LEAD = re.compile(r"^(?:muốn|cần|đang muốn|đang cần)\s+", re.I)  # "muốn gặp nhân viên" -> "gặp nhân viên"
 CLARIFY_BAD = re.compile(r"khách|bot|hệ thống|slot|kịch bản|không rõ|chưa rõ", re.I)
 CLARIFY_CONF = 0.8  # ý chính đã chắc từ mức này thì không hỏi làm rõ nữa
 NODE_CLARIFY = "HOI_LAM_RO"
@@ -775,7 +792,7 @@ def clarify_question(reading: dict) -> str:
 		if not isinstance(point, dict) or point.get("anh_huong") != "DOI_HANH_DONG":
 			continue
 		options = [brain.safe_text(o, CLARIFY_MAX_OPTION).rstrip(".?!") for o in point.get("cach_hieu") or [] if isinstance(o, str)]
-		options = [o[:1].lower() + o[1:] for o in options if o]
+		options = [CLARIFY_LEAD.sub("", o[:1].lower() + o[1:]) for o in options if o]
 		# AI viết cách hiểu cho hệ thống đọc, không phải cho khách: chỉ nhận cụm mở đầu bằng một động từ hành động và
 		# không nhắc "khách", "bot" (từng sinh câu "anh/chị muốn khách đang trả lời về số lượng…")
 		options = [o for o in options if CLARIFY_OK.match(o) and not CLARIFY_BAD.search(o)][:2]
@@ -1028,10 +1045,14 @@ def _route_new_intent(ctx: RouteContext, code: str) -> bool:
 		return False
 	if code == "NHAC_LAI":
 		pending = _pending_question(ctx)
-		if detail.get("questions"):
+		if detail.get("questions") and not pending:
 			ctx.state[engine.LEAD_IN_KEY] = _plain(ctx, NODE_SORRY_WAIT)
 			answer_kb(ctx)
 			return True
+		if detail.get("questions"):
+			# đang hỏi dở mà khách giục / nói chưa hiểu ("em vẫn k hiểu"): kho tri thức có câu trả lời thì trả lời, rồi
+			# LUÔN nói lại điều đã ghi và hỏi lại câu đang dở — không dừng ở "chưa có thông tin"
+			answer_if_known(ctx, detail["questions"])
 		if pending:  # xin lỗi, đọc lại điều đã ghi được, hỏi lại câu đang dở; hỏi mãi không xong thì mời gặp nhân viên
 			from omni_crm.script.flows import collect
 

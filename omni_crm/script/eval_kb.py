@@ -47,3 +47,23 @@ def record(inputs_path: str, out_path: str) -> dict:
 	with open(out_path, "w", encoding="utf-8") as f:
 		json.dump({"_meta": meta, **out}, f, ensure_ascii=False, indent=1)
 	return meta
+
+
+def record_understand(inputs_path: str, out_path: str) -> dict:
+	"""Như `record` nhưng cho bước hiểu mới (`script.understand`, câu lệnh đang ghim): {mã ca: kết quả thô}.
+	`inputs_path`: tệp do `K15_CAPTURE_U` ghi ({mã ca: đầu vào đầy đủ của lượt được chấm})."""
+	from omni_crm.script import understand
+
+	with open(inputs_path, encoding="utf-8") as f:
+		inputs = json.load(f)
+	out: dict = {}
+	calls = 0
+	for case_id, content in inputs.items():
+		if not isinstance(content, str) or content.startswith("LỖI"):
+			continue
+		out[case_id] = understand.call(content, synthetic=True) or {}
+		calls += 1
+	meta = {"prompt": understand.PROMPT_VERSION, "model": understand.model(), "calls": calls}
+	with open(out_path, "w", encoding="utf-8") as f:
+		json.dump({"_meta": meta, **out}, f, ensure_ascii=False, indent=1)
+	return meta

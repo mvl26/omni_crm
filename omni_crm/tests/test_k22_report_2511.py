@@ -180,3 +180,73 @@ class TestWaitNotice(FrappeTestCase):
 
 		self.assertEqual(gather.NOTICE_AFTER, 20)
 		self.assertEqual(menu.thinking_after(), 20)
+
+
+class TestQuoteLinesPure(FrappeTestCase):  # lỗ hổng 4
+	def test_remove_change_and_add_keep_names_and_quantities_in_step(self):
+		from omni_crm.script import quote_lines as q
+
+		lines = q.seed("cồn 70 độ, bơm tiêm", "cồn 70 độ: 50 chai; bơm tiêm: 1000 cái")
+		lines, changed = q.merge(lines, [{"ten": "bơm tiêm", "so_luong_chu": "1 triệu cái"}, {"ten": "khẩu trang", "so_luong": 50, "don_vi": "hộp"}], ["cồn"])
+		self.assertTrue(changed)
+		self.assertEqual(q.items_text(lines), "bơm tiêm, khẩu trang")
+		self.assertEqual(q.quantity_text(lines), "bơm tiêm: 1 triệu cái; khẩu trang: 50 hộp")
+
+	def test_understanding_keeps_spoken_quantity_and_removed_names_only_if_said(self):
+		raw = {"quan_he": "Y_KHAC", "cac_y": [{"y_dinh": "SUA_THONG_TIN", "do_tin_cay": 0.9}], "slots": {"mat_hang": [{"ten": "bơm tiêm", "so_luong_chu": "1 triệu cái"}], "mat_hang_bo": ["cồn", "bông gòn"]}}
+		got = understand.clean(raw, "Bỏ cồn, bơm tiêm 1 triệu cái")
+		self.assertEqual(got["slots"]["mat_hang"], [{"ten": "bơm tiêm", "so_luong_chu": "1 triệu cái"}])
+		self.assertEqual(got["slots"]["mat_hang_bo"], ["cồn"])  # "bông gòn" khách không hề viết
+		self.assertEqual(understand.to_detail(got)["slots"]["quantity"], "1 triệu cái")
+
+
+def _goods(*rows):
+	return [{"ten": t, **({"so_luong": n, "don_vi": u} if n else {})} for t, n, u in rows]
+
+
+class TestQuoteLines(Case):
+	ITEMS, QTY = "cồn 70 độ, bơm tiêm", "cồn 50 chai, bơm tiêm 1000 cái"
+	ADD, CUT = "à thêm 50 hộp khẩu trang nữa nhé", "Bỏ cồn, bơm tiêm 1 triệu cái"
+
+	def setUp(self):
+		super().setUp()
+		edit = [("SUA_THONG_TIN", 0.9, "VATTU")]
+		self.readings.update(
+			{
+				self.ITEMS: U("TRA_LOI", [("BAOGIA", 0.9, "VATTU")], slots={"mat_hang": _goods(("cồn 70 độ", None, ""), ("bơm tiêm", None, ""))}),
+				self.QTY: U("TRA_LOI", [("BAOGIA", 0.9, "VATTU")], slots={"mat_hang": _goods(("cồn", 50, "chai"), ("bơm tiêm", 1000, "cái"))}),
+				self.ADD: U("Y_KHAC", edit, slots={"mat_hang": _goods(("khẩu trang", 50, "hộp"))}),
+				self.CUT: U("Y_KHAC", edit, slots={"mat_hang": [{"ten": "bơm tiêm", "so_luong_chu": "1 triệu cái"}], "mat_hang_bo": ["cồn"]}),
+			}
+		)
+
+	def _answers(self):
+		return self.T[-1].st.get("answers") or {}
+
+	def test_add_then_remove_while_other_questions_are_pending(self):
+		self.talk(["#MENU_VATTU", "#BAOGIA_VATTU", self.ITEMS, self.QTY])
+		asked = self.T[-1].node
+		self.step(self.ADD)
+		added = self.T[-1]
+		self.assertNotIn("chưa ghi được", added.text)
+		self.assertEqual(added.node, asked, added.nodes)  # hỏi tiếp đúng câu đang dở
+		self.assertIn("khẩu trang", self._answers()["items"])
+		self.assertIn("khẩu trang: 50 hộp", self._answers()["quantity"])
+		self.step(self.CUT)
+		cut = self.T[-1]
+		self.assertNotIn("cồn", self._answers()["items"])
+		self.assertNotIn("cồn", self._answers()["quantity"])
+		self.assertIn("bơm tiêm: 1 triệu cái", self._answers()["quantity"])
+		self.assertIn("khẩu trang: 50 hộp", self._answers()["quantity"])
+		self.assertEqual(cut.node, asked)
+		self.assertEqual(self.handoffs, [])
+
+	def test_edit_at_read_back_reads_back_again(self):
+		self.talk(["#MENU_VATTU", "#BAOGIA_VATTU", self.ITEMS, self.QTY, "#BG_VT_TG_GOITHAU", "#BG_VT_TT_DUOC", *CONTACT3])
+		self.assertIn("BG_DOCLAI", self.T[-1].nodes, [t.nodes for t in self.T])
+		self.step(self.CUT)
+		again = self.T[-1]
+		self.assertEqual(again.nodes, ["BG_DOCLAI"], again.nodes)
+		self.assertNotIn("cồn", again.text)
+		self.assertIn("1 triệu cái", again.text)
+		self.assertEqual(len(self.tasks), 0)

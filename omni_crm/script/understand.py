@@ -25,7 +25,7 @@ from omni_crm.bot.context import escape_tags, mask_pii
 from omni_crm.bot.prompts.loader import load_prompt, render
 
 PROMPT_NAME = "script_understand"
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2 (25/11): mat_hang_bo, so_luong_chu, mặt hàng chỉ của LƯỢT NÀY khi khách sửa danh sách
 MODEL_CONF = "omni_understand_model"
 DEFAULT_MODEL = "claude-haiku-5-5"
 AI_KIND = "Reply"
@@ -77,11 +77,12 @@ TOOL = {
 						"maxItems": 10,
 						"items": {
 							"type": "object",
-							"properties": {"ten": _S, "so_luong": {"type": ["number", "null"]}, "don_vi": _S, "hang": _S, "quy_cach": _S},
+							"properties": {"ten": _S, "so_luong": {"type": ["number", "null"]}, "so_luong_chu": _S, "don_vi": _S, "hang": _S, "quy_cach": _S},
 							"required": ["ten"],
 							"additionalProperties": False,
 						},
 					},
+					"mat_hang_bo": {"type": "array", "maxItems": 10, "items": _S},
 					"thoi_gian_can_hang": {
 						"type": "object",
 						"properties": {
@@ -281,7 +282,12 @@ def model() -> str:
 
 
 def _squash(value: object) -> str:
-	return " ".join(str(value or "").split()).casefold()
+	"""Dạng so "nguyên văn": gộp khoảng trắng, chữ thường, BỎ DẤU — khách gõ "khau trang", AI chép lại "khẩu trang" vẫn là
+	cùng một đoạn (lượt ghi 25/11: tên hàng có dấu bị coi là không có trong lời khách và bị bỏ)."""
+	import unicodedata
+
+	text = unicodedata.normalize("NFD", " ".join(str(value or "").split()).casefold().replace("đ", "d"))
+	return "".join(c for c in text if unicodedata.category(c) != "Mn")
 
 
 def clean(raw: dict | None, said: str) -> dict:
@@ -309,12 +315,17 @@ def clean(raw: dict | None, said: str) -> dict:
 			qty = g.get("so_luong")
 			if isinstance(qty, int | float) and not isinstance(qty, bool) and re.search(rf"(?<!\d){int(qty)}(?!\d)", re.sub(r"[.,](?=\d{{3}})", "", said)):
 				item["so_luong"] = int(qty) if float(qty).is_integer() else qty
-			for key in ("don_vi", "hang", "quy_cach"):
+			for key in ("don_vi", "hang", "quy_cach", "so_luong_chu"):  # đều phải là nguyên văn một đoạn khách đã viết
 				value = " ".join(str(g.get(key) or "").split())
 				if value and _squash(value) in source:
 					item[key] = value
 			goods.append(item)
-	slots = {**slots, "mat_hang": goods}
+	gone = []
+	for name in slots.get("mat_hang_bo") or []:
+		name = " ".join(str(name or "").split()) if isinstance(name, str) else ""
+		if name and _squash(name) in source:
+			gone.append(name)
+	slots = {**slots, "mat_hang": goods, "mat_hang_bo": gone}
 	for key in ("thoi_gian_can_hang", "thoi_gian_demo"):
 		value = slots.get(key)
 		if isinstance(value, dict) and value.get("nguyen_van") and _squash(value["nguyen_van"]) not in source:
@@ -387,7 +398,7 @@ def enabled() -> bool:
 def quantity_text(good: dict) -> str:
 	qty = good.get("so_luong")
 	if qty is None:
-		return ""
+		return " ".join(str(good.get("so_luong_chu") or "").split())  # "1 triệu cái": giữ nguyên lời khách, không tự đổi ra số
 	return f"{qty} {good.get('don_vi') or ''}".strip()
 
 
@@ -413,6 +424,8 @@ def to_detail(reading: dict) -> dict:
 	rel = ""
 	if relation == "TRA_LOI":
 		rel = "TRA_LOI"
+	elif relation == "HOI_NGUOC" and intent == "NHAC_LAI":
+		rel = "TRA_LOI"  # khách GIỤC ("sao k trả lời", "em vẫn k hiểu"): đường xử lý lời giục (xin lỗi, nói lại), không coi là câu hỏi mới
 	elif relation == "HOI_NGUOC":
 		rel, code, conf = "Y_KHAC", "KB_HOI", max(conf, SWITCH_CONF)  # luật 4: trả lời trước, hỏi tiếp sau
 	elif relation == "Y_KHAC":
@@ -441,4 +454,6 @@ def to_detail(reading: dict) -> dict:
 		"unclear_action": any(c.get("anh_huong") == "DOI_HANH_DONG" for c in reading.get("chua_ro") or [] if isinstance(c, dict)),
 		"substitute": slots_in.get("hang_thay_the") or "",
 		"failed": bool(reading.get(FAILED)),
+		"goods": goods,
+		"removed": slots_in.get("mat_hang_bo") or [],
 	}

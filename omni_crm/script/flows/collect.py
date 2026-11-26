@@ -87,7 +87,7 @@ MIRROR_KEYS = (
 
 def reset_answers(identity: str, **values) -> None:
 	"""Xoá câu trả lời của nhánh thu thông tin trước (kèm bản sao cấp trên) và ghi thêm `values`."""
-	state.update_state(identity, **{**dict.fromkeys(MIRROR_KEYS), "answers": {}, **values})
+	state.update_state(identity, **{**dict.fromkeys(MIRROR_KEYS), "answers": {}, "lines": None, **values})
 
 
 # --- Tra cứu ---------------------------------------------------------------------------------------------------
@@ -170,7 +170,12 @@ ACK_LABELS = {
 }  # trường không có ở đây (vd spd_value: khoảng giá trị tiền) thì không xác nhận lại
 ACK_MAX_VALUE = 80
 ACK_UNSAFE = re.compile(r"https?://|www\.|[<>{}\[\]|\\`$#@]", re.I)
-ACK_MONEY = re.compile(r"\d[\d.,]*\s*(đ|₫|vnd|vnđ|đồng|dong|nghìn|ngàn|k|triệu|trieu|tr|tỷ|tỉ|usd|\$)(?![a-zà-ỹ])", re.I)
+# số tiền: không nhắc lại. "1 triệu cái", "5 nghìn hộp" là SỐ LƯỢNG (từ chỉ số đứng trước đơn vị hàng), không phải tiền
+_ITEM_UNIT = r"(?:hộp|cái|chiếc|thùng|bộ|gói|lọ|chai|túi|cuộn|đôi|kg|lít|tấm|vỉ|ống|bịch|cây|tuýp|kiện|can|bao|viên|tờ|tập|hop|cai|chiec|thung|goi|chai|doi)"
+ACK_MONEY = re.compile(
+	r"\d[\d.,]*\s*(?:(?:đ|₫|vnd|vnđ|đồng|dong|usd|\$)(?![a-zà-ỹ])|(?:nghìn|ngàn|k|triệu|trieu|tr|tỷ|tỉ)(?![a-zà-ỹ])(?!\s*" + _ITEM_UNIT + r"(?![a-zà-ỹ])))",
+	re.I,
+)
 
 
 # đuôi hỏi lại / lời gọi ở cuối câu trả lời: không thuộc thông tin cần xác nhận
@@ -402,6 +407,62 @@ def _corrected_items(ctx: RouteContext, st: dict, node: dict, text: str) -> bool
 	return True
 
 
+LINES_KEY = "lines"  # script_state: các dòng hàng của yêu cầu báo giá vật tư đang dở (xem script.quote_lines)
+EDIT_WORDS = re.compile(
+	r"(?<![\wà-ỹ])(?:thêm|bỏ|bớt|xoá|xóa|đổi|sửa|thay|không lấy|khỏi lấy|thôi|them|bo|bot|xoa|doi|sua|khong lay)(?![\wà-ỹ])", re.I
+)
+
+
+def edit_lines(ctx: RouteContext) -> bool:
+	"""Yêu cầu báo giá vật tư đang dở mà khách THÊM / BỎ / SỬA mặt hàng ("thêm 50 hộp khẩu trang", "bỏ cồn, bơm tiêm
+	1 triệu cái") trong lúc bot đang hỏi câu khác hoặc đang đọc lại: cập nhật đúng dòng hàng theo bản đọc hiểu, báo lại
+	danh sách mới rồi hỏi tiếp đúng câu đang dở. Không phải việc này → False (không đổi gì)."""
+	from omni_crm.script import quote_lines
+	from omni_crm.script.flows import menu
+
+	st = engine.script_state(ctx)
+	answers = store.as_dict(st.get("answers"))
+	text = (ctx.text or "").strip()
+	field = (st.get("field") or "").lower() if st.get("flow") == FLOW else ""
+	if st.get("branch") != "3b" or not answers.get(EXTRACT_FROM) or not text or ctx.attachments:
+		return False
+	if field == EXTRACT_FROM or not menu._understand_on():
+		return False  # đang hỏi chính câu mặt hàng: luồng thường ghi
+	if not EDIT_WORDS.search(text) and not (field != "quantity" and QUANTITY.search(text)):
+		return False
+	menu.classify_text(ctx)
+	detail = ctx.state.get("_classify_detail") or {}
+	goods, removed = detail.get("goods") or [], detail.get("removed") or []
+	if not goods and not removed:
+		return False
+	lines = st.get(LINES_KEY) if isinstance(st.get(LINES_KEY), list) else None
+	if lines is None:
+		lines = quote_lines.seed(answers.get(EXTRACT_FROM), answers.get("quantity"))
+	lines, changed = quote_lines.merge(lines, goods, removed)
+	if not changed or not lines:
+		return False  # không đổi gì, hoặc khách bỏ hết: để luồng thường / bộ hiểu ý xử lý
+	items, amounts = quote_lines.items_text(lines), quote_lines.quantity_text(lines)
+	answers[EXTRACT_FROM] = items[:MAX_ANSWER]
+	answers["quantity"] = amounts[:MAX_ANSWER]
+	state.update_state(ctx.identity, answers=answers, items=answers[EXTRACT_FROM], quantity=answers["quantity"] or None, **{LINES_KEY: lines})
+	state.reset_reask(ctx.identity)
+	ctx.state[ACK_KEY] = [(EXTRACT_FROM, items)] + ([("quantity", amounts)] if amounts else [])
+	if st.get("flow") == FLOW_READBACK:
+		state.update_state(ctx.identity, flow=None)
+		return _read_back_quote(ctx)
+	code = str(st.get("node") or ctx.state.get("script_node") or "")
+	node = store.get_node(code)
+	if not node:
+		return False
+	prefix = take_ack(ctx, engine.variables(ctx))
+	if not send.send_node(ctx.identity, code, engine.variables(ctx), prefix=prefix):
+		return False
+	router._mark(ctx.batch_id)
+	if field:
+		_restore_flow(ctx, st, wrong=cint(st.get("wrong")))
+	return True
+
+
 def _only_extras(text: str, extras: dict) -> bool:
 	"""Câu trả lời cho ô "mặt hàng" chỉ gồm số lượng / thời gian ("anh cần 100 hộp"), không nêu mặt hàng nào — thuần."""
 	rest = text.lower()
@@ -430,6 +491,8 @@ def save_answer(ctx: RouteContext, field: str, value: str, typed: bool = False) 
 	if typed and field == DELIVERY_FIELD and DELIVERY_ASK.search(answers[field].lower()):
 		ctx.state[NOTE_KEY] = NODE_DELIVERY_NOTE
 	values: dict = {"answers": answers}
+	if field in (EXTRACT_FROM, "quantity"):
+		values[LINES_KEY] = None  # hai chuỗi vừa đổi theo đường thường: các dòng hàng sẽ được dựng lại từ chúng khi cần
 	if field in MIRROR_KEYS:  # flows/quote.py (K7) đọc câu trả lời báo giá ở khóa cấp trên của script_state
 		values[field] = answers[field]
 	if field == "tai_lieu":
