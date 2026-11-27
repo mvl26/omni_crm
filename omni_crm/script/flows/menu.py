@@ -115,6 +115,8 @@ def on_text(ctx: RouteContext) -> None:
 		state.mark_greeted(ctx.identity)
 	st = engine.script_state(ctx)
 	text = (ctx.text or "").strip()
+	if not text and ctx.attachments and _understand_on() and _file_has_text(ctx):
+		text = ctx.text = FILE_ONLY_TEXT  # tệp đọc được mà không kèm chữ: để bước đọc hiểu xem tệp nói gì
 	flow = (st.get("flow") or "").lower()
 	button = _typed_button(ctx, text)
 	if button and flow in ("", "collect"):  # gõ đúng chữ trên nút của câu đang hỏi = bấm nút đó
@@ -721,6 +723,18 @@ def _reply_with_menu(ctx: RouteContext, lead_in: str) -> bool:
 		return True
 	ctx.state.pop(engine.LEAD_IN_KEY, None)
 	return False
+
+
+FILE_ONLY_TEXT = "(khách gửi tệp)"
+
+
+def _file_has_text(ctx: RouteContext) -> bool:
+	try:
+		from omni_crm.script import understand
+
+		return bool(understand.file_texts(ctx))
+	except Exception:
+		return False
 
 
 def _edit_quote_lines(ctx: RouteContext) -> bool:

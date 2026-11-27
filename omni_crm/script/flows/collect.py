@@ -455,6 +455,19 @@ def _write_lines(ctx: RouteContext, lines: list, ack: bool = True) -> None:
 		ctx.state[ACK_KEY] = [*pairs, (EXTRACT_FROM, items)] + ([("quantity", amounts)] if amounts else [])
 
 
+FILE_ONLY = "(khách gửi tệp)"
+
+
+def _file_readable(ctx: RouteContext) -> bool:
+	"""Lượt này có tệp mà bot rút được chữ (Word / Excel / PDF / CSV) và công tắc đọc tệp đang bật."""
+	try:
+		from omni_crm.script import understand
+
+		return bool(understand.file_texts(ctx))
+	except Exception:
+		return False
+
+
 def _goods_of_turn(ctx: RouteContext) -> tuple[list, list]:
 	detail = ctx.state.get("_classify_detail") or {}
 	if detail.get("batch_id") != ctx.batch_id:
@@ -469,17 +482,22 @@ def _structured_answer(ctx: RouteContext, st: dict, field: str, text: str) -> bo
 	from omni_crm.script import quote_lines
 	from omni_crm.script.flows import menu
 
-	if st.get("branch") != "3b" or field not in (EXTRACT_FROM, "quantity") or not text or not menu._understand_on():
+	if st.get("branch") != "3b" or field not in (EXTRACT_FROM, "quantity", FILE_FIELD) or not text or not menu._understand_on():
 		return False
 	answers = store.as_dict(st.get("answers"))
 	several = len(re.findall(r"[,;\n]|\svà\s", text)) >= 1 or len(quote_lines.UNIT_RE.findall(text)) >= 2
-	if field == "quantity" and len(_lines_of(st, answers)) <= 1 and not several:
+	has_file = bool(ctx.attachments) or (bool(st.get("files")) and bool(SEE_FILE.search(text) or FILE_WORD.search(text)))
+	if field == "quantity" and len(_lines_of(st, answers)) <= 1 and not several and not has_file:
 		return False  # một mặt hàng, một số lượng: đường ghi thường đủ dùng, khỏi gọi AI
+	if not (ctx.text or "").strip():
+		ctx.text = FILE_ONLY  # tệp không kèm chữ: vẫn cần một lượt đọc hiểu để trích mặt hàng trong tệp
 	menu.classify_text(ctx)
 	goods, removed = _goods_of_turn(ctx)
 	if not goods:
 		return False
 	base = _lines_of(st, answers) if (field == "quantity" or isinstance(st.get(LINES_KEY), list)) else []
+	if field == "quantity" and has_file and all(_file_placeholder(x.get("ten")) for x in base):
+		base = []  # "mặt hàng" đang chỉ là tên tệp: thay hẳn bằng các dòng đọc được từ tệp
 	lines, _changed = quote_lines.merge(base, goods, removed)
 	if not lines:
 		return False
@@ -525,6 +543,13 @@ def _take_more(ctx: RouteContext, answers: dict) -> None:
 
 
 NOT_GIVEN = "chưa rõ"
+FILE_WORD = re.compile(r"(?<![\wà-ỹ])(?:file|tệp|tep|danh mục|danh muc|đơn dự trù|don du tru|bảng kê|đính kèm)(?![\wà-ỹ])", re.I)
+
+
+def _file_placeholder(name: object) -> bool:
+	"""Tên "mặt hàng" thực ra là chỗ giữ của một tệp ("[Tệp: don.docx]", "(khách gửi tệp)")."""
+	raw = str(name or "").strip().lower()
+	return raw.startswith(("[tệp", "[file", "(khách gửi tệp")) or raw.endswith((".docx]", ".xlsx]", ".pdf]"))
 
 
 def edit_lines(ctx: RouteContext) -> bool:
@@ -711,7 +736,10 @@ def on_text(ctx: RouteContext) -> bool:
 			return True
 		if field == DELIVERY_FIELD and text and ((ctx.state.get("_classify_detail") or {}).get("questions") or DELIVERY_ASK.search(text.lower())):
 			ctx.state[NOTE_KEY] = NODE_DELIVERY_NOTE
-		done = _structured_answer(ctx, st, field, text) if text and not ctx.attachments else False
+		if ctx.attachments:
+			remember_files(ctx)
+		readable = bool(ctx.attachments) and _file_readable(ctx)
+		done = _structured_answer(ctx, st, field, text or FILE_ONLY) if (text and not ctx.attachments) or readable else False
 		if done is None:  # đã ghi phần có và hỏi nốt phần thiếu
 			state.reset_reask(ctx.identity)
 			return True

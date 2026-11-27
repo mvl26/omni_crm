@@ -250,3 +250,106 @@ class TestQuoteLines(Case):
 		self.assertNotIn("cồn", again.text)
 		self.assertIn("1 triệu cái", again.text)
 		self.assertEqual(len(self.tasks), 0)
+
+
+def _docx(rows, paragraphs=()):
+	"""Tệp Word tối thiểu: vài đoạn văn + một bảng."""
+	import io
+	import zipfile
+
+	def para(text):
+		return f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>"
+
+	table = "<w:tbl>" + "".join("<w:tr>" + "".join(f"<w:tc>{para(c)}</w:tc>" for c in row) + "</w:tr>" for row in rows) + "</w:tbl>"
+	xml = "<?xml version='1.0'?><w:document xmlns:w='x'><w:body>" + "".join(para(p) for p in paragraphs) + table + "</w:body></w:document>"
+	out = io.BytesIO()
+	with zipfile.ZipFile(out, "w") as z:
+		z.writestr("word/document.xml", xml)
+	return out.getvalue()
+
+
+ORDER = _docx([["STT", "Tên hàng", "Quy cách", "Số lượng"], ["1", "Găng tay nitrile", "size M", "300 hộp"], ["2", "Bơm tiêm", "5ml", "2000 cái"]], ["ĐƠN DỰ TRÙ VẬT TƯ THÁNG 12"])
+
+
+class TestFileTextPure(FrappeTestCase):  # phản hồi 26/11: khách gửi tệp có đủ thông tin mà bot không đọc
+	def test_word_table_becomes_rows_of_text(self):
+		from omni_crm.script import filedoc
+
+		text = filedoc.extract("don-du-tru.docx", ORDER)
+		self.assertIn("ĐƠN DỰ TRÙ VẬT TƯ THÁNG 12", text)
+		self.assertIn("1 | Găng tay nitrile | size M | 300 hộp", text)
+		self.assertIn("2 | Bơm tiêm | 5ml | 2000 cái", text)
+
+	def test_excel_and_csv(self):
+		import io
+
+		import openpyxl
+
+		from omni_crm.script import filedoc
+
+		book = openpyxl.Workbook()
+		book.active.append(["Tên hàng", "Số lượng"])
+		book.active.append(["Bông gòn", 20])
+		buf = io.BytesIO()
+		book.save(buf)
+		self.assertIn("Bông gòn | 20", filedoc.extract("dm.xlsx", buf.getvalue()))
+		self.assertIn("Cồn 70 độ, 50 chai", filedoc.extract("dm.csv", "Tên,SL\nCồn 70 độ, 50 chai\n".encode()))
+
+	def test_unknown_types_and_broken_files_give_nothing(self):
+		from omni_crm.script import filedoc
+
+		self.assertEqual(filedoc.extract("anh.jpg", b"\xff\xd8"), "")
+		self.assertEqual(filedoc.extract("hong.docx", b"khong phai zip"), "")
+		self.assertLessEqual(len(filedoc.extract("dai.txt", ("dòng\n" * 5000).encode())), filedoc.MAX_CHARS)
+
+	def test_only_zalo_https_hosts_are_fetched(self):
+		from omni_crm.script import filedoc
+
+		self.assertTrue(filedoc.url_ok("https://file-stal-7.dlfl.vn/no/abc/xyz"))
+		for bad in ("http://file-stal-7.dlfl.vn/a", "https://evil.example/a.docx", "https://dlfl.vn.evil.example/a", "https://a@file.dlfl.vn/x", "https://file.dlfl.vn:8443/x", "https://127.0.0.1/a", "file:///etc/passwd", None):
+			self.assertFalse(filedoc.url_ok(bad), bad)
+
+
+class TestFileInQuote(Case):
+	FILE = ("file", "")
+
+	def setUp(self):
+		super().setUp()
+		from omni_crm.script import filedoc
+
+		self.addCleanup(frappe.conf.__setitem__, filedoc.SWITCH, frappe.conf.get(filedoc.SWITCH))
+		frappe.conf[filedoc.SWITCH] = 1
+		self.fetched = []
+		self._start(mock.patch.object(filedoc, "_fetch", side_effect=lambda url: self.fetched.append(url) or ORDER))
+		self._start(mock.patch.object(filedoc, "url_ok", return_value=True))
+		self._start(mock.patch.object(filedoc, "kind_of", return_value=".docx"))
+		frappe.cache().delete_keys("omni:script:filedoc:*")
+		goods = [{"ten": "Găng tay nitrile", "quy_cach": "size M", "so_luong": 300, "don_vi": "hộp"}, {"ten": "Bơm tiêm", "quy_cach": "5ml", "so_luong": 2000, "don_vi": "cái"}]
+		self.file_reading = U("TRA_LOI", [("BAOGIA", 0.95, "VATTU")], slots={"mat_hang": goods})
+		self.seen_input = []
+
+	def _fake_ai(self, kind, model, system, messages, tool, **kw):
+		self.seen_input.append(messages[0]["content"])
+		if "<tep_khach_gui>" in messages[0]["content"]:
+			self.ai_calls.append(self._text)
+			return json.loads(json.dumps(self.file_reading))
+		return super()._fake_ai(kind, model, system, messages, tool, **kw)
+
+	def test_file_sent_for_the_items_question_fills_every_line(self):
+		self.talk(["#MENU_VATTU", "#BAOGIA_VATTU", self.FILE])
+		last = self.T[-1]
+		self.assertTrue(self.fetched)
+		self.assertIn("Găng tay nitrile | size M | 300 hộp", self.seen_input[-1])
+		answers = last.st.get("answers") or {}
+		self.assertEqual(answers.get("items"), "Găng tay nitrile size M, Bơm tiêm 5ml", answers)
+		self.assertEqual(answers.get("quantity"), "Găng tay nitrile: 300 hộp; Bơm tiêm: 2000 cái")
+		self.assertNotIn("BG_VT_SOLUONG", last.nodes)  # không hỏi lại số lượng đã ghi trong tệp
+		self.assertEqual(last.node, "BG_VT_THOIGIAN", last.nodes)
+
+	def test_switch_off_keeps_the_old_behaviour(self):
+		from omni_crm.script import filedoc
+
+		frappe.conf[filedoc.SWITCH] = 0
+		self.talk(["#MENU_VATTU", "#BAOGIA_VATTU", self.FILE])
+		self.assertEqual(self.fetched, [])
+		self.assertEqual(self.T[-1].node, "BG_VT_SOLUONG")
